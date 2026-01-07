@@ -3,7 +3,7 @@ import { Character } from "../engine/character.js";
 
 export class Player extends Character {
   constructor() {
-    super({ radius: 0.6, maxHealth: 100 });
+    super({ radius: 0.6, maxHealth: 100, hitOffsetY: 1.2 });
     this.group.position.set(0, 0, 0);
     this.speed = 4;
     this.sprintSpeed = 7;
@@ -108,7 +108,7 @@ export class Player extends Character {
     };
   }
 
-  update(input, delta, world, camera) {
+  update(input, delta, world, camera, enemies = [], targetEnemy = null) {
     if (this.isDead) {
       this._updateAnimation(delta, false);
       return;
@@ -141,7 +141,15 @@ export class Player extends Character {
     const cameraForward = this._getCameraForward(camera);
 
     this._updateCooldowns(delta);
-    this._handleSkills(input, world, camera, baseDirection, cameraForward);
+    this._handleSkills(
+      input,
+      world,
+      camera,
+      baseDirection,
+      cameraForward,
+      enemies,
+      targetEnemy
+    );
 
     if (this.dashTimer > 0) {
       this.dashTimer = Math.max(0, this.dashTimer - delta);
@@ -213,14 +221,29 @@ export class Player extends Character {
     });
   }
 
-  _handleSkills(input, world, camera, baseDirection, cameraForward) {
+  _handleSkills(
+    input,
+    world,
+    camera,
+    baseDirection,
+    cameraForward,
+    enemies,
+    targetEnemy
+  ) {
+    const hasTarget = !!targetEnemy && !targetEnemy.isDead;
     if (input.consumePressed("skill1")) {
-      this._tryUseSkill("skill1", () => this._doSlash());
+      if (hasTarget && this._isTargetInRange(targetEnemy, 1.5)) {
+        this._tryUseSkill("skill1", () =>
+          this._doSlash(enemies, targetEnemy)
+        );
+      }
     }
     if (input.consumePressed("skill2")) {
-      this._tryUseSkill("skill2", () =>
-        this._doBolt(world, camera, cameraForward)
-      );
+      if (hasTarget && this._isTargetInRange(targetEnemy, 40)) {
+        this._tryUseSkill("skill2", () =>
+          this._doBolt(world, camera, cameraForward, targetEnemy)
+        );
+      }
     }
     if (input.consumePressed("skill3")) {
       this._tryUseSkill("skill3", () =>
@@ -239,22 +262,70 @@ export class Player extends Character {
     action();
   }
 
-  _doSlash() {
+  _doSlash(enemies, targetEnemy) {
     this.attackTimer = 0.25;
+    const slashRange = 1.5;
+    const slashDamage = 25;
+
+    const target = this._getSlashTarget(enemies, targetEnemy, slashRange);
+    if (target) {
+      target.takeDamage(slashDamage);
+    }
   }
 
-  _doBolt(world, camera, cameraForward) {
+  _getSlashTarget(enemies, targetEnemy, range) {
+    if (targetEnemy && !targetEnemy.isDead) {
+      const distSq = targetEnemy.group.position.distanceToSquared(
+        this.group.position
+      );
+      if (distSq <= range * range) {
+        return targetEnemy;
+      }
+    }
+
+    let closest = null;
+    let closestDistSq = range * range;
+    enemies.forEach((enemy) => {
+      if (!enemy || enemy.isDead) return;
+      const distSq = enemy.group.position.distanceToSquared(
+        this.group.position
+      );
+      if (distSq <= closestDistSq) {
+        closestDistSq = distSq;
+        closest = enemy;
+      }
+    });
+    return closest;
+  }
+
+  _isTargetInRange(targetEnemy, range) {
+    if (!targetEnemy) return false;
+    const distSq = targetEnemy.group.position.distanceToSquared(
+      this.group.position
+    );
+    return distSq <= range * range;
+  }
+
+  _doBolt(world, camera, cameraForward, targetEnemy) {
     if (!world) return;
     const spawn = this.group.position.clone().add(new THREE.Vector3(0, 1.6, 0));
     const aim = new THREE.Vector3(0, 0, -1);
-    if (camera) {
+    if (targetEnemy) {
+      aim.copy(targetEnemy.group.position);
+      aim.y += targetEnemy.hitOffsetY ?? 1;
+      aim.sub(spawn);
+    } else if (camera) {
       camera.getWorldDirection(aim);
     } else {
       aim.copy(cameraForward);
     }
     world.spawnProjectile(spawn, aim, {
       owner: "player",
-      damage: 20
+      damage: 20,
+      maxAge: 40 / 14,
+      target: targetEnemy ?? null,
+      targetOffsetY: targetEnemy?.hitOffsetY ?? 0,
+      turnRate: 8
     });
   }
 

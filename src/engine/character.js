@@ -1,11 +1,12 @@
 import * as THREE from "three";
 
 export class Character {
-  constructor({ radius = 0.6, maxHealth = 100 } = {}) {
+  constructor({ radius = 0.6, maxHealth = 100, hitOffsetY = 1 } = {}) {
     this.group = new THREE.Group();
     this.radius = radius;
     this.maxHealth = maxHealth;
     this.health = maxHealth;
+    this.hitOffsetY = hitOffsetY;
     this.isDead = false;
   }
 

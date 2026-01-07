@@ -23,23 +23,89 @@
         overflow: hidden;
         color: #e6f2f1;
       }
-      #hud {
+      #status-hud {
         position: fixed;
-        top: 16px;
-        left: 16px;
-        padding: 10px 14px;
-        background: rgba(10, 16, 18, 0.7);
-        border: 1px solid rgba(180, 230, 220, 0.2);
-        border-radius: 8px;
-        font-size: 14px;
-        line-height: 1.4;
-        max-width: 260px;
+        top: 18px;
+        left: 18px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
       }
-      #hud strong { display: block; margin-bottom: 6px; }
-      #stats {
-        margin-top: 6px;
-        font-size: 13px;
-        color: #b9d7d2;
+      #player-hud {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        background: rgba(8, 12, 14, 0.78);
+        border: 1px solid rgba(180, 230, 220, 0.2);
+        border-radius: 10px;
+        box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+      }
+      #enemy-hud {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        background: rgba(12, 8, 8, 0.78);
+        border: 1px solid rgba(230, 180, 180, 0.2);
+        border-radius: 10px;
+        box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+        margin-left: 36px;
+      }
+      #enemy-hud.hidden {
+        display: none;
+      }
+      #enemy-hud .portrait {
+        background: radial-gradient(circle at 30% 30%, #d47a7a, #4b1f1f 70%);
+        border-color: rgba(240, 190, 190, 0.85);
+      }
+      #enemy-hud .hud-name {
+        color: #f2dede;
+      }
+      #enemy-hud .hp-fill {
+        background: linear-gradient(90deg, #e05050, #a01818);
+      }
+      .portrait {
+        width: 54px;
+        height: 54px;
+        border-radius: 10px;
+        background: radial-gradient(circle at 30% 30%, #d0b07b, #60402e 70%);
+        border: 2px solid rgba(226, 209, 178, 0.85);
+        box-shadow: inset 0 0 0 2px rgba(40, 20, 10, 0.45);
+      }
+      .hud-info {
+        min-width: 190px;
+      }
+      .hud-name {
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: #e6f2f1;
+        margin-bottom: 6px;
+      }
+      .hp-bar {
+        position: relative;
+        height: 14px;
+        background: #1a2124;
+        border: 1px solid rgba(180, 230, 220, 0.25);
+        border-radius: 7px;
+        overflow: hidden;
+      }
+      .hp-fill {
+        height: 100%;
+        width: 100%;
+        background: linear-gradient(90deg, #6bdc6b, #2fae52);
+        transition: width 0.2s ease-out;
+      }
+      .hp-text {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-size: 11px;
+        color: #e6f2f1;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+        pointer-events: none;
       }
       #ui {
         position: fixed;
@@ -53,7 +119,7 @@
         border: 1px solid rgba(170, 220, 210, 0.25);
         border-radius: 12px;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-        pointer-events: none;
+        pointer-events: auto;
         user-select: none;
       }
       .slot {
@@ -70,6 +136,24 @@
         font-size: 13px;
         position: relative;
         overflow: hidden;
+        cursor: pointer;
+      }
+      .slot.disabled {
+        color: rgba(160, 190, 190, 0.55);
+        border-color: rgba(120, 150, 150, 0.2);
+        background: linear-gradient(145deg, #1a2624, #0d1413);
+        cursor: default;
+      }
+      .slot.disabled .cooldown {
+        background: rgba(6, 10, 12, 0.6);
+      }
+      .slot.disabled:hover {
+        border-color: rgba(120, 150, 150, 0.2);
+        color: rgba(160, 190, 190, 0.55);
+      }
+      .slot:hover {
+        border-color: rgba(215, 245, 240, 0.55);
+        color: #e6fffb;
       }
       .slot span {
         position: absolute;
@@ -95,39 +179,75 @@
         color: #e1f7f4;
         text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
       }
+      #skill-desc {
+        position: fixed;
+        left: 50%;
+        bottom: 86px;
+        transform: translateX(-50%);
+        min-width: 220px;
+        padding: 8px 12px;
+        background: rgba(8, 10, 12, 0.82);
+        border: 1px solid rgba(170, 220, 210, 0.25);
+        border-radius: 8px;
+        font-size: 12px;
+        color: #cfe7e2;
+        text-align: center;
+        opacity: 0;
+        transition: opacity 0.15s ease-out;
+        pointer-events: none;
+      }
+      #skill-desc.visible {
+        opacity: 1;
+      }
       canvas { display: block; }
     </style>
   </head>
   <body>
-    <div id="hud">
-      <strong>RPG JS Prototype</strong>
-      Move: WASD or arrow keys<br />
-      Sprint: Shift<br />
-      Camera: third-person follow
-      <div id="stats">HP: <span id="hp">100</span></div>
+    <div id="status-hud">
+      <div id="player-hud" aria-label="player status">
+        <div class="portrait" aria-hidden="true"></div>
+        <div class="hud-info">
+          <div class="hud-name">Adventurer</div>
+          <div class="hp-bar" aria-label="health">
+            <div class="hp-fill" id="hp-fill"></div>
+            <div class="hp-text" id="hp-text">100%</div>
+          </div>
+        </div>
+      </div>
+      <div id="enemy-hud" class="hidden" aria-label="enemy status">
+        <div class="portrait" aria-hidden="true"></div>
+        <div class="hud-info">
+          <div class="hud-name" id="enemy-name">Enemy</div>
+          <div class="hp-bar" aria-label="enemy health">
+            <div class="hp-fill" id="enemy-hp-fill"></div>
+            <div class="hp-text" id="enemy-hp-text">100%</div>
+          </div>
+        </div>
+      </div>
     </div>
     <div id="ui" aria-label="hotbar">
-      <div class="slot" data-skill="skill1">
+      <div class="slot" data-skill="skill1" data-requires-target="true" data-range="1.5" data-desc="Quick melee strike for close targets.">
         Slash<span>1</span>
         <div class="cooldown"></div>
         <div class="cooldown-text"></div>
       </div>
-      <div class="slot" data-skill="skill2">
+      <div class="slot" data-skill="skill2" data-requires-target="true" data-range="40" data-desc="Launch a magic bolt from the camera.">
         Bolt<span>2</span>
         <div class="cooldown"></div>
         <div class="cooldown-text"></div>
       </div>
-      <div class="slot" data-skill="skill3">
+      <div class="slot" data-skill="skill3" data-desc="Short dash in the current move direction.">
         Dash<span>3</span>
         <div class="cooldown"></div>
         <div class="cooldown-text"></div>
       </div>
-      <div class="slot" data-skill="skill4">
+      <div class="slot" data-skill="skill4" data-desc="Restore a chunk of health instantly.">
         Heal<span>4</span>
         <div class="cooldown"></div>
         <div class="cooldown-text"></div>
       </div>
     </div>
+    <div id="skill-desc" aria-live="polite"></div>
     <script type="module" src="./src/main.js"></script>
   </body>
 </html>
