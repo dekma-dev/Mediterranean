@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RPG JS - Prototype</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "./node_modules/three/build/three.module.js"
+        }
+      }
+    </script>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        background: radial-gradient(circle at 20% 20%, #1c2b2a, #0d1216 70%);
+        font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+        overflow: hidden;
+        color: #e6f2f1;
+      }
+      #hud {
+        position: fixed;
+        top: 16px;
+        left: 16px;
+        padding: 10px 14px;
+        background: rgba(10, 16, 18, 0.7);
+        border: 1px solid rgba(180, 230, 220, 0.2);
+        border-radius: 8px;
+        font-size: 14px;
+        line-height: 1.4;
+        max-width: 260px;
+      }
+      #hud strong { display: block; margin-bottom: 6px; }
+      #stats {
+        margin-top: 6px;
+        font-size: 13px;
+        color: #b9d7d2;
+      }
+      #ui {
+        position: fixed;
+        left: 50%;
+        bottom: 18px;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 8px;
+        padding: 10px 14px;
+        background: rgba(9, 12, 14, 0.85);
+        border: 1px solid rgba(170, 220, 210, 0.25);
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+        pointer-events: none;
+        user-select: none;
+      }
+      .slot {
+        width: 56px;
+        height: 56px;
+        background: linear-gradient(145deg, #243c3a, #0f1918);
+        border: 1px solid rgba(160, 210, 200, 0.25);
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        color: #bfe6e0;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        font-size: 13px;
+        position: relative;
+        overflow: hidden;
+      }
+      .slot span {
+        position: absolute;
+        bottom: 4px;
+        right: 6px;
+        font-size: 11px;
+        color: #8bbab1;
+      }
+      .cooldown {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(8, 14, 16, 0.72);
+        height: 0%;
+        transition: height 0.1s linear;
+      }
+      .cooldown-text {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        font-size: 12px;
+        color: #e1f7f4;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+      }
+      canvas { display: block; }
+    </style>
+  </head>
+  <body>
+    <div id="hud">
+      <strong>RPG JS Prototype</strong>
+      Move: WASD or arrow keys<br />
+      Sprint: Shift<br />
+      Camera: third-person follow
+      <div id="stats">HP: <span id="hp">100</span></div>
+    </div>
+    <div id="ui" aria-label="hotbar">
+      <div class="slot" data-skill="skill1">
+        Slash<span>1</span>
+        <div class="cooldown"></div>
+        <div class="cooldown-text"></div>
+      </div>
+      <div class="slot" data-skill="skill2">
+        Bolt<span>2</span>
+        <div class="cooldown"></div>
+        <div class="cooldown-text"></div>
+      </div>
+      <div class="slot" data-skill="skill3">
+        Dash<span>3</span>
+        <div class="cooldown"></div>
+        <div class="cooldown-text"></div>
+      </div>
+      <div class="slot" data-skill="skill4">
+        Heal<span>4</span>
+        <div class="cooldown"></div>
+        <div class="cooldown-text"></div>
+      </div>
+    </div>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
