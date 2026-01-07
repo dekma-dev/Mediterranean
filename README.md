@@ -5,7 +5,6 @@ This is a minimal third-person RPG prototype packaged as a desktop app using Ele
 ## Install
 
 ```powershell
-cd C:\Users\admin\Documents\php_projects\features\rpg-js
 npm install
 ```
 
