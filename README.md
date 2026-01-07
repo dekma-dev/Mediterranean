@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-# Mediterranean
-=======
 # RPG JS Desktop Prototype
 
 This is a minimal third-person RPG prototype packaged as a desktop app using Electron and Three.js. It includes a simple map, obstacles, and WASD movement.
@@ -29,4 +26,3 @@ npm run start
 - Expand map tiles, add props, spawn points
 - Add camera collision and zoom controls
 - Implement combat prototype
->>>>>>> 82f4740 (Initial commit)
