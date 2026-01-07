@@ -13,14 +13,21 @@ const KEY_MAP = {
   Digit4: "skill4",
   Space: "jump",
   ShiftLeft: "sprint",
-  ShiftRight: "sprint"
+  ShiftRight: "sprint",
+  Tab: "target",
+  Escape: "clearTarget"
 };
 
 export class Input {
   constructor() {
     this.state = new Map();
     this.pressed = new Set();
-    this._onKeyDown = (event) => this._setKey(event.code, true);
+    this._onKeyDown = (event) => {
+      if (event.code === "Tab") {
+        event.preventDefault();
+      }
+      this._setKey(event.code, true);
+    };
     this._onKeyUp = (event) => this._setKey(event.code, false);
     window.addEventListener("keydown", this._onKeyDown);
     window.addEventListener("keyup", this._onKeyUp);
@@ -43,5 +50,15 @@ export class Input {
     if (!this.pressed.has(key)) return false;
     this.pressed.delete(key);
     return true;
+  }
+
+  trigger(key) {
+    if (!key) return;
+    this.pressed.add(key);
+  }
+
+  clearPressed(keys) {
+    if (!keys) return;
+    keys.forEach((key) => this.pressed.delete(key));
   }
 }

@@ -97,35 +97,69 @@ export class World {
       size = 0.18,
       owner = "neutral",
       damage = 0,
-      hitRadius = null
+      hitRadius = null,
+      type = "orb",
+      maxAge = null,
+      target = null,
+      targetOffsetY = 0,
+      turnRate = 6
     } = options;
-    const geometry = new THREE.SphereGeometry(size, 12, 12);
-    const material = new THREE.MeshStandardMaterial({
-      color,
-      emissive,
-      roughness
-    });
-    const mesh = new THREE.Mesh(geometry, material);
+    const mesh =
+      type === "fireball"
+        ? this._createFireballMesh(size, color, emissive)
+        : this._createOrbMesh(size, color, emissive, roughness);
     mesh.position.copy(position);
     mesh.castShadow = true;
     this.scene.add(mesh);
 
-    const velocity = direction.clone().normalize().multiplyScalar(speed);
+    const dir = direction.clone().normalize();
+    const velocity = dir.clone().multiplyScalar(speed);
+    const quat = new THREE.Quaternion().setFromUnitVectors(
+      new THREE.Vector3(0, 0, 1),
+      dir
+    );
+    mesh.quaternion.copy(quat);
     this.projectiles.push({
       mesh,
       velocity,
       age: 0,
       radius: hitRadius ?? size * 1.1,
       owner,
-      damage
+      damage,
+      pulseSpeed: type === "fireball" ? 9 : 0,
+      maxAge,
+      target,
+      targetOffsetY,
+      turnRate
     });
   }
 
   _updateProjectiles(delta, { player, enemies = [] } = {}) {
-    const maxAge = 2.5;
     this.projectiles = this.projectiles.filter((projectile) => {
       projectile.age += delta;
+      if (projectile.target && !projectile.target.isDead) {
+        const targetPos = projectile.target.group.position.clone();
+        targetPos.y += projectile.targetOffsetY || 0;
+        const toTarget = targetPos.sub(projectile.mesh.position);
+        if (toTarget.lengthSq() > 0.0001) {
+          const desiredDir = toTarget.normalize();
+          const currentDir = projectile.velocity.clone().normalize();
+          const turn = Math.min(1, delta * projectile.turnRate);
+          currentDir.lerp(desiredDir, turn).normalize();
+          const speed = projectile.velocity.length();
+          projectile.velocity.copy(currentDir.multiplyScalar(speed));
+          projectile.mesh.quaternion.setFromUnitVectors(
+            new THREE.Vector3(0, 0, 1),
+            currentDir
+          );
+        }
+      }
+
       projectile.mesh.position.addScaledVector(projectile.velocity, delta);
+      if (projectile.pulseSpeed) {
+        const pulse = 1 + Math.sin(projectile.age * projectile.pulseSpeed) * 0.12;
+        projectile.mesh.scale.setScalar(pulse);
+      }
       if (this._hitsObstacle(projectile.mesh.position, projectile.radius)) {
         this._disposeProjectile(projectile);
         return false;
@@ -135,7 +169,12 @@ export class World {
         projectile.owner === "enemy" &&
         player &&
         !player.isDead &&
-        this._hitsEntity(projectile, player.group.position, player.radius)
+        this._hitsEntity(
+          projectile,
+          player.group.position,
+          player.radius,
+          player.hitOffsetY
+        )
       ) {
         player.takeDamage(projectile.damage);
         this._disposeProjectile(projectile);
@@ -147,7 +186,12 @@ export class World {
           (enemy) =>
             enemy &&
             !enemy.isDead &&
-            this._hitsEntity(projectile, enemy.group.position, enemy.radius)
+            this._hitsEntity(
+              projectile,
+              enemy.group.position,
+              enemy.radius,
+              enemy.hitOffsetY
+            )
         );
         if (hitEnemy) {
           hitEnemy.takeDamage(projectile.damage);
@@ -156,6 +200,7 @@ export class World {
         }
       }
 
+      const maxAge = projectile.maxAge ?? 2.5;
       if (projectile.age > maxAge) {
         this._disposeProjectile(projectile);
         return false;
@@ -174,6 +219,21 @@ export class World {
     );
   }
 
+  isWalkable(position, radius = 0.6) {
+    const halfWidth = this.mapSize.width / 2 - radius;
+    const halfDepth = this.mapSize.depth / 2 - radius;
+    if (
+      position.x < -halfWidth ||
+      position.x > halfWidth ||
+      position.z < -halfDepth ||
+      position.z > halfDepth
+    ) {
+      return false;
+    }
+
+    return !this._hitsObstacle(position, radius);
+  }
+
   _hitsObstacle(position, radius) {
     const minX = position.x - radius;
     const maxX = position.x + radius;
@@ -187,10 +247,12 @@ export class World {
     });
   }
 
-  _hitsEntity(projectile, targetPosition, targetRadius) {
-    const distanceSq = projectile.mesh.position.distanceToSquared(targetPosition);
+  _hitsEntity(projectile, targetPosition, targetRadius, offsetY = 0) {
+    const dx = projectile.mesh.position.x - targetPosition.x;
+    const dy = projectile.mesh.position.y - (targetPosition.y + offsetY);
+    const dz = projectile.mesh.position.z - targetPosition.z;
     const radius = projectile.radius + targetRadius;
-    return distanceSq <= radius * radius;
+    return dx * dx + dy * dy + dz * dz <= radius * radius;
   }
 
   _segmentIntersectsBox2D(ax, az, bx, bz, box, padding) {
@@ -233,7 +295,64 @@ export class World {
 
   _disposeProjectile(projectile) {
     this.scene.remove(projectile.mesh);
-    projectile.mesh.geometry.dispose();
-    projectile.mesh.material.dispose();
+    projectile.mesh.traverse((child) => {
+      if (!child.isMesh) return;
+      child.geometry?.dispose();
+      if (Array.isArray(child.material)) {
+        child.material.forEach((mat) => mat.dispose());
+      } else {
+        child.material?.dispose();
+      }
+    });
+  }
+
+  _createOrbMesh(size, color, emissive, roughness) {
+    const geometry = new THREE.SphereGeometry(size, 12, 12);
+    const material = new THREE.MeshStandardMaterial({
+      color,
+      emissive,
+      roughness
+    });
+    return new THREE.Mesh(geometry, material);
+  }
+
+  _createFireballMesh(size, color, emissive) {
+    const group = new THREE.Group();
+
+    const core = new THREE.Mesh(
+      new THREE.SphereGeometry(size * 0.55, 14, 14),
+      new THREE.MeshStandardMaterial({
+        color: 0xffd1a1,
+        emissive: 0xff7a3d,
+        roughness: 0.2
+      })
+    );
+    const shell = new THREE.Mesh(
+      new THREE.SphereGeometry(size, 16, 16),
+      new THREE.MeshStandardMaterial({
+        color,
+        emissive,
+        roughness: 0.35,
+        transparent: true,
+        opacity: 0.75
+      })
+    );
+    const tail = new THREE.Mesh(
+      new THREE.ConeGeometry(size * 0.7, size * 2.2, 12),
+      new THREE.MeshStandardMaterial({
+        color: 0xff5b2e,
+        emissive,
+        transparent: true,
+        opacity: 0.65,
+        roughness: 0.6
+      })
+    );
+    tail.rotation.x = Math.PI / 2;
+    tail.position.z = -size * 1.35;
+
+    const glow = new THREE.PointLight(0xff6b4a, 0.8, 4);
+
+    group.add(shell, core, tail, glow);
+    return group;
   }
 }
