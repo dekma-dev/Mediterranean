@@ -11,11 +11,15 @@ const KEY_MAP = {
   Digit2: "skill2",
   Digit3: "skill3",
   Digit4: "skill4",
+  KeyB: "inventory",
+  KeyI: "character",
+  KeyM: "map",
+  KeyQ: "quests",
   Space: "jump",
   ShiftLeft: "sprint",
   ShiftRight: "sprint",
   Tab: "target",
-  Escape: "clearTarget"
+  Escape: "menu"
 };
 
 export class Input {
