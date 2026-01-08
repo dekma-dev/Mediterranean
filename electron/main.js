@@ -5,6 +5,7 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
     height: 720,
+    fullscreen: true,
     backgroundColor: "#0d1216",
     webPreferences: {
       contextIsolation: true,
@@ -13,6 +14,7 @@ function createWindow() {
   });
 
   win.loadFile(path.join(__dirname, "..", "index.html"));
+  win.setMenuBarVisibility(false);
 }
 
 app.whenReady().then(() => {

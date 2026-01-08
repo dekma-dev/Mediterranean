@@ -10,6 +10,7 @@ export class World {
 
     this._createLights();
     this._createGround();
+    this._createSky();
     this._createProps();
     this._createWalls();
   }
@@ -31,6 +32,53 @@ export class World {
     sun.shadow.camera.top = 25;
     sun.shadow.camera.bottom = -25;
     this.scene.add(sun);
+  }
+
+  _createSky() {
+    const sky = new THREE.Mesh(
+      new THREE.SphereGeometry(220, 24, 24),
+      new THREE.MeshBasicMaterial({
+        color: 0x86b6e8,
+        side: THREE.BackSide
+      })
+    );
+    this.scene.add(sky);
+
+    const sun = new THREE.Mesh(
+      new THREE.SphereGeometry(6, 16, 16),
+      new THREE.MeshBasicMaterial({ color: 0xfff1c4 })
+    );
+    sun.position.set(-40, 60, -60);
+    this.scene.add(sun);
+
+    const cloudMaterial = new THREE.MeshStandardMaterial({
+      color: 0xf0f6ff,
+      roughness: 0.9
+    });
+    const cloudPositions = [
+      { x: -30, z: -20, y: 24 },
+      { x: 20, z: -35, y: 26 },
+      { x: 38, z: 12, y: 25 },
+      { x: -12, z: 28, y: 23 },
+      { x: -45, z: 18, y: 27 }
+    ];
+    cloudPositions.forEach((pos) => {
+      const group = new THREE.Group();
+      for (let i = 0; i < 5; i += 1) {
+        const puff = new THREE.Mesh(
+          new THREE.SphereGeometry(3.2, 12, 12),
+          cloudMaterial
+        );
+        puff.position.set(
+          (Math.random() - 0.5) * 8,
+          (Math.random() - 0.5) * 2,
+          (Math.random() - 0.5) * 6
+        );
+        group.add(puff);
+      }
+      group.position.set(pos.x, pos.y, pos.z);
+      this.scene.add(group);
+    });
   }
 
   _createGround() {
@@ -185,7 +233,7 @@ export class World {
         new THREE.DodecahedronGeometry(size, 0),
         rockMaterial
       );
-      rock.position.set(spot.x, 0.8, spot.z);
+      rock.position.set(spot.x, 0.45, spot.z);
       rock.castShadow = true;
       rock.receiveShadow = true;
       this.scene.add(rock);
@@ -206,7 +254,7 @@ export class World {
         new THREE.SphereGeometry(size, 10, 10),
         bushMaterial
       );
-      bush.position.set(spot.x, 0.9, spot.z);
+      bush.position.set(spot.x, 0.6, spot.z);
       bush.castShadow = true;
       bush.receiveShadow = true;
       this.scene.add(bush);

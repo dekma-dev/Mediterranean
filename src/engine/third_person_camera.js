@@ -13,6 +13,8 @@ export class ThirdPersonCamera {
     this.pitch = 0.35;
     this.yaw = Math.PI;
     this.sensitivity = 0.003;
+    this.minDistance = 4;
+    this.maxDistance = 16;
     this.isRotating = false;
     this.lastMouse = null;
     this.isPointerLocked = false;
@@ -69,6 +71,16 @@ export class ThirdPersonCamera {
       this.pitch += dy * this.sensitivity;
       this.pitch = Math.max(0.1, Math.min(1.2, this.pitch));
     });
+
+    window.addEventListener("wheel", (event) => {
+      const delta = Math.sign(event.deltaY);
+      if (delta === 0) return;
+      this.distance = THREE.MathUtils.clamp(
+        this.distance + delta * 1.2,
+        this.minDistance,
+        this.maxDistance
+      );
+    }, { passive: true });
   }
 
   update(delta) {

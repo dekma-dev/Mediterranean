@@ -20,8 +20,12 @@ export class Robber extends Character {
     this.patrolThreshold = 0.25;
     this.aggroRange = 10;
     this.preferredRange = 12;
-    this.patrolPoints = this._buildPatrolPoints(this.group.position);
+    this.patrolPoints = [];
     this.patrolIndex = 0;
+    this.avoidDirection = new THREE.Vector3(1, 0, 0);
+    this.avoidTimer = 0;
+    this.stuckTimer = 0;
+    this.desiredMove = false;
 
     const skinMaterial = new THREE.MeshStandardMaterial({
       color: 0x6d3b3b,
@@ -129,6 +133,7 @@ export class Robber extends Character {
       return;
     }
     if (player.isDead) return;
+    this._ensurePatrolPoints(world);
 
     const distanceSq = this.group.position.distanceToSquared(
       player.group.position
@@ -171,6 +176,19 @@ export class Robber extends Character {
       this.isCasting = false;
       this.castElapsed = 0;
       isMoving = this._updatePatrol(delta, world, enemies, player);
+    }
+
+    if (this.desiredMove && !isMoving) {
+      this.stuckTimer += delta;
+      if (this.stuckTimer > 1.2) {
+        this._startAvoidance(world, enemies, player);
+        if (this.patrolPoints.length > 0) {
+          this.patrolIndex = (this.patrolIndex + 1) % this.patrolPoints.length;
+        }
+        this.stuckTimer = 0;
+      }
+    } else {
+      this.stuckTimer = 0;
     }
 
     this._updateAnimation(delta, seesPlayer, isMoving);
@@ -252,38 +270,81 @@ export class Robber extends Character {
     this.parts.cloak.position.y = 1.45 + idleBob * 0.4;
   }
 
-  _buildPatrolPoints(origin) {
+  _buildPatrolPoints(origin, world) {
     const points = [];
     const baseAngle = Math.random() * Math.PI * 2;
     const radii = [3.5, 4.5, 3, 4];
     for (let i = 0; i < 4; i += 1) {
       const angle = baseAngle + (Math.PI / 2) * i + (Math.random() - 0.5) * 0.7;
       const radius = radii[i] + (Math.random() - 0.5) * 1.2;
-      points.push(
-        origin
-          .clone()
-          .add(new THREE.Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius))
-      );
+      const candidate = origin
+        .clone()
+        .add(
+          new THREE.Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius)
+        );
+      if (!world || world.isWalkable(candidate, this.radius)) {
+        points.push(candidate);
+      }
     }
     return points;
   }
 
+  _ensurePatrolPoints(world) {
+    if (this.patrolPoints.length > 0) return;
+    let points = this._buildPatrolPoints(this.group.position, world);
+    if (points.length === 0) {
+      const backup = [];
+      for (let i = 0; i < 4; i += 1) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 2 + Math.random() * 3;
+        const candidate = this.group.position
+          .clone()
+          .add(
+            new THREE.Vector3(
+              Math.cos(angle) * radius,
+              0,
+              Math.sin(angle) * radius
+            )
+          );
+        if (world.isWalkable(candidate, this.radius)) {
+          backup.push(candidate);
+        }
+      }
+      points = backup;
+    }
+    this.patrolPoints = points;
+    this.patrolIndex = 0;
+  }
+
   _updatePatrol(delta, world, enemies, player) {
     if (this.patrolPoints.length === 0) return false;
+    if (this._updateAvoidance(delta, world, enemies, player)) {
+      this.desiredMove = true;
+      return true;
+    }
     const target = this.patrolPoints[this.patrolIndex];
     const toTarget = target.clone().sub(this.group.position);
     toTarget.y = 0;
     const distance = toTarget.length();
     if (distance <= this.patrolThreshold) {
+      this.desiredMove = false;
       this.patrolIndex = (this.patrolIndex + 1) % this.patrolPoints.length;
       return false;
     }
 
+    this.desiredMove = true;
     const direction = toTarget.normalize();
+    const lookAhead = this.group.position
+      .clone()
+      .addScaledVector(direction, 1.2);
+    const blockers = [player, ...enemies];
+    if (!world.isWalkable(lookAhead, this.radius, blockers, this)) {
+      this._startAvoidance(world, enemies, player);
+      return this._updateAvoidance(delta, world, enemies, player);
+    }
     const speed = this.angrySpeed;
     const step = speed * delta;
     const moveVector = direction.clone().multiplyScalar(step);
-    const blockers = [player, ...enemies];
     const moved = this._tryMove(world, moveVector, blockers);
     if (moved) {
       const heading = Math.atan2(direction.x, direction.z);
@@ -291,6 +352,7 @@ export class Robber extends Character {
       return true;
     }
 
+    this._startAvoidance(world, enemies, player);
     this.patrolIndex = (this.patrolIndex + 1) % this.patrolPoints.length;
     return false;
   }
@@ -299,13 +361,26 @@ export class Robber extends Character {
     const toTarget = player.group.position.clone().sub(this.group.position);
     toTarget.y = 0;
     const distance = toTarget.length();
-    if (distance <= this.preferredRange) return false;
+    if (distance <= this.preferredRange) {
+      this.desiredMove = false;
+      return false;
+    }
 
+    this.desiredMove = true;
+    if (this._updateAvoidance(delta, world, enemies, player)) {
+      return true;
+    }
     const direction = toTarget.normalize();
+    const lookAhead = this.group.position
+      .clone()
+      .addScaledVector(direction, 1.4);
+    const blockers = [player, ...enemies];
+    if (!world.isWalkable(lookAhead, this.radius, blockers, this)) {
+      this._startAvoidance(world, enemies, player);
+      return this._updateAvoidance(delta, world, enemies, player);
+    }
     const step = this.angrySpeed * delta;
     const moveVector = direction.clone().multiplyScalar(step);
-
-    const blockers = [player, ...enemies];
     const moved = this._tryMove(world, moveVector, blockers);
     if (moved) {
       const heading = Math.atan2(direction.x, direction.z);
@@ -313,6 +388,7 @@ export class Robber extends Character {
       return true;
     }
 
+    this._startAvoidance(world, enemies, player);
     return false;
   }
 
@@ -349,5 +425,39 @@ export class Robber extends Character {
       return true;
     }
     return false;
+  }
+
+  _startAvoidance(world, enemies, player) {
+    const blockers = [player, ...enemies];
+    const base = Math.random() * Math.PI * 2;
+    for (let i = 0; i < 6; i += 1) {
+      const angle = base + (i - 3) * 0.45;
+      const dir = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
+      const testPos = this.group.position.clone().addScaledVector(dir, 1.2);
+      if (world.isWalkable(testPos, this.radius, blockers, this)) {
+        this.avoidDirection = dir;
+        this.avoidTimer = THREE.MathUtils.randFloat(0.5, 1.2);
+        return;
+      }
+    }
+    this.avoidDirection = new THREE.Vector3(
+      Math.sin(base),
+      0,
+      Math.cos(base)
+    );
+    this.avoidTimer = 0.4;
+  }
+
+  _updateAvoidance(delta, world, enemies, player) {
+    if (this.avoidTimer <= 0) return false;
+    const blockers = [player, ...enemies];
+    const step = this.angrySpeed * delta;
+    const moveVector = this.avoidDirection.clone().multiplyScalar(step);
+    const moved = this._tryMove(world, moveVector, blockers);
+    if (!moved) {
+      this._startAvoidance(world, enemies, player);
+    }
+    this.avoidTimer = Math.max(0, this.avoidTimer - delta);
+    return moved;
   }
 }

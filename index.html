@@ -363,6 +363,22 @@
         text-transform: uppercase;
         color: rgba(240, 220, 170, 0.6);
       }
+      .menu-button {
+        margin-top: 14px;
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid rgba(210, 176, 112, 0.7);
+        background: linear-gradient(135deg, #5a3d22, #2b1b10);
+        color: #f5e3b2;
+        font-size: 13px;
+        letter-spacing: 0.8px;
+        text-transform: uppercase;
+        cursor: pointer;
+      }
+      .menu-button:hover {
+        border-color: rgba(235, 200, 140, 0.9);
+      }
       .ui-panel {
         position: fixed;
         top: 110px;
@@ -568,6 +584,7 @@
           <div class="menu-tabs" role="tablist" aria-label="menu sections">
             <button class="menu-tab active" type="button" data-menu-tab="character">Character</button>
             <button class="menu-tab" type="button" data-menu-tab="settings">Settings</button>
+            <button class="menu-tab" type="button" data-menu-tab="exit">Exit Game</button>
           </div>
           <div class="menu-panel">
             <div class="menu-panel-page active" data-menu-panel="character">
@@ -592,6 +609,15 @@
                 <div class="menu-stat">Camera <span>Standard</span></div>
                 <div class="menu-stat">Language <span>EN</span></div>
               </div>
+              <div class="menu-footer">Press Esc to close</div>
+            </div>
+            <div class="menu-panel-page" data-menu-panel="exit">
+              <div class="menu-section-title">Exit Game</div>
+              <div class="menu-grid">
+                <div class="menu-stat">Warning <span>Ends session</span></div>
+                <div class="menu-stat">Progress <span>Auto-save only</span></div>
+              </div>
+              <button class="menu-button" id="exit-game" type="button">Exit Game</button>
               <div class="menu-footer">Press Esc to close</div>
             </div>
           </div>

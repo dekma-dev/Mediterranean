@@ -13,7 +13,8 @@ renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x0d1216, 24, 90);
+scene.background = new THREE.Color(0x86b6e8);
+scene.fog = new THREE.Fog(0x86b6e8, 30, 140);
 
 const player = new Player();
 scene.add(player.group);
@@ -56,6 +57,7 @@ const panelQuests = document.getElementById("panel-quests");
 const panelMap = document.getElementById("panel-map");
 const characterCanvas = document.getElementById("character-canvas");
 const mapCanvas = document.getElementById("map-canvas");
+const exitGameButton = document.getElementById("exit-game");
 let isMenuOpen = false;
 const skillSlots = Array.from(document.querySelectorAll("[data-skill]")).map(
   (slot) => ({
@@ -278,6 +280,12 @@ function renderCharacterPreview(delta) {
 
 initCharacterPreview();
 initMap();
+
+if (exitGameButton) {
+  exitGameButton.addEventListener("click", () => {
+    window.close();
+  });
+}
 
 function setMenuPanel(panel) {
   menuTabs.forEach((tab) => {
