@@ -1,9 +1,10 @@
 import * as THREE from "three";
 
 export class ThirdPersonCamera {
-  constructor(camera, target) {
+  constructor(camera, target, domElement = null) {
     this.camera = camera;
     this.target = target;
+    this.domElement = domElement;
     this.currentPosition = new THREE.Vector3();
     this.currentLookAt = new THREE.Vector3();
 
@@ -14,6 +15,7 @@ export class ThirdPersonCamera {
     this.sensitivity = 0.003;
     this.isRotating = false;
     this.lastMouse = null;
+    this.isPointerLocked = false;
 
     this._bindMouse();
   }
@@ -24,7 +26,11 @@ export class ThirdPersonCamera {
     window.addEventListener("mousedown", (event) => {
       if (event.button === 2) {
         this.isRotating = true;
-        this.lastMouse = { x: event.clientX, y: event.clientY };
+        if (this.domElement && this.domElement.requestPointerLock) {
+          this.domElement.requestPointerLock();
+        } else {
+          this.lastMouse = { x: event.clientX, y: event.clientY };
+        }
       }
     });
 
@@ -32,14 +38,32 @@ export class ThirdPersonCamera {
       if (event.button === 2) {
         this.isRotating = false;
         this.lastMouse = null;
+        if (document.pointerLockElement) {
+          document.exitPointerLock();
+        }
+      }
+    });
+
+    document.addEventListener("pointerlockchange", () => {
+      this.isPointerLocked = document.pointerLockElement === this.domElement;
+      if (!this.isPointerLocked) {
+        this.lastMouse = null;
       }
     });
 
     window.addEventListener("mousemove", (event) => {
-      if (!this.isRotating || !this.lastMouse) return;
-      const dx = event.clientX - this.lastMouse.x;
-      const dy = event.clientY - this.lastMouse.y;
-      this.lastMouse = { x: event.clientX, y: event.clientY };
+      if (!this.isRotating) return;
+      let dx = 0;
+      let dy = 0;
+      if (this.isPointerLocked) {
+        dx = event.movementX;
+        dy = event.movementY;
+      } else {
+        if (!this.lastMouse) return;
+        dx = event.clientX - this.lastMouse.x;
+        dy = event.clientY - this.lastMouse.y;
+        this.lastMouse = { x: event.clientX, y: event.clientY };
+      }
 
       this.yaw -= dx * this.sensitivity;
       this.pitch += dy * this.sensitivity;

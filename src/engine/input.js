@@ -16,8 +16,6 @@ const KEY_MAP = {
   KeyM: "map",
   KeyQ: "quests",
   Space: "jump",
-  ShiftLeft: "sprint",
-  ShiftRight: "sprint",
   Tab: "target",
   Escape: "menu"
 };

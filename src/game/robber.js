@@ -122,7 +122,7 @@ export class Robber extends Character {
     };
   }
 
-  update(delta, world, player) {
+  update(delta, world, player, enemies = []) {
     if (!world || !player) return;
     if (this.isDead) {
       this._updateDeath(delta);
@@ -148,7 +148,7 @@ export class Robber extends Character {
     }
 
     if (seesPlayer) {
-      isMoving = this._updateChase(delta, world, player);
+      isMoving = this._updateChase(delta, world, player, enemies);
       if (this.isCasting) {
         this.castElapsed += delta;
         if (!this.castFired && this.castElapsed >= this.castFireDelay) {
@@ -170,7 +170,7 @@ export class Robber extends Character {
     } else {
       this.isCasting = false;
       this.castElapsed = 0;
-      isMoving = this._updatePatrol(delta, world);
+      isMoving = this._updatePatrol(delta, world, enemies, player);
     }
 
     this._updateAnimation(delta, seesPlayer, isMoving);
@@ -268,7 +268,7 @@ export class Robber extends Character {
     return points;
   }
 
-  _updatePatrol(delta, world) {
+  _updatePatrol(delta, world, enemies, player) {
     if (this.patrolPoints.length === 0) return false;
     const target = this.patrolPoints[this.patrolIndex];
     const toTarget = target.clone().sub(this.group.position);
@@ -282,12 +282,10 @@ export class Robber extends Character {
     const direction = toTarget.normalize();
     const speed = this.angrySpeed;
     const step = speed * delta;
-    const nextPosition = this.group.position
-      .clone()
-      .addScaledVector(direction, step);
-
-    if (world.isWalkable(nextPosition, this.radius)) {
-      this.group.position.copy(nextPosition);
+    const moveVector = direction.clone().multiplyScalar(step);
+    const blockers = [player, ...enemies];
+    const moved = this._tryMove(world, moveVector, blockers);
+    if (moved) {
       const heading = Math.atan2(direction.x, direction.z);
       this.group.rotation.y = heading;
       return true;
@@ -297,7 +295,7 @@ export class Robber extends Character {
     return false;
   }
 
-  _updateChase(delta, world, player) {
+  _updateChase(delta, world, player, enemies) {
     const toTarget = player.group.position.clone().sub(this.group.position);
     toTarget.y = 0;
     const distance = toTarget.length();
@@ -305,12 +303,11 @@ export class Robber extends Character {
 
     const direction = toTarget.normalize();
     const step = this.angrySpeed * delta;
-    const nextPosition = this.group.position
-      .clone()
-      .addScaledVector(direction, step);
+    const moveVector = direction.clone().multiplyScalar(step);
 
-    if (world.isWalkable(nextPosition, this.radius)) {
-      this.group.position.copy(nextPosition);
+    const blockers = [player, ...enemies];
+    const moved = this._tryMove(world, moveVector, blockers);
+    if (moved) {
       const heading = Math.atan2(direction.x, direction.z);
       this.group.rotation.y = heading;
       return true;
@@ -328,5 +325,29 @@ export class Robber extends Character {
       this.fallAngle
     );
     this.group.quaternion.copy(this.deathQuat).multiply(fallQuat);
+  }
+
+  _tryMove(world, moveVector, blockers) {
+    if (!world) return false;
+    const nextPosition = this.group.position.clone().add(moveVector);
+    if (world.isWalkable(nextPosition, this.radius, blockers, this)) {
+      this.group.position.copy(nextPosition);
+      return true;
+    }
+
+    const slideX = new THREE.Vector3(moveVector.x, 0, 0);
+    const slideZ = new THREE.Vector3(0, 0, moveVector.z);
+    const nextX = this.group.position.clone().add(slideX);
+    if (slideX.lengthSq() > 0 && world.isWalkable(nextX, this.radius, blockers, this)) {
+      this.group.position.copy(nextX);
+      return true;
+    }
+
+    const nextZ = this.group.position.clone().add(slideZ);
+    if (slideZ.lengthSq() > 0 && world.isWalkable(nextZ, this.radius, blockers, this)) {
+      this.group.position.copy(nextZ);
+      return true;
+    }
+    return false;
   }
 }

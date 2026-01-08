@@ -46,10 +46,10 @@
         align-items: center;
         gap: 12px;
         padding: 10px 14px;
-        background: rgba(12, 8, 8, 0.78);
-        border: 1px solid rgba(230, 180, 180, 0.2);
+        background: rgba(52, 34, 34, 0.92);
+        border: 1px solid rgba(255, 235, 235, 0.75);
         border-radius: 10px;
-        box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+        box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35), 0 0 18px rgba(255, 210, 210, 0.18);
         margin-left: 36px;
       }
       #enemy-hud.hidden {
@@ -60,10 +60,10 @@
         border-color: rgba(240, 190, 190, 0.85);
       }
       #enemy-hud .hud-name {
-        color: #f2dede;
+        color: #fff9f9;
       }
       #enemy-hud .hp-fill {
-        background: linear-gradient(90deg, #e05050, #a01818);
+        background: linear-gradient(90deg, #64c87b, #3a8f55);
       }
       .portrait {
         width: 54px;
@@ -94,8 +94,33 @@
       .hp-fill {
         height: 100%;
         width: 100%;
-        background: linear-gradient(90deg, #6bdc6b, #2fae52);
+        background: linear-gradient(90deg, #2e7a52, #1c5a3a);
         transition: width 0.2s ease-out;
+      }
+      .mp-bar {
+        position: relative;
+        height: 14px;
+        background: #151b1e;
+        border: 1px solid rgba(150, 190, 210, 0.35);
+        border-radius: 6px;
+        overflow: hidden;
+        margin-top: 6px;
+      }
+      .mp-fill {
+        height: 100%;
+        width: 100%;
+        background: linear-gradient(90deg, #4a8fba, #275a84);
+        transition: width 0.2s ease-out;
+      }
+      .mp-text {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-size: 10px;
+        color: #d6ecf9;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+        pointer-events: none;
       }
       .hp-text {
         position: absolute;
@@ -514,6 +539,10 @@
           <div class="hp-bar" aria-label="health">
             <div class="hp-fill" id="hp-fill"></div>
             <div class="hp-text" id="hp-text">100%</div>
+          </div>
+          <div class="mp-bar" aria-label="mana">
+            <div class="mp-fill" id="mp-fill"></div>
+            <div class="mp-text" id="mp-text">1000</div>
           </div>
         </div>
       </div>

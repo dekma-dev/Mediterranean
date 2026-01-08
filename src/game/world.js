@@ -3,14 +3,15 @@ import * as THREE from "three";
 export class World {
   constructor(scene) {
     this.scene = scene;
-    this.mapSize = { width: 40, depth: 40 };
+    this.mapSize = { width: 80, depth: 80 };
     this.obstacles = [];
     this.obstacleBounds = [];
     this.projectiles = [];
 
     this._createLights();
     this._createGround();
-    this._createObstacles();
+    this._createProps();
+    this._createWalls();
   }
 
   update(delta, entities = {}) {
@@ -18,10 +19,10 @@ export class World {
   }
 
   _createLights() {
-    const ambient = new THREE.AmbientLight(0x9bb7b0, 0.5);
+    const ambient = new THREE.AmbientLight(0x9bb7b0, 0.9);
     this.scene.add(ambient);
 
-    const sun = new THREE.DirectionalLight(0xdff6ff, 1.1);
+    const sun = new THREE.DirectionalLight(0xdff6ff, 1.6);
     sun.position.set(12, 18, 8);
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
@@ -36,57 +37,21 @@ export class World {
     const geometry = new THREE.PlaneGeometry(
       this.mapSize.width,
       this.mapSize.depth,
-      10,
-      10
+      20,
+      20
     );
     const material = new THREE.MeshStandardMaterial({
-      color: 0x1b3a36,
-      roughness: 0.9
+      color: 0x3f7a3b,
+      roughness: 0.85
     });
     const ground = new THREE.Mesh(geometry, material);
     ground.receiveShadow = true;
     ground.rotation.x = -Math.PI / 2;
     this.scene.add(ground);
 
-    const grid = new THREE.GridHelper(
-      this.mapSize.width,
-      20,
-      0x3a5e59,
-      0x223632
-    );
-    grid.position.y = 0.01;
-    this.scene.add(grid);
   }
 
-  _createObstacles() {
-    const obstacleData = [
-      { x: -10, z: -6, w: 4, d: 6, h: 4 },
-      { x: 8, z: -2, w: 6, d: 4, h: 3 },
-      { x: 4, z: 10, w: 8, d: 3, h: 2.5 },
-      { x: -6, z: 10, w: 3, d: 6, h: 5 }
-    ];
-
-    const material = new THREE.MeshStandardMaterial({
-      color: 0x2b5c55,
-      roughness: 0.7
-    });
-
-    obstacleData.forEach((data) => {
-      const geometry = new THREE.BoxGeometry(data.w, data.h, data.d);
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.set(data.x, data.h / 2, data.z);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      this.scene.add(mesh);
-      this.obstacles.push(mesh);
-      this.obstacleBounds.push({
-        minX: data.x - data.w / 2,
-        maxX: data.x + data.w / 2,
-        minZ: data.z - data.d / 2,
-        maxZ: data.z + data.d / 2
-      });
-    });
-  }
+  _createObstacles() {}
 
   spawnProjectile(position, direction, options = {}) {
     const {
@@ -132,6 +97,246 @@ export class World {
       targetOffsetY,
       turnRate
     });
+  }
+
+  _createProps() {
+    const treeTrunk = new THREE.MeshStandardMaterial({
+      color: 0x5a3b27,
+      roughness: 0.85
+    });
+    const treeLeaves = new THREE.MeshStandardMaterial({
+      color: 0x2f6d3f,
+      roughness: 0.8
+    });
+    const rockMaterial = new THREE.MeshStandardMaterial({
+      color: 0x4a5a5c,
+      roughness: 0.7
+    });
+    const bushMaterial = new THREE.MeshStandardMaterial({
+      color: 0x2f6b45,
+      roughness: 0.85
+    });
+
+    this._scatterProps(treeTrunk, treeLeaves, rockMaterial, bushMaterial);
+    this._createGrassPatches();
+  }
+
+  _scatterProps(treeTrunk, treeLeaves, rockMaterial, bushMaterial) {
+    const halfWidth = this.mapSize.width / 2 - 6;
+    const halfDepth = this.mapSize.depth / 2 - 6;
+    const minDistance = 2;
+    const spawnClearRadius = 4;
+    const placed = [];
+    const tryPlace = (radius) => {
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        const x = THREE.MathUtils.randFloat(-halfWidth, halfWidth);
+        const z = THREE.MathUtils.randFloat(-halfDepth, halfDepth);
+        if (x * x + z * z < spawnClearRadius * spawnClearRadius) {
+          continue;
+        }
+        const ok = placed.every((p) => {
+          const dx = x - p.x;
+          const dz = z - p.z;
+          const minDist = p.radius + radius + minDistance;
+          return dx * dx + dz * dz >= minDist * minDist;
+        });
+        if (ok) {
+          placed.push({ x, z, radius });
+          return { x, z };
+        }
+      }
+      return null;
+    };
+
+    for (let i = 0; i < 40; i += 1) {
+      const scale = THREE.MathUtils.randFloat(0.8, 1.3);
+      const radius = 0.85 * scale;
+      const spot = tryPlace(radius);
+      if (!spot) continue;
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.35, 0.5, 2.8, 8),
+        treeTrunk
+      );
+      const crown = new THREE.Mesh(
+        new THREE.ConeGeometry(1.4, 2.5, 8),
+        treeLeaves
+      );
+      trunk.position.set(spot.x, 1.4, spot.z);
+      crown.position.set(spot.x, 3.4, spot.z);
+      trunk.castShadow = true;
+      crown.castShadow = true;
+      trunk.scale.setScalar(scale);
+      crown.scale.setScalar(scale);
+      this.scene.add(trunk, crown);
+      this._addObstacleBounds(
+        spot.x - radius,
+        spot.x + radius,
+        spot.z - radius,
+        spot.z + radius
+      );
+    }
+
+    for (let i = 0; i < 48; i += 1) {
+      const size = THREE.MathUtils.randFloat(0.6, 1.3);
+      const radius = 0.7;
+      const spot = tryPlace(radius);
+      if (!spot) continue;
+      const rock = new THREE.Mesh(
+        new THREE.DodecahedronGeometry(size, 0),
+        rockMaterial
+      );
+      rock.position.set(spot.x, 0.8, spot.z);
+      rock.castShadow = true;
+      rock.receiveShadow = true;
+      this.scene.add(rock);
+      this._addObstacleBounds(
+        spot.x - radius,
+        spot.x + radius,
+        spot.z - radius,
+        spot.z + radius
+      );
+    }
+
+    for (let i = 0; i < 46; i += 1) {
+      const size = THREE.MathUtils.randFloat(0.8, 1.4);
+      const radius = 0.65;
+      const spot = tryPlace(radius);
+      if (!spot) continue;
+      const bush = new THREE.Mesh(
+        new THREE.SphereGeometry(size, 10, 10),
+        bushMaterial
+      );
+      bush.position.set(spot.x, 0.9, spot.z);
+      bush.castShadow = true;
+      bush.receiveShadow = true;
+      this.scene.add(bush);
+      this._addObstacleBounds(
+        spot.x - radius,
+        spot.x + radius,
+        spot.z - radius,
+        spot.z + radius
+      );
+    }
+  }
+
+  _createGrassPatches() {
+    const bladeMaterial = new THREE.MeshStandardMaterial({
+      color: 0x3c7a4e,
+      roughness: 0.85
+    });
+    const bladeGeometry = new THREE.ConeGeometry(0.12, 0.6, 5);
+    const halfWidth = this.mapSize.width / 2 - 3;
+    const halfDepth = this.mapSize.depth / 2 - 3;
+    const count = 2600;
+
+    const grass = new THREE.InstancedMesh(
+      bladeGeometry,
+      bladeMaterial,
+      count
+    );
+    grass.castShadow = true;
+    grass.receiveShadow = true;
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i < count; i += 1) {
+      const x = THREE.MathUtils.randFloat(-halfWidth, halfWidth);
+      const z = THREE.MathUtils.randFloat(-halfDepth, halfDepth);
+      const scale = THREE.MathUtils.randFloat(0.7, 1.25);
+      dummy.position.set(x, 0.3, z);
+      dummy.rotation.y = THREE.MathUtils.randFloat(0, Math.PI * 2);
+      dummy.scale.set(scale, scale, scale);
+      dummy.updateMatrix();
+      grass.setMatrixAt(i, dummy.matrix);
+    }
+    this.scene.add(grass);
+  }
+
+  _createWalls() {
+    const inset = 3;
+    const halfWidth = this.mapSize.width / 2 - inset;
+    const halfDepth = this.mapSize.depth / 2 - inset;
+    const wallThickness = 2;
+    const wallHeight = 4;
+    const logRadius = 0.45;
+    const logLength = 1.8;
+    const logMaterial = new THREE.MeshStandardMaterial({
+      color: 0x7a542f,
+      roughness: 0.8
+    });
+    const logGeometry = new THREE.CylinderGeometry(
+      logRadius,
+      logRadius,
+      logLength,
+      10
+    );
+
+    const createLogRow = (count, startX, startZ, dx, dz, y, rotY) => {
+      for (let i = 0; i < count; i += 1) {
+        const log = new THREE.Mesh(logGeometry, logMaterial);
+        log.position.set(startX + dx * i, y, startZ + dz * i);
+        log.rotation.z = Math.PI / 2;
+        log.rotation.y = rotY;
+        log.castShadow = true;
+        log.receiveShadow = true;
+        this.scene.add(log);
+      }
+    };
+
+    const rows = Math.floor(wallHeight / (logRadius * 1.5));
+    const northZ = -halfDepth - wallThickness / 2;
+    const southZ = halfDepth + wallThickness / 2;
+    const westX = -halfWidth - wallThickness / 2;
+    const eastX = halfWidth + wallThickness / 2;
+    const spanX = halfWidth * 2;
+    const spanZ = halfDepth * 2;
+    const countX = Math.ceil(spanX / logLength) + 1;
+    const countZ = Math.ceil(spanZ / logLength) + 1;
+    const actualSpanX = (countX - 1) * logLength;
+    const actualSpanZ = (countZ - 1) * logLength;
+    const offset = logRadius * 1.1;
+
+    for (let r = 0; r < rows; r += 1) {
+      const y = logRadius + r * logRadius * 1.5;
+      const startX = -actualSpanX / 2;
+      const startZ = -actualSpanZ / 2;
+      createLogRow(countX, startX, northZ - offset, logLength, 0, y, 0);
+      createLogRow(countX, startX, northZ + offset, logLength, 0, y, 0);
+      createLogRow(countX, startX, southZ - offset, logLength, 0, y, 0);
+      createLogRow(countX, startX, southZ + offset, logLength, 0, y, 0);
+
+      createLogRow(countZ, westX - offset, startZ, 0, logLength, y, Math.PI / 2);
+      createLogRow(countZ, westX + offset, startZ, 0, logLength, y, Math.PI / 2);
+      createLogRow(countZ, eastX - offset, startZ, 0, logLength, y, Math.PI / 2);
+      createLogRow(countZ, eastX + offset, startZ, 0, logLength, y, Math.PI / 2);
+    }
+
+    this._addObstacleBounds(
+      -halfWidth - wallThickness * 0.4,
+      halfWidth + wallThickness * 0.4,
+      northZ - wallThickness * 0.4,
+      northZ + wallThickness * 0.4
+    );
+    this._addObstacleBounds(
+      -halfWidth - wallThickness * 0.4,
+      halfWidth + wallThickness * 0.4,
+      southZ - wallThickness * 0.4,
+      southZ + wallThickness * 0.4
+    );
+    this._addObstacleBounds(
+      westX - wallThickness * 0.4,
+      westX + wallThickness * 0.4,
+      -halfDepth - wallThickness * 0.4,
+      halfDepth + wallThickness * 0.4
+    );
+    this._addObstacleBounds(
+      eastX - wallThickness * 0.4,
+      eastX + wallThickness * 0.4,
+      -halfDepth - wallThickness * 0.4,
+      halfDepth + wallThickness * 0.4
+    );
+  }
+
+  _addObstacleBounds(minX, maxX, minZ, maxZ) {
+    this.obstacleBounds.push({ minX, maxX, minZ, maxZ });
   }
 
   _updateProjectiles(delta, { player, enemies = [] } = {}) {
@@ -219,7 +424,7 @@ export class World {
     );
   }
 
-  isWalkable(position, radius = 0.6) {
+  isWalkable(position, radius = 0.6, entities = [], self = null) {
     const halfWidth = this.mapSize.width / 2 - radius;
     const halfDepth = this.mapSize.depth / 2 - radius;
     if (
@@ -231,7 +436,23 @@ export class World {
       return false;
     }
 
-    return !this._hitsObstacle(position, radius);
+    if (this._hitsObstacle(position, radius)) {
+      return false;
+    }
+
+    if (entities && entities.length) {
+      for (const entity of entities) {
+        if (!entity || entity === self || entity.isDead) continue;
+        const dx = position.x - entity.group.position.x;
+        const dz = position.z - entity.group.position.z;
+        const minDist = radius + (entity.radius ?? 0.6);
+        if (dx * dx + dz * dz < minDist * minDist) {
+          return false;
+        }
+      }
+    }
+
+    return true;
   }
 
   _hitsObstacle(position, radius) {

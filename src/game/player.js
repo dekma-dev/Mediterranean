@@ -6,7 +6,6 @@ export class Player extends Character {
     super({ radius: 0.6, maxHealth: 100, hitOffsetY: 1.2 });
     this.group.position.set(0, 0, 0);
     this.speed = 4;
-    this.sprintSpeed = 7;
     this.jumpSpeed = 6.5;
     this.gravity = -18;
     this.velocityY = 0;
@@ -17,6 +16,9 @@ export class Player extends Character {
     this.dashTimer = 0;
     this.dashDirection = new THREE.Vector3(0, 0, 1);
     this.dashSpeed = 14;
+    this.maxMana = 1000;
+    this.mana = this.maxMana;
+    this.manaRegen = 10;
     this.skills = {
       skill1: { name: "slash", cooldown: 1, remaining: 0 },
       skill2: { name: "bolt", cooldown: 4, remaining: 0 },
@@ -113,6 +115,7 @@ export class Player extends Character {
       this._updateAnimation(delta, false);
       return;
     }
+    this._regenMana(delta);
     const moveX =
       (input.isDown("right") ? 1 : 0) - (input.isDown("left") ? 1 : 0);
     const moveZ = (input.isDown("down") ? 1 : 0) - (input.isDown("up") ? 1 : 0);
@@ -163,21 +166,13 @@ export class Player extends Character {
       targetSpeed = this.dashSpeed;
     } else if (moving && baseDirection) {
       moveDirection = baseDirection;
-      targetSpeed = input.isDown("sprint") ? this.sprintSpeed : this.speed;
+      targetSpeed = this.speed;
     }
 
     if (moveDirection) {
       const distance = targetSpeed * delta;
-
-      const nextPosition = this.group.position.clone();
-      nextPosition.addScaledVector(moveDirection, distance);
-
-      if (
-        this._isInsideBounds(nextPosition, world) &&
-        !this._hitsObstacle(nextPosition, world)
-      ) {
-        this.group.position.copy(nextPosition);
-      }
+      const moveVector = moveDirection.clone().multiplyScalar(distance);
+      this._tryMove(world, moveVector, enemies);
 
       const heading = Math.atan2(moveDirection.x, moveDirection.z);
       this.group.rotation.y = heading;
@@ -202,6 +197,10 @@ export class Player extends Character {
 
   getSkills() {
     return this.skills;
+  }
+
+  getManaRatio() {
+    return this.maxMana > 0 ? this.mana / this.maxMana : 0;
   }
 
   _getCameraForward(camera) {
@@ -242,7 +241,7 @@ export class Player extends Character {
       if (hasTarget && this._isTargetInRange(targetEnemy, 40)) {
         this._tryUseSkill("skill2", () =>
           this._doBolt(world, camera, cameraForward, targetEnemy)
-        );
+        , 150);
       }
     }
     if (input.consumePressed("skill3")) {
@@ -255,9 +254,10 @@ export class Player extends Character {
     }
   }
 
-  _tryUseSkill(key, action) {
+  _tryUseSkill(key, action, manaCost = 0) {
     const skill = this.skills[key];
     if (!skill || skill.remaining > 0) return;
+    if (manaCost > 0 && !this._consumeMana(manaCost)) return;
     skill.remaining = skill.cooldown;
     action();
   }
@@ -342,6 +342,39 @@ export class Player extends Character {
     this.health = Math.min(this.maxHealth, this.health + amount);
   }
 
+  _tryMove(world, moveVector, enemies) {
+    if (!world) return;
+    const nextPosition = this.group.position.clone().add(moveVector);
+    if (world.isWalkable(nextPosition, this.radius, enemies, this)) {
+      this.group.position.copy(nextPosition);
+      return;
+    }
+
+    const slideX = new THREE.Vector3(moveVector.x, 0, 0);
+    const slideZ = new THREE.Vector3(0, 0, moveVector.z);
+    const nextX = this.group.position.clone().add(slideX);
+    if (slideX.lengthSq() > 0 && world.isWalkable(nextX, this.radius, enemies, this)) {
+      this.group.position.copy(nextX);
+      return;
+    }
+
+    const nextZ = this.group.position.clone().add(slideZ);
+    if (slideZ.lengthSq() > 0 && world.isWalkable(nextZ, this.radius, enemies, this)) {
+      this.group.position.copy(nextZ);
+    }
+  }
+
+  _regenMana(delta) {
+    if (this.mana >= this.maxMana) return;
+    this.mana = Math.min(this.maxMana, this.mana + this.manaRegen * delta);
+  }
+
+  _consumeMana(cost) {
+    if (this.mana < cost) return false;
+    this.mana -= cost;
+    return true;
+  }
+
   _updateAnimation(delta, moving) {
     this.animTime += delta * (moving ? 8 : 2);
 
@@ -385,28 +418,4 @@ export class Player extends Character {
     this.parts.cloak.position.y = 1.35 + bob * 0.4;
   }
 
-  _isInsideBounds(position, world) {
-    const halfWidth = world.mapSize.width / 2 - this.radius;
-    const halfDepth = world.mapSize.depth / 2 - this.radius;
-
-    return (
-      position.x >= -halfWidth &&
-      position.x <= halfWidth &&
-      position.z >= -halfDepth &&
-      position.z <= halfDepth
-    );
-  }
-
-  _hitsObstacle(position, world) {
-    const minX = position.x - this.radius;
-    const maxX = position.x + this.radius;
-    const minZ = position.z - this.radius;
-    const maxZ = position.z + this.radius;
-
-    return world.obstacleBounds.some((box) => {
-      const overlapX = maxX > box.minX && minX < box.maxX;
-      const overlapZ = maxZ > box.minZ && minZ < box.maxZ;
-      return overlapX && overlapZ;
-    });
-  }
 }

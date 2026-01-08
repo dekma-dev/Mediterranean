@@ -13,7 +13,7 @@ renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x0d1216, 18, 45);
+scene.fog = new THREE.Fog(0x0d1216, 24, 90);
 
 const player = new Player();
 scene.add(player.group);
@@ -32,13 +32,15 @@ const camera = new THREE.PerspectiveCamera(
   60,
   window.innerWidth / window.innerHeight,
   0.1,
-  200
+  400
 );
-const followCam = new ThirdPersonCamera(camera, player);
+const followCam = new ThirdPersonCamera(camera, player, renderer.domElement);
 
 const input = new Input();
 const hpFill = document.getElementById("hp-fill");
 const hpText = document.getElementById("hp-text");
+const mpFill = document.getElementById("mp-fill");
+const mpText = document.getElementById("mp-text");
 const enemyHud = document.getElementById("enemy-hud");
 const enemyName = document.getElementById("enemy-name");
 const enemyHpFill = document.getElementById("enemy-hp-fill");
@@ -164,7 +166,7 @@ function resizeMapCanvas() {
   mapCanvas.height = height;
   mapCtx.setTransform(1, 0, 0, 1, 0, 0);
   mapCtx.scale(dpr, dpr);
-  const baseSize = 1024;
+  const baseSize = 2048;
   mapBaseCanvas.width = baseSize;
   mapBaseCanvas.height = baseSize;
   mapNeedsRedraw = true;
@@ -346,7 +348,7 @@ startLoop((delta) => {
   }
 
   player.update(input, delta, world, camera, enemies, targetEnemy);
-  enemies.forEach((enemy) => enemy.update(delta, world, player));
+  enemies.forEach((enemy) => enemy.update(delta, world, player, enemies));
   world.update(delta, { player, enemies });
   followCam.update(delta);
   renderer.render(scene, camera);
@@ -372,6 +374,14 @@ startLoop((delta) => {
   }
   if (hpText) {
     hpText.textContent = `${hpPercent}%`;
+  }
+  const mpRatio = player.getManaRatio();
+  const mpPercent = Math.round(mpRatio * 100);
+  if (mpFill) {
+    mpFill.style.width = `${Math.max(0, Math.min(100, mpPercent))}%`;
+  }
+  if (mpText) {
+    mpText.textContent = `${Math.round(player.mana)} / ${player.maxMana}`;
   }
 
   updateEnemyHud(targetEnemy);
