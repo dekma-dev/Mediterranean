@@ -199,6 +199,309 @@
       #skill-desc.visible {
         opacity: 1;
       }
+      #menu-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(6, 9, 12, 0.68);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease-out;
+        z-index: 90;
+      }
+      #game-menu {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+        transform: translateY(6px);
+        z-index: 91;
+        font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif;
+        color: #f4ead2;
+      }
+      body.menu-open #menu-overlay {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      body.menu-open #game-menu {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+      }
+      .menu-frame {
+        width: min(920px, 92vw);
+        background: linear-gradient(145deg, #2b2219, #1a120d);
+        border: 2px solid rgba(210, 176, 112, 0.85);
+        border-radius: 14px;
+        padding: 16px 18px 18px;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+        position: relative;
+      }
+      .menu-frame::after {
+        content: "";
+        position: absolute;
+        inset: 8px;
+        border: 1px solid rgba(220, 200, 150, 0.35);
+        border-radius: 10px;
+        pointer-events: none;
+      }
+      .menu-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        padding: 4px 6px 12px;
+        border-bottom: 1px solid rgba(210, 176, 112, 0.3);
+        margin-bottom: 12px;
+      }
+      .menu-title {
+        font-size: 26px;
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        color: #f6e6b6;
+      }
+      .menu-subtitle {
+        font-size: 12px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: rgba(240, 220, 170, 0.7);
+      }
+      .menu-body {
+        display: grid;
+        grid-template-columns: 180px 1fr;
+        gap: 16px;
+      }
+      .menu-tabs {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .menu-tab {
+        border: 1px solid rgba(210, 176, 112, 0.5);
+        background: linear-gradient(135deg, #3a2d20, #221710);
+        color: #f5e3b2;
+        padding: 10px 12px;
+        border-radius: 8px;
+        text-align: left;
+        font-size: 14px;
+        letter-spacing: 0.6px;
+        cursor: pointer;
+        text-transform: uppercase;
+      }
+      .menu-tab.active {
+        background: linear-gradient(135deg, #5a4428, #2a1b10);
+        border-color: rgba(235, 200, 140, 0.9);
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+      }
+      .menu-panel {
+        background: linear-gradient(135deg, rgba(52, 40, 26, 0.95), rgba(28, 20, 14, 0.95));
+        border: 1px solid rgba(210, 176, 112, 0.35);
+        border-radius: 10px;
+        padding: 16px;
+        min-height: 320px;
+      }
+      .menu-panel-page {
+        display: none;
+      }
+      .menu-panel-page.active {
+        display: block;
+      }
+      .menu-section-title {
+        font-size: 16px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        margin-bottom: 10px;
+        color: #f7e6b8;
+      }
+      .menu-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px 18px;
+        font-size: 14px;
+      }
+      .menu-stat {
+        display: flex;
+        justify-content: space-between;
+        padding: 6px 8px;
+        background: rgba(14, 10, 8, 0.6);
+        border: 1px solid rgba(220, 200, 150, 0.2);
+        border-radius: 6px;
+      }
+      .menu-stat span {
+        color: rgba(240, 220, 170, 0.7);
+      }
+      .menu-footer {
+        margin-top: 14px;
+        font-size: 12px;
+        letter-spacing: 0.8px;
+        text-transform: uppercase;
+        color: rgba(240, 220, 170, 0.6);
+      }
+      .ui-panel {
+        position: fixed;
+        top: 110px;
+        width: 320px;
+        background: linear-gradient(145deg, rgba(30, 23, 18, 0.95), rgba(16, 12, 9, 0.95));
+        border: 2px solid rgba(210, 176, 112, 0.75);
+        border-radius: 12px;
+        box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45);
+        padding: 12px;
+        color: #f4ead2;
+        font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif;
+        display: none;
+        z-index: 80;
+      }
+      .ui-panel.active {
+        display: block;
+      }
+      #panel-character {
+        left: 18px;
+        width: 340px;
+      }
+      #panel-inventory {
+        right: 18px;
+        width: 360px;
+      }
+      #panel-quests {
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(520px, 90vw);
+      }
+      #panel-map {
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        border-radius: 0;
+        padding: 16px 18px;
+      }
+      .panel-title {
+        font-size: 16px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #f7e6b8;
+        margin-bottom: 10px;
+      }
+      .panel-subtitle {
+        font-size: 11px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: rgba(240, 220, 170, 0.6);
+        margin-bottom: 10px;
+      }
+      .character-preview {
+        height: 220px;
+        border: 1px solid rgba(210, 176, 112, 0.4);
+        border-radius: 10px;
+        background: radial-gradient(circle at 35% 20%, rgba(120, 95, 60, 0.35), rgba(18, 12, 8, 0.9));
+        display: grid;
+        place-items: center;
+        color: rgba(240, 220, 170, 0.75);
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        margin-bottom: 10px;
+      }
+      .equipment-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .equipment-slot {
+        padding: 8px 10px;
+        background: rgba(14, 10, 8, 0.6);
+        border: 1px solid rgba(220, 200, 150, 0.2);
+        border-radius: 6px;
+        font-size: 12px;
+        display: flex;
+        justify-content: space-between;
+      }
+      .inventory-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+      }
+      .inventory-cell {
+        height: 64px;
+        background: linear-gradient(145deg, rgba(26, 20, 16, 0.9), rgba(12, 9, 7, 0.9));
+        border: 1px solid rgba(210, 176, 112, 0.4);
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        font-size: 11px;
+        color: rgba(240, 220, 170, 0.7);
+        text-align: center;
+        padding: 4px;
+      }
+      .quest-list {
+        display: grid;
+        gap: 10px;
+      }
+      .quest-item {
+        padding: 10px 12px;
+        background: rgba(14, 10, 8, 0.6);
+        border: 1px solid rgba(220, 200, 150, 0.2);
+        border-radius: 8px;
+        font-size: 13px;
+      }
+      .map-preview {
+        height: 240px;
+        border: 1px solid rgba(210, 176, 112, 0.4);
+        border-radius: 10px;
+        background: radial-gradient(circle at 50% 30%, rgba(70, 90, 70, 0.45), rgba(14, 18, 14, 0.9));
+        display: grid;
+        place-items: center;
+        color: rgba(240, 220, 170, 0.75);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+      #character-canvas {
+        width: 100%;
+        height: 220px;
+        border-radius: 10px;
+        display: block;
+      }
+      #map-canvas {
+        width: 100%;
+        height: calc(100% - 64px);
+        min-height: 280px;
+        border-radius: 12px;
+        display: block;
+        background: #0e1512;
+      }
+      .menu-full {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+        gap: 18px;
+      }
+      .character-preview {
+        height: 280px;
+        border: 1px solid rgba(210, 176, 112, 0.4);
+        border-radius: 10px;
+        background: radial-gradient(circle at 35% 20%, rgba(120, 95, 60, 0.35), rgba(18, 12, 8, 0.9));
+        display: grid;
+        place-items: center;
+        color: rgba(240, 220, 170, 0.75);
+        letter-spacing: 1px;
+        text-transform: uppercase;
+      }
+      .equipment-list {
+        display: grid;
+        gap: 8px;
+      }
+      .equipment-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 10px;
+        background: rgba(14, 10, 8, 0.6);
+        border: 1px solid rgba(220, 200, 150, 0.2);
+        border-radius: 6px;
+        font-size: 13px;
+      }
+      body.menu-open #ui,
+      body.menu-open #status-hud,
+      body.menu-open #skill-desc {
+        filter: brightness(0.65);
+      }
       canvas { display: block; }
     </style>
   </head>
@@ -224,6 +527,99 @@
           </div>
         </div>
       </div>
+    </div>
+    <div id="menu-overlay" aria-hidden="true"></div>
+    <div id="game-menu" role="dialog" aria-modal="true" aria-hidden="true" aria-label="game menu">
+      <div class="menu-frame">
+        <div class="menu-header">
+          <div class="menu-title" id="menu-title">Adventurer Menu</div>
+          <div class="menu-subtitle" id="menu-subtitle">Esc to close</div>
+        </div>
+        <div class="menu-body">
+          <div class="menu-tabs" role="tablist" aria-label="menu sections">
+            <button class="menu-tab active" type="button" data-menu-tab="character">Character</button>
+            <button class="menu-tab" type="button" data-menu-tab="settings">Settings</button>
+          </div>
+          <div class="menu-panel">
+            <div class="menu-panel-page active" data-menu-panel="character">
+              <div class="menu-section-title">Character Overview</div>
+              <div class="menu-grid">
+                <div class="menu-stat">Level <span>8</span></div>
+                <div class="menu-stat">Class <span>Ranger</span></div>
+                <div class="menu-stat">Strength <span>14</span></div>
+                <div class="menu-stat">Agility <span>19</span></div>
+                <div class="menu-stat">Stamina <span>12</span></div>
+                <div class="menu-stat">Spirit <span>10</span></div>
+                <div class="menu-stat">Armor <span>128</span></div>
+                <div class="menu-stat">Gold <span>42</span></div>
+              </div>
+              <div class="menu-footer">Quest: Return to Ember Camp</div>
+            </div>
+            <div class="menu-panel-page" data-menu-panel="settings">
+              <div class="menu-section-title">Settings</div>
+              <div class="menu-grid">
+                <div class="menu-stat">Music <span>On</span></div>
+                <div class="menu-stat">SFX <span>On</span></div>
+                <div class="menu-stat">Camera <span>Standard</span></div>
+                <div class="menu-stat">Language <span>EN</span></div>
+              </div>
+              <div class="menu-footer">Press Esc to close</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="ui-panel" id="panel-character" aria-label="character panel">
+      <div class="panel-title">Character</div>
+      <div class="panel-subtitle">Hotkey: I</div>
+      <canvas id="character-canvas" aria-label="character preview"></canvas>
+      <div class="menu-grid">
+        <div class="menu-stat">Nickname <span>Arden</span></div>
+        <div class="menu-stat">Level <span>8</span></div>
+        <div class="menu-stat">Class <span>Ranger</span></div>
+        <div class="menu-stat">Realm <span>Wildreach</span></div>
+      </div>
+      <div class="panel-title" style="margin-top:12px;">Equipment</div>
+      <div class="equipment-grid">
+        <div class="equipment-slot">Weapon <span>Oak Longbow</span></div>
+        <div class="equipment-slot">Chest <span>Leather Jerkin</span></div>
+        <div class="equipment-slot">Legs <span>Traveler's Pants</span></div>
+        <div class="equipment-slot">Boots <span>Scout Boots</span></div>
+        <div class="equipment-slot">Ring <span>Band of Wind</span></div>
+        <div class="equipment-slot">Gloves <span>Wanderer Wraps</span></div>
+      </div>
+    </div>
+    <div class="ui-panel" id="panel-inventory" aria-label="inventory panel">
+      <div class="panel-title">Inventory</div>
+      <div class="panel-subtitle">Hotkey: B</div>
+      <div class="inventory-grid">
+        <div class="inventory-cell">Potion</div>
+        <div class="inventory-cell">Ration</div>
+        <div class="inventory-cell">Empty</div>
+        <div class="inventory-cell">Empty</div>
+        <div class="inventory-cell">Bandage</div>
+        <div class="inventory-cell">Empty</div>
+        <div class="inventory-cell">Empty</div>
+        <div class="inventory-cell">Coin Pouch</div>
+        <div class="inventory-cell">Empty</div>
+        <div class="inventory-cell">Empty</div>
+        <div class="inventory-cell">Empty</div>
+        <div class="inventory-cell">Empty</div>
+      </div>
+    </div>
+    <div class="ui-panel" id="panel-quests" aria-label="quest panel">
+      <div class="panel-title">Quest Journal</div>
+      <div class="panel-subtitle">Hotkey: Q</div>
+      <div class="quest-list">
+        <div class="quest-item">Return to Ember Camp (Active)</div>
+        <div class="quest-item">Gather Wolf Pelts (Active)</div>
+        <div class="quest-item">Meet the Cartographer (Side)</div>
+      </div>
+    </div>
+    <div class="ui-panel" id="panel-map" aria-label="map panel">
+      <div class="panel-title">World Map</div>
+      <div class="panel-subtitle">Hotkey: M</div>
+      <canvas id="map-canvas" aria-label="world map"></canvas>
     </div>
     <div id="ui" aria-label="hotbar">
       <div class="slot" data-skill="skill1" data-requires-target="true" data-range="1.5" data-desc="Quick melee strike for close targets.">

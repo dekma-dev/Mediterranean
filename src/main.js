@@ -44,6 +44,17 @@ const enemyName = document.getElementById("enemy-name");
 const enemyHpFill = document.getElementById("enemy-hp-fill");
 const enemyHpText = document.getElementById("enemy-hp-text");
 const skillDesc = document.getElementById("skill-desc");
+const menuOverlay = document.getElementById("menu-overlay");
+const gameMenu = document.getElementById("game-menu");
+const menuTabs = Array.from(document.querySelectorAll("[data-menu-tab]"));
+const menuPanels = Array.from(document.querySelectorAll("[data-menu-panel]"));
+const panelCharacter = document.getElementById("panel-character");
+const panelInventory = document.getElementById("panel-inventory");
+const panelQuests = document.getElementById("panel-quests");
+const panelMap = document.getElementById("panel-map");
+const characterCanvas = document.getElementById("character-canvas");
+const mapCanvas = document.getElementById("map-canvas");
+let isMenuOpen = false;
 const skillSlots = Array.from(document.querySelectorAll("[data-skill]")).map(
   (slot) => ({
     slot,
@@ -77,16 +88,254 @@ function onResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  resizeMapCanvas();
 }
 
 window.addEventListener("resize", onResize);
 
+let characterRenderer = null;
+let characterScene = null;
+let characterCamera = null;
+let characterModel = null;
+let mapCtx = null;
+let mapBaseCanvas = null;
+let mapBaseCtx = null;
+let mapTexture = null;
+let mapNeedsRedraw = true;
+
+function initCharacterPreview() {
+  if (!characterCanvas) return;
+  characterRenderer = new THREE.WebGLRenderer({
+    canvas: characterCanvas,
+    alpha: true,
+    antialias: true
+  });
+  characterRenderer.setPixelRatio(window.devicePixelRatio || 1);
+  characterRenderer.setSize(
+    characterCanvas.clientWidth,
+    characterCanvas.clientHeight,
+    false
+  );
+  characterScene = new THREE.Scene();
+  characterCamera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
+  const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+  characterScene.add(ambient);
+  const keyLight = new THREE.DirectionalLight(0xffe0b8, 0.8);
+  keyLight.position.set(2, 4, 3);
+  characterScene.add(keyLight);
+  characterModel = player.group.clone(true);
+  const box = new THREE.Box3().setFromObject(characterModel);
+  const size = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  box.getSize(size);
+  box.getCenter(center);
+  characterModel.position.sub(center);
+  characterScene.add(characterModel);
+  const maxDim = Math.max(size.x, size.y, size.z);
+  characterCamera.position.set(0, maxDim * 0.6, maxDim * 2.2);
+  characterCamera.lookAt(0, maxDim * 0.4, 0);
+  characterCamera.updateProjectionMatrix();
+}
+
+function initMap() {
+  if (!mapCanvas) return;
+  mapCtx = mapCanvas.getContext("2d");
+  mapBaseCanvas = document.createElement("canvas");
+  mapBaseCtx = mapBaseCanvas.getContext("2d");
+  mapTexture = new Image();
+  mapTexture.src = "./public/assets/map/world-map.png";
+  mapTexture.onload = () => {
+    mapNeedsRedraw = true;
+  };
+  mapTexture.onerror = () => {
+    mapTexture = null;
+    mapNeedsRedraw = true;
+  };
+  resizeMapCanvas();
+  drawMapBase();
+}
+
+function resizeMapCanvas() {
+  if (!mapCanvas || !mapCtx) return;
+  const dpr = window.devicePixelRatio || 1;
+  const width = Math.max(1, Math.floor(mapCanvas.clientWidth * dpr));
+  const height = Math.max(1, Math.floor(mapCanvas.clientHeight * dpr));
+  mapCanvas.width = width;
+  mapCanvas.height = height;
+  mapCtx.setTransform(1, 0, 0, 1, 0, 0);
+  mapCtx.scale(dpr, dpr);
+  const baseSize = 1024;
+  mapBaseCanvas.width = baseSize;
+  mapBaseCanvas.height = baseSize;
+  mapNeedsRedraw = true;
+}
+
+function worldToMap(point, width, height) {
+  const halfWidth = world.mapSize.width / 2;
+  const halfDepth = world.mapSize.depth / 2;
+  const x = ((-point.x / halfWidth) + 1) * 0.5 * width;
+  const y = ((-point.z / halfDepth) + 1) * 0.5 * height;
+  return { x, y };
+}
+
+function drawMapBase() {
+  if (!mapBaseCtx) return;
+  const width = mapBaseCanvas.width;
+  const height = mapBaseCanvas.height;
+  mapBaseCtx.clearRect(0, 0, width, height);
+
+  if (mapTexture && mapTexture.complete) {
+    mapBaseCtx.drawImage(mapTexture, 0, 0, width, height);
+  } else {
+    const gradient = mapBaseCtx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, "#223b2f");
+    gradient.addColorStop(1, "#0e1512");
+    mapBaseCtx.fillStyle = gradient;
+    mapBaseCtx.fillRect(0, 0, width, height);
+  }
+
+  mapBaseCtx.strokeStyle = "rgba(120, 150, 120, 0.35)";
+  mapBaseCtx.lineWidth = 1;
+  const gridCount = 10;
+  for (let i = 1; i < gridCount; i += 1) {
+    const x = (width / gridCount) * i;
+    const y = (height / gridCount) * i;
+    mapBaseCtx.beginPath();
+    mapBaseCtx.moveTo(x, 0);
+    mapBaseCtx.lineTo(x, height);
+    mapBaseCtx.stroke();
+    mapBaseCtx.beginPath();
+    mapBaseCtx.moveTo(0, y);
+    mapBaseCtx.lineTo(width, y);
+    mapBaseCtx.stroke();
+  }
+
+  mapBaseCtx.fillStyle = "rgba(80, 120, 95, 0.7)";
+  world.obstacleBounds.forEach((box) => {
+    const min = worldToMap(
+      { x: box.minX, z: box.minZ },
+      width,
+      height
+    );
+    const max = worldToMap(
+      { x: box.maxX, z: box.maxZ },
+      width,
+      height
+    );
+    const rectX = Math.min(min.x, max.x);
+    const rectY = Math.min(min.y, max.y);
+    const rectW = Math.abs(max.x - min.x);
+    const rectH = Math.abs(max.y - min.y);
+    mapBaseCtx.fillRect(rectX, rectY, rectW, rectH);
+  });
+
+  mapBaseCtx.strokeStyle = "rgba(220, 200, 150, 0.6)";
+  mapBaseCtx.lineWidth = 2;
+  mapBaseCtx.strokeRect(4, 4, width - 8, height - 8);
+  mapNeedsRedraw = false;
+}
+
+function renderMap() {
+  if (!mapCtx || !mapCanvas) return;
+  const width = mapCanvas.clientWidth;
+  const height = mapCanvas.clientHeight;
+  if (width <= 0 || height <= 0) return;
+  if (mapNeedsRedraw) drawMapBase();
+  mapCtx.clearRect(0, 0, width, height);
+  mapCtx.drawImage(mapBaseCanvas, 0, 0, width, height);
+
+  const playerPos = worldToMap(player.group.position, width, height);
+  mapCtx.fillStyle = "#f5e3b2";
+  mapCtx.strokeStyle = "#3a2d20";
+  mapCtx.lineWidth = 2;
+  mapCtx.beginPath();
+  mapCtx.arc(playerPos.x, playerPos.y, 6, 0, Math.PI * 2);
+  mapCtx.fill();
+  mapCtx.stroke();
+  mapCtx.beginPath();
+  mapCtx.moveTo(playerPos.x, playerPos.y);
+  mapCtx.lineTo(playerPos.x, playerPos.y - 14);
+  mapCtx.stroke();
+}
+
+function renderCharacterPreview(delta) {
+  if (!characterRenderer || !characterScene || !characterCamera) return;
+  if (!panelCharacter || !panelCharacter.classList.contains("active")) return;
+  if (characterModel) {
+    characterModel.rotation.y += delta * 0.4;
+  }
+  const width = characterCanvas.clientWidth;
+  const height = characterCanvas.clientHeight;
+  if (width > 0 && height > 0) {
+    characterRenderer.setSize(width, height, false);
+    characterCamera.aspect = width / height;
+    characterCamera.updateProjectionMatrix();
+  }
+  characterRenderer.render(characterScene, characterCamera);
+}
+
+initCharacterPreview();
+initMap();
+
+function setMenuPanel(panel) {
+  menuTabs.forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.menuTab === panel);
+  });
+  menuPanels.forEach((page) => {
+    page.classList.toggle("active", page.dataset.menuPanel === panel);
+  });
+}
+
+function setMenuOpen(open) {
+  isMenuOpen = open;
+  document.body.classList.toggle("menu-open", isMenuOpen);
+  if (menuOverlay) {
+    menuOverlay.setAttribute("aria-hidden", isMenuOpen ? "false" : "true");
+  }
+  if (gameMenu) {
+    gameMenu.setAttribute("aria-hidden", isMenuOpen ? "false" : "true");
+  }
+}
+
+menuTabs.forEach((tab) => {
+  tab.addEventListener("click", () => setMenuPanel(tab.dataset.menuTab));
+});
+
+function togglePanel(panel) {
+  if (!panel) return;
+  const willOpen = !panel.classList.contains("active");
+  panel.classList.toggle("active");
+  if (panel === panelMap && willOpen) {
+    resizeMapCanvas();
+    mapNeedsRedraw = true;
+  }
+}
+
 startLoop((delta) => {
+  if (input.consumePressed("menu")) {
+    if (isMenuOpen) {
+      setMenuOpen(false);
+    } else {
+      targetEnemy = null;
+      setMenuOpen(true);
+      setMenuPanel("character");
+    }
+    input.clearPressed(["skill1", "skill2", "skill3", "skill4", "target"]);
+  }
+  if (input.consumePressed("map")) {
+    togglePanel(panelMap);
+  }
+  if (input.consumePressed("inventory")) {
+    togglePanel(panelInventory);
+  }
+  if (input.consumePressed("quests")) {
+    togglePanel(panelQuests);
+  }
+  if (input.consumePressed("character")) {
+    togglePanel(panelCharacter);
+  }
   if (input.consumePressed("target")) {
     targetEnemy = findTargetEnemy(player, enemies, 40);
-  }
-  if (input.consumePressed("clearTarget")) {
-    targetEnemy = null;
   }
 
   if (targetEnemy && targetEnemy.isDead) {
@@ -101,6 +350,10 @@ startLoop((delta) => {
   world.update(delta, { player, enemies });
   followCam.update(delta);
   renderer.render(scene, camera);
+  if (panelMap && panelMap.classList.contains("active")) {
+    renderMap();
+  }
+  renderCharacterPreview(delta);
 
   const skills = player.getSkills();
   skillSlots.forEach(({ key, cooldown, text }) => {
