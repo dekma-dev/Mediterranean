@@ -1,0 +1,7 @@
+# ninja log v6
+16	751	7896927799741312	CMakeFiles/RPGNative.dir/platform/Win32Window.cpp.obj	de38d4f7c5886d4b
+24	958	7896931521139847	CMakeFiles/RPGNative.dir/main.cpp.obj	239bef39d1a22af
+20	867	7896927799774475	CMakeFiles/RPGNative.dir/game/Game.cpp.obj	88cb181b5e4221f7
+13	911	7896927799713152	CMakeFiles/RPGNative.dir/engine/Renderer.cpp.obj	5921b584fe3e9adc
+85	1206	7896931521752375	CMakeFiles/RPGNative.dir/engine/Engine.cpp.obj	f2cafca3c8d73a8d
+1207	1957	7896931532966218	RPGNative.exe	1f955a0ad2ffd635

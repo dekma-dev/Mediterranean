@@ -1,0 +1,2 @@
+#pragma code_page(65001)
+1 /* CREATEPROCESS_MANIFEST_RESOURCE_ID */ 24 /* RT_MANIFEST */ "C:/Users/admin/Documents/php_projects/features/rpg-js/src_native/out/build/x64-Debug/CMakeFiles/RPGNative.dir/embed.manifest"

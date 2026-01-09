@@ -1,0 +1,3 @@
+C:/Users/admin/Documents/php_projects/features/rpg-js/src_native/out/build/x64-Debug/CMakeFiles/RPGNative.dir
+C:/Users/admin/Documents/php_projects/features/rpg-js/src_native/out/build/x64-Debug/CMakeFiles/edit_cache.dir
+C:/Users/admin/Documents/php_projects/features/rpg-js/src_native/out/build/x64-Debug/CMakeFiles/rebuild_cache.dir
