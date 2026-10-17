@@ -4,7 +4,7 @@ Last updated: 2026-10-17
 
 ## Current status
 
-The active `main` working tree is now native C++ / DirectX 11 only, built on the sources imported from `origin/C++`. The JavaScript prototype is preserved in Git history and on the local `codex/archive-js-prototype` branch. Allods Online is the primary setting, visual, and mechanics reference. A first gameplay slice is implemented in source, but native compilation, regression test execution, and launch remain blocked by the missing local toolchain. No playable-build claim is made yet.
+The active `main` working tree is native C++ / DirectX 11 only. Allods Online is the primary setting, visual, and mechanics reference; development is single-player first, focused on one test map. **Debug and Release builds pass, all three regression suites pass in both, and the hidden DirectX render smoke test passes.** Rendered output has been visually inspected. Full interactive playtesting and finished art remain pending. Current development changes are uncommitted and have not been pushed.
 
 ## Pre-migration repository snapshot
 
@@ -42,34 +42,36 @@ Imported from `origin/C++` without generated binaries or build caches:
 
 The original empty game methods have now been replaced. The working source contains:
 
-- Runtime-compiled HLSL shaders, a procedural box mesh, depth testing, directional lighting, atmospheric fog, and an embedded bitmap font.
-- A layered floating island, outpost buildings with stepped roofs, decorative trees, distant fragments, a quest beacon, a player, and three enemies.
-- Camera-relative movement, sprinting, jumping, collision against buildings and island bounds, mouse orbit, zoom, and camera obstruction checks.
+- Runtime-compiled HLSL shaders, box/pyramid meshes, correct normal transforms, depth testing, directional lighting, fog, a bitmap font, and batched HUD geometry.
+- A layered floating island with named village/dock/training/camp areas, detailed placeholder houses, trees, banners, distant fragments, a quest beacon, a player, and three enemies.
+- Camera-relative movement, sprinting, jumping, collision against buildings/trees/island bounds, mouse orbit, zoom, and camera obstruction checks.
 - Target cycling, melee range and line-of-sight checks, strike, heavy strike, dash, mend, cooldowns, enemy pursuit/return behavior, damage, death, and restart.
 - A patrol acceptance/kill/return/reward loop with protection against duplicate rewards and support for a kill before quest acceptance.
-- Health/target/ability HUD, live map, quest view, character statistics, and a read-only inventory summary.
+- Health/target/ability HUD with availability reasons, live map and loot markers, quest view, character statistics, potion use, and sword switching.
+- Static-grid A* navigation with path smoothing, enemy behavior states and home leashes, soft enemy separation, and stable enemy IDs.
+- One-time enemy loot, potion cooldowns, a stronger patrol reward sword, and version 2 saves with version 1 migration.
 - Versioned local save/load with bounds checking and transactional simulation replacement; invalid data does not replace the current simulation. Save files are replaced only after a successful temporary-file write.
 - Window resizing, focus/minimize suspension, pause, DirectX error reporting, and shutdown handling.
 
-These are source-level implementation claims only. The intended first frame is now a 3D scene rather than a blank window. All art remains procedural placeholder geometry, not finished Allods-style art.
+Compilation, domain regression tests, and hidden rendering now validate parts of this implementation. Automated tests do not certify the complete interactive experience. All art remains procedural placeholder geometry, not finished Allods-style art.
 
 ## Known gaps
 
 - The historical C++ branch tracks generated files under `build/`, `build_vs/`, and `out/build/`. Those files were not imported into the working checkout.
-- Native compilation, HLSL compilation, regression execution, and visual/runtime behavior remain unverified.
+- Real keyboard/mouse interaction, focus/minimize behavior, all panels, and full gameplay feel still need the manual checklist.
 - No sound, skeletal animation, imported art, networking, or GPU performance measurements.
-- Enemies use direct steering with collision sliding, not pathfinding; characters do not collide with one another.
-- Decorative trees are not movement/camera collision objects.
-- Inventory is informational; equipment management, loot items, and broader RPG progression remain pending.
+- Navigation uses a static grid and is suited to this small map; there is no general navmesh or crowd solver. Enemy separation is soft, and player/enemy collision is not a full rigid-body system.
+- Decorative dock rails, banners, and training targets are non-solid. Trees have trunk-based collision and conservative camera bounds.
+- Inventory currently supports two swords and healing potions. Armor, item grids, trading, and broader RPG progression remain pending.
 - Camera, target, panel state, jump height, and transient hit flashes are not saved.
-- The renderer currently uses immediate per-object/per-glyph draw calls; batching and profiling remain future work.
+- World geometry still uses per-object draw calls; the HUD is batched. F3 reports draw submissions, not GPU timing. GPU profiling and world instancing remain future work.
 
 ## Development environment
 
 - Visual Studio Community 2022 version 17.13.3 was detected.
-- `cmake` and `cl` were not found on the inspected PowerShell PATH. This alone does not prove that MSVC is absent.
-- The Visual Studio component query did not confirm the combined C++ toolchain and CMake requirements; the expected bundled CMake executable was not found.
-- No tools were installed and no system settings were changed.
+- The initial inspection found no usable toolchain. A later inspection found installed CMake 3.30.5-msvc23, MSVC 19.43.34809.0, and Windows SDK 10.0.22621.0, which now build the project successfully.
+- MSBuild required execution outside the restricted sandbox to read its SDK-discovery directory. This did not install software or change system settings.
+- No tools were installed or downloaded by the agent.
 
 ## Completed in this session
 
@@ -81,7 +83,7 @@ These are source-level implementation claims only. The intended first frame is n
 
 ## Next validation milestone
 
-Confirm the required build tools and perform a clean build and launch using `scripts/build-native.ps1`. Use `build-local` rather than historical committed caches. Record the configuration and observed result here once performed.
+Run the interactive checklist in `tests/manual-smoke.md`, record input/combat/camera/panel behavior, and fix observed problems before expanding beyond this map.
 
 ## 2026-10-17: native development baseline
 
@@ -115,3 +117,38 @@ The planned feature sequence is maintained in [roadmap.md](roadmap.md).
 - Kept `main` as the active development branch. The unrelated historical `origin/C++` branch was not checked out or merged.
 - Updated the README with native-only instructions and Visual Studio Open Folder guidance.
 - This migration changes repository organization only; native build/runtime validation is still pending. No dependencies were downloaded and no remote push was performed.
+
+## 2026-10-17: start and debug manual
+
+- Added `START_AND_DEBUG.md` with Visual Studio folder/solution workflows, build/test/run commands, breakpoint guidance, controls, save-file behavior, and troubleshooting.
+- Linked the manual from `README.md`. Instructions were checked against the current build helper and source; this documentation update does not constitute a successful build or runtime test.
+
+## 2026-10-17: validated map and gameplay expansion
+
+- Separated platform-independent simulation/world data into `MediterraneanSimulation`; extracted map presentation into `WorldView`.
+- Added shared tree/building collision, named map areas, A* routes with clearance checks and smoothing, explicit enemy states, home return, and soft enemy separation.
+- Implemented one-time corpse loot, healing potions (Q), the watchguard blade reward and equipment switching (G), availability feedback, and a debug overlay (F3).
+- Introduced version 2 saves with stable enemy IDs, behavior/loot flags, inventory/equipment validation, and migration of valid version 1 saves.
+- Added pyramid meshes, house trim, banners, dock and arena props, simple limb motion, and batched HUD/text geometry.
+- Added hidden `--smoke-test` rendering and PNG capture; the PowerShell helper exposes it through `-SmokeTest`.
+- Fixed issues found during validation: a missing lambda capture and a WIC pixel-format mismatch. Final runs pass.
+
+| Validation | Debug | Release |
+| --- | --- | --- |
+| Native build | PASS | PASS |
+| SimulationTests | PASS | PASS |
+| NavigationTests | PASS | PASS |
+| InventoryTests | PASS | PASS |
+| DirectX device/shaders, resize, rendering, PNG readback | PASS | PASS |
+
+Commands executed: `./scripts/build-native.ps1 -Configuration Debug -Test -SmokeTest` and the same command with `Release`. The render test exercises 960x600, 1600x900, and 1280x720 targets, then captures the final size. Captures and logs live in ignored `build-local/Debug-smoke.png` and `build-local/Release-smoke.png` (with `.log` appended for results). The Debug capture was visually inspected after HUD batching.
+
+Regression coverage includes the original patrol/combat/save checks, routing around buildings, a pursuing enemy navigating around a tower, one-build command replay consistency, one-time loot, potion consumption/cooldowns, equipment damage, legacy save migration, and rejection of unknown enemy IDs. This is not a claim of cross-platform deterministic networking or complete manual QA.
+
+No commits, amendments, pushes, downloads, or system-setting changes were made during this development pass. User edits to `AGENTS.md` were preserved.
+
+## 2026-10-17: Visual Studio startup troubleshooting
+
+- The reported toolbar showed `RPGNative.sln` as the launch item, and Solution Explorer had an active search filter. Documented how to open the generated solution through **File > Open > Project/Solution**, clear the search, and select the `RPGNative` C++ startup project.
+- Confirmed the folder-mode CMake cache identifies the installed MSVC compiler and exposes `RPGNative` as an executable target. Confirmed `build-local/RPGNative.sln` and `build-local/Debug/RPGNative.exe` exist, with a passing render smoke-test log from the prior build.
+- Added an immediate existing-executable launch path to `START_AND_DEBUG.md`. No source, IDE settings, or system settings were changed; this documentation check does not verify an interactive Visual Studio launch.

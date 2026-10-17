@@ -27,7 +27,7 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
   }
 }
 
-bool Win32Window::Create(HINSTANCE instance, int width, int height, const wchar_t* title) {
+bool Win32Window::Create(HINSTANCE instance, int width, int height, const wchar_t* title, bool visible) {
   const wchar_t* className = L"RPGNativeWindow";
 
   WNDCLASSEX wc = {};
@@ -64,7 +64,9 @@ bool Win32Window::Create(HINSTANCE instance, int width, int height, const wchar_
     return false;
   }
 
-  ShowWindow(hwnd_, SW_SHOW);
-  UpdateWindow(hwnd_);
+  if (visible) {
+    ShowWindow(hwnd_, SW_SHOW);
+    UpdateWindow(hwnd_);
+  }
   return true;
 }

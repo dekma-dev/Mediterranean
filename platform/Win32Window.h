@@ -5,7 +5,7 @@
 class Win32Window {
 public:
   ~Win32Window() { if (hwnd_ && IsWindow(hwnd_)) DestroyWindow(hwnd_); }
-  bool Create(HINSTANCE instance, int width, int height, const wchar_t* title);
+  bool Create(HINSTANCE instance, int width, int height, const wchar_t* title, bool visible = true);
   HWND GetHandle() const { return hwnd_; }
   float ConsumeWheel() { const float result = wheel_; wheel_ = 0; return result; }
 

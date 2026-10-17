@@ -11,9 +11,9 @@ Engine::Engine() = default;
 
 Engine::~Engine() = default;
 
-bool Engine::Initialize(HINSTANCE instance, int width, int height) {
+bool Engine::Initialize(HINSTANCE instance, int width, int height, bool visible) {
   window_ = std::make_unique<Win32Window>();
-  if (!window_->Create(instance, width, height, L"RPG Native Prototype")) {
+  if (!window_->Create(instance, width, height, L"RPG Native Prototype", visible)) {
     error_ = L"Could not create the application window.";
     return false;
   }
@@ -29,6 +29,19 @@ bool Engine::Initialize(HINSTANCE instance, int width, int height) {
   SetWindowTextW(window_->GetHandle(), game_->WindowTitle().c_str());
 
   running_ = true;
+  return true;
+}
+
+bool Engine::SmokeTest(const std::wstring& capturePath) {
+  // Exercise real device/shader creation, resized targets, rendering and GPU readback.
+  // This does not synthesize input or claim to replace interactive playtesting.
+  for (const auto dimensions : {std::pair<int,int>{960,600},{1600,900},{1280,720}}) {
+    if (!renderer_->Resize(dimensions.first,dimensions.second)) { error_=renderer_->Error(); return false; }
+    game_->Update(1.0/60.0,input_,0);
+    renderer_->BeginFrame(); game_->Render(*renderer_);
+    if (dimensions.first==1280 && !renderer_->Capture(capturePath)) { error_=renderer_->Error(); return false; }
+    if (!renderer_->EndFrame()) { error_=renderer_->Error(); return false; }
+  }
   return true;
 }
 

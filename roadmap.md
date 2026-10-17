@@ -6,6 +6,8 @@ Last updated: 2026-10-17
 
 Build a classic third-person RPG for Windows PC using C++ and a custom DirectX 11 engine. Allods Online is the primary reference for setting, visual direction, and mechanics. World of Warcraft and The Lord of the Rings are secondary references and should not override that direction. Do not use an existing game engine.
 
+Build single-player first and concentrate on one well-developed test map. Keep simulation, world data, and command handling independent of rendering/input so a future MMO server can reuse domain code; networking is not part of the current milestone.
+
 ### First playable slice: floating-island outpost
 
 The following are project design decisions, not claims that these systems have been implemented:
@@ -23,7 +25,7 @@ This is a proposed implementation sequence, not a list of completed features. Se
 
 ## Implementation checkpoint - 2026-10-17
 
-The first source implementation spans the native foundation, scene, movement, combat, HUD, panels, patrol objective, and save/load milestones below. None of their runtime acceptance criteria has passed yet: compilation and tests are blocked by missing local build tools. The next priority is a verified build and smoke test, then fixes and visual iteration; avoid treating source completion as playable completion.
+Debug and Release builds now pass, together with simulation/navigation/inventory regression tests and a hidden DirectX render/capture check. The first map includes a village, dock, training ground, and raider camp; navigation, loot, consumables, and one equipment upgrade are implemented. Interactive input, combat feel, and complete visual acceptance still need playtesting. Next priorities are fixing findings from that playtest, improving this one map's art and interactions, and profiling before expanding scope.
 
 ## 1. Establish the native development baseline
 
@@ -87,3 +89,4 @@ Acceptance: a complete short gameplay loop can be played and its progress saved 
 - Keep planned features separate from implemented and runtime-verified behavior.
 - Keep generated files and machine-specific caches out of version control.
 - Follow `AGENTS.md`: keep changes within the project, do not modify system files or settings, and obtain permission before downloads.
+- Leave work uncommitted and do not push unless the user explicitly requests it.

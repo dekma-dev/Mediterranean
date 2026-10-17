@@ -81,5 +81,19 @@ int main() {
   command.restart=true; restored.Update(.05f,command);
   Require(restored.Gold()==0 && restored.Health()==100 && restored.QuestState()==rpg::Quest::Available,
     "Restart must reset the session");
+  const std::string chasing="MEDITERRANEAN 2\n12 1 100 0 0 0\n2 0 0 0\n0 0 0 0\n100 -4 7 80 0 0 0\n101 8 1 80 0 0 1\n102 0 12 80 0 0 0\n";
+  rpg::Simulation navigator;
+  Require(navigator.Load(chasing),"Navigation scenario must be a valid save");
+  command={};
+  for (int i=0;i<180;++i) navigator.Update(.05f,command);
+  Require(Distance(navigator.Enemies()[1].position,navigator.Player())<2,
+    "Pursuing enemy must navigate around the tower, not remain stuck against it");
+  Require(navigator.CanStand(navigator.Enemies()[1].position,.45f),"Navigating enemy must remain outside obstacles");
+  rpg::Simulation replayA,replayB;
+  for (int i=0;i<240;++i) {
+    command={}; command.movement={i<120?.3f:-.3f,1}; command.jump=i==40; command.nextTarget=i==100;
+    replayA.Update(1.f/60,command); replayB.Update(1.f/60,command);
+  }
+  Require(replayA.Save()==replayB.Save(),"Identical command streams must reproduce the same state in one build");
   std::cout << "Simulation checks passed.\n";
 }

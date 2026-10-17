@@ -2,7 +2,8 @@ param(
   [ValidateSet('Debug', 'Release')]
   [string]$Configuration = 'Debug',
   [switch]$Run,
-  [switch]$Test
+  [switch]$Test,
+  [switch]$SmokeTest
 )
 
 $ErrorActionPreference = 'Stop'
@@ -33,6 +34,19 @@ if ($Test) {
   if (-not (Test-Path -LiteralPath $ctestPath)) { throw 'CTest was not found beside CMake.' }
   & $ctestPath --test-dir $buildPath -C $Configuration --output-on-failure
   if ($LASTEXITCODE -ne 0) { throw 'Simulation tests failed.' }
+}
+
+if ($SmokeTest) {
+  $executablePath = Join-Path $buildPath "$Configuration\RPGNative.exe"
+  $capturePath = Join-Path $buildPath "$Configuration-smoke.png"
+  $renderCheck = Start-Process -FilePath $executablePath -ArgumentList @('--smoke-test', ('"' + $capturePath + '"')) -WindowStyle Hidden -PassThru
+  if (-not $renderCheck.WaitForExit(20000)) {
+    $renderCheck.Kill()
+    throw 'Render smoke test timed out.'
+  }
+  if (Test-Path -LiteralPath "$capturePath.log") { Get-Content -LiteralPath "$capturePath.log" }
+  if ($renderCheck.ExitCode -ne 0) { throw "Render smoke test failed with code $($renderCheck.ExitCode)." }
+  Write-Output "Render capture: $capturePath"
 }
 
 if ($Run) {

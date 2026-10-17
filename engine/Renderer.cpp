@@ -3,22 +3,24 @@
 #include <cstring>
 #include <sstream>
 #include <vector>
+#include <wincodec.h>
+#include <algorithm>
 using namespace DirectX;
 using Microsoft::WRL::ComPtr;
 namespace {
-struct Vertex { XMFLOAT3 position, normal; };
-struct Constants { XMFLOAT4X4 world, wvp; XMFLOAT4 color, eyeAndHud; };
+struct Vertex { XMFLOAT3 position, normal; XMFLOAT4 color{1,1,1,1}; };
+struct Constants { XMFLOAT4X4 world, wvp, normalWorld; XMFLOAT4 color, eyeAndHud; };
 static_assert(sizeof(Constants)%16==0,"D3D constant buffers require 16-byte alignment.");
 constexpr char shader[] = R"(
-cbuffer Scene : register(b0) { matrix world; matrix wvp; float4 color; float4 eyeAndHud; };
-struct VIn { float3 p : POSITION; float3 n : NORMAL; };
-struct VOut { float4 p : SV_POSITION; float3 n : NORMAL; float3 wp : TEXCOORD0; };
+cbuffer Scene : register(b0) { matrix world; matrix wvp; matrix normalWorld; float4 color; float4 eyeAndHud; };
+struct VIn { float3 p : POSITION; float3 n : NORMAL; float4 tint : COLOR; };
+struct VOut { float4 p : SV_POSITION; float3 n : NORMAL; float3 wp : TEXCOORD0; float4 tint : COLOR; };
 VOut VSMain(VIn i) {
  VOut o; o.p = mul(float4(i.p,1),wvp); o.wp = mul(float4(i.p,1),world).xyz;
- o.n = normalize(mul(i.n,(float3x3)world)); return o;
+ o.n = normalize(mul(i.n,(float3x3)normalWorld)); o.tint=i.tint; return o;
 }
 float4 PSMain(VOut i) : SV_TARGET {
- if (eyeAndHud.w > 0.5) return color;
+ if (eyeAndHud.w > 0.5) return color*i.tint;
  float light = .42 + .58 * saturate(dot(normalize(i.n),normalize(float3(-.4,.8,-.3))));
  float fog = saturate((distance(i.wp,eyeAndHud.xyz)-24)/65);
  return float4(lerp(color.rgb*light,float3(.19,.23,.38),fog),1);
@@ -82,8 +84,9 @@ bool Renderer::CreatePipeline() {
  if (!Check(device_->CreatePixelShader(ps->GetBufferPointer(),ps->GetBufferSize(),nullptr,pixelShader_.GetAddressOf()),L"Create pixel shader")) return false;
  const D3D11_INPUT_ELEMENT_DESC elements[]={
   {"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0},
-  {"NORMAL",0,DXGI_FORMAT_R32G32B32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0}};
- if (!Check(device_->CreateInputLayout(elements,2,vs->GetBufferPointer(),vs->GetBufferSize(),layout_.GetAddressOf()),L"Create input layout")) return false;
+  {"NORMAL",0,DXGI_FORMAT_R32G32B32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0},
+  {"COLOR",0,DXGI_FORMAT_R32G32B32A32_FLOAT,0,24,D3D11_INPUT_PER_VERTEX_DATA,0}};
+ if (!Check(device_->CreateInputLayout(elements,3,vs->GetBufferPointer(),vs->GetBufferSize(),layout_.GetAddressOf()),L"Create input layout")) return false;
  std::vector<Vertex> mesh;
  auto face = [&](XMFLOAT3 a,XMFLOAT3 b,XMFLOAT3 c,XMFLOAT3 d,XMFLOAT3 n) {
   for (const auto& p : {a,b,c,a,c,d}) mesh.push_back({p,n});
@@ -94,12 +97,25 @@ bool Renderer::CreatePipeline() {
  face({.5f,-.5f,-.5f},{.5f,.5f,-.5f},{.5f,.5f,.5f},{.5f,-.5f,.5f},{1,0,0});
  face({-.5f,.5f,-.5f},{-.5f,.5f,.5f},{.5f,.5f,.5f},{.5f,.5f,-.5f},{0,1,0});
  face({-.5f,-.5f,.5f},{-.5f,-.5f,-.5f},{.5f,-.5f,-.5f},{.5f,-.5f,.5f},{0,-1,0});
+ auto triangle=[&](XMFLOAT3 a,XMFLOAT3 b,XMFLOAT3 c) {
+  XMFLOAT3 normal;
+  XMStoreFloat3(&normal,XMVector3Normalize(XMVector3Cross(XMLoadFloat3(&b)-XMLoadFloat3(&a),XMLoadFloat3(&c)-XMLoadFloat3(&a))));
+  for (auto p : {a,b,c}) mesh.push_back({p,normal});
+ };
+ triangle({-.5f,-.5f,-.5f},{0,.5f,0},{.5f,-.5f,-.5f});
+ triangle({.5f,-.5f,-.5f},{0,.5f,0},{.5f,-.5f,.5f});
+ triangle({.5f,-.5f,.5f},{0,.5f,0},{-.5f,-.5f,.5f});
+ triangle({-.5f,-.5f,.5f},{0,.5f,0},{-.5f,-.5f,-.5f});
+ face({-.5f,-.5f,.5f},{-.5f,-.5f,-.5f},{.5f,-.5f,-.5f},{.5f,-.5f,.5f},{0,-1,0});
  D3D11_BUFFER_DESC b{}; b.ByteWidth=static_cast<UINT>(mesh.size()*sizeof(Vertex));
  b.Usage=D3D11_USAGE_IMMUTABLE; b.BindFlags=D3D11_BIND_VERTEX_BUFFER;
  D3D11_SUBRESOURCE_DATA data{}; data.pSysMem=mesh.data();
  if (!Check(device_->CreateBuffer(&b,&data,vertices_.GetAddressOf()),L"Create box mesh")) return false;
  b.ByteWidth=sizeof(Constants); b.Usage=D3D11_USAGE_DEFAULT; b.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
  if (!Check(device_->CreateBuffer(&b,nullptr,constants_.GetAddressOf()),L"Create constants")) return false;
+ b.ByteWidth=16380*sizeof(Vertex); b.Usage=D3D11_USAGE_DYNAMIC; b.BindFlags=D3D11_BIND_VERTEX_BUFFER;
+ b.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
+ if (!Check(device_->CreateBuffer(&b,nullptr,hudVertices_.GetAddressOf()),L"Create HUD vertex buffer")) return false;
  D3D11_RASTERIZER_DESC r{}; r.FillMode=D3D11_FILL_SOLID; r.CullMode=D3D11_CULL_BACK; r.DepthClipEnable=TRUE;
  if (!Check(device_->CreateRasterizerState(&r,rasterizer_.GetAddressOf()),L"Create rasterizer")) return false;
  D3D11_DEPTH_STENCIL_DESC z{}; z.DepthEnable=TRUE; z.DepthWriteMask=D3D11_DEPTH_WRITE_MASK_ALL; z.DepthFunc=D3D11_COMPARISON_LESS;
@@ -108,6 +124,8 @@ bool Renderer::CreatePipeline() {
  return Check(device_->CreateDepthStencilState(&z,depthOff_.GetAddressOf()),L"Create HUD depth state");
 }
 void Renderer::BeginFrame() {
+ drawCalls_=0;
+ hud_.clear();
  const float sky[]={.19f,.23f,.38f,1};
  context_->OMSetRenderTargets(1,target_.GetAddressOf(),depth_.Get());
  context_->ClearRenderTargetView(target_.Get(),sky);
@@ -126,20 +144,91 @@ void Renderer::SetCamera(const XMFLOAT3& eye,const XMFLOAT3& target) {
  auto projection=XMMatrixPerspectiveFovLH(XM_PIDIV4,static_cast<float>(width_)/height_,.1f,160.f);
  XMStoreFloat4x4(&viewProjection_,view*projection);
 }
-void Renderer::Draw(const XMMATRIX& world,const XMMATRIX& vp,const XMFLOAT4& color,bool hud) {
+void Renderer::Draw(const XMMATRIX& world,const XMMATRIX& vp,const XMFLOAT4& color,bool hud,UINT count,UINT start) {
+ ++drawCalls_;
  Constants data{}; XMStoreFloat4x4(&data.world,XMMatrixTranspose(world)); XMStoreFloat4x4(&data.wvp,XMMatrixTranspose(world*vp));
+ const auto normal=XMMatrixTranspose(XMMatrixInverse(nullptr,world));
+ XMStoreFloat4x4(&data.normalWorld,XMMatrixTranspose(normal));
  data.color=color; data.eyeAndHud={eye_.x,eye_.y,eye_.z,hud?1.f:0.f};
  context_->UpdateSubresource(constants_.Get(),0,nullptr,&data,0,0);
- context_->OMSetDepthStencilState(hud?depthOff_.Get():depthOn_.Get(),0); context_->Draw(hud?6:36,0);
+ context_->OMSetDepthStencilState(hud?depthOff_.Get():depthOn_.Get(),0); context_->Draw(count,start);
 }
 void Renderer::DrawBox(const XMFLOAT3& p,const XMFLOAT3& s,const XMFLOAT4& color,float yaw) {
  Draw(XMMatrixScaling(s.x,s.y,s.z)*XMMatrixRotationY(yaw)*XMMatrixTranslation(p.x,p.y,p.z),XMLoadFloat4x4(&viewProjection_),color,false);
 }
+void Renderer::DrawPyramid(const XMFLOAT3& p,const XMFLOAT3& s,const XMFLOAT4& color,float yaw,float pitch) {
+ Draw(XMMatrixScaling(s.x,s.y,s.z)*XMMatrixRotationX(pitch)*XMMatrixRotationY(yaw)*XMMatrixTranslation(p.x,p.y,p.z),
+  XMLoadFloat4x4(&viewProjection_),color,false,18,36);
+}
 void Renderer::DrawHudRect(float x,float y,float width,float height,const XMFLOAT4& color) {
  if (width<=0 || height<=0) return;
- Draw(XMMatrixScaling(width*2,height*2,.01f)*XMMatrixTranslation(x*2+width-1,1-y*2-height,.5f),XMMatrixIdentity(),color,true);
+ hud_.push_back({x,y,width,height,color});
 }
-bool Renderer::EndFrame() { return Check(swapChain_->Present(1,0),L"Present frame"); }
+bool Renderer::FlushHud() {
+ if (hud_.empty()) return true;
+ std::vector<Vertex> mesh; mesh.reserve(hud_.size()*6);
+ for (const auto& rect : hud_) {
+  const float left=rect.x*2-1,right=left+rect.width*2,top=1-rect.y*2,bottom=top-rect.height*2;
+  for (const XMFLOAT3 p : {XMFLOAT3{left,top,.5f},{right,top,.5f},{right,bottom,.5f},
+      {left,top,.5f},{right,bottom,.5f},{left,bottom,.5f}})
+    mesh.push_back({p,{0,0,-1},rect.color});
+ }
+ const UINT stride=sizeof(Vertex),offset=0;
+ context_->IASetVertexBuffers(0,1,hudVertices_.GetAddressOf(),&stride,&offset);
+ for (std::size_t start=0;start<mesh.size();start+=16380) {
+  const UINT count=static_cast<UINT>(std::min<std::size_t>(16380,mesh.size()-start));
+  D3D11_MAPPED_SUBRESOURCE mapped{};
+  if (!Check(context_->Map(hudVertices_.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&mapped),L"Upload HUD geometry")) return false;
+  std::memcpy(mapped.pData,mesh.data()+start,count*sizeof(Vertex));
+  context_->Unmap(hudVertices_.Get(),0);
+  Draw(XMMatrixIdentity(),XMMatrixIdentity(),{1,1,1,1},true,count);
+ }
+ hud_.clear();
+ context_->IASetVertexBuffers(0,1,vertices_.GetAddressOf(),&stride,&offset);
+ return true;
+}
+bool Renderer::EndFrame() { return FlushHud() && Check(swapChain_->Present(1,0),L"Present frame"); }
+
+bool Renderer::Capture(const std::wstring& path) {
+ if (!FlushHud()) return false;
+ ComPtr<ID3D11Texture2D> back,staging;
+ if (!Check(swapChain_->GetBuffer(0,IID_PPV_ARGS(back.GetAddressOf())),L"Get capture buffer")) return false;
+ D3D11_TEXTURE2D_DESC desc{}; back->GetDesc(&desc);
+ desc.Usage=D3D11_USAGE_STAGING; desc.BindFlags=0; desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ; desc.MiscFlags=0;
+ if (!Check(device_->CreateTexture2D(&desc,nullptr,staging.GetAddressOf()),L"Create capture buffer")) return false;
+ context_->CopyResource(staging.Get(),back.Get());
+ D3D11_MAPPED_SUBRESOURCE mapped{};
+ if (!Check(context_->Map(staging.Get(),0,D3D11_MAP_READ,0,&mapped),L"Read capture buffer")) return false;
+ std::vector<BYTE> pixels(static_cast<std::size_t>(width_)*height_*4);
+ for (int row=0;row<height_;++row)
+  std::memcpy(pixels.data()+static_cast<std::size_t>(row)*width_*4,
+   static_cast<const BYTE*>(mapped.pData)+static_cast<std::size_t>(row)*mapped.RowPitch,width_*4);
+ context_->Unmap(staging.Get(),0);
+ for (std::size_t i=0;i<pixels.size();i+=4) std::swap(pixels[i],pixels[i+2]);
+ const HRESULT initialized=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
+ if (FAILED(initialized) && initialized!=RPC_E_CHANGED_MODE) return Check(initialized,L"Initialize image encoder");
+ const auto encode=[&]() {
+  ComPtr<IWICImagingFactory> factory; ComPtr<IWICStream> stream;
+  ComPtr<IWICBitmapEncoder> encoder; ComPtr<IWICBitmapFrameEncode> frame;
+  ComPtr<IPropertyBag2> properties;
+  if (!Check(CoCreateInstance(CLSID_WICImagingFactory,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(factory.GetAddressOf())),L"Create image encoder")) return false;
+  if (!Check(factory->CreateStream(stream.GetAddressOf()),L"Create image stream") ||
+      !Check(stream->InitializeFromFilename(path.c_str(),GENERIC_WRITE),L"Open capture output")) return false;
+  if (!Check(factory->CreateEncoder(GUID_ContainerFormatPng,nullptr,encoder.GetAddressOf()),L"Create PNG encoder") ||
+      !Check(encoder->Initialize(stream.Get(),WICBitmapEncoderNoCache),L"Initialize PNG encoder") ||
+      !Check(encoder->CreateNewFrame(frame.GetAddressOf(),properties.GetAddressOf()),L"Create PNG frame") ||
+      !Check(frame->Initialize(properties.Get()),L"Initialize PNG frame") ||
+      !Check(frame->SetSize(width_,height_),L"Set PNG dimensions")) return false;
+  WICPixelFormatGUID format=GUID_WICPixelFormat32bppBGRA;
+  if (!Check(frame->SetPixelFormat(&format),L"Set PNG format")) return false;
+  if (format!=GUID_WICPixelFormat32bppBGRA) { error_=L"PNG encoder did not accept BGRA."; return false; }
+  return Check(frame->WritePixels(height_,width_*4,static_cast<UINT>(pixels.size()),pixels.data()),L"Write PNG pixels") &&
+   Check(frame->Commit(),L"Commit PNG frame") && Check(encoder->Commit(),L"Commit PNG");
+ };
+ const bool success=encode();
+ if (SUCCEEDED(initialized)) CoUninitialize();
+ return success;
+}
 
 void Renderer::DrawText(float x,float y,const std::string& text,const XMFLOAT4& color,float size) {
  // Embedded 5x7 bitmap font: no external assets or font downloads.
