@@ -33,4 +33,37 @@ void Simulation::Buy(int offer) {
   gold_-=entry.price; ++purchases_[offer];
   message_=std::string("Bought ")+DescribeItem(entry.item).name+" for "+std::to_string(entry.price)+" gold. Stored in your bag.";
 }
+int Simulation::BuybackValue() const {
+  int result=0; for (int i=0;i<int(Item::Count);++i) result+=buyback_[i]*SellPrice(Item(i));
+  return result;
+}
+const char* Simulation::TradeStatus(const TradeCommand& command) const {
+  if (!ValidItem(command.item)) return "Unknown item";
+  if (!CanTrade()) return "Return to the quartermaster";
+  if (command.action==TradeAction::Sell) {
+    if (command.source<0 || command.source>=Inventory::capacity || inventory_.Bag()[command.source].item!=command.item)
+      return "Select an item in your bag";
+    return "Available";
+  }
+  if (command.action!=TradeAction::Buyback) return "Unknown transaction";
+  if (BuybackCount(command.item)==0) return "No item to reclaim";
+  if (gold_<SellPrice(command.item)) return "Not enough gold";
+  auto candidate=inventory_;
+  if (!candidate.Add(command.item)) return "Make room in your bag";
+  return "Available";
+}
+void Simulation::Trade(const TradeCommand& command) {
+  const auto status=TradeStatus(command);
+  if (std::string(status)!="Available") { message_=status; return; }
+  const int price=SellPrice(command.item);
+  if (command.action==TradeAction::Sell) {
+    if (!inventory_.Remove(command.source,command.item)) return;
+    gold_+=price; ++buyback_[int(command.item)];
+    message_=std::string("Sold one ")+DescribeItem(command.item).name+" for "+std::to_string(price)+" gold. Available in buyback.";
+  } else {
+    if (!inventory_.Add(command.item)) return;
+    gold_-=price; --buyback_[int(command.item)];
+    message_=std::string("Reclaimed ")+DescribeItem(command.item).name+" for "+std::to_string(price)+" gold. Stored in your bag.";
+  }
+}
 }

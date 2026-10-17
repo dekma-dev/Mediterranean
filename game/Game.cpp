@@ -23,6 +23,9 @@ bool Game::RestoreSnapshot(const std::string& snapshot) {
 void Game::Update(double seconds,const Input& input,float wheel) {
   const float dt=static_cast<float>(seconds);
   interface_.noticeTime=std::max(0.f,interface_.noticeTime-dt);
+  // Engine changes the window after this update. Cancel before dispatching a
+  // simultaneous mouse release, or that release would commit a stale drop.
+  if (input.Pressed(VK_F11)) { CancelUiGesture(); interface_.InvalidateHitRegions(); }
   if (input.Pressed(VK_F2)) { hudVisible_=!hudVisible_; interface_.InvalidateHitRegions(); }
   if (input.Pressed(VK_F3)) debugOverlay_=!debugOverlay_;
   if (input.Pressed(VK_F5)) SaveProgress();
@@ -51,10 +54,13 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   case ui::Action::Load: LoadProgress(); interface_.menuNotice=simulation_.Message(); break;
   case ui::Action::Fullscreen: fullscreenRequest_=true; break;
   case ui::Action::Quit: quitRequested_=true; break;
-  case ui::Action::SelectItem: interface_.selected=static_cast<ui::Item>(event.value); interface_.Show(ui::Panel::Inventory); break;
-  case ui::Action::UseItem: ui::ApplyItem(command,simulation_,static_cast<ui::Item>(event.value)); break;
+  case ui::Action::SelectItem:
+    interface_.selected=static_cast<ui::Item>(event.value); interface_.selectedBag=event.inventory.source; interface_.Show(ui::Panel::Inventory); break;
+  case ui::Action::UseItem: ui::ApplyItem(command,simulation_,static_cast<ui::Item>(event.value),event.inventory.source); break;
   case ui::Action::InventoryChange: command.inventory=event.inventory; break;
   case ui::Action::Purchase: command.purchase=event.value; break;
+  case ui::Action::Sell: command.trade={rpg::TradeAction::Sell,static_cast<ui::Item>(event.value),event.inventory.source}; break;
+  case ui::Action::Buyback: command.trade={rpg::TradeAction::Buyback,static_cast<ui::Item>(event.value)}; break;
   case ui::Action::RotatePreview: interface_.previewYaw=event.value==0?0:std::remainder(interface_.previewYaw+event.value*.45f,6.2831853f); break;
   case ui::Action::Ability: command.ability=event.value; break;
   case ui::Action::ClearWaypoint: interface_.hasWaypoint=false; break;
@@ -77,21 +83,27 @@ void Game::Update(double seconds,const Input& input,float wheel) {
     command.movement={std::sin(yaw_)*forward+std::cos(yaw_)*right,std::cos(yaw_)*forward-std::sin(yaw_)*right};
     command.sprint=input.Held(VK_SHIFT); command.jump=input.Pressed(VK_SPACE);
     command.nextTarget=input.Pressed(VK_TAB); command.interact=input.Pressed('E') && !closingMerchant;
-    command.restart=input.Pressed('R'); command.respawn=input.Pressed(VK_RETURN);
+    command.restart=input.Pressed('R');
     command.usePotion=command.usePotion || input.Pressed('Q'); command.equipWeapon=command.equipWeapon || input.Pressed('G');
     for (int i=0;i<4;++i) if (input.Pressed('1'+i)) { command.ability=i; break; }
   }
-  if (command.restart || (command.respawn && simulation_.Health()<=0)) {
+  // Recovery stays reachable even if the player opens a central panel after death.
+  command.respawn=simulation_.Health()<=0 && input.Pressed(VK_RETURN);
+  if (command.restart || command.respawn) {
     CancelUiGesture();
     interface_.SetOnly(ui::Panel::None); yaw_=0; pitch_=.45f; distance_=10;
     interface_.previewYaw=0;
     if (command.restart) interface_.hasWaypoint=false;
   }
   const auto before=simulation_.Player();
+  const bool wasAlive=simulation_.Health()>0;
   // Menus capture local commands, but never stop simulation time.
   simulation_.Update(dt,command);
+  if (wasAlive && simulation_.Health()<=0) {
+    CancelUiGesture(); interface_.Close(interface_.panel);
+  }
   if (simulation_.TradeRequested()) { interface_.merchantNotice.clear(); interface_.Show(ui::Panel::Merchant); }
-  if (command.purchase!=-1) interface_.merchantNotice=simulation_.Message();
+  if (command.purchase!=-1 || command.trade.action!=rpg::TradeAction::None) interface_.merchantNotice=simulation_.Message();
   if (interface_.panel==ui::Panel::Merchant && !simulation_.CanTrade()) interface_.Close(ui::Panel::Merchant);
   if (command.inventory.action!=rpg::InventoryAction::None) {
     interface_.inventoryNotice=simulation_.Message(); interface_.noticeTime=3;

@@ -1,6 +1,6 @@
 # Mediterranean Roadmap
 
-Last updated: 2026-10-17
+Last updated: 2026-10-18
 
 ## Direction
 
@@ -23,17 +23,19 @@ Official reference sources: [Allods setting and factions](https://allods.ru/spla
 
 This is a proposed implementation sequence, not a list of completed features. See [progress.md](progress.md) for verified status.
 
-## Implementation checkpoint - 2026-10-17
+## Implementation checkpoint - 2026-10-18
 
-Debug and Release builds pass using Ninja/MSVC with nine regression suites and 104 hidden render captures per configuration, including interface layouts, outfit changes, sparring and the shop. Gameplay starts fullscreen; Escape opens a live menu. The supplied Allods screenshot guides the green/gold frames, independent character/bag windows and circular minimap. The bag has 24 real cells, drag swaps, sorting, comparisons and six worn slots; see [interface design](docs/interface.md). The village quartermaster sells bounded supplies, a helm and shield, with real gold charges and persistent stock. Purchased gear changes both character views and combat protection. Mesh/material/texture allocations remain unchanged; see [graphics budgets](docs/graphics.md). The map contains a two-quest campaign, levels 1–3, a captain, anchor stabilization, rewards, progress-preserving death recovery and repeatable nonlethal practice without reward farming. Version 5 preserves exact inventory, worn gear and purchases while migrating versions 1–4. Interactive input, combat feel and final art acceptance still need playtesting.
+Debug and Release builds pass using Ninja/MSVC with nine regression suites and 107 hidden render captures per configuration, including interface layouts, outfit changes, sparring, the shop and buyback. Gameplay starts fullscreen; Escape opens a live menu. The supplied Allods screenshot guides the green/gold frames, independent character/bag windows and circular minimap. The bag has 24 real cells, drag swaps, stack splitting/merging, sorting, comparisons and six worn slots; see [interface design](docs/interface.md). The village quartermaster sells bounded supplies, a helm and shield, accepts bag items and retains them in persistent buyback. Purchased gear changes both character views and combat protection. No new meshes/materials/textures were introduced for trading; see [graphics budgets](docs/graphics.md). The map contains a two-quest campaign, levels 1–3, a captain, anchor stabilization, rewards, progress-preserving death recovery and repeatable nonlethal practice without reward farming. Version 6 preserves exact split stacks, worn gear, purchases, buyback and balanced gold while migrating versions 1–5. Interactive input, combat feel and final art acceptance still need playtesting.
 
 ### Next work on this map
 
 The latest bug-fix pass addresses stale panel/load hit regions, UI-to-camera gesture leakage, the starter-sword hotkey while unarmed, and inconsistent quest saves. Automated regressions cover these paths; real desktop input remains the next validation step.
 
+The 2026-10-18 follow-up fixes F11 arriving on the item-drop frame and central panels swallowing defeat recovery. Death now reveals the recovery prompt, and Enter remains usable from reopened panels. These paths have sampled-input regressions; physical display transitions still need the interactive checklist.
+
 1. Run the expanded fullscreen/interface checklist, including real mouse input, Alt-Tab and DPI/monitor behavior; tune combat/camera/UI from actual findings.
 2. Refine character anatomy/clothing, foliage, terrain composition and camera bounds from the procedural art foundation. Keep collision/navigation consistent and retain the measured memory budgets.
-3. The first village trading/equipment milestone is delivered: quartermaster, limited supplies, helm/shield, six working slots and durable spending/stock. Validate its purchase/equip/save loop before adding selling, stack splitting, more items or additional NPC services. Practice still grants no XP/loot and refunds no resources; broader progression remains planned.
+3. Village trading now includes stack splitting, explicit sales and persistent buyback alongside limited supplies, helm/shield and six working slots. Automated tests cover exact-cell use/sale, old-save migration, balanced ownership/gold, denied transactions and repeated sell/reclaim cycles. Run the manual trade/split/reclaim checklist before expanding the item catalog or adding NPC services. Practice still grants no XP/loot and refunds no resources; broader progression remains planned.
 4. Profile moving-camera and encounter frame costs before expanding rendering complexity; stationary Release measurements are recorded in docs/graphics.md and docs/interface.md. Audio, skeletal animation and class specialization remain later work.
 
 Gameplay tuning and campaign rules are documented in [docs/gameplay.md](docs/gameplay.md). Broader MMO systems and extra maps remain outside this milestone.

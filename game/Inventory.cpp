@@ -49,10 +49,13 @@ bool Inventory::Add(Item item,int count) {
   if (count!=0) return false;
   bag_=next; return true;
 }
-bool Inventory::Consume(Item item) {
+bool Inventory::Consume(Item item,int source) {
   if (item!=Item::Potion) return false;
-  const int at=Find(item); if (at<0) return false;
-  if (--bag_[at].count==0) bag_[at]={};
+  return Remove(source==-1?Find(item):source,item);
+}
+bool Inventory::Remove(int source,Item expected) {
+  if (source<0 || source>=capacity || !ValidItem(expected) || bag_[source].item!=expected || bag_[source].count<=0) return false;
+  if (--bag_[source].count==0) bag_[source]={};
   return true;
 }
 bool Inventory::Equip(Item item) {
@@ -71,6 +74,13 @@ bool Inventory::Apply(const InventoryCommand& command) {
     bag_[target]={gear_[from],1}; gear_[from]=replacement.item; return true;
   }
   if (from<0 || from>=capacity || bag_[from].item==Item::None || bag_[from].item!=command.expected) return false;
+  if (command.action==InventoryAction::Split) {
+    if (command.amount<=0 || command.amount>=bag_[from].count) return false;
+    int target=to;
+    if (target==-1) for (int i=0;i<capacity;++i) if (bag_[i].item==Item::None) { target=i; break; }
+    if (target<0 || target>=capacity || bag_[target].item!=Item::None) return false;
+    bag_[target]={bag_[from].item,command.amount}; bag_[from].count-=command.amount; return true;
+  }
   if (command.action==InventoryAction::Equip) {
     if (to<0 || to>=gearCount || int(DescribeItem(bag_[from].item).slot)!=to || bag_[from].count!=1) return false;
     const auto old=gear_[to]; gear_[to]=bag_[from].item; bag_[from]={old,old==Item::None?0:1}; return true;
@@ -117,10 +127,12 @@ bool Inventory::Read(std::istream& input,int savedGearCount) {
   for (int i=0;i<int(Item::Count);++i) if (DescribeItem(Item(i)).stackLimit==1 && candidate.Count(Item(i))>1) return false;
   *this=candidate; return true;
 }
-bool Inventory::MatchesCampaign(bool rewardWeapon,bool wardArmor,int potions,bool helm,bool shield) const {
-  for (auto item : {Item::Starter,Item::Tunic,Item::Trousers,Item::Boots}) if (Count(item)!=1) return false;
-  return Count(Item::Watchguard)==int(rewardWeapon) && Count(Item::Ward)==int(wardArmor) && Count(Item::Potion)==potions &&
-    Count(Item::Helm)==int(helm) && Count(Item::Shield)==int(shield);
+bool Inventory::MatchesCampaign(bool rewardWeapon,bool wardArmor,int potions,bool helm,bool shield,
+  const std::array<int,int(Item::Count)>& sold) const {
+  const auto total=[&](Item item) { return Count(item)+sold[int(item)]; };
+  for (auto item : {Item::Starter,Item::Tunic,Item::Trousers,Item::Boots}) if (total(item)!=1) return false;
+  return total(Item::Watchguard)==int(rewardWeapon) && total(Item::Ward)==int(wardArmor) && Count(Item::Potion)==potions &&
+    total(Item::Helm)==int(helm) && total(Item::Shield)==int(shield);
 }
 Inventory Inventory::Migrate(int potions,bool rewardWeapon,bool equipped,bool wardArmor) {
   Inventory result; result.bag_.fill({}); if (potions>0) result.Add(Item::Potion,potions);

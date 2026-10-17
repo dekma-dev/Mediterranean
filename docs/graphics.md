@@ -71,7 +71,7 @@ The character now has a narrower torso/limbs, smaller head details, layered tuni
 
 Sparring captures exposed a camera trapped beside the eastern tree because the wide crown bounds extended to the ground. Camera queries now use trunk bounds below the foliage and crown bounds above it. Regression checks retain roof/crown collision while allowing the training camera to retreat underneath the canopy. The corrected scene was visually inspected with both side windows open.
 
-The veteran smoke scenario adds base/travel outfits and sparring with/without the interface. Together with the later shop/equipment views below, the current total is 104 smoke captures per configuration. Moving-camera stability, close-up art quality and real input still require interactive inspection.
+The veteran smoke scenario adds base/travel outfits and sparring with/without the interface. Together with the later shop/equipment views below, the current total is 107 smoke captures per configuration. Moving-camera stability, close-up art quality and real input still require interactive inspection.
 
 ## Quartermaster and six-slot equipment pass
 
@@ -80,3 +80,7 @@ The shared character renderer now draws a steel helm with cheek guards and crest
 New veteran captures show shop/character/bag together and the bought outfit at three sizes, a world close-up, and fully equipped sparring. Representative 960x600 and 1280x720 images were inspected for clipping, legibility and equipment visibility. Geometry remains deliberately compact procedural art; these additions do not establish realistic anatomy or finished Allods art quality.
 
 Latest stationary Release HUD measurement: 26 submissions, 125,948 submitted triangles, CPU median/p95 0.293/0.355 ms, GPU median/p95 0.179/0.183 ms (240 GPU samples), working set 52.055 MiB, private bytes 75.711 MiB. Immutable meshes remain 70,496 bytes; materials/shadows 5,155,484; font/map textures 1,529,172. Conditions match the hidden stationary benchmark above. This does not measure moving-camera, shop-window, encounter or long-session performance.
+
+## Selling and buyback interface pass
+
+The merchant now uses compact offer rows above a nine-cell buyback shelf; bag details add Sell one and Split half. Existing code-drawn icons and batched UI geometry are reused, with no new meshes, materials, textures or external assets. Three new `-buyback` captures bring the smoke total to 107 per configuration. Representative 960x600 and 1280x720 views were inspected with all three windows open. The stationary benchmark above remains historical; this pass did not measure the expanded merchant window's frame cost.

@@ -57,6 +57,33 @@ int main() {
   Inventory full;
   Require(full.Add(Item::Potion,478) && full.UsedSlots()==24 && !full.Add(Item::Watchguard),"A full bag must reject rewards atomically.");
   Require(!full.Apply({InventoryAction::Unequip,int(GearSlot::Weapon),-1,Item::Starter}) && full.Worn(GearSlot::Weapon)==Item::Starter,"Unequip must retain gear when the bag is full.");
+  Require(!full.Apply({InventoryAction::Split,0,-1,Item::Potion,10}) && full.Count(Item::Potion)==480,
+    "Splitting a full bag must retain the complete source stack.");
+  Inventory stacks; Require(stacks.Add(Item::Potion,3),"Prepare odd potion stack.");
+  for (int amount : {-1,0,5,6}) Require(!stacks.Apply({InventoryAction::Split,0,23,Item::Potion,amount}),"Invalid split counts must reject.");
+  Require(!stacks.Apply({InventoryAction::Split,0,0,Item::Potion,2}) &&
+    !stacks.Apply({InventoryAction::Split,0,23,Item::Starter,2}),"Occupied targets and stale split sources must reject.");
+  Require(stacks.Apply({InventoryAction::Split,0,23,Item::Potion,2}) && stacks.Bag()[0].count==3 && stacks.Bag()[23].count==2,
+    "Split must conserve an odd stack and use the requested empty cell.");
+  Require(stacks.Consume(Item::Potion,23) && stacks.Bag()[0].count==3 && stacks.Bag()[23].count==1,
+    "Drinking must consume from the clicked stack, not the first matching item.");
+  Require(!stacks.Consume(Item::Potion,22) && !stacks.Remove(23,Item::Starter) && stacks.Count(Item::Potion)==4,
+    "Stale consumption/removal must not fall back to another stack.");
+  Require(stacks.Apply({InventoryAction::Move,23,0,Item::Potion}) && stacks.Bag()[0].count==4 && stacks.Bag()[23].item==Item::None,
+    "Dragging split stacks back together must merge them without duplication.");
+  Require(stacks.Apply({InventoryAction::Split,0,-1,Item::Potion,2}) && stacks.Bag()[1].count==2,"Automatic split uses the first empty cell.");
+  stacks.Sort(); Require(stacks.UsedSlots()==1 && stacks.Bag()[0].count==4,"Sort must recombine split stacks.");
+  Simulation splitGame; auto injuredSave=splitGame.Save();
+  auto healthAt=injuredSave.find("100 0 0 0"); Require(healthAt!=std::string::npos,"Starting health fixture.");
+  injuredSave.replace(healthAt,3,"50"); Require(splitGame.Load(injuredSave),"Injured split fixture loads.");
+  command={}; command.inventory={InventoryAction::Split,0,23,Item::Potion,1}; splitGame.Update(.01f,command);
+  const auto splitSave=splitGame.Save();
+  Require(restored.Load(splitSave) && restored.Save()==splitSave,"Exact split cells must persist.");
+  command={}; command.usePotion=true; command.potionSource=22; splitGame.Update(.01f,command);
+  Require(splitGame.Health()==50 && splitGame.Potions()==2 && splitGame.PotionCooldown()==0,"A stale potion source cannot grant free healing.");
+  command.potionSource=23; splitGame.Update(.01f,command);
+  Require(splitGame.Health()==90 && splitGame.Items().Bag()[0].count==1 && splitGame.Items().Bag()[23].item==Item::None,
+    "Simulation must consume the selected split stack exactly once.");
   // Whole-game validation rejects forged inventories before replacing live progress.
   Simulation baseline; const auto stable=baseline.Save();
   const auto reject=[&](std::string data) { Require(!baseline.Load(data) && baseline.Save()==stable,"Malformed equipment save must be transactional."); };

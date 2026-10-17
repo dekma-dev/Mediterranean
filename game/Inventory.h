@@ -17,11 +17,12 @@ struct ItemInfo {
 const ItemInfo& DescribeItem(Item item);
 bool ValidItem(Item item);
 struct ItemStack { Item item=Item::None; int count=0; };
-enum class InventoryAction { None,Move,Equip,Unequip,Sort };
+enum class InventoryAction { None,Move,Equip,Unequip,Sort,Split };
 struct InventoryCommand {
   InventoryAction action=InventoryAction::None;
   int source=-1,destination=-1;
   Item expected=Item::None;
+  int amount=0;
 };
 class Inventory {
 public:
@@ -33,13 +34,15 @@ public:
   int Find(Item item) const;
   int UsedSlots() const;
   bool Add(Item item,int count=1);
-  bool Consume(Item item);
+  bool Consume(Item item,int source=-1);
+  bool Remove(int source,Item expected);
   bool Equip(Item item);
   bool Apply(const InventoryCommand& command);
   void Sort();
   void Write(std::ostream& out) const;
   bool Read(std::istream& input,int savedGearCount=gearCount);
-  bool MatchesCampaign(bool rewardWeapon,bool wardArmor,int potions,bool helm=false,bool shield=false) const;
+  bool MatchesCampaign(bool rewardWeapon,bool wardArmor,int potions,bool helm=false,bool shield=false,
+    const std::array<int,int(Item::Count)>& sold={}) const;
   static Inventory Migrate(int potions,bool rewardWeapon,bool equipped,bool wardArmor);
 private:
   std::array<ItemStack,capacity> bag_{};

@@ -237,6 +237,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   if (Equipped(s,item)) c.Diamond(rect.x+rect.w-5,rect.y+5,3,3,{.66f,.92f,.39f,1});
   if (item==Item::Potion) c.Text(rect.x+rect.w-15,rect.y+rect.h-16,std::to_string(bag>=0?s.Items().Bag()[bag].count:s.Potions()),12,{1,.94f,.57f,1});
   regions_.push_back({rect,{Action::SelectItem,static_cast<int>(item)},true,bag,gear});
+  regions_.back().event.inventory.source=bag;
  };
  const auto blockWindow=[&](Rect rect) { regions_.push_back({rect,{},false}); c.Window(rect); };
  const auto close=[&](Rect rect,Panel which) { button(rect,"X",Action::Close,int(which)); };
@@ -372,11 +373,13 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Text(1013,231,"Inventory",13,muted);
   button({1183,223,69,25},"Sort",Action::InventoryChange);
   regions_.back().event.inventory.action=rpg::InventoryAction::Sort;
-  if (!Owned(s,selected)) selected=Item::Starter;
+  if (!Owned(s,selected)) selected=Item::None;
+  if (selectedBag<0 || selectedBag>=rpg::Inventory::capacity || s.Items().Bag()[selectedBag].item!=selected)
+    selectedBag=s.Items().Find(selected);
   for (int i=0;i<24;++i) {
    const Rect rect{1010+float(i%6)*40,255+float(i/6)*42,37,39};
    const auto item=s.Items().Bag()[i].item;
-   slot(rect,item,selected==item,i);
+   slot(rect,item,selectedBag==i,i);
   }
   c.Frame({1008,430,248,27},{.055f,.07f,.025f,1}); c.Text(1017,436,std::to_string(s.Items().UsedSlots())+" / 24",12,muted);
   c.Oval(1189,443,5,5,gold); c.Text(1200,434,std::to_string(s.Gold()),14,gold);
@@ -393,29 +396,54 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    detail="Damage reduction: "+std::to_string(int(info.armor))+".\n";
    detail+=Equipped(s,selected)?"Equipped. Right-click to remove.":"Compared to worn: "+delta(info.armor-Describe(s.Items().Worn(info.slot)).armor)+".\nRight-click or drag onto its gear slot.";
   }
-  c.Wrap(1011,520,238,detail,13,ink,4);
+  c.Wrap(1011,515,238,detail,13,ink,3);
+  const int count=selectedBag>=0?s.Items().Bag()[selectedBag].count:0;
+  const bool split=count>1 && s.Items().UsedSlots()<rpg::Inventory::capacity && s.Health()>0;
+  if (panel==Panel::Merchant) {
+   const rpg::TradeCommand sale{rpg::TradeAction::Sell,selected,selectedBag};
+   button({1011,574,132,27},Equipped(s,selected)?"Unequip to sell":selectedBag<0?"Select bag item":"Sell one "+std::to_string(rpg::SellPrice(selected))+" g",
+     Action::Sell,int(selected),std::string(s.TradeStatus(sale))=="Available");
+   regions_.back().event.inventory.source=selectedBag;
+  }
+  if (selected==Item::Potion) {
+   button({panel==Panel::Merchant?1148.f:1011.f,574,panel==Panel::Merchant?102.f:239.f,27},"Split half",Action::InventoryChange,0,split);
+   regions_.back().event.inventory={rpg::InventoryAction::Split,selectedBag,-1,selected,count/2};
+  }
   const bool usable=CanUse(s,selected);
   std::string label=selected==Item::Potion?(s.Health()<=0?"Defeated":s.Health()>=s.MaxHealth()?"Full health":s.PotionCooldown()>0?"Cooling down":"Drink draught"):
    Equipped(s,selected)?"Unequip":"Equip";
   button({1011,606,239,29},label,Action::UseItem,int(selected),usable);
+  regions_.back().event.inventory.source=selectedBag;
  }
 
  if (panel==Panel::Merchant) {
   // Side windows remain interactive while the service window captures movement.
-  blockWindow({470,198,506,430}); c.Banner({487,188,472,35},"Dawnwatch quartermaster",21);
-  close({939,226,24,24},Panel::Merchant);
-  c.Text(489,234,"FIELD SUPPLIES",13,gold); c.Text(755,234,std::to_string(s.Gold())+" gold available",14,gold);
+  blockWindow({470,126,506,502}); c.Banner({487,116,472,35},"Dawnwatch quartermaster",21);
+  close({939,158,24,24},Panel::Merchant);
+  c.Text(489,168,"FIELD SUPPLIES",13,gold); c.Text(755,168,std::to_string(s.Gold())+" gold",14,gold);
   for (int i=0;i<int(rpg::shopOffers.size());++i) {
-   const auto& offer=rpg::shopOffers[i]; const auto& info=Describe(offer.item); const float y=264+i*94.f;
-   c.Frame({487,y,471,88},{.065f,.11f,.06f,1}); c.Frame({496,y+13,53,57},{.11f,.20f,.14f,1},gold);
-   Icon(c,{501,y+18,43,47},offer.item);
-   c.Text(560,y+9,info.name,17,ink);
-   c.Text(560,y+33,"Stock "+std::to_string(s.ShopStock(i))+" / "+std::to_string(offer.stock)+"   |   "+info.type,11,muted);
+   const auto& offer=rpg::shopOffers[i]; const auto& info=Describe(offer.item); const float y=196+i*70.f;
+   c.Frame({487,y,471,66},{.065f,.11f,.06f,1}); c.Frame({496,y+10,43,46},{.11f,.20f,.14f,1},gold);
+   Icon(c,{500,y+14,35,38},offer.item);
+   c.Text(550,y+6,info.name,16,ink);
+   c.Text(550,y+28,"Stock "+std::to_string(s.ShopStock(i))+" / "+std::to_string(offer.stock)+"   |   "+info.type,11,muted);
    const bool available=std::string(s.PurchaseStatus(i))=="Available";
-   c.Wrap(560,y+54,285,available?(offer.item==Item::Potion?"Restores 40 health. Stored in your bag.":"Protection +"+std::to_string(int(info.armor))+" while equipped. Stored in your bag."):s.PurchaseStatus(i),12,available?ink:gold,2);
+   c.Text(550,y+45,available?(offer.item==Item::Potion?"Restores 40 health.":"Protection +"+std::to_string(int(info.armor))+" while equipped."):s.PurchaseStatus(i),12,available?ink:gold);
    button({854,y+12,92,30},"Buy "+std::to_string(offer.price)+" g",Action::Purchase,i,available);
   }
-  c.Wrap(490,554,465,merchantNotice.empty()?"Limited expedition stock. Gear unlocks after the frontier patrol. Purchases are final; loading does not restock supplies.":merchantNotice,13,ink,3);
+  c.Text(490,418,"BUYBACK",13,gold); c.Text(590,418,"Click an item to reclaim one at its sale price",12,muted);
+  for (int i=0;i<int(Item::Count);++i) {
+   const auto item=Item(i); const int count=s.BuybackCount(item);
+   const Rect rect{490+i*51.f,447,43,45};
+   if (count==0) { c.EmptySlot(rect); continue; }
+   const bool available=std::string(s.TradeStatus({rpg::TradeAction::Buyback,item}))=="Available";
+   c.Frame(rect,{.08f,.16f,.11f,1},rect.Contains(mouseX_,mouseY_)?gold:border);
+   Icon(c,{rect.x+4,rect.y+4,35,37},item,available?1.f:.5f);
+   if (count>1) c.Text(rect.x+28,rect.y+28,std::to_string(count),12,gold);
+   c.Center(rect.x,497,rect.w,std::to_string(rpg::SellPrice(item))+" g",12,gold);
+   regions_.push_back({rect,{Action::Buyback,i},available});
+  }
+  c.Wrap(490,529,465,merchantNotice.empty()?"Select a bag item, then Sell one. Unequip worn gear first. Buyback items are kept when you leave or save; R resets the expedition.":merchantNotice,13,ink,3);
   c.Text(490,605,"E or X closes trade. C opens your equipment.",12,muted);
  } else if (panel!=Panel::None) {
   c.RectFill({0,0,1280,720},{0,0,0,.38f}); regions_.clear();
@@ -469,6 +497,12 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Window({x,y,309,156}); c.Text(x+14,y+10,info.name,18,gold);
    c.Text(x+14,y+39,info.type,12,muted); c.Wrap(x+14,y+64,280,info.description,13,ink,3);
    c.Text(x+14,y+128,Equipped(s,item)?"Right-click: remove  /  Drag: move":item==Item::Potion?"Right-click: drink  /  Drag: move":"Right-click: equip  /  Drag: move",12,gold);
+  } else if (it->event.action==Action::Buyback) {
+   const auto item=Item(it->event.value); const float x=std::clamp(mouseX_-140,475.f,659.f);
+   c.Window({x,312,309,116}); c.Text(x+14,322,Describe(item).name,17,gold);
+   c.Text(x+14,351,"Held: "+std::to_string(s.BuybackCount(item))+"  /  "+std::to_string(rpg::SellPrice(item))+" gold each",13,ink);
+   const auto status=s.TradeStatus({rpg::TradeAction::Buyback,item});
+   c.Text(x+14,390,std::string(status)=="Available"?"Click to reclaim one into your bag":status,12,muted);
   } else if (panel!=Panel::Merchant && (it->event.action==Action::Ability || it->event.action==Action::UseItem) && it->rect.y>650) {
    const bool potion=it->event.action==Action::UseItem; const int ability=it->event.value;
    static const char* names[]={"Strike","Heavy strike","Dash","Mend"};

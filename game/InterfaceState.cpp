@@ -47,11 +47,12 @@ bool CanUse(const rpg::Simulation& s,Item item) {
   if (!Owned(s,item) || s.Health()<=0) return false;
   return item==Item::Potion?s.PotionCooldown()==0 && s.Health()<s.MaxHealth():Describe(item).slot!=rpg::GearSlot::None;
 }
-void ApplyItem(rpg::Command& command,const rpg::Simulation& s,Item item) {
+void ApplyItem(rpg::Command& command,const rpg::Simulation& s,Item item,int bagSlot) {
   if (!CanUse(s,item)) return;
-  if (item==Item::Potion) command.usePotion=true;
+  if (bagSlot!=-1 && (bagSlot<0 || bagSlot>=rpg::Inventory::capacity || s.Items().Bag()[bagSlot].item!=item)) return;
+  if (item==Item::Potion) { command.usePotion=true; command.potionSource=bagSlot; }
   else if (Equipped(s,item)) command.inventory={rpg::InventoryAction::Unequip,int(Describe(item).slot),-1,item};
-  else command.inventory={rpg::InventoryAction::Equip,s.Items().Find(item),int(Describe(item).slot),item};
+  else command.inventory={rpg::InventoryAction::Equip,bagSlot==-1?s.Items().Find(item):bagSlot,int(Describe(item).slot),item};
 }
 Event Interface::Pointer(float x,float y,float width,float height,bool clicked,bool rightClicked,bool held,bool released) {
   const Layout layout(width,height); mouseX_=layout.LocalX(x); mouseY_=layout.LocalY(y);
@@ -67,7 +68,9 @@ Event Interface::Pointer(float x,float y,float width,float height,bool clicked,b
   }
   if (rightClicked) {
     CancelDrag();
-    if (hit && hit->enabled && hit->event.action==Action::SelectItem) return {Action::UseItem,hit->event.value};
+    if (hit && hit->enabled && hit->event.action==Action::SelectItem) {
+      auto result=hit->event; result.action=Action::UseItem; return result;
+    }
     return {};
   }
   if (dragItem_!=Item::None && (held || released) && std::hypot(mouseX_-pressX_,mouseY_-pressY_)>6) dragging_=true;

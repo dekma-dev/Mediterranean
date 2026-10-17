@@ -140,23 +140,41 @@ bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapsh
     };
     if (!walkTo({3,-10}) || !game_->State().CanTrade()) { error_=L"Quartermaster render scenario could not reach the shop."; return false; }
     game_->SetCameraOrbit(0,.45f,10);
-    for (int stage=0;stage<2;++stage) {
+    std::string equippedSnapshot;
+    for (int stage=0;stage<3;++stage) {
       if (stage==0) { game_->OpenPanel(ui::Panel::Merchant); game_->ShowPanel(ui::Panel::Character); }
-      else {
+      else if (stage==1) {
         c={}; c.purchase=1; game_->ExecuteCommand(c); c.purchase=2; game_->ExecuteCommand(c);
         for (const auto item : {rpg::Item::Helm,rpg::Item::Shield}) {
           c={}; c.inventory={rpg::InventoryAction::Equip,game_->State().Items().Find(item),int(rpg::DescribeItem(item).slot),item}; game_->ExecuteCommand(c);
         }
         if (game_->State().DamageReduction()!=5) { error_=L"Purchased equipment render scenario failed."; return false; }
         game_->OpenPanel(ui::Panel::Character); game_->ShowPanel(ui::Panel::Inventory);
+        equippedSnapshot=game_->State().Save();
+      } else {
+        c={}; c.inventory={rpg::InventoryAction::Unequip,int(rpg::GearSlot::Offhand),-1,rpg::Item::Shield}; game_->ExecuteCommand(c);
+        for (auto item : {rpg::Item::Starter,rpg::Item::Tunic,rpg::Item::Shield,rpg::Item::Potion}) {
+          c={}; c.trade={rpg::TradeAction::Sell,item,game_->State().Items().Find(item)}; game_->ExecuteCommand(c);
+        }
+        c={}; c.inventory={rpg::InventoryAction::Split,game_->State().Items().Find(rpg::Item::Potion),-1,rpg::Item::Potion,2}; game_->ExecuteCommand(c);
+        if (game_->State().BuybackCount(rpg::Item::Shield)!=1 || game_->State().Potions()!=4) { error_=L"Buyback render scenario failed."; return false; }
+        game_->OpenPanel(ui::Panel::Merchant); game_->ShowPanel(ui::Panel::Character);
+        renderer_->BeginFrame(); game_->Render(*renderer_); if (!renderer_->EndFrame(false)) return false;
+        const int cell=game_->State().Items().Find(rpg::Item::Potion);
+        Input sample; Input::Frame frame; frame.focused=true; frame.client={1028+(cell%6)*40,274+(cell/6)*42};
+        frame.screen=frame.client; sample.Update(frame);
+        frame.down[VK_LBUTTON]=true; sample.Update(frame); game_->Update(.01,sample,0);
+        frame.down[VK_LBUTTON]=false; frame.client={720,585}; frame.screen=frame.client; sample.Update(frame); game_->Update(.01,sample,0);
       }
       for (const auto dimensions : {std::pair<int,int>{960,600},{1600,900},{1280,720}}) {
         if (!renderer_->Resize(dimensions.first,dimensions.second)) { error_=renderer_->Error(); return false; }
-        std::wstring suffix=stage==0?L"-quartermaster":L"-purchased-equipment";
+        std::wstring suffix=stage==0?L"-quartermaster":stage==1?L"-purchased-equipment":L"-buyback";
         if (dimensions.first!=1280) suffix+=L"-"+std::to_wstring(dimensions.first)+L"x"+std::to_wstring(dimensions.second);
         if (!capture(suffix.c_str())) { error_=renderer_->Error(); return false; }
       }
     }
+    if (!game_->RestoreSnapshot(equippedSnapshot)) return false;
+    game_->OpenPanel(ui::Panel::Character); game_->ShowPanel(ui::Panel::Inventory);
     if (!walkTo({0,-8})) { error_=L"Equipped character inspection could not reach clear ground."; return false; }
     game_->SetCameraOrbit(game_->State().Facing()+3.14159265f,.2f,4);
     if (!capture(L"-watchman-character",false)) { error_=renderer_->Error(); return false; }

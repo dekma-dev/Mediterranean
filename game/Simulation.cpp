@@ -245,28 +245,26 @@ void Simulation::Update(float seconds,const Command& command) {
   if (command.nextTarget) SelectTarget();
   if (command.interact) Interact();
   if (command.equipWeapon) {
-    if (!HasRewardWeapon() && inventory_.Worn(GearSlot::Weapon)==Item::Starter)
-      message_="Complete the patrol to earn the watchguard blade.";
-    else {
-      inventory_.Equip(HasRewardWeapon() && !RewardWeaponEquipped()?Item::Watchguard:Item::Starter);
-      message_=RewardWeaponEquipped()?"Watchguard blade equipped. Melee damage increased.":"Starter sword equipped.";
-    }
+    const auto next=HasRewardWeapon() && !RewardWeaponEquipped()?Item::Watchguard:Item::Starter;
+    if (inventory_.Equip(next)) message_=std::string(DescribeItem(next).name)+" equipped.";
+    else message_="No other sword in your bag. Reclaim sold gear at the quartermaster.";
   }
   if (command.inventory.action!=InventoryAction::None) {
     if (inventory_.Apply(command.inventory)) message_=command.inventory.action==InventoryAction::Sort?"Bag sorted.":
-      command.inventory.action==InventoryAction::Move?"Item moved.":"Equipment updated.";
+      command.inventory.action==InventoryAction::Move?"Item moved.":command.inventory.action==InventoryAction::Split?"Stack split. Drag either stack to move it.":"Equipment updated.";
     else message_="That item cannot go there. Equipment and bag are unchanged.";
   }
   if (command.purchase!=-1) Buy(command.purchase);
+  if (command.trade.action!=TradeAction::None) Trade(command.trade);
   if (command.usePotion) {
     if (Potions()==0) message_="No healing potions. Loot defeated raiders with E.";
     else if (health_>=MaxHealth()) message_="Health is already full. Potion retained.";
     else if (potionCooldown_>0) message_="Potion is cooling down.";
-    else {
-      inventory_.Consume(Item::Potion); const float healed=std::min(40.f,MaxHealth()-health_); health_+=healed;
+    else if (inventory_.Consume(Item::Potion,command.potionSource)) {
+      const float healed=std::min(40.f,MaxHealth()-health_); health_+=healed;
       Emit(FeedbackKind::Heal,player_,static_cast<int>(healed));
       potionCooldown_=3; message_="Healing potion restored health.";
-    }
+    } else message_="That potion stack has moved. Select it again.";
   }
   UseAbility(command.ability);
   for (auto& enemy : enemies_) UpdateEnemy(enemy,dt);
@@ -376,7 +374,7 @@ void Simulation::UpdateEnemy(Enemy& enemy,float dt) {
 
 std::string Simulation::Save() const {
   std::ostringstream out;
-  out << std::setprecision(9) << "MEDITERRANEAN 5\n" << player_.x << ' ' << player_.z << ' '
+  out << std::setprecision(9) << "MEDITERRANEAN 6\n" << player_.x << ' ' << player_.z << ' '
     << health_ << ' ' << facing_ << ' ' << static_cast<int>(quest_) << ' ' << gold_ << '\n';
   out << Potions() << ' ' << HasRewardWeapon() << ' ' << RewardWeaponEquipped() << ' ' << potionCooldown_ << '\n';
   out << static_cast<int>(anchorQuest_) << '\n';
@@ -387,6 +385,7 @@ std::string Simulation::Save() const {
       << enemy.attackCooldown << ' ' << enemy.looted << ' ' << static_cast<int>(enemy.state) << ' '
       << enemy.windup << ' ' << enemy.facing << '\n';
   out<<"SHOP"; for (auto count : purchases_) out<<' '<<count; out<<'\n';
+  out<<"BUYBACK"; for (auto count : buyback_) out<<' '<<count; out<<'\n';
   inventory_.Write(out);
   return out.str();
 }
@@ -396,7 +395,7 @@ bool Simulation::Load(const std::string& data) {
   std::istringstream input(data);
   std::string magic; int version=0, quest=0,potions=2,owned=0,equipped=0;
   Simulation candidate;
-  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>5) return false;
+  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>6) return false;
   // The shop counter occupies formerly walkable ground. Preserve old saves by
   // moving only actors overlapping that new prop to its nearest free edge.
   const auto migrateCounter=[&](Vec2& position,float radius) {
@@ -422,12 +421,12 @@ bool Simulation::Load(const std::string& data) {
   auto valid=[](float value,float min,float max) { return std::isfinite(value) && value>=min && value<=max; };
   if (!valid(candidate.player_.x,-17,17) || !valid(candidate.player_.z,-19,19) ||
     !candidate.CanStand(candidate.player_) || !valid(candidate.health_,0,version<3?100.f:140.f) ||
-    !valid(candidate.facing_,-3.142f,3.142f) || quest<0 || quest>3 || candidate.gold_<0 || candidate.gold_>90) return false;
+    !valid(candidate.facing_,-3.142f,3.142f) || quest<0 || quest>3 || candidate.gold_<0 || (version<6 && candidate.gold_>90)) return false;
   candidate.quest_=static_cast<Quest>(quest);
   if (version>=2) {
     if (!(input >> potions >> owned >> equipped >> candidate.potionCooldown_) ||
       potions<0 || potions>(version>=5?5+shopOffers[0].stock:5) || owned<0 || owned>1 || equipped<0 || equipped>1 ||
-      (equipped && !owned) || bool(owned)!=(quest==3) || !valid(candidate.potionCooldown_,0,3)) return false;
+      (equipped && !owned) || (version<6 && bool(owned)!=(quest==3)) || !valid(candidate.potionCooldown_,0,3)) return false;
   } else owned=quest==3;
   if (version>=3) {
     int anchor=0;
@@ -469,13 +468,19 @@ bool Simulation::Load(const std::string& data) {
         (count>0 && shopOffers[i].patrolRequired && quest!=int(Quest::Complete))) return false;
     }
   }
+  if (version>=6) {
+    std::string tag; if (!(input>>tag) || tag!="BUYBACK") return false;
+    for (int i=0;i<int(Item::Count);++i)
+      if (!(input>>candidate.buyback_[i]) || candidate.buyback_[i]<0 || candidate.buyback_[i]>(Item(i)==Item::Potion?11:1)) return false;
+  }
   if ((quest==int(Quest::Active) && defeated>0) || (quest>=2 && defeated==0) ||
-    candidate.gold_!=(quest==3?25:0)+5*looted+(candidate.HasWardArmor()?50:0)-candidate.GoldSpent() ||
-    potions>2+looted+candidate.purchases_[0] || candidate.health_>candidate.MaxHealth() ||
+    candidate.gold_!=(quest==3?25:0)+5*looted+(candidate.HasWardArmor()?50:0)-candidate.GoldSpent()+candidate.BuybackValue() ||
+    potions+candidate.BuybackCount(Item::Potion)>2+looted+candidate.purchases_[0] || candidate.health_>candidate.MaxHealth() ||
     (candidate.anchorQuest_>=AnchorQuest::Return && defeated!=3)) return false;
   if (version>=4) {
     if (!candidate.inventory_.Read(input,version==4?4:Inventory::gearCount) ||
-      !candidate.inventory_.MatchesCampaign(owned!=0,candidate.HasWardArmor(),potions,candidate.purchases_[1]!=0,candidate.purchases_[2]!=0) ||
+      !candidate.inventory_.MatchesCampaign(quest==3,candidate.HasWardArmor(),potions,candidate.purchases_[1]!=0,candidate.purchases_[2]!=0,candidate.buyback_) ||
+      candidate.HasRewardWeapon()!=(owned!=0) ||
       candidate.RewardWeaponEquipped()!=(equipped!=0)) return false;
   } else candidate.inventory_=Inventory::Migrate(potions,owned!=0,equipped!=0,candidate.HasWardArmor());
   input >> std::ws;

@@ -1,6 +1,6 @@
 # Fullscreen and interface
 
-Updated: 2026-10-17
+Updated: 2026-10-18
 
 ## Display and menu behavior
 
@@ -26,6 +26,9 @@ Menu, atlas, journal and the quartermaster capture movement/camera/combat comman
 | Drag item | Swap bag cells, equip into a compatible slot, or remove into the bag |
 | Right-click item | Equip, unequip or drink |
 | Sort button | Compact and order the bag, merging consumable stacks |
+| Split half button | Move half the selected potion stack into the first free cell |
+| Sell one button in shop | Sell one from the selected bag cell at the displayed price |
+| Buyback item | Reclaim one into the bag at its sale price |
 | E near the quartermaster / E in the shop | Browse / close trade |
 | Character arrows / Front | Rotate the dressed preview / reset its facing |
 | Right click on atlas | Clear waypoint |
@@ -42,7 +45,9 @@ The compact six-column bag displays 24 actual storage cells. Worn items occupy s
 
 Drag between bag cells to move or swap; matching consumables merge up to 20 per stack. Drag gear onto its compatible character slot to equip it and return the previous item to the source cell. Drag worn gear into the bag to remove it or swap with compatible gear in the destination. Sort compacts cells and merges stacks. Incompatible drops change nothing; commands include the expected source item to reject stale drags after keyboard equipment changes. Closing a window, Escape, focus loss, minimization or resizing cancels the gesture.
 
-Ward armor automatically equips on reward, placing the tunic in the bag; both remain freely interchangeable afterward. Removing gear updates combat attributes immediately. Version 5 saves preserve exact cells, stacks, six worn slots and purchases; versions 1–4 migrate without losing existing rewards. The catalog has two swords, a potion, tunic, trousers, boots, ward armor, helm and shield. Stack splitting, disposal, selling, additional item types and movable windows remain future work.
+The selected bag cell is tracked separately from its item type. Split half moves the floor of half its potion count into the first empty cell; at least two potions and an empty cell are required. Drinking or selling uses that exact selected stack. Q still uses the first available stack. Dragging matching stacks together or Sort merges them. Stale source cells reject without consuming another stack or granting healing.
+
+Ward armor automatically equips on reward, placing the tunic in the bag; both remain freely interchangeable afterward. Removing gear updates combat attributes immediately. Version 6 saves preserve exact cells, split stacks, six worn slots, purchases and buyback; versions 1–5 migrate without losing existing rewards. The catalog has two swords, a potion, tunic, trousers, boots, ward armor, helm and shield. Permanent disposal, additional item types and movable windows remain future work.
 
 ### Character
 
@@ -52,7 +57,9 @@ The character screen places six working equipment slots around a lit 3D preview.
 
 An orange marker identifies the village quartermaster at `(3, -12)`, beside an original wooden supply counter. E opens a central green/gold shop with the bag already open; C adds the character window without closing trade. Each row has an item icon, stock, price, effect and Buy button. The displayed availability comes from the same simulation rules as the purchase command. Sold-out, locked or unaffordable rows cannot be purchased.
 
-The shop stocks six healing draughts (6 gold each), one helm (20) and one shield (35). Equipment unlocks after the patrol hand-in. Purchases update gold, item ownership and remaining stock together, put items in the bag and report the result. Drag or right-click the bought gear to equip it while the shop stays open. Stock survives loading and respawn. There is no selling, refund or automatic restock; R resets the expedition. E or X closes trade. Death or loss of trading eligibility also closes it. The world remains live, but underlying HUD attacks and movement keys are captured.
+The shop stocks six healing draughts (6 gold each), one helm (20) and one shield (35). Equipment unlocks after the patrol hand-in. Purchases update gold, item ownership and remaining stock together, put items in the bag and report the result. Drag or right-click the bought gear to equip it while the shop stays open. Stock survives loading and respawn. E or X closes trade. Death or loss of trading eligibility also closes it. The world remains live, but underlying HUD attacks and movement keys are captured.
+
+Select a bag cell and click Sell one; the button displays its price. Worn items show Unequip to sell and cannot be sold directly. Right-click remains equip/remove/drink. Nine buyback cells below the offers show the merchant-held item types, counts and reclaim prices. Hover for the name and eligibility; click to reclaim one into the bag. Unaffordable items stay visible but cannot be reclaimed. All items remain held across leaving, saving/loading and respawn; only a new expedition clears them. Buyback groups identical potions and has no expiry or discarded history. Reclaiming costs exactly the sale price, while fresh purchases cost more. Selling never replenishes retail stock. Prices are listed in [gameplay rules](gameplay.md).
 
 ### Atlas
 
@@ -89,11 +96,15 @@ The user's supplied Allods character/bag screenshot subsequently clarified the d
 
 `InterfaceTests` checks Escape transitions, simultaneous character/bag state, independent closing, return from the menu, live damage during all five panels, ownership/use rules, equipment changes and save round trips. A hidden DirectX window checks item, close, action-bar, menu and map click routing at 960x600, 1280x720 and 2560x1080. It also drags items between bag cells and worn slots, rejects incompatible drops, removes boots by right-click, sorts the bag and cancels a drag through Escape. Side-window surfaces capture the pointer while the world gap and available action-bar abilities remain usable. Central overlays reject clicks aimed at the underlying HUD. DirectX debug warnings/errors are rejected when that optional runtime is available.
 
-`-SmokeTest` validates hidden fullscreen size/restoration and renders spawn, raider, captain and veteran scenes. Each scenario captures the world at three sizes, two inspection views, and Menu/Inventory/Equipment/Atlas/Journal plus the combined Equipment+Bag layout at 960x600, 1280x720 and 1600x900. The veteran adds base/travel outfits, sparring with/without side windows, shop and purchased equipment at three sizes, a dressed world close-up and fully equipped sparring: 104 smoke captures per configuration. New suffixes include `-quartermaster`, `-purchased-equipment`, `-watchman-character` and `-equipped-sparring`. InterfaceTests separately writes `inventory-drag.png`. Representative captures were visually inspected. Debug and Release pass all nine CTest suites.
+Trading coverage also drives sell/buyback and odd-stack splitting through sampled Game input. Scaled pointer tests select the second potion stack, split, sell one, reclaim into the first stack and drink from the second, checking each exact cell. Worn sales and empty shelf clicks are disabled. Domain tests validate all catalog sale/reclaim cycles, transactional denial, balanced gold, saved buyback and v4–v6 migration. These checks exercise the production input/layout/command code without synthesizing real desktop input.
+
+`-SmokeTest` validates hidden fullscreen size/restoration and renders spawn, raider, captain and veteran scenes. Each scenario captures the world at three sizes, two inspection views, and Menu/Inventory/Equipment/Atlas/Journal plus the combined Equipment+Bag layout at 960x600, 1280x720 and 1600x900. The veteran adds base/travel outfits, sparring with/without side windows, shop, purchased equipment and buyback at three sizes, a dressed world close-up and fully equipped sparring: 107 smoke captures per configuration. New suffixes include `-quartermaster`, `-purchased-equipment`, `-buyback`, `-watchman-character` and `-equipped-sparring`. InterfaceTests separately writes `inventory-drag.png`. Representative captures were visually inspected. Debug and Release pass all nine CTest suites.
 
 Merchant integration checks route sampled E/click inputs through Game, buy actual gear, block walking while shopping and allow it after E closes trade. Scaled pointer checks buy/equip both new items with all three windows open, reject sold-out buttons and underlying attacks, and route portrait rotation. TradeTests verifies persistent charges/stock, unavailable purchases, armor in real combat and save migration.
 
 Hit regions are invalidated when panels change, a snapshot loads or HUD visibility changes, and are checked against the current panel state and rendered size. Input cannot activate an invisible previous-panel button before the next render. Additional regression tests cover opening/closing the menu while clicking, old gear regions after load, resize during a drag, and right-button gestures crossing from the bag/minimap into the world.
+
+The 2026-10-18 input fix cancels gestures and invalidates hit regions before processing F11's frame. Releasing a dragged item together with F11 cannot commit a drop before the window transition; a fresh drag afterward works normally. On defeat, the current central panel closes and gestures cancel so the recovery prompt becomes visible. Side windows remain open. Enter recovers the defeated character even if the menu, atlas or journal is reopened. Regression tests cover both behaviors, and `InterfaceTests` writes a separate `defeat-recovery.png` for visual inspection.
 
 Real keyboard/mouse interaction, Alt-Tab, multiple physical monitors, display scaling changes and longer gameplay sessions still need the manual checklist. Automated pointer tests call the same interface routing with coordinates. Game integration tests feed sampled input frames through the same transition logic used by Win32 polling, including focus loss/restoration; they do not synthesize desktop input.
 

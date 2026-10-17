@@ -32,9 +32,11 @@ struct Command {
   bool sprint = false, jump = false, nextTarget = false, interact = false, restart = false;
   int ability = -1;
   bool usePotion = false, equipWeapon = false;
+  int potionSource=-1;
   bool respawn = false;
   InventoryCommand inventory;
   int purchase=-1;
+  TradeCommand trade;
 };
 enum class Quest { Available, Active, Return, Complete };
 enum class AnchorQuest { Locked, Available, Active, Return, Complete };
@@ -87,6 +89,8 @@ public:
   bool TradeRequested() const { return tradeRequested_; }
   int ShopStock(int offer) const;
   const char* PurchaseStatus(int offer) const;
+  int BuybackCount(Item item) const { return ValidItem(item)?buyback_[int(item)]:0; }
+  const char* TradeStatus(const TradeCommand& command) const;
   int Potions() const { return inventory_.Count(Item::Potion); }
   bool HasRewardWeapon() const { return inventory_.Count(Item::Watchguard)>0; }
   bool RewardWeaponEquipped() const { return inventory_.Worn(GearSlot::Weapon)==Item::Watchguard; }
@@ -125,6 +129,8 @@ private:
   void EndSparring(const char* result);
   void Buy(int offer);
   int GoldSpent() const;
+  int BuybackValue() const;
+  void Trade(const TradeCommand& command);
   WorldMap map_;
   std::vector<Enemy> enemies_;
   Vec2 player_{0,-10};
@@ -133,6 +139,7 @@ private:
   int target_ = -1, gold_ = 0;
   Inventory inventory_;
   std::array<int,shopOffers.size()> purchases_{};
+  std::array<int,int(Item::Count)> buyback_{};
   bool tradeRequested_=false;
   Enemy trainer_;
   bool sparring_=false;

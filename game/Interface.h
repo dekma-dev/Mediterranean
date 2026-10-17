@@ -4,7 +4,7 @@
 class Renderer;
 namespace ui {
 enum class Panel { None,Menu,Character,Inventory,Map,Journal,Merchant };
-enum class Action { None,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,RotatePreview };
+enum class Action { None,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview };
 using Item=rpg::Item;
 struct Rect { float x,y,w,h; bool Contains(float px,float py) const { return px>=x && py>=y && px<x+w && py<y+h; } };
 struct Layout {
@@ -20,7 +20,7 @@ const ItemInfo& Describe(Item item);
 bool Owned(const rpg::Simulation& simulation,Item item);
 bool Equipped(const rpg::Simulation& simulation,Item item);
 bool CanUse(const rpg::Simulation& simulation,Item item);
-void ApplyItem(rpg::Command& command,const rpg::Simulation& simulation,Item item);
+void ApplyItem(rpg::Command& command,const rpg::Simulation& simulation,Item item,int bagSlot=-1);
 class Interface {
 public:
   void Escape() { CancelDrag(); InvalidateHitRegions(); panel=panel==Panel::Menu?Panel::None:Panel::Menu; }
@@ -43,6 +43,7 @@ public:
   Panel panel=Panel::None;
   bool characterOpen=false,inventoryOpen=false;
   Item selected=Item::Starter;
+  int selectedBag=-1;
   bool fullscreen=true,hasWaypoint=false;
   std::string menuNotice;
   std::string inventoryNotice;

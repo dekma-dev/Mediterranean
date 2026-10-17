@@ -9,6 +9,12 @@ std::string Veteran() {
     "100 -4 7 0 0 1 3 0 0\n101 4 9 0 0 1 3 0 0\n102 0 12 0 0 1 3 0 0\n";
 }
 void Buy(rpg::Simulation& game,int index) { rpg::Command c; c.purchase=index; game.Update(.01f,c); }
+void Trade(rpg::Simulation& game,rpg::TradeAction action,rpg::Item item,int source=-1) {
+  rpg::Command c; c.trade={action,item,source}; game.Update(.01f,c);
+}
+void RemoveRecord(std::string& save,const char* tag) {
+  const auto at=save.find(tag); Require(at!=std::string::npos,"Expected save record."); save.erase(at,save.find('\n',at)-at+1);
+}
 int main() {
   using namespace rpg;
   Simulation game; Require(game.Load(Veteran()) && game.CanTrade(),"Veteran must reach the quartermaster.");
@@ -25,7 +31,8 @@ int main() {
   c.inventory={InventoryAction::Equip,game.Items().Find(Item::Shield),int(GearSlot::Offhand),Item::Shield}; game.Update(.01f,c);
   Require(game.DamageReduction()==5 && game.Experience()==300,"Six-slot protection must combine without changing earned XP.");
   Simulation copy; Require(copy.Load(game.Save()) && copy.Save()==game.Save() && copy.ShopStock(1)==0,
-    "Version-5 saves must retain purchases, exact gold, stock and equipment.");
+    "Current saves must retain purchases, exact gold, stock and equipment.");
+  const auto armored=game.Save();
   // Armored training uses the real hit calculation, not only the attribute panel.
   for (auto waypoint : game.Map().FindPath(game.Player(),{12,-3.8f},.4f)) {
     for (int i=0;i<500 && std::hypot(game.Player().x-waypoint.x,game.Player().z-waypoint.z)>.15f;++i) {
@@ -50,9 +57,13 @@ int main() {
   Require(!copy.Load(bad) && copy.Save()==stable,"Missing purchase receipt must reject a forged refund/ownership state.");
   bad=soldOut; at=bad.find("SHOP 6 0 0"); bad.replace(at,10,"SHOP 7 0 0");
   Require(!copy.Load(bad) && copy.Save()==stable,"Stock purchases above the initial limit must reject transactionally.");
-  // Actual old v4 layout has four gear slots and no SHOP record.
+  // Actual v5 has purchases and six gear slots but no buyback record.
+  auto version5=armored; version5.replace(14,1,"5"); RemoveRecord(version5,"BUYBACK ");
+  Require(copy.Load(version5) && copy.Save()==armored,"Version-5 migration must preserve purchases/worn six-slot gear and start with empty buyback.");
+  // Actual old v4 layout has four gear slots and no SHOP/BUYBACK record.
   Require(game.Load(Veteran()),"Prepare version-4 migration."); auto old=game.Save(); old.replace(14,1,"4");
   at=old.find("SHOP "); old.erase(at,old.find('\n',at)-at+1);
+  RemoveRecord(old,"BUYBACK ");
   at=old.find("GEAR "); const auto end=old.find('\n',at); old.erase(end-6,6);
   Require(copy.Load(old) && copy.Items().Worn(GearSlot::Head)==Item::None && copy.ShopStock(1)==1 && copy.Gold()==90,
     "Version-4 migration must retain old bag/gear without granting new equipment or charging gold.");
@@ -78,5 +89,88 @@ int main() {
   Require(copy.NearQuartermaster(),"Recruit should be within trading range.");
   Require(std::string(copy.PurchaseStatus(1))=="Complete the frontier patrol","Gear must require the actual quest hand-in.");
   const auto recruit=copy.Save(); Buy(copy,1); Require(copy.Save()==recruit,"Locked gear cannot be purchased by direct command.");
-  std::cout<<"PASS: limited stock, gold, purchase validation, six-slot gear, training effects and v4/v5 migration.\n";
+  // Sold items remain held by the merchant, and their value reconciles with gold.
+  Require(game.Load(Veteran()),"Prepare selling scenario.");
+  const auto beforeSales=game.Save();
+  Trade(game,TradeAction::Sell,Item::Watchguard,-1);
+  Trade(game,TradeAction::Sell,Item::Starter,game.Items().Find(Item::Potion));
+  Trade(game,TradeAction::Buyback,Item::Shield);
+  Trade(game,TradeAction::Sell,Item::Count,0);
+  Require(game.Save()==beforeSales,"Worn, stale, missing and unknown trades must be atomic rejections.");
+  for (auto item : {Item::Starter,Item::Tunic}) Trade(game,TradeAction::Sell,item,game.Items().Find(item));
+  Require(game.Gold()==97 && game.Items().Count(Item::Starter)==0 && game.BuybackCount(Item::Starter)==1,
+    "Sale must move gear to merchant ownership and permit legitimate gold above the old 90 cap.");
+  c={}; c.inventory={InventoryAction::Unequip,int(GearSlot::Weapon),-1,Item::Watchguard}; game.Update(.01f,c);
+  Trade(game,TradeAction::Sell,Item::Watchguard,game.Items().Find(Item::Watchguard));
+  c={}; c.inventory={InventoryAction::Unequip,int(GearSlot::Chest),-1,Item::Ward}; game.Update(.01f,c);
+  Trade(game,TradeAction::Sell,Item::Ward,game.Items().Find(Item::Ward));
+  c={}; c.equipWeapon=true; game.Update(.01f,c);
+  Require(game.Experience()==300 && game.Level()==3 && !game.HasRewardWeapon() && game.StrikeDamage()==12 && game.DamageReduction()==0,
+    "Selling quest gear must retain earned XP; G cannot equip a sold sword.");
+  Require(copy.Load(game.Save()) && copy.Save()==game.Save(),"Sold rewards and starting gear must survive a version-6 save.");
+  const auto soldGear=game.Save();
+  for (int i=0;i<5;++i) Trade(game,TradeAction::Sell,Item::Potion,game.Items().Find(Item::Potion));
+  Require(game.Potions()==0 && game.BuybackCount(Item::Potion)==5 && game.Gold()==132,"Each potion sale transfers one, including the last item in its cell.");
+  Require(copy.Load(game.Save()) && copy.Save()==game.Save(),"Potion buyback counts must persist even with no potions left in the bag.");
+  for (int i=0;i<5;++i) Trade(game,TradeAction::Buyback,Item::Potion);
+  Require(game.Save()==soldGear,"Selling and reclaiming the same stack must not create gold or potions.");
+  for (auto item : {Item::Starter,Item::Tunic,Item::Watchguard,Item::Ward}) Trade(game,TradeAction::Buyback,item);
+  Require(game.Gold()==90 && game.Items().Count(Item::Ward)==1 && !game.WardArmorEquipped(),"Reclaimed equipment returns to bag at exactly its sale price.");
+  Require(copy.Load(game.Save()),"Fully reclaimed inventory must remain valid.");
+  // Spend sale proceeds: buyback may become unaffordable but may never disappear.
+  Require(game.Load(Veteran()),"Prepare spending buyback scenario."); Buy(game,1); Buy(game,2);
+  Trade(game,TradeAction::Sell,Item::Shield,game.Items().Find(Item::Shield));
+  for (int i=0;i<6;++i) Buy(game,0);
+  Require(game.Gold()==16 && game.BuybackCount(Item::Shield)==1 && game.ShopStock(2)==0,"Selling must not replenish the original shop stock.");
+  const auto noGold=game.Save(); Trade(game,TradeAction::Buyback,Item::Shield);
+  Require(game.Save()==noGold && std::string(game.TradeStatus({TradeAction::Buyback,Item::Shield}))=="Not enough gold",
+    "Unaffordable buyback must retain the item, gold and inventory.");
+  Trade(game,TradeAction::Sell,Item::Potion,game.Items().Find(Item::Potion)); Trade(game,TradeAction::Buyback,Item::Shield);
+  Require(game.Gold()==1 && game.BuybackCount(Item::Shield)==0 && game.Items().Count(Item::Shield)==1 && copy.Load(game.Save()),
+    "Further sales may fund reclaiming without resetting stock or violating the ledger.");
+  // Reject manipulated buyback counts/credits and duplicate unique ownership.
+  const auto valid=copy.Save();
+  const auto reject=[&](std::string data) { Require(!copy.Load(data) && copy.Save()==valid,"Forged buyback save must reject transactionally."); };
+  bad=soldGear; at=bad.find("BUYBACK "); bad.replace(at,bad.find('\n',at)-at,"BUYBACK 1 1 0 1 0 0 1 1 0"); reject(bad);
+  bad=soldGear; at=bad.find("BUYBACK "); bad.replace(at,bad.find('\n',at)-at,"BUYBACK 1 1 12 1 0 0 1 0 0"); reject(bad);
+  bad=soldGear; at=bad.find("BUYBACK "); bad.replace(at,bad.find('\n',at)-at,"BUYBACK -1 1 0 1 0 0 1 0 0"); reject(bad);
+  bad=soldGear; at=bad.find("3 -10 140 0 3 122"); Require(at!=std::string::npos,"Expected sale balance.");
+  bad.replace(at,17,"3 -10 140 0 3 123"); reject(bad);
+  bad=soldGear; at=bad.find(" -1 0",bad.find("BAG")); bad.replace(at,5," 0 1"); reject(bad);
+  // Even internally balanced gold cannot authorize an unearned item.
+  bad=soldGear; at=bad.find("BUYBACK "); bad.replace(at,bad.find('\n',at)-at,"BUYBACK 1 1 0 1 0 0 1 1 0");
+  at=bad.find("3 -10 140 0 3 122"); bad.replace(at,17,"3 -10 140 0 3 132"); reject(bad);
+  // Reclaim and sell every catalog item repeatedly; unique gear never returns to retail stock.
+  Require(game.Load(armored),"Prepare catalog round trip.");
+  for (int i=0;i<int(Item::Count);++i) {
+    const auto item=Item(i); const auto slot=DescribeItem(item).slot;
+    if (slot!=GearSlot::None && game.Items().Worn(slot)==item) {
+      c={}; c.inventory={InventoryAction::Unequip,int(slot),-1,item}; game.Update(.01f,c);
+    }
+    const int beforeGold=game.Gold(),beforeCount=game.Items().Count(item);
+    for (int cycle=0;cycle<12;++cycle) {
+      Trade(game,TradeAction::Sell,item,game.Items().Find(item));
+      Require(game.BuybackCount(item)==1 && game.Gold()==beforeGold+SellPrice(item),"Catalog sale transfers one item at its price.");
+      Trade(game,TradeAction::Buyback,item);
+      Require(game.BuybackCount(item)==0 && game.Gold()==beforeGold && game.Items().Count(item)==beforeCount,
+        "Repeated catalog trades cannot farm gold or duplicate items.");
+    }
+    Require(copy.Load(game.Save()) && game.Experience()==300,"Every catalog item's transfer must remain save-valid without changing XP.");
+  }
+  // Eligibility applies to sales and buyback as well as fresh purchases.
+  Require(game.Load(soldGear),"Prepare trade eligibility scenario.");
+  c={}; c.jump=true; c.trade={TradeAction::Buyback,Item::Starter}; game.Update(.01f,c);
+  Require(game.Gold()==122 && game.BuybackCount(Item::Starter)==1,"Jumping must reject buyback before charging.");
+  Require(game.Load(soldGear),"Reset remote trade scenario.");
+  for (int i=0;i<30;++i) { c={}; c.movement={0,1}; game.Update(.05f,c); }
+  const auto away=game.Save(); Trade(game,TradeAction::Sell,Item::Potion,game.Items().Find(Item::Potion)); Trade(game,TradeAction::Buyback,Item::Starter);
+  Require(!game.CanTrade() && game.Save()==away,"Remote sale and buyback must reject without side effects.");
+  bad=soldGear; at=bad.find("140"); bad.replace(at,3,"0"); Require(game.Load(bad),"Sold-item death fixture.");
+  const auto deadSales=game.Save(); Trade(game,TradeAction::Sell,Item::Potion,game.Items().Find(Item::Potion)); Trade(game,TradeAction::Buyback,Item::Starter);
+  Require(game.Save()==deadSales,"Defeated characters cannot sell or reclaim.");
+  c={}; c.respawn=true; game.Update(.01f,c);
+  Require(game.Gold()==122 && game.BuybackCount(Item::Ward)==1 && copy.Load(game.Save()),"Respawn must preserve sold gear and sale proceeds.");
+  c={}; c.restart=true; game.Update(.01f,c);
+  Require(game.Gold()==0 && game.BuybackCount(Item::Ward)==0 && game.Items().Count(Item::Starter)==1,"Restart resets buyback and restores starting gear.");
+  std::cout<<"PASS: stock, selling, buyback, exact gold/item accounting, eligibility, equipment effects and v4-v6 migration.\n";
 }
