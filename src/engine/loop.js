@@ -1,1 +1,0 @@
-export function startLoop(onFrame) {  let last = performance.now();  function tick(now) {    const delta = Math.min(0.05, (now - last) / 1000);    last = now;    onFrame(delta);    requestAnimationFrame(tick);  }  requestAnimationFrame(tick);}

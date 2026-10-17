@@ -1,2 +1,7 @@
 
-node_modules/
+.vs/
+build/
+build-*/
+build_vs/
+out/
+saves/
