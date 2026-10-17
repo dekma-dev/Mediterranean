@@ -17,6 +17,10 @@ int main() {
   Require(!game.CanStand({18,0}),"Island edge must block movement");
   Require(game.CanStand({0,0}),"Main path must remain walkable");
   Require(game.CameraDistance({0,-8},1.4f,{-1,0},0,10)<6,"Camera must pull forward before entering a building");
+  Require(game.CameraDistance({0,-8},5.7f,{-1,0},0,10)<5,"Camera must avoid the pitched roof above the wall bounds");
+  Require(game.CameraDistance({10,10},3.2f,{1,0},0,6)<2.2f,"Camera must avoid the tree crown, not only its trunk");
+  Require(game.CameraDistance({0,-8},8.f,{-1,0},0,10)==10,"Camera above the roof envelope should remain unobstructed");
+  Require(game.CanStand({12.5f,10}),"Expanded camera bounds must not block movement underneath foliage");
 
   rpg::Command command;
   command.movement={-1,0}; command.sprint=true;

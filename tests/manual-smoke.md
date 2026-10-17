@@ -1,8 +1,8 @@
 # Native smoke test
 
-Status: interactive checklist NOT RUN. Debug/Release builds, three CTest suites, and hidden DirectX rendering/capture pass as of 2026-10-17. Those automated checks do not replace this checklist.
+Status: interactive checklist NOT RUN. Debug/Release Ninja/MSVC builds, seven CTest suites, and four render scenarios at three sizes plus five interface panels and two camera angles pass as of 2026-10-17. Those automated checks do not replace this checklist.
 
-Run `./scripts/build-native.ps1 -Configuration Debug -Test -Run` from PowerShell. Repeat the build/test step for Release after the Debug checks succeed. Record actual observations in `progress.md`; source inspection does not count as a pass.
+Run `./scripts/build-native.ps1 -Backend Ninja -Configuration Debug -Test -Run` from PowerShell. Repeat for Release after the Debug checks succeed. Record actual observations in `progress.md`; source inspection does not count as a pass.
 
 1. Confirm the application shows a lit island, buildings, a blue player, red raiders, and readable HUD text. Check shader/device diagnostics if startup fails.
 2. Resize, maximize, minimize, and restore the window. Confirm the view keeps its aspect ratio, the HUD remains usable, and rendering resumes.
@@ -12,10 +12,21 @@ Run `./scripts/build-native.ps1 -Configuration Debug -Test -Run` from PowerShell
 6. Press E at the gold beacon to accept the patrol. Approach a raider and cycle targets with Tab. Verify selected-target feedback and range rejection without consuming an attack cooldown.
 7. Use strike and heavy strike; verify damage, cooldowns, enemy retaliation, and death. Check that melee attacks do not pass through buildings. Use mend after taking damage; full-health mend should not consume cooldown.
 8. Defeat a raider, collect its loot with E, return, and claim the patrol reward. Repeated E presses must not add more loot or quest rewards. Also test defeating a raider before accepting the quest. Press G to equip the reward sword; confirm the character panel and subsequent damage reflect it.
-9. Open C/I/J/M panels, switch between them, and close with Escape. The world should remain active behind panels. With no panel open, Escape should pause/resume simulation.
+9. Open C/I (or B)/J/M panels. Close them with X or the same hotkey. Escape opens the menu from gameplay or any panel, and Escape again closes the menu. Verify enemies and cooldowns continue while every panel/menu is open, but movement/camera keys are captured. Check every menu button, Save/Load feedback and explicit Exit.
 10. Use Q while injured and check potion consumption/cooldown. Save with F5, move or fight, then load with F9. Confirm position, health, enemy state, loot claims, quest, gold, potions, equipment, and cooldowns are restored. Confirm a malformed save is rejected without replacing active progress.
-11. Die, check that movement and abilities are disabled, then press R to restart. Confirm quest, gold, enemies, and health reset.
+11. Die and check that movement and abilities are disabled. Press Enter: return to the village with earned maximum health, quests, XP, equipment, gold, potions, defeated enemies, and loot claims retained. Living enemies should recover at home. Separately use R and confirm the entire current expedition resets without erasing the old save file.
 12. Close the window and confirm the process exits. Review Debug output for DirectX warnings or errors.
 13. Pull a raider around a building and beyond its home leash. Check navigation, separation between enemies, return behavior, and health restoration at home.
+14. Watch a raider windup, stand in its cone for one hit, then dodge a later swing by moving or dashing outside it. Heavy strike should interrupt an active windup. Check floating numbers, hit flash, and the target's windup message. Returning enemies should be untargetable and immune.
+15. Claim the patrol reward and check level 2, increased maximum health, restored health, and damage bonuses. Accept the next quest with E. Clear the remaining enemies, including the violet captain with a longer windup and heavier damage.
+16. Start anchor stabilization with E at the violet crystal after all three enemies die. Move or use an ability to cancel; confirm no credit. Start again and stand still for three seconds. The crystal should turn green and the tracker should direct you back to the beacon.
+17. Hand in the anchor quest. Check 50 additional gold, 120 additional XP, level 3, 140 maximum health, and ward armor in the character/inventory panels and on the model. Repeated E must not repeat the reward. Save/load the complete campaign and verify both quests and equipment persist.
+18. Inspect the tracker, health/XP bars, contextual E prompt, target panel, journal, map, and death overlay at 960x600 and a larger window. Check that long messages fit and input remains usable with a panel open.
 
-Known prototype limits: procedural blockout art and simple limb motion; no sound or skeletal animation; static-grid navigation and soft enemy separation; small decorative props are non-solid; limited inventory with two swords and one consumable type; no networking; no GPU performance measurements yet.
+19. Press F2, orbit and zoom to inspect character silhouettes, armor seams, roofs, foliage, island boundaries and shadows. Press F2 again. Check that the menu, panels and death remain readable even with the HUD hidden. Watch F3 GPU time/draw calls in Release while moving and fighting; record resolution and hardware with any performance observation.
+
+Known prototype limits: procedural stylized art and simple joint motion; no audio or skeletal animation; static-grid navigation and soft separation; decorative props are non-solid; two swords, one consumable type, one automatic armor reward; level cap 3; no repeatable spawns or networking; stationary GPU measurements exist, but interactive performance is not yet established. Final armor is awarded after the current enemies are dead; new encounters to use it against are future work.
+
+20. Verify a normal launch fills the monitor without window borders. Press F11 to return to the previous window size and position, then toggle again. Test the menu Display button, Alt-Tab, DPI scaling and another connected monitor if available. No desktop resolution or scaling preference should change.
+21. In I, select owned items and inspect descriptions/stack counts. Switch between both swords with Equip; confirm stats, world model and C preview change. Use a draught when injured; verify exactly one is consumed, cooldown applies and full-health use is disabled. Hover slots and action-bar buttons for details. Check that clicks do not pass through an open panel to the HUD.
+22. In M, compare the illustrated roads/buildings/crowns/ruin/dock with the actual map. Place a waypoint on clear ground, try invalid ground without losing the first waypoint, then clear it with right click or the button. Inspect player-facing and living/dead/loot/objective markers. Verify C shows current armor and weapon, empty head/off-hand slots, and real attributes.

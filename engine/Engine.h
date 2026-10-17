@@ -15,7 +15,8 @@ public:
   ~Engine();
 
   bool Initialize(HINSTANCE instance, int width, int height, bool visible = true);
-  bool SmokeTest(const std::wstring& capturePath);
+  bool SmokeTest(const std::wstring& capturePath,const std::string& snapshot = {});
+  bool Benchmark(const std::wstring& reportPath);
   int Run();
   const std::wstring& Error() const { return error_; }
 

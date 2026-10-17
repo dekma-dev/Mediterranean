@@ -1,22 +1,31 @@
 #pragma once
 #include "engine/Input.h"
 #include "game/Simulation.h"
+#include "game/Interface.h"
 class Renderer;
 
 class Game {
 public:
   void Initialize();
   void Update(double deltaSeconds, const Input& input, float wheel);
-  void Render(Renderer& renderer);
+  void Render(Renderer& renderer,bool showInterface = true);
+  void SetCameraOrbit(float yaw,float pitch,float distance);
+  bool RestoreSnapshot(const std::string& snapshot);
   std::wstring WindowTitle() const;
+  bool TakeFullscreenRequest() { const bool value=fullscreenRequest_; fullscreenRequest_=false; return value; }
+  bool QuitRequested() const { return quitRequested_; }
+  void SetFullscreenState(bool enabled) { interface_.fullscreen=enabled; }
+  void OpenPanel(ui::Panel panel) { interface_.SetOnly(panel); }
+  void ShowPanel(ui::Panel panel) { interface_.Show(panel); }
+  const rpg::Simulation& State() const { return simulation_; }
 private:
   rpg::Simulation simulation_;
   float yaw_ = 0, pitch_ = .45f, distance_ = 10, time_ = 0;
   float walkPhase_ = 0, walkBlend_ = 0;
-  bool paused_ = false;
   bool debugOverlay_ = false;
-  enum class Panel { None, Character, Inventory, Quest, Map };
-  Panel panel_ = Panel::None;
+  bool hudVisible_ = true;
+  ui::Interface interface_;
+  bool fullscreenRequest_ = false,quitRequested_ = false;
   void SaveProgress();
   void LoadProgress();
 };

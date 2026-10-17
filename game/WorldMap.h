@@ -10,6 +10,12 @@ struct Obstacle {
   Vec2 center;
   float halfX, halfZ, height;
   PropKind kind = PropKind::Building;
+  float RoofHeight() const { return halfX*.75f; }
+  // Camera bounds include the art silhouette; actors still collide with trunks
+  // and wall footprints so they can walk underneath foliage and roof overhangs.
+  float CameraHalfX() const { return kind==PropKind::Tree?2.f:halfX+.35f; }
+  float CameraHalfZ() const { return kind==PropKind::Tree?2.f:halfZ+.35f; }
+  float CameraHeight() const { return height+(kind==PropKind::Building?RoofHeight()+1.f:kind==PropKind::Tree?.5f:1.f); }
 };
 
 // Shared by simulation, navigation, rendering and map UI. No platform dependencies.
@@ -18,6 +24,7 @@ public:
   WorldMap();
   static constexpr float halfWidth = 17, halfDepth = 19;
   static constexpr Vec2 spawn{0,-10}, questGiver{-3,-10};
+  static constexpr Vec2 astralAnchor{0,12.8f};
   const std::vector<Obstacle>& Obstacles() const { return obstacles_; }
   bool CanStand(Vec2 position, float radius) const;
   bool CanTravel(Vec2 from, Vec2 to, float radius) const;

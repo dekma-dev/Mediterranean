@@ -13,7 +13,7 @@ Build single-player first and concentrate on one well-developed test map. Keep s
 The following are project design decisions, not claims that these systems have been implemented:
 
 - Setting: a small inhabited island surrounded by an astral-like sky, with an outpost, a path, and an enemy camp.
-- Visual target: stylized proportions, readable silhouettes, warm timber and stone buildings, painted color blocks, and cool atmospheric distance. Start with procedural placeholder geometry.
+- Visual target: stylized proportions, readable silhouettes, warm timber and stone buildings, believable timber, stone and cloth surfaces, and cool atmospheric distance. Use compact procedural geometry/materials while external art datasets are excluded.
 - Controls: third-person follow/orbit camera, WASD movement, mouse camera control, and zoom.
 - Combat target: explicit enemy selection, a numbered action bar, cooldowns, range checks, and readable health and target feedback. Start with one melee archetype and one enemy type; existing JS abilities are migration references rather than the final class design.
 - First objective: leave the outpost, defeat a nearby enemy, return, and receive a reward.
@@ -25,7 +25,16 @@ This is a proposed implementation sequence, not a list of completed features. Se
 
 ## Implementation checkpoint - 2026-10-17
 
-Debug and Release builds now pass, together with simulation/navigation/inventory regression tests and a hidden DirectX render/capture check. The first map includes a village, dock, training ground, and raider camp; navigation, loot, consumables, and one equipment upgrade are implemented. Interactive input, combat feel, and complete visual acceptance still need playtesting. Next priorities are fixing findings from that playtest, improving this one map's art and interactions, and profiling before expanding scope.
+Debug and Release builds pass using Ninja/MSVC, together with seven regression suites and four render scenarios at three window sizes plus two inspection angles and all five interface panels. Gameplay now starts fullscreen; Escape opens a live menu. The interface has a clickable item grid, a dressed 3D equipment preview and a generated atlas/minimap with waypoints; see [interface design](docs/interface.md). A first procedural art pass adds curved character/prop meshes, generated materials, instancing, culling and a bounded shadow map; see [graphics budgets](docs/graphics.md). The first map now contains a two-quest campaign, XP and levels 1–3, a captain with telegraphed attacks, heavy-strike interrupts, anchor stabilization, weapon/armor rewards, progress-preserving death recovery, and version 3 saves with migration. Interactive input, combat feel, and final art acceptance still need playtesting.
+
+### Next work on this map
+
+1. Run the expanded fullscreen/interface checklist, including real mouse input, Alt-Tab and DPI/monitor behavior; tune combat/camera/UI from actual findings.
+2. Refine character anatomy/clothing, foliage, terrain composition and camera bounds from the procedural art foundation. Keep collision/navigation consistent and retain the measured memory budgets.
+3. Add usable village/training interactions and a repeatable encounter design with explicit reward rules; do not enable unlimited XP through naive enemy respawns.
+4. Profile moving-camera and encounter frame costs before expanding rendering complexity; the first stationary Release comparison is recorded in docs/graphics.md. Audio, skeletal animation, class specialization, and item grids remain later work.
+
+Gameplay tuning and campaign rules are documented in [docs/gameplay.md](docs/gameplay.md). Broader MMO systems and extra maps remain outside this milestone.
 
 ## 1. Establish the native development baseline
 
