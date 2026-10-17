@@ -32,5 +32,7 @@ int main() {
   Require(map.FindPath({0,0},{40,0}).empty(),"Outside goal must not create a route");
   Require(!map.CanStand({std::numeric_limits<float>::quiet_NaN(),0},.4f),"NaN coordinates must be rejected");
   Require(!map.CanStand({14,-2},.4f),"Visible tree trunk must be solid");
+  Require(!map.CanTravel({3,-15},{3,-11},.45f),"The visible shop counter must block a direct route.");
+  CheckRoute(map,{3,-15},{3,-11});
   std::cout << "Navigation checks passed.\n";
 }

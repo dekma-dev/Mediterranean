@@ -8,7 +8,8 @@
 namespace rpg {
 WorldMap::WorldMap() {
   obstacles_ = {{{-8,-8},2.8f,2.5f,4.f},{{8,-8},2.8f,2.5f,4.f},
-    {{-10,3},1.3f,1.3f,3.f},{{10,1},1.5f,1.5f,3.4f},{{0,15},2,1,2,PropKind::Ruin}};
+    {{-10,3},1.3f,1.3f,3.f},{{10,1},1.5f,1.5f,3.4f},{{0,15},2,1,2,PropKind::Ruin},
+    {{3,-13.3f},1.1f,.4f,.85f,PropKind::Counter}};
   for (float x : {-14.f,14.f}) for (float z : {-14.f,-2.f,10.f})
     obstacles_.push_back({{x,z},.35f,.35f,3.9f,PropKind::Tree});
 }

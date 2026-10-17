@@ -3,10 +3,12 @@
 #include <string>
 #include <vector>
 #include "game/WorldMap.h"
+#include "game/Inventory.h"
+#include "game/Trade.h"
 
 namespace rpg {
 enum class EnemyState { Idle, Pursuing, Returning, Dead };
-enum class EnemyKind { Raider, Captain };
+enum class EnemyKind { Raider, Captain,Trainer };
 struct Enemy {
   Vec2 position, home;
   float health = 80, attackCooldown = 0, hitFlash = 0;
@@ -18,11 +20,11 @@ struct Enemy {
   std::size_t waypoint = 0;
   EnemyKind kind = EnemyKind::Raider;
   float windup = 0, facing = 0;
-  float MaxHealth() const { return kind==EnemyKind::Captain?120.f:80.f; }
-  float WindupDuration() const { return kind==EnemyKind::Captain?1.f:.7f; }
+  float MaxHealth() const { return kind==EnemyKind::Trainer?180.f:kind==EnemyKind::Captain?120.f:80.f; }
+  float WindupDuration() const { return kind==EnemyKind::Trainer?.9f:kind==EnemyKind::Captain?1.f:.7f; }
   float AttackInterval() const { return kind==EnemyKind::Captain?2.4f:1.4f; }
   float Damage() const { return kind==EnemyKind::Captain?16.f:8.f; }
-  const char* Name() const { return kind==EnemyKind::Captain?"RAIDER CAPTAIN":"RAIDER"; }
+  const char* Name() const { return kind==EnemyKind::Trainer?"SPARRING GUARD":kind==EnemyKind::Captain?"RAIDER CAPTAIN":"RAIDER"; }
   static constexpr float attackReach = 2.4f, attackHalfAngle = 1.f;
 };
 struct Command {
@@ -31,6 +33,8 @@ struct Command {
   int ability = -1;
   bool usePotion = false, equipWeapon = false;
   bool respawn = false;
+  InventoryCommand inventory;
+  int purchase=-1;
 };
 enum class Quest { Available, Active, Return, Complete };
 enum class AnchorQuest { Locked, Available, Active, Return, Complete };
@@ -62,17 +66,32 @@ public:
   float MaxHealth() const { return 100.f+20.f*(Level()-1); }
   int DefeatedCount() const;
   bool HasWardArmor() const { return anchorQuest_==AnchorQuest::Complete; }
-  float DamageReduction() const { return HasWardArmor()?2.f:0.f; }
+  bool WardArmorEquipped() const { return inventory_.Worn(GearSlot::Chest)==Item::Ward; }
+  const Inventory& Items() const { return inventory_; }
+  float DamageReduction() const;
   const std::vector<CombatFeedback>& Feedback() const { return feedback_; }
   float HurtFlash() const { return hurtFlash_; }
   float AttackFlash() const { return attackFlash_; }
   int Target() const { return target_; }
+  const Enemy* TargetActor() const;
+  bool Sparring() const { return sparring_; }
+  const Enemy& SparringOpponent() const { return trainer_; }
+  float SparringSeconds() const { return sparringRemaining_; }
+  int SparringDamageDealt() const { return sparringDealt_; }
+  int SparringDamageTaken() const { return sparringTaken_; }
+  float SparringReportTime() const { return sparringReportTime_; }
+  const std::string& SparringResult() const { return sparringResult_; }
   int Gold() const { return gold_; }
-  int Potions() const { return potions_; }
-  bool HasRewardWeapon() const { return rewardWeapon_; }
-  bool RewardWeaponEquipped() const { return equipped_; }
-  float StrikeDamage() const { return (equipped_?27.f:20.f)+3.f*(Level()-1); }
-  float HeavyDamage() const { return (equipped_?45.f:35.f)+5.f*(Level()-1); }
+  bool NearQuartermaster() const;
+  bool CanTrade() const;
+  bool TradeRequested() const { return tradeRequested_; }
+  int ShopStock(int offer) const;
+  const char* PurchaseStatus(int offer) const;
+  int Potions() const { return inventory_.Count(Item::Potion); }
+  bool HasRewardWeapon() const { return inventory_.Count(Item::Watchguard)>0; }
+  bool RewardWeaponEquipped() const { return inventory_.Worn(GearSlot::Weapon)==Item::Watchguard; }
+  float StrikeDamage() const { return DescribeItem(inventory_.Worn(GearSlot::Weapon)).strike+3.f*(Level()-1); }
+  float HeavyDamage() const { return DescribeItem(inventory_.Worn(GearSlot::Weapon)).heavy+5.f*(Level()-1); }
   float PotionCooldown() const { return potionCooldown_; }
   const char* AbilityStatus(int index) const;
   Quest QuestState() const { return quest_; }
@@ -102,14 +121,24 @@ private:
   void RestoreForLevel(int previousLevel);
   void Respawn();
   void DamagePlayer(float damage);
+  void StartSparring();
+  void EndSparring(const char* result);
+  void Buy(int offer);
+  int GoldSpent() const;
   WorldMap map_;
   std::vector<Enemy> enemies_;
   Vec2 player_{0,-10};
   float height_ = 0, velocityY_ = 0, facing_ = 0, health_ = 100, attackFlash_ = 0;
   std::array<float,4> cooldowns_{};
   int target_ = -1, gold_ = 0;
-  int potions_ = 2;
-  bool rewardWeapon_ = false, equipped_ = false;
+  Inventory inventory_;
+  std::array<int,shopOffers.size()> purchases_{};
+  bool tradeRequested_=false;
+  Enemy trainer_;
+  bool sparring_=false;
+  float sparringRemaining_=0,sparringReportTime_=0;
+  int sparringDealt_=0,sparringTaken_=0;
+  std::string sparringResult_;
   float potionCooldown_ = 0;
   Quest quest_ = Quest::Available;
   AnchorQuest anchorQuest_ = AnchorQuest::Locked;

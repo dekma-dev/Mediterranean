@@ -34,11 +34,25 @@ void Simulation::RestoreForLevel(int previousLevel) {
 
 void Simulation::DamagePlayer(float damage) {
   if (health_<=0) return;
-  const float applied=std::min(health_,std::max(1.f,damage-DamageReduction()));
+  const float applied=std::min(sparring_?std::max(0.f,health_-1):health_,std::max(1.f,damage-DamageReduction()));
   health_-=applied; hurtFlash_=.25f;
+  if (sparring_) sparringTaken_+=int(applied);
   Emit(FeedbackKind::Hurt,player_,static_cast<int>(applied));
   if (Channeling()) { channelRemaining_=0; message_="Damage interrupted stabilization."; }
   if (health_==0) { target_=-1; height_=0; velocityY_=0; }
+  if (sparring_ && health_<=1) EndSparring("Yielded");
+}
+void Simulation::StartSparring() {
+  trainer_=Enemy{}; trainer_.kind=EnemyKind::Trainer; trainer_.id=200;
+  trainer_.position=trainer_.home=WorldMap::trainingPost; trainer_.health=trainer_.MaxHealth();
+  trainer_.state=EnemyState::Pursuing; sparring_=true; sparringRemaining_=30; sparringReportTime_=0;
+  sparringDealt_=sparringTaken_=0; sparringResult_.clear(); target_=int(enemies_.size());
+  message_="Sparring: 30 seconds. E stops. Nonlethal; no XP or loot. Potions are consumed normally.";
+}
+void Simulation::EndSparring(const char* result) {
+  sparring_=false; trainer_.windup=0; trainer_.path.clear(); target_=-1;
+  sparringResult_=result; sparringReportTime_=8;
+  message_=std::string("Sparring: ")+result+". Dealt "+std::to_string(sparringDealt_)+", taken "+std::to_string(sparringTaken_)+". No rewards or resource refunds.";
 }
 
 void Simulation::Respawn() {
@@ -64,7 +78,7 @@ std::string Simulation::Objective() const {
     return "SECURE THE ASTRAL ANCHOR\nPress E at the northern crystal";
   }
   if (anchorQuest_==AnchorQuest::Return) return "SECURE THE ASTRAL ANCHOR\nReturn to the beacon for your reward";
-  return "DAWNWATCH SECURED\nBoth quests complete";
+  return "DAWNWATCH SECURED\nOptional: spar at the eastern training post";
 }
 
 Vec2 Simulation::ObjectivePosition() const {
@@ -75,11 +89,12 @@ Vec2 Simulation::ObjectivePosition() const {
     }
     return nearest;
   }
-  return anchorQuest_==AnchorQuest::Active?WorldMap::astralAnchor:questGiver;
+  return anchorQuest_==AnchorQuest::Complete?WorldMap::trainingPost:anchorQuest_==AnchorQuest::Active?WorldMap::astralAnchor:questGiver;
 }
 
 std::string Simulation::InteractionPrompt() const {
   if (health_<=0) return "ENTER RETURN TO DAWNWATCH";
+  if (sparring_) return "E END SPARRING ROUND";
   if (Channeling()) return "STABILIZING - STAND STILL";
   if (Distance(player_,questGiver)<=3) {
     if (quest_==Quest::Available) return "E ACCEPT FRONTIER PATROL";
@@ -93,6 +108,9 @@ std::string Simulation::InteractionPrompt() const {
   for (const auto& enemy : enemies_)
     if (enemy.health<=0 && !enemy.looted && Distance(player_,enemy.position)<=2.5f && HasLineOfSight(player_,enemy.position))
       return "E LOOT - 5 GOLD AND A POTION";
+  if (NearQuartermaster()) return "E BROWSE QUARTERMASTER SUPPLIES";
+  if (Distance(player_,WorldMap::trainingPost)<=2.5f && HasLineOfSight(player_,WorldMap::trainingPost))
+    return anchorQuest_==AnchorQuest::Complete?"E START SPARRING - NO XP OR LOOT":"TRAINING UNLOCKS AFTER BOTH QUESTS";
   return "";
 }
 }

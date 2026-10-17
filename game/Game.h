@@ -17,6 +17,8 @@ public:
   void SetFullscreenState(bool enabled) { interface_.fullscreen=enabled; }
   void OpenPanel(ui::Panel panel) { interface_.SetOnly(panel); }
   void ShowPanel(ui::Panel panel) { interface_.Show(panel); }
+  void CancelUiGesture() { interface_.CancelDrag(); orbiting_=false; }
+  void ExecuteCommand(const rpg::Command& command,float seconds=.01f) { simulation_.Update(seconds,command); }
   const rpg::Simulation& State() const { return simulation_; }
 private:
   rpg::Simulation simulation_;
@@ -24,6 +26,7 @@ private:
   float walkPhase_ = 0, walkBlend_ = 0;
   bool debugOverlay_ = false;
   bool hudVisible_ = true;
+  bool orbiting_ = false;
   ui::Interface interface_;
   bool fullscreenRequest_ = false,quitRequested_ = false;
   void SaveProgress();

@@ -53,7 +53,7 @@ In game, **F2** hides/restores the HUD. Opening the menu/panels or dying restore
 
 ## Validation and remaining work
 
-Debug and Release pass all six CTest suites. Geometry tests validate finite positions/normals, index ranges, nondegenerate triangles, normal orientation, playable-floor coverage, cliff joins, culling and resource budgets. They caught a cap-normal seam in the original procedural trunk/limb implementation, which was corrected by separating cap vertices.
+Debug and Release now pass all nine CTest suites. Geometry tests validate finite positions/normals, index ranges, nondegenerate triangles, normal orientation, playable-floor coverage, cliff joins, culling and resource budgets. They caught a cap-normal seam in the original procedural trunk/limb implementation, which was corrected by separating cap vertices.
 
 Four smoke scenes (spawn, raider, captain, veteran) each render at three window sizes plus overview and front-character views. Debug smoke tests also reject DirectX warning/error messages when the optional debug layer is available. Representative captures were visually inspected. They caught intersecting armor surfaces; armor now uses the torso surface directly.
 
@@ -63,4 +63,20 @@ Remaining: authored character anatomy and clothing, more natural foliage and ter
 
 The later fullscreen/interface pass adds 1,529,172 bytes for the generated map mip chain and installed-font atlas. The world mesh/material/shadow allocations above remain unchanged. A shared CharacterView now renders the player's actual equipment both in the world and in a bounded preview viewport. Preview lighting is separate from world lighting.
 
-The earlier comparison above is a historical graphics checkpoint; the current `Release-benchmark.txt` is replaced by subsequent benchmark runs. See [interface.md](interface.md) for the latest recorded measurements, seven-suite validation, menu behavior, generated atlas and control guide.
+The earlier comparison above is a historical graphics checkpoint; the current `Release-benchmark.txt` is replaced by subsequent benchmark runs. See [interface.md](interface.md) for the latest recorded measurements, nine-suite validation, menu behavior, generated atlas and control guide.
+
+## Equipment and training pass
+
+The character now has a narrower torso/limbs, smaller head details, layered tunic trim, a belt, ward crest/pauldron edging and boot cuffs. World and preview rendering use the same inventory-derived outfit. Removing the weapon hides it; removing clothes leaves neutral underclothes and removing boots reveals bare feet. These changes reuse the mesh/material library and introduce no downloaded art or additional texture allocations. They remain procedural prototype art.
+
+Sparring captures exposed a camera trapped beside the eastern tree because the wide crown bounds extended to the ground. Camera queries now use trunk bounds below the foliage and crown bounds above it. Regression checks retain roof/crown collision while allowing the training camera to retreat underneath the canopy. The corrected scene was visually inspected with both side windows open.
+
+The veteran smoke scenario adds base/travel outfits and sparring with/without the interface. Together with the later shop/equipment views below, the current total is 104 smoke captures per configuration. Moving-camera stability, close-up art quality and real input still require interactive inspection.
+
+## Quartermaster and six-slot equipment pass
+
+The shared character renderer now draws a steel helm with cheek guards and crest, plus a blue shield with brass edge and metal boss, according to actual worn head/off-hand items. The portrait can rotate through UI controls. A green-clothed quartermaster and wooden supply counter with bottles make the village trade location visible. The counter uses shared solid world data for navigation, camera queries and atlas artwork. All these assets reuse existing meshes/materials; no files were downloaded and no texture allocation was added.
+
+New veteran captures show shop/character/bag together and the bought outfit at three sizes, a world close-up, and fully equipped sparring. Representative 960x600 and 1280x720 images were inspected for clipping, legibility and equipment visibility. Geometry remains deliberately compact procedural art; these additions do not establish realistic anatomy or finished Allods art quality.
+
+Latest stationary Release HUD measurement: 26 submissions, 125,948 submitted triangles, CPU median/p95 0.293/0.355 ms, GPU median/p95 0.179/0.183 ms (240 GPU samples), working set 52.055 MiB, private bytes 75.711 MiB. Immutable meshes remain 70,496 bytes; materials/shadows 5,155,484; font/map textures 1,529,172. Conditions match the hidden stationary benchmark above. This does not measure moving-camera, shop-window, encounter or long-session performance.

@@ -8,7 +8,9 @@ Normal gameplay starts in borderless fullscreen on the window's monitor. F11, or
 
 Escape always opens the game menu; pressing it again returns to the game. From another panel, Escape opens the menu. It never pauses simulation. The menu has Return, Character, Inventory, Atlas, Journal, Display, Save, Load and Exit buttons. Save/load results appear in the menu. Exit closes the game without an automatic save; F5 or Save explicitly writes progress.
 
-Menus and panels capture movement, camera orbit and keyboard combat commands while open. Enemies, committed attacks, cooldowns and other simulation time continue. Bag actions can still use a potion or equip an owned sword. Focus loss/minimization retains the existing single-player suspension behavior; it is independent of Escape.
+Character and inventory are independent side windows. Press C then I to keep both open; each X or hotkey closes only its own window. Keyboard movement and combat remain available. Mouse orbit/zoom is captured over side windows and interactive HUD controls and remains available over the world. Camera orbit must begin with a fresh right-button press over the world: a gesture started in the bag or minimap cannot become an orbit by crossing its edge. Focus/display changes cancel that gesture. Selecting worn gear opens its item in the bag without closing the character window.
+
+Menu, atlas, journal and the quartermaster capture movement/camera/combat commands. Escape opens the menu over the side windows; closing it restores them. Trading itself closes on Escape. Enemies, committed attacks, cooldowns and other simulation time continue in every layout. Focus loss/minimization retains the existing single-player suspension behavior; it is independent of Escape.
 
 ## Controls and screens
 
@@ -21,25 +23,40 @@ Menus and panels capture movement, camera orbit and keyboard combat commands whi
 | M | Atlas |
 | J | Journal |
 | Left click | Buttons, item slots, action-bar abilities and map waypoint |
+| Drag item | Swap bag cells, equip into a compatible slot, or remove into the bag |
+| Right-click item | Equip, unequip or drink |
+| Sort button | Compact and order the bag, merging consumable stacks |
+| E near the quartermaster / E in the shop | Browse / close trade |
+| Character arrows / Front | Rotate the dressed preview / reset its facing |
 | Right click on atlas | Clear waypoint |
 | X button / same panel hotkey | Close the current panel |
 | F2 / F3 | Hide HUD / show renderer metrics |
 
-The HUD has player health/XP, target health and windup state, a north-up minimap, objective tracker, context action prompt, five action slots, gold and panel shortcuts. Hovering an action shows its effect and availability. Interface scaling uses a centered 1280x720 design canvas, maintaining proportions on standard and ultrawide displays.
+The supplied Allods screenshot is the primary layout reference for the current pass: carved green/gold frames, raised title plaques, serif labels, a character alcove and adjacent attributes on the left, a compact bag on the right, a circular minimap, and a bottom combat dock. Both side windows leave the middle of the world visible without dimming it. The bag replaces the objective tracker while open.
+
+The HUD has player health/XP, target health and windup state, a north-up circular minimap, objective tracker, context action prompt, five functional action slots, gold and panel shortcuts. Four additional engraved action cells are visibly empty and unbound. Hovering an action shows its effect and availability. Interface scaling uses a centered 1280x720 design canvas, maintaining proportions on standard and ultrawide displays.
 
 ### Inventory
 
-The 24-slot belongings view shows the items actually owned by the simulation. Item icons, stacks, equipped markers, hover details and a selected-item description are functional. Selecting an unequipped owned sword enables Equip; selecting a usable draught enables Drink. These buttons issue the same validated gameplay commands as G and Q. Full health, death, cooldowns and lack of ownership cannot bypass simulation checks. Sword changes persist in the existing version 3 saves.
+The compact six-column bag displays 24 actual storage cells. Worn items occupy separate weapon/chest/legs/feet/head/off-hand slots and are not duplicated in the bag. Item details compare weapon damage or damage reduction against currently worn gear. Left-click selects an item; right-click equips/removes gear or drinks a draught. The detail button offers the same action. Potion ownership, death, full health and cooldown rules remain simulation-validated.
 
-The starting tunic, trousers and boots are the current outfit. Ward armor is automatically worn over the tunic after its quest reward; it is not yet a freely interchangeable armor system. The item grid is an inspection/action interface over the current small inventory. Drag sorting, arbitrary item storage, trading, additional armor choices and item disposal are not implemented.
+Drag between bag cells to move or swap; matching consumables merge up to 20 per stack. Drag gear onto its compatible character slot to equip it and return the previous item to the source cell. Drag worn gear into the bag to remove it or swap with compatible gear in the destination. Sort compacts cells and merges stacks. Incompatible drops change nothing; commands include the expected source item to reject stale drags after keyboard equipment changes. Closing a window, Escape, focus loss, minimization or resizing cancels the gesture.
+
+Ward armor automatically equips on reward, placing the tunic in the bag; both remain freely interchangeable afterward. Removing gear updates combat attributes immediately. Version 5 saves preserve exact cells, stacks, six worn slots and purchases; versions 1–4 migrate without losing existing rewards. The catalog has two swords, a potion, tunic, trousers, boots, ward armor, helm and shield. Stack splitting, disposal, selling, additional item types and movable windows remain future work.
 
 ### Character
 
-The character screen places equipment slots around a lit 3D preview. The preview and world share `CharacterView`; both use the current weapon and earned armor. The watchguard blade has a distinct brass/gold finish. Filled slots open that item in the bag; head/off-hand show empty slots. Attributes come from the simulation. Clothing descriptions do not invent additional combat bonuses.
+The character screen places six working equipment slots around a lit 3D preview. The preview and world share `CharacterView` and the actual worn outfit. The watchguard blade has a brass/gold finish; ward armor has a chest crest and edged shoulder plates. The bought helm adds steel head protection and cheek guards; the shield has a blue face, brass rim and metal boss. Removing equipment removes its visual; neutral underclothes remain under removed clothing. Arrows rotate the preview and Front resets it. Filled slots open details in the bag. Attributes derive from worn gear: starting clothes add no protection, ward adds 2, helm 1, shield 2. The art remains procedural and is not a finished character model.
+
+### Quartermaster
+
+An orange marker identifies the village quartermaster at `(3, -12)`, beside an original wooden supply counter. E opens a central green/gold shop with the bag already open; C adds the character window without closing trade. Each row has an item icon, stock, price, effect and Buy button. The displayed availability comes from the same simulation rules as the purchase command. Sold-out, locked or unaffordable rows cannot be purchased.
+
+The shop stocks six healing draughts (6 gold each), one helm (20) and one shield (35). Equipment unlocks after the patrol hand-in. Purchases update gold, item ownership and remaining stock together, put items in the bag and report the result. Drag or right-click the bought gear to equip it while the shop stays open. Stock survives loading and respawn. There is no selling, refund or automatic restock; R resets the expedition. E or X closes trade. Death or loss of trading eligibility also closes it. The world remains live, but underlying HUD attacks and movement keys are captured.
 
 ### Atlas
 
-The atlas and minimap share a generated 512-square illustration: coastline from the rendered island mesh, roads, tiled roofs, shaded tree crowns, ruins and dock planks. The chart uses undistorted world coordinates, a compass, named areas and a legend. Player facing, living raiders, unclaimed loot, keeper, anchor and current objective are live overlays.
+The atlas and minimap share a generated 512-square illustration: coastline from the rendered island mesh, roads, tiled roofs, shaded tree crowns, ruins, shop counter and dock planks. The chart uses undistorted world coordinates, a compass, named areas and a legend. Player facing, living raiders, unclaimed loot, keeper, anchor and current objective are live overlays. Orange marks the quartermaster; cyan marks the eastern sparring post, unlocked after both quests. A live practice card shows the remaining time, damage dealt/taken and resource rules; the round result remains visible for eight seconds.
 
 Click traversable ground to place a waypoint; right click or Clear removes it. Invalid ground does not replace an existing valid waypoint. Waypoints are session UI state and do not move the character or alter saves. The illustration depicts this small flat test island; it is not a large authored world atlas or a claim that additional terrain exists.
 
@@ -49,9 +66,9 @@ Both quest cards show their current completion/unlock state, objectives and actu
 
 ## Art and rendering
 
-Original UI shapes/icons are authored in C++; no reference screenshots or downloaded art are included. The installed Windows Segoe UI font is rasterized into a 512x256 R8 atlas at startup. No font file is copied or modified. The map is generated once and uploaded with mipmaps. Font and map textures together use 1,529,172 bytes (about 1.46 MiB), additional to the existing world material/shadow allocation. These are texture allocations, not total process or VRAM use.
+Original UI shapes/icons, embossed rails, leaf inlays, curtains and gradients are authored in C++; no reference screenshots or downloaded art are included. The installed Windows Georgia font is rasterized into a 512x256 R8 atlas at startup. No font file is copied or modified. The map is generated once and uploaded with mipmaps. The circular minimap reuses that texture through a bounded triangle fan, with aspect-correct UVs. Font and map textures together still use 1,529,172 bytes (about 1.46 MiB), additional to the existing world material/shadow allocation. These are texture allocations, not total process or VRAM use.
 
-The interface uses alpha-blended batched triangles. A character preview flushes preceding UI, renders the shared model in a bounded viewport with studio lighting, then restores the game camera and viewport. It does not allocate a second large scene target or update the simulation.
+The interface uses alpha-blended batched triangles, with a small dark text shadow for contrast. A character preview flushes preceding UI, renders the shared model in a bounded viewport with studio lighting, then restores the game camera and viewport. It does not allocate a second large scene target or update the simulation.
 
 ## Reference research
 
@@ -62,15 +79,22 @@ Research used web search/indexed excerpts and image-search references. Direct ar
 - [Allods character equipment reference](https://alloder.pro/main/guides/sistema-odevaniya-v-krae-mira-r1055/): dressed character, equipment slots and adjacent attributes, used as a visual reference.
 - [Blizzard's UI/HUD overview](https://worldofwarcraft.blizzard.com/en-us/news/23837944/get-into-the-grid-of-things-with-the-updated-ui-and-hud): readable HUD organization and combined backpack presentation.
 - [Blizzard's map/quest interface preview](https://worldofwarcraft.blizzard.com/en-gb/news/15707238/patch-602-preview-user-interface): connecting map and quest information while reducing clutter.
+- [Allods basics guide](https://allods.my.games/en/game/game-guide/basics): merchant and NPC roles, checked through indexed excerpts for this village pass.
+- [Blizzard's Stormwind tour](https://news.blizzard.com/en-us/article/20142731/welcome-to-stormwind-a-guided-tour): equipment and supply vendor roles.
+- [World of Warcraft classic manual](https://us.media.blizzard.com/manuals/wow/wow-classic-manual-enUS.pdf): equipment contributing to offensive/defensive attributes; consulted through indexed excerpts. Prices, stock, protection values and quest restrictions here are original prototype rules.
 
-Allods remains the main reference. The brass/dark-panel palette, icons, small-map illustration, layouts and procedural player model here are our own implementation. No game assets were downloaded or copied.
+The user's supplied Allods character/bag screenshot subsequently clarified the desired visual direction and window composition. The current green/gold skin follows that reference's arrangement with original code-drawn decoration. This is a functional prototype adaptation; it does not reproduce Allods' finished illustrations, character art or full item catalog. No game assets were downloaded or copied.
 
 ## Validation
 
-`InterfaceTests` checks Escape transitions, live damage during all five panels, ownership/use rules, actual equipment changes and save round trips. It creates a hidden DirectX window to check inventory/menu/map click routing at 960x600, 1280x720 and 2560x1080. Modal panels reject clicks aimed at the underlying HUD. DirectX debug warnings/errors are rejected when that optional runtime is available.
+`InterfaceTests` checks Escape transitions, simultaneous character/bag state, independent closing, return from the menu, live damage during all five panels, ownership/use rules, equipment changes and save round trips. A hidden DirectX window checks item, close, action-bar, menu and map click routing at 960x600, 1280x720 and 2560x1080. It also drags items between bag cells and worn slots, rejects incompatible drops, removes boots by right-click, sorts the bag and cancels a drag through Escape. Side-window surfaces capture the pointer while the world gap and available action-bar abilities remain usable. Central overlays reject clicks aimed at the underlying HUD. DirectX debug warnings/errors are rejected when that optional runtime is available.
 
-`-SmokeTest` validates hidden fullscreen size/restoration and renders spawn, raider, captain and veteran scenes. Each scenario captures the world at three sizes, two inspection views, and Menu/Inventory/Equipment/Atlas/Journal at 960x600, 1280x720 and 1600x900. Representative captures were visually inspected. Debug and Release pass all seven CTest suites.
+`-SmokeTest` validates hidden fullscreen size/restoration and renders spawn, raider, captain and veteran scenes. Each scenario captures the world at three sizes, two inspection views, and Menu/Inventory/Equipment/Atlas/Journal plus the combined Equipment+Bag layout at 960x600, 1280x720 and 1600x900. The veteran adds base/travel outfits, sparring with/without side windows, shop and purchased equipment at three sizes, a dressed world close-up and fully equipped sparring: 104 smoke captures per configuration. New suffixes include `-quartermaster`, `-purchased-equipment`, `-watchman-character` and `-equipped-sparring`. InterfaceTests separately writes `inventory-drag.png`. Representative captures were visually inspected. Debug and Release pass all nine CTest suites.
 
-Real keyboard/mouse interaction, Alt-Tab, multiple physical monitors, display scaling changes and longer gameplay sessions still need the manual checklist. Automated pointer tests call the same interface routing with coordinates; they do not synthesize desktop input.
+Merchant integration checks route sampled E/click inputs through Game, buy actual gear, block walking while shopping and allow it after E closes trade. Scaled pointer checks buy/equip both new items with all three windows open, reject sold-out buttons and underlying attacks, and route portrait rotation. TradeTests verifies persistent charges/stock, unavailable purchases, armor in real combat and save migration.
 
-The updated stationary Release benchmark reports 25 draw submissions, 0.123 ms CPU median and 0.127 ms GPU median at 1280x720 (122 asynchronous GPU samples, 240 measured frames). Process working set was 58.465 MiB and private bytes 83.547 MiB. These hidden-window measurements are not a guarantee of visible/fullscreen FPS. Re-run `-Backend Ninja -Configuration Release -Benchmark` for current local results.
+Hit regions are invalidated when panels change, a snapshot loads or HUD visibility changes, and are checked against the current panel state and rendered size. Input cannot activate an invisible previous-panel button before the next render. Additional regression tests cover opening/closing the menu while clicking, old gear regions after load, resize during a drag, and right-button gestures crossing from the bag/minimap into the world.
+
+Real keyboard/mouse interaction, Alt-Tab, multiple physical monitors, display scaling changes and longer gameplay sessions still need the manual checklist. Automated pointer tests call the same interface routing with coordinates. Game integration tests feed sampled input frames through the same transition logic used by Win32 polling, including focus loss/restoration; they do not synthesize desktop input.
+
+The current stationary Release benchmark reports 26 draw submissions, 125,948 submitted triangles (including shadows/UI), 0.293 ms CPU median / 0.355 ms p95 and 0.179 ms GPU median / 0.183 ms p95 at 1280x720 (240 asynchronous GPU samples, 240 measured frames). Process working set was 52.055 MiB and private bytes 75.711 MiB. This is the ordinary gameplay HUD, not the combined-window, shop or sparring workload. These hidden-window measurements are not a guarantee of visible/fullscreen FPS. Re-run `-Backend Ninja -Configuration Release -Benchmark` for current local results.

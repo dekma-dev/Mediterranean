@@ -1,9 +1,10 @@
 #include "game/WorldView.h"
 #include "game/WorldMap.h"
+#include "game/CharacterView.h"
 #include "engine/Renderer.h"
 #include <cmath>
 
-void DrawWorld(Renderer& r,const rpg::WorldMap& map,float time) {
+void DrawWorld(Renderer& r,const rpg::WorldMap& map,float time,bool sparring) {
   using DirectX::XMFLOAT3;
   using DirectX::XMFLOAT4;
   using M=visual::Mesh;
@@ -23,6 +24,15 @@ void DrawWorld(Renderer& r,const rpg::WorldMap& map,float time) {
   }
   for (const auto& o : map.Obstacles()) {
     const float x=o.center.x,z=o.center.z;
+    if (o.kind==rpg::PropKind::Counter) {
+      box({x,o.height*.5f,z},{o.halfX*2,o.height,o.halfZ*2},timber,S::Wood);
+      box({x,o.height+.02f,z},{o.halfX*2+.1f,.08f,o.halfZ*2+.06f},brass,S::Metal);
+      for (int i=0;i<3;++i) {
+        r.DrawMesh(M::Sphere,{x-.65f+i*.43f,o.height+.15f,z},{.22f,.25f,.22f},{.45f,.18f,.16f,1},S::Cloth);
+        box({x-.65f+i*.43f,o.height+.30f,z},{.08f,.10f,.08f},timber,S::Wood);
+      }
+      continue;
+    }
     if (o.kind==rpg::PropKind::Tree) {
       r.DrawMesh(M::Trunk,{x,1.35f,z},{o.halfX*2,2.7f,o.halfZ*2},timber,S::Wood,z*.3f);
       for (int branch=0;branch<3;++branch) {
@@ -75,6 +85,7 @@ void DrawWorld(Renderer& r,const rpg::WorldMap& map,float time) {
   for (float z : {-3.f,2.4f}) for (float x : {-15.f,-10.f})
     r.DrawMesh(M::Trunk,{x,.55f,z},{.34f,1.1f,.34f},timber,S::Wood);
   for (float z : {-2.f,1.f,4.f}) {
+    if (sparring && z==rpg::WorldMap::trainingPost.z) continue;
     r.DrawMesh(M::Trunk,{12,.7f,z},{.3f,1.4f,.3f},timber,S::Wood);
     r.DrawMesh(M::Torso,{12,1.3f,z},{.85f,.75f,.4f},{.6f,.49f,.29f,1},S::Cloth);
     r.DrawSegment({11.4f,1.4f,z},{12.6f,1.4f,z},.18f,.18f,timber,S::Wood);
@@ -93,6 +104,8 @@ void DrawWorld(Renderer& r,const rpg::WorldMap& map,float time) {
     r.DrawMesh(M::Rock,{x,y+1,z},{3,3,3},rock,S::Stone,angle);
   }
   const auto giver=rpg::WorldMap::questGiver;
+  CharacterOutfit merchant; merchant.weapon=false; merchant.helm=true;
+  DrawCharacter(r,rpg::WorldMap::quartermaster,0,0,{.28f,.39f,.22f,1},0,0,merchant);
   r.DrawMesh(M::Rock,{giver.x,.1f,giver.z},{1.2f,.35f,1.2f},rock,S::Stone);
   r.DrawMesh(M::Trunk,{giver.x,.65f,giver.z},{.55f,1.3f,.55f},timber,S::Wood);
   r.DrawMesh(M::Sphere,{giver.x,1.55f,giver.z},{.55f,.7f,.55f},brass,S::Metal);

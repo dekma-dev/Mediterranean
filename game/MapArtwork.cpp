@@ -50,7 +50,8 @@ std::vector<std::uint8_t> BuildMapArtwork(const rpg::WorldMap& world) {
     } else {
      if (std::abs(dx-1.f)<o.halfX+.35f && std::abs(dz-.8f)<o.halfZ+.35f) color=Mix(color,{.18f,.23f,.17f},.45f);
      if (std::abs(dx)<o.halfX+.3f && std::abs(dz)<o.halfZ+.3f) {
-      if (o.kind==rpg::PropKind::Ruin) color=Mix({.36f,.37f,.32f},{.56f,.54f,.43f},fine);
+      if (o.kind==rpg::PropKind::Counter) color=Mix({.34f,.23f,.12f},{.60f,.44f,.22f},fine);
+      else if (o.kind==rpg::PropKind::Ruin) color=Mix({.36f,.37f,.32f},{.56f,.54f,.43f},fine);
       else {
        const float tx=Fraction((dx+o.halfX)*4+std::floor(dz*5)*.5f),tz=Fraction(dz*5);
        const float tile=tx<.07f || tz<.09f?.62f:1.f;

@@ -4,7 +4,7 @@ Last updated: 2026-10-17
 
 ## Current status
 
-The active `main` working tree is native C++ / DirectX 11 only. Allods Online is the primary reference; development is single-player first on one map. **Debug and Release Ninja/MSVC builds pass, all seven regression suites pass in both, and four hidden render scenarios pass at three sizes plus overview/front-camera views and all five interface panels.** Representative captures were visually inspected. The map now has two linked quests, levels 1–3, a captain, telegraphed combat, and progress-preserving respawn. Full interactive playtesting and finished art remain pending. This development pass is uncommitted and has not been pushed.
+The active `main` working tree is native C++ / DirectX 11 only. Allods Online is the primary reference; development is single-player first on one map. **Debug and Release Ninja/MSVC builds pass all nine regression suites and 104 hidden smoke captures per configuration, including world/interface layouts, outfits, sparring and the shop.** Representative captures were visually inspected. The map has two quests, levels 1–3, a captain, telegraphed combat, progress-preserving respawn, repeatable nonlethal training and a village quartermaster. The 24-cell bag supports drag/sort actions and six worn slots; bought helmet/shield change visuals and protection. Version 5 preserves exact inventory and purchase stock/spending and migrates versions 1–4. Full interactive playtesting and finished art remain pending. Repository HEAD is `6144929` (0.0.4); current development remains in the working tree. The agent has not committed or pushed.
 
 ## Pre-migration repository snapshot
 
@@ -49,7 +49,10 @@ The original empty game methods have now been replaced. The working source conta
 - A patrol acceptance/kill/return/reward loop with protection against duplicate rewards and support for a kill before quest acceptance.
 - Health/target/ability HUD with availability reasons, live map and loot markers, quest view, character statistics, potion use, and sword switching.
 - Static-grid A* navigation with path smoothing, enemy behavior states and home leashes, soft enemy separation, and stable enemy IDs.
-- One-time loot, potion cooldowns, reward sword and ward armor, two quests, derived XP/levels, interruptible attack windups, and version 3 saves with version 1/2 migration.
+- One-time loot, potion cooldowns, reward sword and ward armor, two quests, derived XP/levels and interruptible attack windups.
+- A simulation-owned 24-cell bag, six worn slots, drag swaps/equip/remove, sorting, right-click actions, comparisons and shared outfit visuals. Version 5 preserves exact placement/equipment and purchases, migrating versions 1–4.
+- A quartermaster, solid supply counter, orange map marker, limited potion/helm/shield stock, validated purchases and a shop that coexists with character/bag windows. Portrait arrows rotate the actual worn outfit.
+- A repeatable 30-second sparring opponent after the campaign, with real armor effects, nonlethal damage, result reports and no rewards or resource refunds.
 - Versioned local save/load with bounds checking and transactional simulation replacement; invalid data does not replace the current simulation. Save files are replaced only after a successful temporary-file write.
 - Borderless fullscreen, windowed restoration, per-monitor DPI awareness, focus/minimize suspension, a live Escape menu, DirectX error reporting, and shutdown handling.
 
@@ -62,9 +65,9 @@ Compilation, domain regression tests, and hidden rendering now validate parts of
 - No sound, skeletal animation, imported art or networking. Stationary Release GPU measurements exist; moving-camera, large-encounter and long-session performance remain unverified.
 - Navigation uses a static grid and is suited to this small map; there is no general navmesh or crowd solver. Enemy separation is soft, and player/enemy collision is not a full rigid-body system.
 - Decorative dock rails, banners, and training targets are non-solid. Trees have trunk-based collision and conservative camera bounds.
-- Inventory now has a clickable 24-slot belongings view over the existing two swords, healing potions, starting outfit and automatic quest armor. Arbitrary item storage, drag sorting, selectable additional armor, trading and progression beyond level 3 remain pending.
+- The catalog has two swords, one potion type, tunic, trousers, boots, ward armor, helm and shield. Six worn slots, drag/sort and limited purchasing work. Stack splitting, disposal, selling, active shield blocking, more items and progression beyond level 3 remain pending.
 - Camera, target, panel state, jump height, and transient hit flashes are not saved.
-- World geometry still uses per-object draw calls; the HUD is batched. F3 reports draw submissions, not GPU timing. GPU profiling and world instancing remain future work.
+- World geometry is instanced and F3 includes asynchronous GPU timing. Broader visible-gameplay profiling and final art acceptance remain pending.
 
 ## Development environment
 
@@ -84,6 +87,8 @@ Compilation, domain regression tests, and hidden rendering now validate parts of
 ## Next validation milestone
 
 Run the interactive checklist in `tests/manual-smoke.md`, record input/combat/camera/panel behavior, and fix observed problems before expanding beyond this map.
+
+The latest bug-fix pass adds reproduced regressions for stale panel/load input, camera gesture leakage, the unarmed starter-sword hotkey and impossible patrol save states. All fixes pass Debug/Release validation; actual desktop input and monitor behavior remain manual checks.
 
 ## 2026-10-17: native development baseline
 
@@ -212,3 +217,65 @@ Validation: Debug and Release native builds, all seven CTest suites and the expa
 The font/map textures add 1,529,172 bytes (about 1.46 MiB). The current stationary Release report records 25 draw submissions, 0.123 ms CPU median and 0.127 ms GPU median; this hidden scene is not an interactive/fullscreen FPS guarantee. See docs/interface.md for the full limits and benchmark conditions.
 
 Updated README, START_AND_DEBUG.md, architecture notes, roadmap and the manual checklist. Real mouse/keyboard use, Alt-Tab, multiple physical monitors, display-scaling changes and long sessions remain manual checks. No commits, staging, pushes, downloads or system-setting changes were made. AGENTS.md and prior gameplay work remain preserved.
+
+## 2026-10-17: Allods screenshot interface pass
+
+- Used the user-supplied character/bag screenshot as the visual layout reference: green/gold carved framing, beveled title plaques, serif text, compact item cells, a left character alcove with adjacent attributes, right-hand bag, circular minimap and a bottom combat dock.
+- Replaced the exclusive character/inventory overlay with independent side windows. C then I opens both without dimming the world. Each closes independently; Esc opens the live menu and preserves the side-window state. Selecting worn gear opens its details in the bag.
+- Side windows allow keyboard movement/combat and preserve camera orbit over the visible world. Their surfaces consume pointer input; menu/map/journal remain modal for player commands. Simulation time continues in every case.
+- Kept item ownership, Equip/Drink actions, character appearance and stats connected to the actual simulation. The grid has 24 inspection cells and only owned items; four engraved action-bar cells are unbound. Arbitrary item storage, drag sorting, movable windows and finished item/character illustrations remain future work.
+- Added original code-drawn rails, leaf inlays, cloth backdrop and item-slot treatments. Switched the small installed-font atlas to Georgia. Reused the existing map texture for the circular minimap; texture memory remains 1,529,172 bytes for the font and map together. No assets or dependencies were downloaded.
+- Extended InterfaceTests for coexisting windows, independent closing, menu restoration, scaled item/close/action clicks, and camera-pointer capture versus the world gap. Hidden smoke captures now include combined equipment/bag at all three sizes (92 captures per configuration).
+
+Validation: Ninja/MSVC Debug and Release pass all seven CTest suites and the four hidden fullscreen/world/UI scenarios. Representative normal HUD, combined side-window and central overlay captures were inspected, including 960x600. Logs: `build-ninja-debug/allods-interface-validation.log` and `build-ninja-release/allods-interface-validation.log`. Combined previews use the `-equipment-bag.png` suffix.
+
+Release stationary HUD benchmark at 1280x720: 26 draw submissions, CPU median 0.264 ms / p95 0.317 ms, GPU median 0.173 ms / p95 0.178 ms (240 GPU samples); working set 51.824 MiB, private bytes 76.105 MiB. This hidden-window HUD workload does not measure combined-window cost or guarantee visible-gameplay FPS. Real input, Alt-Tab, multiple monitors and long sessions remain on the manual checklist.
+
+Repository HEAD changed to `6144929` during this pass through an external action. The agent made no commits or pushes; remaining working-tree edits are left for user review.
+
+## 2026-10-17: real equipment, bag storage and repeatable sparring
+
+- Added a platform-independent Inventory model with one canonical item catalog, 24 bag cells, stack limits and four worn slots. Equipped items have one location. Additions, moves and equipment changes validate capacity, compatibility and expected source items before mutation.
+- Connected the Allods-inspired side windows to real storage: drag cell swaps, drag equip/remove, right-click actions, Sort, selected-item comparisons, feedback and a drag preview. Invalid drops preserve state. Escape, closing panels, focus loss, minimization and display changes cancel the drag. Movement remains available behind the side windows.
+- Made the tunic, trousers, boots, swords and ward freely equipable/removable. Damage/protection derive from worn gear; unarmed base damage is 6/10, starting clothes add no armor, and ward reduces damage by 2 only when worn. Reward ownership and earned XP remain independent of outfit selection.
+- Introduced version-4 saves with exact bag/gear serialization and transactional rejection of unknown items, duplicate unique gear, bad stacks, wrong slots and inconsistent rewards. Versions 1–3 migrate with their potions, rewards and sword selection preserved. Old campaign fixtures remain useful migration coverage.
+- Refined character proportions, tunic layering, armor crest/shoulders and boots. World and preview use the same outfit. Empty weapon/feet slots remove those visuals; neutral underclothes remain when clothing is removed. Geometry/material resources are reused; no asset download or new texture allocation was needed.
+- Added a dedicated 180-HP sparring guard at the eastern training post after both quests. Rounds last 30 seconds, use the real combat/armor rules, stop through E/arena exit and end nonlethally at 1 HP. Reports show damage dealt/taken. No XP, gold, loot or campaign credit is granted and resources are not refunded. Practice is transient across save/load; health, consumed potions, cooldowns and gear persist.
+- Added training markers, prompts and a live round/result panel. Nearby unclaimed campaign loot takes precedence over starting practice. Kept all development on the existing map.
+- The new sparring capture exposed a camera collapse beside a tree. Camera collision now uses trunk bounds below the canopy and wider crown bounds above it. Regression checks retain crown/roof obstruction while allowing a clear retreat underneath foliage. The corrected training view was visually inspected.
+
+Validation: Debug and Release Ninja/MSVC builds pass all eight CTest suites. Expanded InventoryTests covers capacity, swaps, stale commands, sorting, unarmed damage, migration and malformed version-4 saves. InterfaceTests exercises scaled drag/drop, right-click, invalid drops, cancellation and round trips at 960x600, 1280x720 and 2560x1080. TrainingTests verifies actual armored/unarmored hits (6/8), victory, stop/restart, timeout, arena exit, nonlethal yield, consumable costs and no farming.
+
+Both configurations pass 96 hidden smoke captures: the existing 92 world/interface views plus veteran base/travel outfits and sparring with/without side windows. InterfaceTests also captures a bag drag separately. Representative combined, outfit, drag, small-window and corrected sparring views were inspected. Latest logs: `build-ninja-debug/inventory-validation.log` and `build-ninja-release/inventory-validation.log`. Latest executables: `build-ninja-debug/RPGNative.exe` and `build-ninja-release/RPGNative.exe`. The older generated Visual Studio solution output still needs rebuilding before use.
+
+Release stationary HUD measurement at 1280x720: 26 draw submissions, 112,348 submitted triangles, CPU median/p95 0.281/0.316 ms, GPU median/p95 0.178/0.181 ms (240 samples), working set 52.371 MiB and private bytes 75.574 MiB. Mesh bytes remain 70,496; materials/shadows 5,155,484; font/map textures 1,529,172. This hidden stationary workload does not measure moving cameras, combined windows, practice combat or long-session performance.
+
+Updated README, launch/debug manual, gameplay/interface/architecture/graphics notes, roadmap and manual checklist. Real desktop input, focus/display transitions, combat feel and finished art remain pending. No commits, staging, pushes, downloads or system changes were made. AGENTS.md and the prior development remain preserved.
+
+## 2026-10-17: input and save bug fixes
+
+- Reproduced right-clicks reaching old bag cells immediately after opening the menu. Panel changes now invalidate hit regions; dispatch also checks rendered state/dimensions. Closing a menu cannot activate its invisible Exit button, loading cannot use old equipment hit regions, and resizing cannot complete a stale drop. HUD visibility changes invalidate hits as well.
+- Reproduced camera rotation after an RMB gesture began in the bag and crossed into the world. Orbit now requires a fresh RMB press over the world; side windows and interactive HUD controls capture their gestures. Focus, resize/fullscreen, load and restart cancel orbit ownership along with item dragging. A new world gesture still rotates normally.
+- Reproduced G failing to re-equip an unequipped starter sword before the patrol reward. It now restores that owned sword while retaining the normal reward-sword toggle after hand-in.
+- Reproduced a load accepting an active patrol with an already cleared camp, leaving no kill available to advance the quest. Legacy and version-4 loads now reject that inconsistent state transactionally. Valid kills before quest acceptance and cleared patrols awaiting hand-in remain supported.
+- Separated Win32 sampling from input transition calculation through `Input::Frame`, so tests exercise the production input/Game path without synthesizing desktop input. Added focus loss/restoration, bag/minimap-to-world orbit, fresh orbit, load, stale menu/gear hits, resize cancellation, starter re-equip and invalid quest-save coverage.
+
+Reproduction evidence: `build-ninja-debug/bug-reproduction.log` failed on the stale menu hit and starter hotkey; `input-bug-reproduction.log` failed on camera gesture leakage; `save-bug-reproduction.log` failed on inconsistent quest state. After the fixes, Debug and Release pass all eight suites and all 96 smoke captures per configuration. Final logs: `build-ninja-debug/bugfix-validation.log` and `build-ninja-release/bugfix-validation.log`. Both `RPGNative.exe` outputs were rebuilt, and `git diff --check` passes.
+
+Updated interface/gameplay/architecture notes, roadmap, launch manual and the interactive checklist. The automated input checks do not claim an actual Alt-Tab/multi-monitor playtest. Prior work and AGENTS.md are preserved. No commits, staging, pushes, downloads or system changes were made.
+
+## 2026-10-17: quartermaster, six-slot equipment and persistent trading
+
+- Continued the roadmap's village/equipment milestone on the existing island, guided by the supplied Allods character/bag composition. Added a central green/gold quartermaster window alongside the independent character and bag windows, with stock, prices, effects, availability reasons and purchase feedback. E opens/closes trade; the world stays live while local movement/attacks are captured. Disabled combat slots are visibly dimmed while shopping.
+- Added a village quartermaster at `(3, -12)`, an orange atlas/minimap marker, and a wooden supply counter with bottles. The counter is solid shared map data, so navigation, movement, camera queries and map artwork agree. The NPC and counter reuse existing resources.
+- Added a limited offer catalog: six draughts at 6 gold each, a helm at 20, and a shield at 35. Gear requires the patrol hand-in. Simulation validates range, life/grounded state, quest, stock, gold and capacity before updating item, charge and purchase count together. Purchases are stowed first. No selling, refund or restock exists; death recovery and loading preserve spending/stock, while R resets the expedition.
+- Activated Head and Off hand slots. The helm adds 1 protection and the shield 2 while worn; with ward armor, an actual normal 8-point hit becomes 3. Both items appear in the world and portrait. Drag/right-click equip/remove, comparisons and exact placement use the existing inventory rules. Added portrait rotation arrows and Front reset.
+- Introduced save version 5 with bounded SHOP receipts and six-slot equipment. Validate gold against earned rewards minus purchases, stock limits and actual item ownership. Versions 1–4 migrate; version 4 retains exact previous cells/worn slots and starts with empty new slots. An older actor position inside the newly solid counter moves to its nearest free edge instead of losing access to that save. Current saves inside solid geometry remain invalid.
+- Added TradeTests for actual charges/items, sold-out and insufficient-gold rejection, quest/range/death/jump checks, fully armored combat, purchase persistence, forged receipts, stock bounds, respawn/reset and v4/v5 migration. NavigationTests checks routing around the counter. InterfaceTests drives shop opening, purchase and E close through sampled Game input, and scaled buy/drag/rotation controls with all three windows visible.
+- Added eight veteran render captures: shop and purchased outfit at three sizes, a world close-up and equipped sparring. Inspected representative shop/gear/portrait views at 960x600 and 1280x720. The dressed world capture now uses clear ground and faces the player, avoiding overlap with the merchant during inspection.
+
+Validation: Debug and Release Ninja/MSVC builds pass all nine CTest suites and 104 hidden smoke captures per configuration. Logs are `build-ninja-debug/quartermaster-validation.log` and `build-ninja-release/quartermaster-validation.log`; updated executables are in the same directories. The separate `inventory-drag.png` integration capture is not included in the 104. Player saves were not overwritten. `git diff --check` passes.
+
+Release stationary HUD benchmark: 26 draw submissions, 125,948 submitted triangles, CPU median/p95 0.293/0.355 ms, GPU median/p95 0.179/0.183 ms (240 samples), working set 52.055 MiB, private bytes 75.711 MiB. Meshes remain 70,496 bytes, materials/shadows 5,155,484, font/map textures 1,529,172. This hidden stationary workload does not measure interactive FPS, shop-window cost, movement spikes or long sessions.
+
+Updated README, START_AND_DEBUG, gameplay/interface/architecture/graphics notes, roadmap and the manual checklist. Official Allods/Blizzard merchant and equipment references were checked through indexed excerpts and linked in docs/interface.md; rules/prices and code-drawn artwork here are original. Real desktop input, Alt-Tab/monitor behavior, combat feel and finished character/environment art remain pending. No assets/dependencies were downloaded, no system settings changed, and no commits, staging or pushes were made. AGENTS.md and earlier development remain preserved.

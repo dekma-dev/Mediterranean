@@ -2,7 +2,7 @@
 
 This guide covers the native C++17 / DirectX 11 game on Windows.
 
-**Validation status:** Debug and Release builds, all five regression suites, and four hidden DirectX scenarios at three sizes pass using Ninja/MSVC. Representative PNG captures have been inspected. A complete interactive playtest remains pending; see [progress.md](progress.md).
+**Validation status:** Debug and Release builds, all eight regression suites, and hidden DirectX world/interface/outfit/sparring captures pass using Ninja/MSVC. Representative PNG captures have been inspected. A complete interactive playtest remains pending; see [progress.md](progress.md).
 
 To build and play the latest version from PowerShell in `D:\Mediterranean`:
 
@@ -89,7 +89,7 @@ Run these commands from `D:\Mediterranean`:
 
 `-Run` starts the game without attaching the Visual Studio debugger. Launching an existing executable does not rebuild changed source files. Use Debug for breakpoints and inspecting variables; use Release for later performance checks.
 
-`-SmokeTest` captures spawn, combat windup, captain windup, and a veteran after both quests. Each scene is captured at 960x600, 1600x900, and 1280x720 in the selected build directory. For example, `build-ninja-debug/Debug-combat.png` is the 1280x720 frame and `Debug-combat-960x600.png` is the smaller variant. Each scenario also creates `-overview.png` and `-character.png` captures without the HUD, plus `-menu`, `-inventory`, `-equipment`, `-atlas` and `-journal` captures at all three sizes. The test also verifies hidden fullscreen size and windowed restoration. The adjacent `.png.log` records the result. `-Test` runs `InterfaceTests`, `GeometryTests`, `SimulationTests`, `NavigationTests`, `InventoryTests`, `CombatTests`, and `ProgressionTests`.
+`-SmokeTest` captures spawn, combat windup, captain windup, and a veteran after both quests. Each scene is captured at 960x600, 1600x900, and 1280x720 in the selected build directory. For example, `build-ninja-debug/Debug-combat.png` is the 1280x720 frame and `Debug-combat-960x600.png` is the smaller variant. Each scenario also creates `-overview.png` and `-character.png` without the HUD, plus `-menu`, `-inventory`, `-equipment`, `-atlas`, `-journal` and combined `-equipment-bag` at all three sizes. The veteran adds `-base-outfit`, `-travel-outfit`, `-sparring`, `-sparring-interface`, `-watchman-character` and `-equipped-sparring` at 1280x720, plus `-quartermaster` and `-purchased-equipment` at all three sizes: 104 smoke captures per configuration. The test also verifies hidden fullscreen size and windowed restoration. The adjacent `.png.log` records the result. `-Test` runs nine suites: `InterfaceTests`, `GeometryTests`, `SimulationTests`, `NavigationTests`, `InventoryTests`, `CombatTests`, `ProgressionTests`, `TrainingTests` and `TradeTests`. InterfaceTests also writes `inventory-drag.png` in the build directory.
 
 For a specific render fixture: `RPGNative.exe --smoke-test <absolute-output.png> <absolute-snapshot.save>`. This optional snapshot is validated in memory and never replaces `saves/patrol.save`. Provided fixtures are under `tests/fixtures`. Captures do not replace interactive playtesting. See [graphics and measured budgets](docs/graphics.md) for the generated art, memory limits and benchmark methodology. `-Benchmark` writes `<Configuration>-benchmark.txt`; it runs a hidden stationary scene and does not measure interactive FPS.
 
@@ -114,6 +114,9 @@ Useful breakpoint locations:
 - `game/Simulation.cpp`, inside `Simulation::UseAbility`: target, range, damage, and cooldown behavior.
 - `game/Simulation.cpp`, inside `Simulation::Interact`: quest and reward transitions.
 - `game/Simulation.cpp`, inside `Simulation::Load`: save validation.
+- `game/Inventory.cpp`, inside `Inventory::Apply`: bag swaps, equipment compatibility and stale-drag rejection.
+- `game/Trade.cpp`, inside `Simulation::PurchaseStatus` / `Buy`: range, quest, stock, capacity and gold checks.
+- `game/Progression.cpp`, inside `Simulation::StartSparring` / `EndSparring`: practice lifecycle and results.
 
 When execution pauses, inspect **Locals**, **Watch**, and **Call Stack** under **Debug > Windows**. The **Output** window's Debug output contains shader compiler messages and renderer diagnostics. Use Build output for compiler/linker errors.
 
@@ -135,6 +138,10 @@ Normal gameplay opens in borderless fullscreen. Use F11 or the Display button in
 8. The patrol reward also grants 60 XP; together with one kill this earns level 2 and 120 maximum health. Press **E** again to accept **Secure the Astral Anchor**.
 9. Defeat the remaining raider and the violet captain. Orange cones announce attacks: move outside them, dash away, or press **2** to interrupt a windup. The captain has a longer windup and hits harder.
 10. Approach the violet crystal in front of the northern ruin, press **E**, and stand still for three seconds. Movement and actions cancel stabilization. Return for 50 gold, 120 XP, ward armor, and level 3.
+11. Press **C then I**. Drag the tunic from the bag onto Chest to swap armor; drag gear back to a bag cell to remove it. Right-click also equips/removes/drinks. Use Sort to compact the bag. Attributes and both character views follow the worn items; ward armor reduces damage only while equipped.
+12. Follow the cyan map marker to the eastern training post at `(12, -2)`. Within 2.5 units, press **E** to start a 30-second sparring round. The 180-HP guard uses telegraphed melee attacks; **2** interrupts. Compare damage with ward armor and the tunic. **E** stops, leaving the area ends the round, and reaching 1 HP ends it nonlethally. No XP/loot is awarded and no health, cooldowns or potions are refunded. A damage report appears when the round ends.
+13. Visit the orange quartermaster marker at `(3, -12)`, near the village entrance. Stand within 2.75 units and press **E**. The shop opens beside the bag; **C** adds the character window. Buy the helm for 20 gold and shield for 35, then right-click or drag each into **Head / Off hand**. Gear unlocks after the patrol hand-in. Bought gear starts in the bag; no item equips automatically. Use the portrait arrows and **Front** to inspect it.
+14. With both quests completed and all three loot bags claimed, 90 gold becomes 35 after buying both pieces. Both rows become sold out. The fully equipped ward/helm/shield outfit shows 5 armor; a normal sparring hit now deals 3 instead of 8. Save/load and verify the same gold, stock and exact item locations. The vendor also stocks six draughts at 6 gold each. Purchases are final; stock resets only with a new expedition.
 
 Additional controls:
 
@@ -144,22 +151,28 @@ Additional controls:
 | Escape | Open/close the live game menu; the world continues |
 | F11 | Toggle borderless fullscreen/windowed |
 | Left click | Use UI buttons, select items, click action slots or place a map waypoint |
+| Drag item | Move/swap bag cells, equip into a compatible slot, or remove gear into the bag |
+| Right-click item | Equip, remove, or drink; does not rotate the camera over a window |
 | Right click on atlas | Clear the waypoint |
+| E in the shop / shop X | Close trade; the bag/character can remain open |
+| Character < / > / Front | Rotate the outfit preview / restore front view |
 | R | Reset the current session, including enemies, quest, and reward |
 | Enter while defeated | Return to Dawnwatch while preserving earned progression and loot |
 | F5 / F9 | Save / load while the game has focus |
 | Q | Use a healing potion; full health does not consume one |
-| G | Switch between the starter sword and the earned watchguard blade |
+| G | Switch owned swords; re-equip the starter sword when unarmed before the reward |
 | F2 | Hide / restore the HUD for art inspection |
 | F3 | Show completed-frame draw calls, GPU milliseconds and mesh KiB |
 
-The menu and every panel keep combat active. They capture movement and keyboard combat commands until closed. Click X or the same panel hotkey to close a panel; Escape opens the menu. Inventory item details provide Equip or Drink actions; C shows the actual dressed model. Armor remains an automatic quest reward, and drag sorting is future work. The atlas has generated terrain/landmarks, live markers and a traversable-ground waypoint. See [interface details and references](docs/interface.md). See [gameplay rules](docs/gameplay.md) and complete the [manual smoke test](tests/manual-smoke.md) before declaring the build fully playtested.
+The menu and every panel keep combat active. Press **C then I** to open the character on the left and bag on the right together. Each X or hotkey closes only its own window. These side windows allow keyboard movement/combat; mouse orbit and zoom work over the visible world. The menu, atlas, journal and shop capture movement/combat commands until closed. Escape opens the menu and preserves the side windows for returning; it closes an active trade. Inventory details compare the selected item with worn gear and provide Equip, Unequip or Drink actions. Invalid drops leave the inventory unchanged. Closing a window, Escape, focus loss or a display resize cancels the active drag. C and the world show the same outfit; removing clothing leaves neutral underclothes. The atlas has generated terrain/landmarks, live markers and a traversable-ground waypoint. See [interface details and references](docs/interface.md), [gameplay rules](docs/gameplay.md) and the [manual smoke test](tests/manual-smoke.md).
+
+Start a camera orbit by pressing the right mouse button over the world. A press that starts on a side window or interactive HUD control stays captured until release, even when the pointer leaves it. After Alt-Tab or a display change, release and press again to resume orbit. Panel transitions and loading invalidate old hit regions so the next click cannot activate a hidden item or menu button.
 
 ## 7. Save files
 
 The build configures saves under the source checkout's `saves` directory, currently `D:\Mediterranean\saves\patrol.save`. This location is independent of the shell's working directory and is ignored by Git.
 
-Version 3 stores both quests, inventory, enemy identities, behavior, committed windups and facing, loot, health, position, and cooldowns. XP/levels and ward armor derive from completed objectives. Versions 1 and 2 migrate; the third raider becomes a captain at the same health fraction, completed patrols unlock the second quest, and existing kills/hand-ins supply XP. Camera, jump, target, panels, and unfinished channels reset. Invalid data never replaces the active simulation. **R** resets the session without erasing the existing save; a later **F5** replaces it.
+Version 5 stores both quests, exact bag cells/stacks, six worn slots, purchase counts in a `SHOP` record, remaining gold, enemy identities/behavior/windups/facing, loot, health, position and cooldowns. Gold and item ownership must agree with campaign rewards and purchases. XP/levels derive from completed objectives; protection comes from worn gear. Versions 1–3 migrate potions, rewards and sword selection; earned ward armor initially equips, placing the tunic in the bag. Version 4 retains exact old bag/gear placement with empty head/off-hand slots and fresh stock. Versions 1/2 also migrate the third raider to a captain at the same health fraction. An old actor position inside the newly added counter moves to its nearest free edge. Camera, jump, target, panels, preview rotation, unfinished channels and sparring rounds reset; health and consumed resources persist. Invalid IDs, slots, duplicate gear, bad stacks, stock, receipts or campaign-inconsistent ownership reject the whole load. **R** resets the session without erasing the existing save; a later **F5** replaces it.
 
 If you move the source checkout, reconfigure and rebuild so the compiled save path points to the new location.
 
@@ -180,6 +193,7 @@ If you move the source checkout, reconfigure and rebuild so the compiled save pa
 | Shader compilation fails | Read Debug output for the HLSL compiler message; shader source is embedded in `engine/SceneShader.h`. |
 | Game freezes when another window is focused | This is intentional suspension. Return focus to the game to resume. |
 | Save/load fails | Check the configured project `saves` directory and the in-game message. Invalid files are rejected. |
+| Shop gear is unavailable | Hand in the frontier patrol, check price/stock and approach the quartermaster while alive and grounded. Bought gear appears in the bag; equip it explicitly. |
 | Tests fail | The helper stops before launching. Read the CTest failure output; do not treat a completed compilation as a passing test run. |
 
 When reporting a failure, include the configuration (Debug or Release), how you opened the project, the command or steps used, and the first meaningful error message. Record actual test outcomes in [progress.md](progress.md).

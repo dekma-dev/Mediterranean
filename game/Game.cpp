@@ -13,27 +13,32 @@ void Game::Initialize() { simulation_ = rpg::Simulation{}; }
 
 bool Game::RestoreSnapshot(const std::string& snapshot) {
   if (!simulation_.Load(snapshot)) return false;
+  CancelUiGesture();
   interface_.SetOnly(ui::Panel::None);
+  interface_.previewYaw=0;
   yaw_=0; pitch_=.45f; distance_=10; walkBlend_=walkPhase_=0;
   return true;
 }
 
 void Game::Update(double seconds,const Input& input,float wheel) {
   const float dt=static_cast<float>(seconds);
-  if (input.Pressed(VK_F2)) hudVisible_=!hudVisible_;
+  interface_.noticeTime=std::max(0.f,interface_.noticeTime-dt);
+  if (input.Pressed(VK_F2)) { hudVisible_=!hudVisible_; interface_.InvalidateHitRegions(); }
   if (input.Pressed(VK_F3)) debugOverlay_=!debugOverlay_;
   if (input.Pressed(VK_F5)) SaveProgress();
   if (input.Pressed(VK_F9)) LoadProgress();
-  const auto previousPanel=interface_.StateKey();
   if (input.Pressed(VK_ESCAPE)) interface_.Escape();
   if (input.Pressed('C')) interface_.Toggle(ui::Panel::Character);
   if (input.Pressed('I') || input.Pressed('B')) interface_.Toggle(ui::Panel::Inventory);
   if (input.Pressed('J')) interface_.Toggle(ui::Panel::Journal);
   if (input.Pressed('M')) interface_.Toggle(ui::Panel::Map);
+  const bool closingMerchant=interface_.panel==ui::Panel::Merchant && input.Pressed('E');
+  if (closingMerchant) interface_.Close(ui::Panel::Merchant);
   ui::Event event;
-  if (hudVisible_ || interface_.HasPanels() || simulation_.Health()<=0)
+  const bool uiVisible=hudVisible_ || interface_.HasPanels() || simulation_.Health()<=0;
+  if (uiVisible)
     event=interface_.Pointer(input.ClientX(),input.ClientY(),input.Width(),input.Height(),
-      previousPanel==interface_.StateKey() && input.Pressed(VK_LBUTTON),input.Pressed(VK_RBUTTON));
+      input.Pressed(VK_LBUTTON),input.Pressed(VK_RBUTTON),input.Held(VK_LBUTTON),input.Released(VK_LBUTTON));
   rpg::Command command;
   switch (event.action) {
   case ui::Action::Close: interface_.Close(static_cast<ui::Panel>(event.value)); break;
@@ -48,6 +53,9 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   case ui::Action::Quit: quitRequested_=true; break;
   case ui::Action::SelectItem: interface_.selected=static_cast<ui::Item>(event.value); interface_.Show(ui::Panel::Inventory); break;
   case ui::Action::UseItem: ui::ApplyItem(command,simulation_,static_cast<ui::Item>(event.value)); break;
+  case ui::Action::InventoryChange: command.inventory=event.inventory; break;
+  case ui::Action::Purchase: command.purchase=event.value; break;
+  case ui::Action::RotatePreview: interface_.previewYaw=event.value==0?0:std::remainder(interface_.previewYaw+event.value*.45f,6.2831853f); break;
   case ui::Action::Ability: command.ability=event.value; break;
   case ui::Action::ClearWaypoint: interface_.hasWaypoint=false; break;
   case ui::Action::PlaceWaypoint:
@@ -57,25 +65,37 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   default: break;
   }
   time_+=dt;
+  const bool pointerCaptured=uiVisible && interface_.PointerOverUi();
+  if (!input.Held(VK_RBUTTON) || interface_.CapturesMovement() || interface_.Dragging()) orbiting_=false;
+  if (input.Pressed(VK_RBUTTON))
+    orbiting_=!pointerCaptured && !interface_.CapturesMovement() && !interface_.Dragging();
   if (!interface_.CapturesMovement()) {
-    if (!interface_.PointerOverWindow())
-      SetCameraOrbit(yaw_+input.MouseX()*.006f,pitch_+input.MouseY()*.004f,distance_-wheel);
+    if (!pointerCaptured && !interface_.Dragging())
+      SetCameraOrbit(yaw_+(orbiting_?input.MouseX()*.006f:0),pitch_+(orbiting_?input.MouseY()*.004f:0),distance_-wheel);
     const float forward=float(input.Held('W'))-float(input.Held('S'));
     const float right=float(input.Held('D'))-float(input.Held('A'));
     command.movement={std::sin(yaw_)*forward+std::cos(yaw_)*right,std::cos(yaw_)*forward-std::sin(yaw_)*right};
     command.sprint=input.Held(VK_SHIFT); command.jump=input.Pressed(VK_SPACE);
-    command.nextTarget=input.Pressed(VK_TAB); command.interact=input.Pressed('E');
+    command.nextTarget=input.Pressed(VK_TAB); command.interact=input.Pressed('E') && !closingMerchant;
     command.restart=input.Pressed('R'); command.respawn=input.Pressed(VK_RETURN);
     command.usePotion=command.usePotion || input.Pressed('Q'); command.equipWeapon=command.equipWeapon || input.Pressed('G');
     for (int i=0;i<4;++i) if (input.Pressed('1'+i)) { command.ability=i; break; }
   }
   if (command.restart || (command.respawn && simulation_.Health()<=0)) {
+    CancelUiGesture();
     interface_.SetOnly(ui::Panel::None); yaw_=0; pitch_=.45f; distance_=10;
+    interface_.previewYaw=0;
     if (command.restart) interface_.hasWaypoint=false;
   }
   const auto before=simulation_.Player();
   // Menus capture local commands, but never stop simulation time.
   simulation_.Update(dt,command);
+  if (simulation_.TradeRequested()) { interface_.merchantNotice.clear(); interface_.Show(ui::Panel::Merchant); }
+  if (command.purchase!=-1) interface_.merchantNotice=simulation_.Message();
+  if (interface_.panel==ui::Panel::Merchant && !simulation_.CanTrade()) interface_.Close(ui::Panel::Merchant);
+  if (command.inventory.action!=rpg::InventoryAction::None) {
+    interface_.inventoryNotice=simulation_.Message(); interface_.noticeTime=3;
+  }
   const auto after=simulation_.Player();
   const float distance=std::hypot(after.x-before.x,after.z-before.z);
   walkBlend_=distance>.0001f?1.f:0.f; walkPhase_+=distance*4;
@@ -94,11 +114,11 @@ void Game::Render(Renderer& renderer,bool showInterface) {
   const float cameraDistance=simulation_.CameraDistance(player,y+1.4f,direction,std::sin(pitch_),distance_);
   renderer.SetCamera({player.x+direction.x*cameraDistance,y+1.4f+std::sin(pitch_)*cameraDistance,
     player.z+direction.z*cameraDistance},{player.x,y+1.4f,player.z});
-  DrawWorld(renderer,simulation_.Map(),time_);
+  DrawWorld(renderer,simulation_.Map(),time_,simulation_.Sparring());
   using M=visual::Mesh;
   using S=visual::Material;
   DrawCharacter(renderer,player,y,simulation_.Facing(),simulation_.HurtFlash()>0?XMFLOAT4{1,.48f,.35f,1}:
-    XMFLOAT4{.22f,.37f,.54f,1},simulation_.AttackFlash()*2,std::sin(walkPhase_)*walkBlend_,simulation_.HasWardArmor(),simulation_.RewardWeaponEquipped());
+    XMFLOAT4{.22f,.37f,.54f,1},simulation_.AttackFlash()*2,std::sin(walkPhase_)*walkBlend_,CharacterOutfit::From(simulation_.Items()));
   const auto anchor=rpg::WorldMap::astralAnchor;
   const bool stable=simulation_.AnchorState()>=rpg::AnchorQuest::Return;
   const XMFLOAT4 crystal=stable?XMFLOAT4{.3f,.95f,.65f,1}:XMFLOAT4{.72f,.4f,.95f,1};
@@ -112,8 +132,8 @@ void Game::Render(Renderer& renderer,bool showInterface) {
     }
   }
   const auto& enemies=simulation_.Enemies();
-  for (int i=0;i<static_cast<int>(enemies.size());++i) {
-    const auto& enemy=enemies[i];
+  for (int i=0;i<static_cast<int>(enemies.size())+int(simulation_.Sparring());++i) {
+    const auto& enemy=i<int(enemies.size())?enemies[i]:simulation_.SparringOpponent();
     if (enemy.health<=0) {
       if (!enemy.looted) {
         renderer.DrawMesh(M::Rock,{enemy.position.x,.22f,enemy.position.z},{.55f,.44f,.45f},{.51f,.34f,.15f,1},S::Cloth);
@@ -123,8 +143,8 @@ void Game::Render(Renderer& renderer,bool showInterface) {
     }
     const bool captain=enemy.kind==rpg::EnemyKind::Captain;
     DrawCharacter(renderer,enemy.position,0,enemy.facing,
-      enemy.hitFlash>0?XMFLOAT4{1,.7f,.55f,1}:captain?XMFLOAT4{.36f,.19f,.48f,1}:XMFLOAT4{.65f,.2f,.25f,1},
-      enemy.windup>0?.6f:0,enemy.windup>0 || enemy.path.empty()?0.f:std::sin(time_*7+float(i)),captain);
+      enemy.hitFlash>0?XMFLOAT4{1,.7f,.55f,1}:enemy.kind==rpg::EnemyKind::Trainer?XMFLOAT4{.55f,.46f,.22f,1}:captain?XMFLOAT4{.36f,.19f,.48f,1}:XMFLOAT4{.65f,.2f,.25f,1},
+      enemy.windup>0?.6f:0,enemy.windup>0 || enemy.path.empty()?0.f:std::sin(time_*7+float(i)),CharacterOutfit{captain});
     if (captain) {
       renderer.DrawMesh(M::Sphere,{enemy.position.x,1.92f,enemy.position.z},{.40f,.33f,.40f},
         {.64f,.49f,.29f,1},S::Metal,enemy.facing);

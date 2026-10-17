@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -84,9 +85,11 @@ bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapsh
     if (!renderer_->Resize(dimensions.first,dimensions.second)) { error_=renderer_->Error(); return false; }
     const std::pair<ui::Panel,const wchar_t*> panels[]={
       {ui::Panel::Menu,L"menu"},{ui::Panel::Inventory,L"inventory"},{ui::Panel::Character,L"equipment"},
-      {ui::Panel::Map,L"atlas"},{ui::Panel::Journal,L"journal"}};
+      {ui::Panel::Map,L"atlas"},{ui::Panel::Journal,L"journal"},{ui::Panel::Character,L"equipment-bag"}};
     for (const auto& panel : panels) {
-      game_->OpenPanel(panel.first); renderer_->BeginFrame(); game_->Render(*renderer_);
+      game_->OpenPanel(panel.first);
+      if (std::wstring(panel.second)==L"equipment-bag") game_->ShowPanel(ui::Panel::Inventory);
+      renderer_->BeginFrame(); game_->Render(*renderer_);
       const auto base=std::filesystem::path(capturePath);
       const auto suffix=dimensions.first==1280?L"":L"-"+std::to_wstring(dimensions.first)+L"x"+std::to_wstring(dimensions.second);
       const auto output=base.parent_path()/(base.stem().wstring()+L"-"+panel.second+suffix+base.extension().wstring());
@@ -94,6 +97,76 @@ bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapsh
     }
   }
   game_->OpenPanel(ui::Panel::None);
+  if (game_->State().HasWardArmor()) {
+    const auto original=game_->State().Save();
+    const auto capture=[&](const wchar_t* suffix,bool showInterface=true) {
+      const auto base=std::filesystem::path(capturePath);
+      const auto path=base.parent_path()/(base.stem().wstring()+suffix+base.extension().wstring());
+      renderer_->BeginFrame(); game_->Render(*renderer_,showInterface);
+      return renderer_->Capture(path.wstring()) && renderer_->EndFrame();
+    };
+    for (int i=0;i<rpg::Inventory::gearCount;++i) {
+      rpg::Command c; c.inventory={rpg::InventoryAction::Unequip,i,-1,game_->State().Items().Worn(rpg::GearSlot(i))}; game_->ExecuteCommand(c);
+    }
+    game_->OpenPanel(ui::Panel::Character); game_->ShowPanel(ui::Panel::Inventory);
+    if (!capture(L"-base-outfit")) { error_=renderer_->Error(); return false; }
+    if (!game_->RestoreSnapshot(original)) return false;
+    rpg::Command c; c.inventory={rpg::InventoryAction::Equip,game_->State().Items().Find(rpg::Item::Tunic),int(rpg::GearSlot::Chest),rpg::Item::Tunic}; game_->ExecuteCommand(c);
+    game_->OpenPanel(ui::Panel::Character); game_->ShowPanel(ui::Panel::Inventory);
+    if (!capture(L"-travel-outfit")) { error_=renderer_->Error(); return false; }
+    if (!game_->RestoreSnapshot(original)) return false;
+    const rpg::Vec2 destination{12,-3.8f};
+    const auto path=game_->State().Map().FindPath(game_->State().Player(),destination);
+    for (auto waypoint : path) for (int step=0;step<500;++step) {
+      const auto p=game_->State().Player(); if (std::hypot(p.x-waypoint.x,p.z-waypoint.z)<.15f) break;
+      c={}; c.sprint=true; c.movement={waypoint.x-p.x,waypoint.z-p.z}; game_->ExecuteCommand(c,.05f);
+    }
+    c={}; c.interact=true; game_->ExecuteCommand(c);
+    if (!game_->State().Sparring()) { error_=L"Sparring render scenario could not start."; return false; }
+    for (int step=0;step<8;++step) game_->ExecuteCommand({},.05f);
+    game_->SetCameraOrbit(0,.45f,7);
+    if (!capture(L"-sparring")) { error_=renderer_->Error(); return false; }
+    game_->OpenPanel(ui::Panel::Character); game_->ShowPanel(ui::Panel::Inventory);
+    if (!capture(L"-sparring-interface")) { error_=renderer_->Error(); return false; }
+    if (!game_->RestoreSnapshot(original)) return false;
+    const auto walkTo=[&](rpg::Vec2 destination) {
+      for (auto waypoint : game_->State().Map().FindPath(game_->State().Player(),destination)) {
+        for (int step=0;step<500;++step) {
+          const auto p=game_->State().Player(); if (std::hypot(p.x-waypoint.x,p.z-waypoint.z)<.15f) break;
+          rpg::Command move; move.sprint=true; move.movement={waypoint.x-p.x,waypoint.z-p.z}; game_->ExecuteCommand(move,.05f);
+        }
+      }
+      const auto p=game_->State().Player(); return std::hypot(p.x-destination.x,p.z-destination.z)<.2f;
+    };
+    if (!walkTo({3,-10}) || !game_->State().CanTrade()) { error_=L"Quartermaster render scenario could not reach the shop."; return false; }
+    game_->SetCameraOrbit(0,.45f,10);
+    for (int stage=0;stage<2;++stage) {
+      if (stage==0) { game_->OpenPanel(ui::Panel::Merchant); game_->ShowPanel(ui::Panel::Character); }
+      else {
+        c={}; c.purchase=1; game_->ExecuteCommand(c); c.purchase=2; game_->ExecuteCommand(c);
+        for (const auto item : {rpg::Item::Helm,rpg::Item::Shield}) {
+          c={}; c.inventory={rpg::InventoryAction::Equip,game_->State().Items().Find(item),int(rpg::DescribeItem(item).slot),item}; game_->ExecuteCommand(c);
+        }
+        if (game_->State().DamageReduction()!=5) { error_=L"Purchased equipment render scenario failed."; return false; }
+        game_->OpenPanel(ui::Panel::Character); game_->ShowPanel(ui::Panel::Inventory);
+      }
+      for (const auto dimensions : {std::pair<int,int>{960,600},{1600,900},{1280,720}}) {
+        if (!renderer_->Resize(dimensions.first,dimensions.second)) { error_=renderer_->Error(); return false; }
+        std::wstring suffix=stage==0?L"-quartermaster":L"-purchased-equipment";
+        if (dimensions.first!=1280) suffix+=L"-"+std::to_wstring(dimensions.first)+L"x"+std::to_wstring(dimensions.second);
+        if (!capture(suffix.c_str())) { error_=renderer_->Error(); return false; }
+      }
+    }
+    if (!walkTo({0,-8})) { error_=L"Equipped character inspection could not reach clear ground."; return false; }
+    game_->SetCameraOrbit(game_->State().Facing()+3.14159265f,.2f,4);
+    if (!capture(L"-watchman-character",false)) { error_=renderer_->Error(); return false; }
+    if (!walkTo({12,-3.8f})) { error_=L"Equipped sparring scenario could not reach the guard."; return false; }
+    c={}; c.interact=true; game_->ExecuteCommand(c);
+    if (!game_->State().Sparring()) { error_=L"Equipped sparring render scenario could not start."; return false; }
+    game_->SetCameraOrbit(0,.45f,7);
+    if (!capture(L"-equipped-sparring")) { error_=renderer_->Error(); return false; }
+    if (!game_->RestoreSnapshot(original)) return false;
+  }
   if (!renderer_->ValidateDebugMessages()) { error_=renderer_->Error(); return false; }
   return true;
 }
@@ -161,6 +234,7 @@ int Engine::Run() {
 
     input_.Update(window_->GetHandle());
     if (IsIconic(window_->GetHandle()) || GetForegroundWindow() != window_->GetHandle()) {
+      game_->CancelUiGesture();
       window_->ConsumeWheel();
       WaitMessage();
       QueryPerformanceCounter(&last);
@@ -184,6 +258,7 @@ void Engine::Tick(double deltaSeconds) {
 
   RECT client{};
   GetClientRect(window_->GetHandle(), &client);
+  if (renderer_->Width()!=client.right || renderer_->Height()!=client.bottom) game_->CancelUiGesture();
   if (!renderer_->Resize(client.right, client.bottom)) {
     MessageBoxW(window_->GetHandle(), renderer_->Error().c_str(), L"Renderer error", MB_OK | MB_ICONERROR);
     exitCode_ = 1;
@@ -193,6 +268,7 @@ void Engine::Tick(double deltaSeconds) {
   game_->Update(deltaSeconds, input_, window_->ConsumeWheel());
   const bool fullscreenRequest=game_->TakeFullscreenRequest();
   if (input_.Pressed(VK_F11) || fullscreenRequest) {
+    game_->CancelUiGesture();
     if (!window_->SetFullscreen(!window_->Fullscreen())) {
       error_=L"Could not change the game window display mode."; exitCode_=1; running_=false; return;
     }

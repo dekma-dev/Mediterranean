@@ -12,12 +12,18 @@ Vec2 Difference(Vec2 a, Vec2 b) { return {a.x-b.x,a.z-b.z}; }
 }
 
 Simulation::Simulation() {
+  trainer_.position=trainer_.home=WorldMap::trainingPost; trainer_.id=200; trainer_.kind=EnemyKind::Trainer; trainer_.health=trainer_.MaxHealth();
   EntityId id=100;
   for (Vec2 home : {Vec2{-4,7},Vec2{4,9},Vec2{0,12}}) {
     Enemy enemy; enemy.position=home; enemy.home=home; enemy.id=id++;
     if (enemy.id==102) { enemy.kind=EnemyKind::Captain; enemy.health=enemy.MaxHealth(); }
     enemies_.push_back(enemy);
   }
+}
+float Simulation::DamageReduction() const {
+  float value=0;
+  for (int i=0;i<Inventory::gearCount;++i) value+=DescribeItem(inventory_.Worn(GearSlot(i))).armor;
+  return value;
 }
 
 bool Simulation::CanStand(Vec2 p, float radius) const {
@@ -39,14 +45,21 @@ float Simulation::CameraDistance(Vec2 origin,float originY,Vec2 direction,float 
   for (float d=.3f;d<desired;d+=.1f) {
     const Vec2 p{origin.x+direction.x*d,origin.z+direction.z*d};
     const float y=originY+slope*d;
-    for (const auto& o : map_.Obstacles())
-      if (y < o.CameraHeight() && y > -.2f && std::abs(p.x-o.center.x)<o.CameraHalfX()+.15f &&
-        std::abs(p.z-o.center.z)<o.CameraHalfZ()+.15f) return std::max(.25f,d-.2f);
+    for (const auto& o : map_.Obstacles()) {
+      // The crown begins above the character's shoulders. Extending its wide
+      // bounds down to the ground traps the camera beside the training post.
+      const bool belowCrown=o.kind==PropKind::Tree && y<1.65f;
+      const float halfX=belowCrown?o.halfX:o.CameraHalfX();
+      const float halfZ=belowCrown?o.halfZ:o.CameraHalfZ();
+      if (y < o.CameraHeight() && y > -.2f && std::abs(p.x-o.center.x)<halfX+.15f &&
+        std::abs(p.z-o.center.z)<halfZ+.15f) return std::max(.25f,d-.2f);
+    }
   }
   return desired;
 }
 
 void Simulation::SelectTarget() {
+  if (sparring_) { target_=int(enemies_.size()); return; }
   const int count=static_cast<int>(enemies_.size());
   for (int step=1;step<=count;++step) {
     const int index=(target_+step)%count;
@@ -56,6 +69,10 @@ void Simulation::SelectTarget() {
     }
   }
   target_=-1; message_="No living target nearby.";
+}
+const Enemy* Simulation::TargetActor() const {
+  if (target_==int(enemies_.size()) && sparring_) return &trainer_;
+  return target_>=0 && target_<int(enemies_.size())?&enemies_[target_]:nullptr;
 }
 
 bool Simulation::HasLineOfSight(Vec2 from,Vec2 to) const {
@@ -74,8 +91,9 @@ void Simulation::UseAbility(int index) {
     Move(player_,{std::sin(facing_)*3.5f,std::cos(facing_)*3.5f},.4f);
     message_="Dash.";
   } else {
-    if (target_<0 || enemies_[target_].health<=0) { message_="Press Tab to select an enemy."; return; }
-    auto& enemy=enemies_[target_];
+    if (!TargetActor() || TargetActor()->health<=0) { message_="Press Tab to select an enemy."; return; }
+    const bool trainingTarget=sparring_ && target_==int(enemies_.size());
+    auto& enemy=trainingTarget?trainer_:enemies_[target_];
     if (enemy.state==EnemyState::Returning) { message_="That enemy is returning home."; return; }
     if (Length(Difference(enemy.position,player_))>2.5f || height_>1.5f) {
       message_="Target is out of melee range."; return;
@@ -86,6 +104,7 @@ void Simulation::UseAbility(int index) {
     const int previousLevel=Level();
     const float damage=std::min(enemy.health,index==0?StrikeDamage():HeavyDamage());
     enemy.health-=damage;
+    if (trainingTarget) sparringDealt_+=int(damage);
     Emit(FeedbackKind::Damage,enemy.position,static_cast<int>(damage));
     enemy.hitFlash=.2f; attackFlash_=.2f;
     message_="Hit.";
@@ -97,6 +116,7 @@ void Simulation::UseAbility(int index) {
     }
     if (enemy.health<=0) {
       target_=-1; enemy.state=EnemyState::Dead; enemy.path.clear(); enemy.windup=0;
+      if (trainingTarget) { EndSparring("Victory"); cooldowns_[index]=abilityCooldowns[index]; return; }
       Emit(FeedbackKind::Experience,enemy.position,40);
       message_="Raider defeated. Press E nearby to loot.";
       if (quest_==Quest::Active) { quest_=Quest::Return; message_="Patrol complete. Return to the gold beacon and press E."; }
@@ -111,13 +131,29 @@ const char* Simulation::AbilityStatus(int index) const {
   if (cooldowns_[index]>0) return "COOLDOWN";
   if (index==3) return health_>=MaxHealth()?"FULL HEALTH":"READY";
   if (index==2) return "READY";
-  if (target_<0 || enemies_[target_].health<=0) return "NO TARGET";
-  if (enemies_[target_].state==EnemyState::Returning) return "RETURNING";
-  if (Length(Difference(enemies_[target_].position,player_))>2.5f || height_>1.5f) return "OUT OF RANGE";
-  return HasLineOfSight(player_,enemies_[target_].position)?"READY":"BLOCKED";
+  const auto* target=TargetActor();
+  if (!target || target->health<=0) return "NO TARGET";
+  if (target->state==EnemyState::Returning) return "RETURNING";
+  if (Length(Difference(target->position,player_))>2.5f || height_>1.5f) return "OUT OF RANGE";
+  return HasLineOfSight(player_,target->position)?"READY":"BLOCKED";
 }
 
 void Simulation::Interact() {
+  if (sparring_) { EndSparring("Stopped"); return; }
+  const bool nearbyLoot=std::any_of(enemies_.begin(),enemies_.end(),[&](const Enemy& e) {
+    return e.health<=0 && !e.looted && Length(Difference(player_,e.position))<=2.5f && HasLineOfSight(player_,e.position);
+  });
+  if (!nearbyLoot && NearQuartermaster()) {
+    if (CanTrade()) { tradeRequested_=true; message_="Quartermaster: supplies and equipment for the Dawnwatch patrol."; }
+    else message_="Land before speaking to the quartermaster.";
+    return;
+  }
+  if (!nearbyLoot && Length(Difference(player_,WorldMap::trainingPost))<=2.5f && HasLineOfSight(player_,WorldMap::trainingPost)) {
+    if (anchorQuest_!=AnchorQuest::Complete) message_="Secure Dawnwatch before starting a sparring round.";
+    else if (height_>0) message_="Land before starting a sparring round.";
+    else StartSparring();
+    return;
+  }
   if (Length(Difference(player_,WorldMap::astralAnchor))<=2.5f &&
     HasLineOfSight(player_,WorldMap::astralAnchor)) {
     if (anchorQuest_!=AnchorQuest::Active) {
@@ -138,7 +174,8 @@ void Simulation::Interact() {
       }
     }
     if (nearest) {
-      nearest->looted=true; gold_+=5; ++potions_;
+      if (!inventory_.Add(Item::Potion)) { message_="Your bag is full. Make room before looting."; return; }
+      nearest->looted=true; gold_+=5;
       message_="Looted 5 gold and one healing potion. Q uses a potion.";
     } else if (Length(Difference(player_,WorldMap::astralAnchor))>2.5f)
       message_="Move near the gold beacon, astral anchor, or loot bag and press E.";
@@ -152,7 +189,8 @@ void Simulation::Interact() {
   }
   else if (quest_==Quest::Return) {
     const int previousLevel=Level();
-    quest_=Quest::Complete; gold_+=25; rewardWeapon_=true; anchorQuest_=AnchorQuest::Available;
+    if (!inventory_.Add(Item::Watchguard)) { message_="Make room in your bag to claim the blade."; return; }
+    quest_=Quest::Complete; gold_+=25; anchorQuest_=AnchorQuest::Available;
     Emit(FeedbackKind::Experience,player_,60); RestoreForLevel(previousLevel); health_=MaxHealth();
     message_="Patrol reward: blade, 25 gold, 60 XP. G equip. E for the next quest.";
   }
@@ -162,20 +200,24 @@ void Simulation::Interact() {
     message_="Secure the anchor: defeat the camp and stabilize the crystal in the north.";
   } else if (anchorQuest_==AnchorQuest::Return) {
     const int previousLevel=Level();
+    if (!inventory_.Add(Item::Ward)) { message_="Make room in your bag to claim the armor."; return; }
+    inventory_.Equip(Item::Ward);
     anchorQuest_=AnchorQuest::Complete; gold_+=50;
     Emit(FeedbackKind::Experience,player_,120); RestoreForLevel(previousLevel); health_=MaxHealth();
     message_="Outpost secured: 50 gold, 120 XP, ward armor. Damage taken reduced by 2.";
   } else if (anchorQuest_==AnchorQuest::Active) message_="Clear the raider camp, then press E at the northern crystal.";
-  else message_="Dawnwatch is secure. Both quests complete. R starts a new expedition.";
+  else message_="Dawnwatch is secure. The eastern training post offers repeatable sparring.";
 }
 
 void Simulation::Update(float seconds,const Command& command) {
+  tradeRequested_=false;
   if (!std::isfinite(seconds) || seconds<=0) return;
   const float dt=std::min(seconds,.05f);
   if (command.restart) { *this=Simulation{}; return; }
   for (auto& feedback : feedback_) feedback.age+=dt;
   feedback_.erase(std::remove_if(feedback_.begin(),feedback_.end(),[](const CombatFeedback& f) { return f.age>=1.5f; }),feedback_.end());
   hurtFlash_=std::max(0.f,hurtFlash_-dt);
+  sparringReportTime_=std::max(0.f,sparringReportTime_-dt);
   if (health_<=0) {
     if (command.respawn) Respawn();
     else message_="You have fallen. Enter returns to Dawnwatch with progress retained. R resets all.";
@@ -187,7 +229,8 @@ void Simulation::Update(float seconds,const Command& command) {
   const float length=Length(command.movement);
   const bool moving=std::isfinite(command.movement.x) && std::isfinite(command.movement.z) &&
     std::isfinite(length) && length>.001f;
-  if (Channeling() && (moving || command.jump || command.ability>=0 || command.usePotion || command.equipWeapon)) {
+  const bool changingGear=command.equipWeapon || command.inventory.action==InventoryAction::Equip || command.inventory.action==InventoryAction::Unequip;
+  if (Channeling() && (moving || command.jump || command.ability>=0 || command.usePotion || changingGear)) {
     channelRemaining_=0; message_="Stabilization interrupted. Press E at the anchor to try again.";
   }
   if (moving) {
@@ -202,27 +245,40 @@ void Simulation::Update(float seconds,const Command& command) {
   if (command.nextTarget) SelectTarget();
   if (command.interact) Interact();
   if (command.equipWeapon) {
-    if (!rewardWeapon_) message_="Complete the patrol to earn the watchguard blade.";
+    if (!HasRewardWeapon() && inventory_.Worn(GearSlot::Weapon)==Item::Starter)
+      message_="Complete the patrol to earn the watchguard blade.";
     else {
-      equipped_=!equipped_;
-      message_=equipped_?"Watchguard blade equipped. Melee damage increased.":"Starter sword equipped.";
+      inventory_.Equip(HasRewardWeapon() && !RewardWeaponEquipped()?Item::Watchguard:Item::Starter);
+      message_=RewardWeaponEquipped()?"Watchguard blade equipped. Melee damage increased.":"Starter sword equipped.";
     }
   }
+  if (command.inventory.action!=InventoryAction::None) {
+    if (inventory_.Apply(command.inventory)) message_=command.inventory.action==InventoryAction::Sort?"Bag sorted.":
+      command.inventory.action==InventoryAction::Move?"Item moved.":"Equipment updated.";
+    else message_="That item cannot go there. Equipment and bag are unchanged.";
+  }
+  if (command.purchase!=-1) Buy(command.purchase);
   if (command.usePotion) {
-    if (potions_==0) message_="No healing potions. Loot defeated raiders with E.";
+    if (Potions()==0) message_="No healing potions. Loot defeated raiders with E.";
     else if (health_>=MaxHealth()) message_="Health is already full. Potion retained.";
     else if (potionCooldown_>0) message_="Potion is cooling down.";
     else {
-      --potions_; const float healed=std::min(40.f,MaxHealth()-health_); health_+=healed;
+      inventory_.Consume(Item::Potion); const float healed=std::min(40.f,MaxHealth()-health_); health_+=healed;
       Emit(FeedbackKind::Heal,player_,static_cast<int>(healed));
       potionCooldown_=3; message_="Healing potion restored health.";
     }
   }
   UseAbility(command.ability);
   for (auto& enemy : enemies_) UpdateEnemy(enemy,dt);
+  if (sparring_) {
+    sparringRemaining_=std::max(0.f,sparringRemaining_-dt);
+    if (Length(Difference(player_,WorldMap::trainingPost))>7) EndSparring("Left the arena");
+    else if (sparringRemaining_==0) EndSparring("Time complete");
+    else UpdateEnemy(trainer_,dt);
+  }
   SeparateEnemies();
   if (Channeling()) {
-    if (moving || height_>0 || command.ability>=0 || command.usePotion || command.equipWeapon ||
+    if (moving || height_>0 || command.ability>=0 || command.usePotion || changingGear ||
       Length(Difference(player_,WorldMap::astralAnchor))>2.5f || !HasLineOfSight(player_,WorldMap::astralAnchor)) {
       channelRemaining_=0; message_="Stabilization interrupted. Stand still at the anchor.";
     } else {
@@ -320,9 +376,9 @@ void Simulation::UpdateEnemy(Enemy& enemy,float dt) {
 
 std::string Simulation::Save() const {
   std::ostringstream out;
-  out << std::setprecision(9) << "MEDITERRANEAN 3\n" << player_.x << ' ' << player_.z << ' '
+  out << std::setprecision(9) << "MEDITERRANEAN 5\n" << player_.x << ' ' << player_.z << ' '
     << health_ << ' ' << facing_ << ' ' << static_cast<int>(quest_) << ' ' << gold_ << '\n';
-  out << potions_ << ' ' << rewardWeapon_ << ' ' << equipped_ << ' ' << potionCooldown_ << '\n';
+  out << Potions() << ' ' << HasRewardWeapon() << ' ' << RewardWeaponEquipped() << ' ' << potionCooldown_ << '\n';
   out << static_cast<int>(anchorQuest_) << '\n';
   for (float cooldown : cooldowns_) out << cooldown << ' ';
   out << '\n';
@@ -330,29 +386,50 @@ std::string Simulation::Save() const {
     out << enemy.id << ' ' << enemy.position.x << ' ' << enemy.position.z << ' ' << enemy.health << ' '
       << enemy.attackCooldown << ' ' << enemy.looted << ' ' << static_cast<int>(enemy.state) << ' '
       << enemy.windup << ' ' << enemy.facing << '\n';
+  out<<"SHOP"; for (auto count : purchases_) out<<' '<<count; out<<'\n';
+  inventory_.Write(out);
   return out.str();
 }
 
 bool Simulation::Load(const std::string& data) {
   if (data.size()>4096) return false;
   std::istringstream input(data);
-  std::string magic; int version=0, quest=0;
+  std::string magic; int version=0, quest=0,potions=2,owned=0,equipped=0;
   Simulation candidate;
-  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>3) return false;
+  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>5) return false;
+  // The shop counter occupies formerly walkable ground. Preserve old saves by
+  // moving only actors overlapping that new prop to its nearest free edge.
+  const auto migrateCounter=[&](Vec2& position,float radius) {
+    if (version>=5 || !std::isfinite(position.x) || !std::isfinite(position.z) || candidate.map_.CanStand(position,radius)) return;
+    for (const auto& prop : candidate.map_.Obstacles()) {
+      if (prop.kind!=PropKind::Counter) continue;
+      const Vec2 nearest{std::clamp(position.x,prop.center.x-prop.halfX,prop.center.x+prop.halfX),
+        std::clamp(position.z,prop.center.z-prop.halfZ,prop.center.z+prop.halfZ)};
+      if (Length(Difference(position,nearest))>=radius) continue;
+      const float x=prop.halfX+radius+.01f,z=prop.halfZ+radius+.01f;
+      const Vec2 edges[]={{prop.center.x-x,position.z},{prop.center.x+x,position.z},
+        {position.x,prop.center.z-z},{position.x,prop.center.z+z}};
+      Vec2 result=position; float distance=100;
+      for (const auto edge : edges) {
+        const float delta=Length(Difference(position,edge));
+        if (delta<distance && candidate.map_.CanStand(edge,radius)) { result=edge; distance=delta; }
+      }
+      position=result;
+    }
+  };
   if (!(input >> candidate.player_.x >> candidate.player_.z >> candidate.health_ >> candidate.facing_ >> quest >> candidate.gold_)) return false;
+  migrateCounter(candidate.player_,.4f);
   auto valid=[](float value,float min,float max) { return std::isfinite(value) && value>=min && value<=max; };
   if (!valid(candidate.player_.x,-17,17) || !valid(candidate.player_.z,-19,19) ||
     !candidate.CanStand(candidate.player_) || !valid(candidate.health_,0,version<3?100.f:140.f) ||
     !valid(candidate.facing_,-3.142f,3.142f) || quest<0 || quest>3 || candidate.gold_<0 || candidate.gold_>90) return false;
   candidate.quest_=static_cast<Quest>(quest);
   if (version>=2) {
-    int owned=0,equipped=0;
-    if (!(input >> candidate.potions_ >> owned >> equipped >> candidate.potionCooldown_) ||
-      candidate.potions_<0 || candidate.potions_>5 || owned<0 || owned>1 || equipped<0 || equipped>1 ||
+    if (!(input >> potions >> owned >> equipped >> candidate.potionCooldown_) ||
+      potions<0 || potions>(version>=5?5+shopOffers[0].stock:5) || owned<0 || owned>1 || equipped<0 || equipped>1 ||
       (equipped && !owned) || bool(owned)!=(quest==3) || !valid(candidate.potionCooldown_,0,3)) return false;
-    candidate.rewardWeapon_=owned!=0; candidate.equipped_=equipped!=0;
-  } else candidate.rewardWeapon_=quest==3;
-  if (version==3) {
+  } else owned=quest==3;
+  if (version>=3) {
     int anchor=0;
     if (!(input >> anchor) || anchor<0 || anchor>4 || ((quest==3)!=(anchor>0))) return false;
     candidate.anchorQuest_=static_cast<AnchorQuest>(anchor);
@@ -366,6 +443,7 @@ bool Simulation::Load(const std::string& data) {
       if (!(input >> id) || id!=enemy.id) return false;
     }
     if (!(input >> enemy.position.x >> enemy.position.z >> enemy.health >> enemy.attackCooldown)) return false;
+    migrateCounter(enemy.position,.45f);
     if (!valid(enemy.position.x,-17,17) || !valid(enemy.position.z,-19,19) || !candidate.CanStand(enemy.position,.45f) ||
       !valid(enemy.health,0,version<3?80.f:enemy.MaxHealth()) ||
       !valid(enemy.attackCooldown,0,version<3?1.4f:enemy.AttackInterval())) return false;
@@ -377,15 +455,29 @@ bool Simulation::Load(const std::string& data) {
         (claimed && enemy.health>0) || ((state==3)!=(enemy.health==0))) return false;
       enemy.looted=claimed!=0; looted+=claimed; enemy.state=static_cast<EnemyState>(state);
     } else enemy.state=enemy.health==0?EnemyState::Dead:EnemyState::Idle;
-    if (version==3) {
+    if (version>=3) {
       if (!(input >> enemy.windup >> enemy.facing) || !valid(enemy.windup,0,enemy.WindupDuration()) ||
         !valid(enemy.facing,-3.142f,3.142f) ||
         (enemy.windup>0 && (enemy.state!=EnemyState::Pursuing || enemy.attackCooldown>0))) return false;
     }
   }
-  if ((quest>=2 && defeated==0) || candidate.gold_!=(quest==3?25:0)+5*looted+(candidate.HasWardArmor()?50:0) ||
-    candidate.potions_>2+looted || candidate.health_>candidate.MaxHealth() ||
+  if (version>=5) {
+    std::string tag; if (!(input>>tag) || tag!="SHOP") return false;
+    for (int i=0;i<int(shopOffers.size());++i) {
+      auto& count=candidate.purchases_[i];
+      if (!(input>>count) || count<0 || count>shopOffers[i].stock ||
+        (count>0 && shopOffers[i].patrolRequired && quest!=int(Quest::Complete))) return false;
+    }
+  }
+  if ((quest==int(Quest::Active) && defeated>0) || (quest>=2 && defeated==0) ||
+    candidate.gold_!=(quest==3?25:0)+5*looted+(candidate.HasWardArmor()?50:0)-candidate.GoldSpent() ||
+    potions>2+looted+candidate.purchases_[0] || candidate.health_>candidate.MaxHealth() ||
     (candidate.anchorQuest_>=AnchorQuest::Return && defeated!=3)) return false;
+  if (version>=4) {
+    if (!candidate.inventory_.Read(input,version==4?4:Inventory::gearCount) ||
+      !candidate.inventory_.MatchesCampaign(owned!=0,candidate.HasWardArmor(),potions,candidate.purchases_[1]!=0,candidate.purchases_[2]!=0) ||
+      candidate.RewardWeaponEquipped()!=(equipped!=0)) return false;
+  } else candidate.inventory_=Inventory::Migrate(potions,owned!=0,equipped!=0,candidate.HasWardArmor());
   input >> std::ws;
   if (!input.eof()) return false;
   candidate.message_="Progress loaded. Camera, jump, and unfinished anchor channel reset.";

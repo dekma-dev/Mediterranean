@@ -92,7 +92,8 @@ if ($SmokeTest) {
     }
     if (Test-Path -LiteralPath "$capturePath.log") { Get-Content -LiteralPath "$capturePath.log" }
     if ($renderCheck.ExitCode -ne 0) { throw "Render smoke test failed for $scene with code $($renderCheck.ExitCode)." }
-    Write-Output "Render capture: $capturePath (three sizes, two inspection angles and five interface panels)"
+    Write-Output "Render capture: $capturePath (world, inspection angles, panels and combined equipment/bag)"
+    if ($scene -eq 'veteran') { Write-Output 'Veteran extras: outfits, sparring, quartermaster and purchased equipment. Total: 104 captures.' }
   }
 }
 

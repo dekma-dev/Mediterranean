@@ -31,6 +31,7 @@ struct Canvas {
   RectFill({a.x+3,a.y+a.h-3,a.w-6,1},{.015f,.025f,.015f,.95f});
  }
  void Text(float x,float y,const std::string& s,float size=18,Color c=ink) {
+  const auto shadow=P(x+1,y+1); r.DrawText(shadow.x,shadow.y,s,{.01f,.015f,.008f,c.w*.85f},size*layout.scale/12);
   const auto p=P(x,y); r.DrawText(p.x,p.y,s,c,size*layout.scale/12);
  }
  float Width(const std::string& s,float size=18) const { return r.TextWidth(s,size*layout.scale/12)/layout.scale; }
@@ -83,9 +84,23 @@ struct Canvas {
  }
  void Window(Rect a) {
   Frame(a,dark,{.37f,.39f,.17f,1});
-  Gradient({a.x+5,a.y+5,a.w-10,a.h-10},{.13f,.20f,.11f,.99f},{.045f,.075f,.045f,.99f});
+  Gradient({a.x+5,a.y+5,a.w-10,a.h-10},{.16f,.23f,.13f,.99f},{.045f,.075f,.045f,.99f});
+  // Embossed rails and leaf inlays give the frame depth without an art atlas.
+  for (float side : {0.f,1.f}) {
+   const float x=a.x+side*(a.w-9);
+   RectFill({x+2,a.y+7,6,a.h-14},{.075f,.12f,.055f,1});
+   Line(x+3,a.y+8,x+3,a.y+a.h-8,1,{.47f,.47f,.23f,1});
+   Line(x+7,a.y+8,x+7,a.y+a.h-8,1,{.025f,.04f,.018f,1});
+  }
+  Gradient({a.x+8,a.y+3,a.w-16,6},{.36f,.40f,.20f,1},{.08f,.13f,.045f,1});
+  Gradient({a.x+8,a.y+a.h-9,a.w-16,6},{.08f,.13f,.045f,1},{.32f,.36f,.17f,1});
   for (float y=a.y+30;y<a.y+a.h-25;y+=31) {
-   Scroll(a.x+12,y,1,.55f); Scroll(a.x+a.w-12,y,-1,.55f);
+   for (float side : {0.f,1.f}) {
+    const float x=a.x+12+side*(a.w-24),dir=side==0?1.f:-1.f;
+    Scroll(x,y,dir,.55f);
+    Triangle({x,y+14},{x+dir*5,y+9},{x+dir*4,y+18},{.28f,.36f,.16f,1});
+    Line(x,y+14,x+dir*5,y+9,.8f,{.51f,.51f,.27f,1});
+   }
   }
   RectFill({a.x+18,a.y+21,a.w-36,a.h-42},{.015f,.022f,.012f,.24f});
   for (float side : {0.f,1.f}) for (float bottom : {0.f,1.f}) {
@@ -126,6 +141,16 @@ void Icon(Canvas& c,Rect rect,Item item,float alpha=1) {
   c.Line(x-15*s,y-14*s,x-22*s,y+1*s,11*s,tint); c.Line(x+15*s,y-14*s,x+22*s,y+1*s,11*s,tint);
   c.RectFill({x-17*s,y+13*s,34*s,4*s},leather); c.Oval(x,y-20*s,7*s,5*s,dark);
   if (item==Item::Ward) { c.Oval(x-18*s,y-12*s,10*s,7*s,gold); c.Oval(x+18*s,y-12*s,10*s,7*s,gold); }
+ } else if (item==Item::Helm) {
+  c.Oval(x,y-5*s,20*s,20*s,metal);
+  c.RectFill({x-14*s,y-5*s,28*s,26*s},{.055f,.08f,.07f,alpha});
+  c.Line(x-19*s,y-7*s,x+19*s,y-7*s,5*s,gold);
+  c.Line(x-18*s,y-3*s,x-15*s,y+20*s,7*s,metal); c.Line(x+18*s,y-3*s,x+15*s,y+20*s,7*s,metal);
+  c.Line(x,y-24*s,x,y-10*s,5*s,gold);
+ } else if (item==Item::Shield) {
+  c.Diamond(x,y,23*s,28*s,gold); c.Diamond(x,y-1*s,18*s,23*s,cloth);
+  c.Line(x,y-20*s,x,y+19*s,3*s,metal); c.Line(x-14*s,y-5*s,x+14*s,y-5*s,3*s,metal);
+  c.Oval(x,y-4*s,6*s,6*s,gold);
  } else if (item==Item::Trousers) {
   c.RectFill({x-15*s,y-20*s,30*s,15*s},leather);
   c.Line(x-8*s,y-6*s,x-10*s,y+21*s,12*s,{.39f,.43f,.40f,alpha});
@@ -169,6 +194,8 @@ void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoin
   marker(e.position,e.health>0?Color{.72f,.20f,.15f,1}:gold,compact?2.f:4.f);
  marker(rpg::WorldMap::questGiver,{.98f,.77f,.25f,1},compact?3.f:5.f);
  marker(rpg::WorldMap::astralAnchor,{.59f,.38f,.84f,1},compact?3.f:5.f);
+ marker(rpg::WorldMap::trainingPost,{.35f,.72f,.76f,1},compact?3.f:5.f);
+ marker(rpg::WorldMap::quartermaster,{.95f,.57f,.22f,1},compact?3.f:5.f);
  if (sim.AnchorState()!=rpg::AnchorQuest::Complete) {
   const auto p=MapPoint(a,sim.ObjectivePosition()); c.Ring(p.x,p.y,compact?5.f:10.f,{.98f,.85f,.40f,1},compact?1.f:2.f);
  }
@@ -190,219 +217,295 @@ void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoin
 
 void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bool debug) {
  Canvas c(renderer); regions_.clear();
+ renderedState_=StateKey(); renderedWidth_=float(renderer.Width()); renderedHeight_=float(renderer.Height());
  if (!renderer.HasMapArtwork() && !renderer.SetMapArtwork(BuildMapArtwork(s.Map()),512)) return;
  const auto button=[&](Rect rect,const std::string& label,Action action,int value=0,bool enabled=true) {
   const bool hover=rect.Contains(mouseX_,mouseY_);
-  c.Frame(rect,enabled && hover?Color{.20f,.24f,.24f,.98f}:Color{.07f,.095f,.11f,.98f},enabled && hover?gold:border);
-  c.Center(rect.x,rect.y+(rect.h-20)*.5f-2,rect.w,label,17,enabled?ink:muted);
+  c.Frame(rect,enabled && hover?Color{.26f,.31f,.12f,1}:Color{.10f,.16f,.075f,1},hover && enabled?gold:border);
+  c.Gradient({rect.x+4,rect.y+4,rect.w-8,rect.h-8},enabled?Color{.23f,.28f,.12f,1}:Color{.12f,.14f,.08f,1},{.065f,.10f,.045f,1});
+  c.Center(rect.x,rect.y+(rect.h-15)*.5f-2,rect.w,label,15,enabled?ink:muted);
   regions_.push_back({rect,{action,value},enabled});
  };
- const auto slot=[&](Rect rect,Item item,bool present,bool selectedSlot=false) {
+ const auto slot=[&](Rect rect,Item item,bool selectedSlot=false,int bag=-1,int gear=-1) {
+  if (item==Item::None) { c.EmptySlot(rect); regions_.push_back({rect,{},false,bag,gear}); return; }
+  const bool rare=item==Item::Ward || item==Item::Watchguard || item==Item::Helm || item==Item::Shield;
   const bool hover=rect.Contains(mouseX_,mouseY_);
-  c.Frame(rect,{.08f,.105f,.12f,1},selectedSlot || hover?gold:Equipped(s,item) && present?Color{.28f,.48f,.43f,1}:border);
-  if (present) {
-   Icon(c,{rect.x+5,rect.y+4,rect.w-10,rect.h-10},item);
-   if (Equipped(s,item)) c.RectFill({rect.x+3,rect.y+rect.h-5,rect.w-6,2},{.36f,.65f,.51f,1});
-   if (item==Item::Potion) c.Text(rect.x+rect.w-22,rect.y+rect.h-23,std::to_string(s.Potions()),17);
-   regions_.push_back({rect,{Action::SelectItem,static_cast<int>(item)},true});
-  }
+  c.Frame(rect,{.03f,.065f,.065f,1},hover || selectedSlot?gold:rare?Color{.35f,.64f,.31f,1}:Color{.44f,.43f,.25f,1});
+  c.Gradient({rect.x+4,rect.y+4,rect.w-8,rect.h-8},rare?Color{.14f,.31f,.20f,1}:Color{.14f,.22f,.25f,1},{.025f,.045f,.06f,1});
+  for (int i=0;i<5;++i) c.Line(rect.x+rect.w*.5f,rect.y+rect.h*.5f,rect.x+5+i*(rect.w-10)/4,rect.y+5,1,{.52f,.60f,.39f,.15f});
+  Icon(c,{rect.x+3,rect.y+3,rect.w-6,rect.h-6},item,dragging_ && item==dragItem_?.35f:1.f);
+  if (Equipped(s,item)) c.Diamond(rect.x+rect.w-5,rect.y+5,3,3,{.66f,.92f,.39f,1});
+  if (item==Item::Potion) c.Text(rect.x+rect.w-15,rect.y+rect.h-16,std::to_string(bag>=0?s.Items().Bag()[bag].count:s.Potions()),12,{1,.94f,.57f,1});
+  regions_.push_back({rect,{Action::SelectItem,static_cast<int>(item)},true,bag,gear});
  };
- const auto itemDetails=[&](Rect rect,Item item) {
-  const auto& info=Describe(item);
-  Icon(c,{rect.x,rect.y,62,62},item);
-  c.Text(rect.x+77,rect.y+2,info.name,22,item==Item::Ward || item==Item::Watchguard?Color{.52f,.76f,.54f,1}:ink);
-  c.Text(rect.x+77,rect.y+32,info.type,15,muted);
-  c.RectFill({rect.x,rect.y+76,rect.w,1},border);
-  c.Text(rect.x,rect.y+94,info.description,16,ink);
-  std::string stats;
-  if (item==Item::Starter || item==Item::Watchguard) {
-   const bool reward=item==Item::Watchguard;
-   stats="Strike damage   "+std::to_string((reward?27:20)+3*(s.Level()-1))+"\nHeavy damage   "+std::to_string((reward?45:35)+5*(s.Level()-1));
-  } else if (item==Item::Ward) stats="Incoming damage reduced by 2\nAutomatically equipped quest reward";
-  else if (item==Item::Potion) stats="In bag   "+std::to_string(s.Potions())+"\nCooldown   3 seconds";
-  else stats=item==Item::Tunic && s.HasWardArmor()?"Worn beneath ward armor\nNo additional combat bonuses":"Starting outfit\nNo additional combat bonuses";
-  c.Text(rect.x,rect.y+166,stats,17,gold);
-  const bool usable=CanUse(s,item);
-  std::string label=item==Item::Potion?"Drink draught":Equipped(s,item)?"Equipped":"Equip item";
-  if (item!=Item::Potion && item!=Item::Starter && item!=Item::Watchguard) label="Part of your outfit";
-  button({rect.x,rect.y+250,rect.w,42},label,Action::UseItem,static_cast<int>(item),usable);
-  if (item==Item::Potion && !usable) c.Wrap(rect.x,rect.y+306,rect.w,s.Health()<=0?"Return to Dawnwatch before using items.":s.Health()>=s.MaxHealth()?"You are already at full health.":"Potion is cooling down.",15,muted);
- };
- // Persistent HUD leaves the centre of the world available for movement and combat.
- c.Frame({24,24,280,96}); c.Oval(57,67,23,29,{.20f,.32f,.37f,1});
- c.Text(43,51,std::to_string(s.Level()),24,gold);
- c.Text(94,33,"Frontier guard",20); c.Text(94,58,"Dawnwatch expedition",13,muted);
- c.RectFill({94,83,191,13},{.13f,.18f,.17f,1}); c.RectFill({94,83,191*s.Health()/s.MaxHealth(),13},{.29f,.53f,.37f,1});
- c.Center(94,79,191,std::to_string(int(s.Health()))+" / "+std::to_string(int(s.MaxHealth())),13);
- const float xp=s.Level()==3?1.f:float(s.Experience()-s.LevelStartExperience())/(s.NextLevelExperience()-s.LevelStartExperience());
- c.RectFill({94,103,191,3},{.20f,.20f,.27f,1}); c.RectFill({94,103,191*xp,3},{.57f,.49f,.69f,1});
- if (s.Target()>=0) {
-  const auto& target=s.Enemies()[s.Target()]; c.Frame({453,24,310,78});
-  c.Text(469,33,target.Name(),20); c.Text(469,60,target.windup>0?"Preparing attack - move or interrupt":"Selected target",13,target.windup>0?gold:muted);
-  c.RectFill({469,84,278,6},{.20f,.12f,.12f,1}); c.RectFill({469,84,278*target.health/target.MaxHealth(),6},{.64f,.24f,.20f,1});
+ const auto blockWindow=[&](Rect rect) { regions_.push_back({rect,{},false}); c.Window(rect); };
+ const auto close=[&](Rect rect,Panel which) { button(rect,"X",Action::Close,int(which)); };
+
+ // Carved unit frame, circular survey and compact combat dock.
+ c.Window({18,23,276,72});
+ c.Oval(49,58,27,29,{.04f,.07f,.025f,1}); c.Ring(49,58,26,gold,2); c.Ring(49,58,21,border,2);
+ c.Diamond(49,58,17,21,{.18f,.28f,.13f,1}); c.Center(25,42,48,std::to_string(s.Level()),25,gold);
+ c.Banner({77,18,208,27},"Frontier guard",16);
+ c.RectFill({84,53,194,19},{.025f,.045f,.02f,1});
+ c.Gradient({86,55,190*s.Health()/s.MaxHealth(),15},{.42f,.62f,.20f,1},{.12f,.29f,.085f,1});
+ c.Center(84,52,194,std::to_string(int(s.Health()))+" / "+std::to_string(int(s.MaxHealth())),13);
+ c.Text(87,77,"Dawnwatch expedition",12,muted);
+ if (s.TargetActor()) {
+  const auto& target=*s.TargetActor(); c.Window({475,26,278,62}); c.Banner({487,20,254,26},target.Name(),16);
+  c.RectFill({491,52,246,14},{.12f,.035f,.02f,1});
+  c.Gradient({493,54,242*target.health/target.MaxHealth(),10},{.74f,.30f,.13f,1},{.35f,.06f,.03f,1});
+  c.Center(479,70,270,target.windup>0?"Incoming strike - move!":"Selected target",12,target.windup>0?gold:muted);
  }
- c.Frame({1062,24,194,202}); Atlas(c,s,{1070,49,178,163},true,hasWaypoint,waypoint);
- c.Text(1073,26,"Dawnwatch",16,gold); c.Text(1230,26,"N",15);
- regions_.push_back({{1062,24,194,202},{Action::Map},true});
- c.RectFill({990,236,266,181},{.025f,.04f,.05f,.74f});
- c.Text(1001,246,"EXPEDITION",14,gold); c.RectFill({1001,270,255,1},border);
- c.Wrap(1001,280,248,s.Objective(),16,ink,4);
- const auto objective=s.ObjectivePosition();
- if (s.AnchorState()!=rpg::AnchorQuest::Complete)
-  c.Text(1001,370,std::to_string(int(std::ceil(std::hypot(s.Player().x-objective.x,s.Player().z-objective.z))))+" m to objective",14,muted);
- if (hasWaypoint) c.Text(1001,396,"Waypoint  "+std::to_string(int(std::ceil(std::hypot(s.Player().x-waypoint.x,s.Player().z-waypoint.z))))+" m",14,{.56f,.76f,.88f,1});
- c.Frame({404,614,414,86});
- for (int i=0;i<5;++i) {
-  const float x=414+i*80.f; Rect rect{x,624,66,58};
-  c.Frame(rect,{.10f,.14f,.17f,1},rect.Contains(mouseX_,mouseY_)?gold:border);
+ c.Oval(1170,94,81,81,{.025f,.04f,.02f,1});
+ Atlas(c,s,{1096,20,148,148},true,hasWaypoint,waypoint);
+ c.Ring(1170,94,77,{.30f,.33f,.10f,1},5); c.Ring(1170,94,80,gold,1.5f); c.Ring(1170,94,74,gold,1);
+ for (int i=0;i<16;++i) {
+  const float a=i*6.2831853f/16;
+  c.Line(1170+std::sin(a)*75,94+std::cos(a)*75,1170+std::sin(a)*79,94+std::cos(a)*79,1,gold);
+ }
+ c.Diamond(1170,17,6,9,{.39f,.51f,.16f,1}); c.Text(1164,23,"N",12);
+ c.Banner({1057,3,209,25},"Dawnwatch",16);
+ c.Banner({1118,158,104,23},"Atlas  [M]",12);
+ regions_.push_back({{1090,13,160,168},{Action::Map},true});
+ if (!inventoryOpen || panel!=Panel::None) {
+  c.Text(1013,202,"EXPEDITION",14,gold); c.Line(1010,226,1260,226,1,border);
+  c.Wrap(1013,236,244,s.Objective(),15,ink,4);
+  const auto objective=s.ObjectivePosition();
+  if (s.AnchorState()!=rpg::AnchorQuest::Complete)
+   c.Text(1013,332,std::to_string(int(std::ceil(std::hypot(s.Player().x-objective.x,s.Player().z-objective.z))))+" m to objective",13,gold);
+  if (hasWaypoint) c.Text(1013,355,"Waypoint  "+std::to_string(int(std::ceil(std::hypot(s.Player().x-waypoint.x,s.Player().z-waypoint.z))))+" m",13,{.56f,.76f,.88f,1});
+ }
+ if (s.Sparring() || s.SparringReportTime()>0) {
+  c.Window({470,105,506,81});
+  c.Text(485,113,s.Sparring()?"SPARRING  /  "+std::to_string(int(std::ceil(s.SparringSeconds())))+" seconds":s.SparringResult(),17,gold);
+  c.Text(485,141,"Dealt "+std::to_string(s.SparringDamageDealt())+"  /  Taken "+std::to_string(s.SparringDamageTaken())+"  /  No XP or loot",13);
+  c.Text(485,164,s.Sparring()?"E stops. Nonlethal. Potions are consumed normally.":"Health and consumables are not refunded. E at the post starts again.",11,muted);
+ }
+ c.Gradient({0,704,1280,16},{.13f,.20f,.085f,1},{.035f,.06f,.03f,1}); c.Line(0,704,1280,704,2,border);
+ for (float x=14;x<1280;x+=32) c.Scroll(x,706,1,.5f);
+ const float xp=s.Level()==3?1.f:float(s.Experience()-s.LevelStartExperience())/(s.NextLevelExperience()-s.LevelStartExperience());
+ c.Frame({439,645,403,7}); c.RectFill({442,648,397*xp,2},{.55f,.63f,.29f,1});
+ c.Window({437,655,406,55}); c.Scroll(420,676,-1,1.5f); c.Scroll(860,676,1,1.5f);
+ for (int i=0;i<9;++i) {
+  const float x=447+i*43.f; const Rect rect{x,662,39,40};
+  if (i>=5) { c.EmptySlot(rect); continue; }
+  c.Frame(rect,{.08f,.12f,.055f,1},rect.Contains(mouseX_,mouseY_)?gold:border);
+  c.Gradient({x+4,666,31,32},i==3?Color{.16f,.36f,.16f,1}:Color{.25f,.19f,.10f,1},{.035f,.06f,.03f,1});
   if (i==3) {
-   c.Oval(x+33,652,19,19,{.16f,.34f,.27f,1});
-   c.RectFill({x+29,638,8,28},{.62f,.79f,.55f,1}); c.RectFill({x+19,648,28,8},{.62f,.79f,.55f,1});
+   c.Oval(x+20,682,13,13,{.20f,.39f,.17f,1});
+   c.RectFill({x+17,671,6,22},{.76f,.91f,.43f,1}); c.RectFill({x+9,679,22,6},{.76f,.91f,.43f,1});
   } else {
-   Icon(c,{x+11,625,43,45},i<2?Item::Starter:i==4?Item::Potion:Item::Boots);
-   if (i==1) { c.Line(x+14,647,x+48,661,3,gold); c.Line(x+16,642,x+19,653,3,gold); }
+   Icon(c,{x+2,663,35,35},i<2?Item::Starter:i==4?Item::Potion:Item::Boots);
+   if (i==1) c.Line(x+6,679,x+31,690,2,{.94f,.41f,.12f,1});
   }
-  const bool ready=i<4?std::string(s.AbilityStatus(i))=="READY":CanUse(s,Item::Potion);
-  if (!ready) c.RectFill({rect.x+1,rect.y+1,rect.w-2,rect.h-2},{.02f,.025f,.03f,.52f});
+  const bool ready=panel!=Panel::Merchant && (i<4?std::string(s.AbilityStatus(i))=="READY":CanUse(s,Item::Potion));
+  if (!ready) c.RectFill({x+3,665,33,34},{.02f,.025f,.01f,.56f});
   const float cooldown=i<4?s.Cooldown(i):s.PotionCooldown();
-  if (cooldown>0) c.Center(x,636,66,std::to_string(int(std::ceil(cooldown))),22);
-  c.Text(x+4,625,i<4?std::to_string(i+1):"Q",13,gold);
-  static const char* names[]={"Strike","Heavy","Dash","Mend","Potion"}; c.Center(x,682,66,names[i],12,muted);
+  if (cooldown>0) c.Center(x,675,39,std::to_string(int(std::ceil(cooldown))),19);
+  c.Text(x+3,662,i<4?std::to_string(i+1):"Q",12,{1,.96f,.73f,1});
   regions_.push_back({rect,{i<4?Action::Ability:Action::UseItem,i<4?i:static_cast<int>(Item::Potion)},ready});
  }
- button({974,658,52,38},"C",Action::Character); button({1031,658,52,38},"I",Action::Inventory);
- button({1088,658,52,38},"M",Action::Map); button({1145,658,52,38},"J",Action::Journal);
- button({1202,658,54,38},"Esc",Action::Menu);
- c.Text(26,664,std::to_string(s.Gold())+" gold",18,gold);
- c.Text(26,690,"WASD move   RMB orbit   F11 display",12,muted);
- c.Wrap(26,553,840,s.Message(),15,ink,2);
+ const std::pair<Action,const char*> shortcuts[]={{Action::Character,"C"},{Action::Inventory,"I"},{Action::Map,"M"},{Action::Journal,"J"},{Action::Menu,"Esc"}};
+ for (int i=0;i<5;++i) button({1067+i*40.f,671,37,32},shortcuts[i].second,shortcuts[i].first);
+ c.Text(22,674,std::to_string(s.Gold())+" gold",16,gold);
+ c.Text(22,695,"WASD  Move     RMB  Orbit     F11  Display",11,muted);
+ if (!characterOpen) c.Wrap(22,578,405,s.Message(),14,ink,3);
  if (panel==Panel::None && s.Health()>0) {
   const auto prompt=s.InteractionPrompt();
-  if (!prompt.empty()) { const float w=std::min(680.f,c.Width(prompt,18)+34); c.Frame({640-w/2,577,w,30}); c.Center(640-w/2,579,w,prompt,18,gold); }
-  if (s.Channeling()) { c.RectFill({470,607,340,4},border); c.RectFill({470,607,340*s.ChannelProgress(),4},blue); }
+  if (!prompt.empty()) { const float w=std::min(510.f,c.Width(prompt,14)+30); c.Frame({640-w/2,609,w,27}); c.Center(640-w/2,614,w,prompt,14,gold); }
+  if (s.Channeling()) { c.RectFill({470,640,340,3},border); c.RectFill({470,640,340*s.ChannelProgress(),3},blue); }
  }
- if (panel!=Panel::None) {
-  c.RectFill({0,0,1280,720},{0,0,0,.38f});
-  // Only the active panel receives pointer events; HUD buttons cannot click through it.
-  regions_.clear();
+
+ // Independent side windows: no world dimming, keyboard movement remains live.
+ if (characterOpen) {
+  blockWindow({12,116,438,500});
+  c.Banner({30,106,265,31},"Frontier guard",19); close({420,121,24,24},Panel::Character);
+  c.Center(30,148,265,"Level "+std::to_string(s.Level())+"  /  Dawnwatch guard",13);
+  c.Frame({65,176,188,329},{.025f,.045f,.025f,1});
+  for (int i=0;i<16;++i) {
+   const float x=69+i*11.f;
+   c.Gradient({x,180,11,280},{.12f+.045f*std::sin(i*1.7f),.028f,.022f,1},{.024f,.043f,.023f,1});
+  }
+  for (int row=0;row<4;++row) for (int column=0;column<5;++column)
+   c.Frame({69+column*35.f,462+row*9.f,34,8},{.13f,.18f,.105f,1},{.17f,.22f,.12f,1});
+  c.Oval(159,474,63,12,{.01f,.02f,.01f,.7f});
+  const auto p=c.P(70,181);
+  if (renderer.BeginPortrait(p.x,p.y,178*c.layout.scale/renderer.Width(),316*c.layout.scale/renderer.Height())) {
+   DrawCharacter(renderer,{0,0},0,previewYaw+std::sin(time*.35f)*.05f,{.22f,.37f,.54f,1},0,0,CharacterOutfit::From(s.Items()));
+   renderer.EndPortrait();
+  }
+  const Item worn[]={s.Items().Worn(rpg::GearSlot::Chest),s.Items().Worn(rpg::GearSlot::Legs),s.Items().Worn(rpg::GearSlot::Feet)};
+  const char* labels[]={"Chest","Legs","Feet"};
+  for (int i=0;i<3;++i) { slot({23,190+i*100.f,38,40},worn[i],false,-1,i+1); c.Center(18,234+i*100.f,48,labels[i],11,muted); }
+  slot({258,190,38,40},s.Items().Worn(rpg::GearSlot::Weapon),false,-1,0); c.Center(253,234,48,"Weapon",10,muted);
+  slot({258,290,38,40},s.Items().Worn(rpg::GearSlot::Offhand),false,-1,int(rpg::GearSlot::Offhand));
+  slot({258,390,38,40},s.Items().Worn(rpg::GearSlot::Head),false,-1,int(rpg::GearSlot::Head));
+  c.Center(251,334,52,"Off hand",10,muted); c.Center(251,434,52,"Head",10,muted);
+  c.Banner({69,514,180,26},s.WardArmorEquipped()?"Astral ward":"Frontier outfit",14);
+  c.Text(28,552,"Drag gear to your bag. Right-click to remove.",11,muted);
+  button({26,579,34,27},"<",Action::RotatePreview,-1);
+  button({64,579,63,27},"Front",Action::RotatePreview,0);
+  button({131,579,34,27},">",Action::RotatePreview,1);
+  button({174,579,117,27},inventoryOpen?"Close bag [I]":"Open bag [I]",Action::Inventory);
+  c.Frame({304,152,132,449},{.075f,.11f,.055f,1});
+  c.Center(304,160,132,"Attributes",16,gold);
+  const char* names[]={"Health","Armor","Strike","Heavy"};
+  const std::string values[]={std::to_string(int(s.MaxHealth())),std::to_string(int(s.DamageReduction())),std::to_string(int(s.StrikeDamage())),std::to_string(int(s.HeavyDamage()))};
+  for (int i=0;i<4;++i) {
+   const float x=310+(i%2)*60.f,y=190+(i/2)*83.f;
+   c.Frame({x,y,58,78},{.14f,.18f,.075f,1});
+   c.Center(x,y+5,58,names[i],11);
+   if (i==0) { c.Diamond(x+29,y+39,13,15,{.56f,.38f,.13f,1}); c.Diamond(x+29,y+39,8,10,gold); }
+   else if (i==1) { c.Oval(x+29,y+38,12,16,gold); c.Oval(x+29,y+38,8,12,{.28f,.32f,.11f,1}); }
+   else Icon(c,{x+14,y+23,31,31},i==2?Item::Starter:Item::Watchguard);
+   c.Center(x,y+57,58,values[i],16,gold);
+  }
+  c.Line(312,366,428,366,1,border); c.Center(308,378,124,"Progression",14,gold);
+  c.Text(314,408,"XP",12,muted); c.Text(367,408,std::to_string(s.Experience()),13);
+  c.Text(314,435,"Next",12,muted); c.Text(367,435,s.Level()==3?"Max":std::to_string(s.NextLevelExperience()),13);
+  c.Text(314,466,"Gold",12,muted); c.Text(367,466,std::to_string(s.Gold()),13,gold);
+  c.Text(314,493,"Potions",12,muted); c.Text(389,493,std::to_string(s.Potions()),13);
+  c.Wrap(314,536,114,"Equipment changes your combat attributes.",12,muted,4);
+ }
+ if (inventoryOpen) {
+  blockWindow({994,196,276,452}); c.Banner({1023,186,218,31},"Bag",19); close({1239,201,24,24},Panel::Inventory);
+  c.Text(1013,231,"Inventory",13,muted);
+  button({1183,223,69,25},"Sort",Action::InventoryChange);
+  regions_.back().event.inventory.action=rpg::InventoryAction::Sort;
+  if (!Owned(s,selected)) selected=Item::Starter;
+  for (int i=0;i<24;++i) {
+   const Rect rect{1010+float(i%6)*40,255+float(i/6)*42,37,39};
+   const auto item=s.Items().Bag()[i].item;
+   slot(rect,item,selected==item,i);
+  }
+  c.Frame({1008,430,248,27},{.055f,.07f,.025f,1}); c.Text(1017,436,std::to_string(s.Items().UsedSlots())+" / 24",12,muted);
+  c.Oval(1189,443,5,5,gold); c.Text(1200,434,std::to_string(s.Gold()),14,gold);
+  const auto& info=Describe(selected);
+  c.Text(1011,468,info.name,16,selected==Item::Watchguard || selected==Item::Ward?Color{.63f,.85f,.43f,1}:ink);
+  c.Text(1011,493,info.type,12,muted);
+  std::string detail=info.description;
+  const auto delta=[](float value) { return (value>=0?std::string("+"):std::string())+std::to_string(int(value)); };
+  if (info.slot==rpg::GearSlot::Weapon) {
+   detail="Strike "+std::to_string(int(info.strike)+3*(s.Level()-1))+"  /  Heavy "+std::to_string(int(info.heavy)+5*(s.Level()-1))+" damage.\n";
+   const auto& current=Describe(s.Items().Worn(info.slot));
+   detail+=Equipped(s,selected)?"Equipped. Removing uses unarmed damage.":"Compared to worn: "+delta(info.strike-current.strike)+" / "+delta(info.heavy-current.heavy)+".";
+  } else if (info.slot!=rpg::GearSlot::None) {
+   detail="Damage reduction: "+std::to_string(int(info.armor))+".\n";
+   detail+=Equipped(s,selected)?"Equipped. Right-click to remove.":"Compared to worn: "+delta(info.armor-Describe(s.Items().Worn(info.slot)).armor)+".\nRight-click or drag onto its gear slot.";
+  }
+  c.Wrap(1011,520,238,detail,13,ink,4);
+  const bool usable=CanUse(s,selected);
+  std::string label=selected==Item::Potion?(s.Health()<=0?"Defeated":s.Health()>=s.MaxHealth()?"Full health":s.PotionCooldown()>0?"Cooling down":"Drink draught"):
+   Equipped(s,selected)?"Unequip":"Equip";
+  button({1011,606,239,29},label,Action::UseItem,int(selected),usable);
+ }
+
+ if (panel==Panel::Merchant) {
+  // Side windows remain interactive while the service window captures movement.
+  blockWindow({470,198,506,430}); c.Banner({487,188,472,35},"Dawnwatch quartermaster",21);
+  close({939,226,24,24},Panel::Merchant);
+  c.Text(489,234,"FIELD SUPPLIES",13,gold); c.Text(755,234,std::to_string(s.Gold())+" gold available",14,gold);
+  for (int i=0;i<int(rpg::shopOffers.size());++i) {
+   const auto& offer=rpg::shopOffers[i]; const auto& info=Describe(offer.item); const float y=264+i*94.f;
+   c.Frame({487,y,471,88},{.065f,.11f,.06f,1}); c.Frame({496,y+13,53,57},{.11f,.20f,.14f,1},gold);
+   Icon(c,{501,y+18,43,47},offer.item);
+   c.Text(560,y+9,info.name,17,ink);
+   c.Text(560,y+33,"Stock "+std::to_string(s.ShopStock(i))+" / "+std::to_string(offer.stock)+"   |   "+info.type,11,muted);
+   const bool available=std::string(s.PurchaseStatus(i))=="Available";
+   c.Wrap(560,y+54,285,available?(offer.item==Item::Potion?"Restores 40 health. Stored in your bag.":"Protection +"+std::to_string(int(info.armor))+" while equipped. Stored in your bag."):s.PurchaseStatus(i),12,available?ink:gold,2);
+   button({854,y+12,92,30},"Buy "+std::to_string(offer.price)+" g",Action::Purchase,i,available);
+  }
+  c.Wrap(490,554,465,merchantNotice.empty()?"Limited expedition stock. Gear unlocks after the frontier patrol. Purchases are final; loading does not restock supplies.":merchantNotice,13,ink,3);
+  c.Text(490,605,"E or X closes trade. C opens your equipment.",12,muted);
+ } else if (panel!=Panel::None) {
+  c.RectFill({0,0,1280,720},{0,0,0,.38f}); regions_.clear();
   if (panel==Panel::Menu) {
-   c.Frame({432,82,416,560}); c.Center(432,108,416,"MEDITERRANEAN",30,gold);
-   c.Center(432,149,416,"Dawnwatch expedition",17,muted);
+   c.Window({432,82,416,560}); c.Banner({457,99,366,41},"MEDITERRANEAN",25);
+   c.Center(432,153,416,"Dawnwatch expedition",16,muted);
    button({474,197,332,44},"Return to game",Action::Close);
    button({474,251,161,42},"Character",Action::Character); button({645,251,161,42},"Inventory",Action::Inventory);
    button({474,303,161,42},"Atlas",Action::Map); button({645,303,161,42},"Journal",Action::Journal);
-   button({474,355,332,42},fullscreen?"Display: Fullscreen  /  F11":"Display: Windowed  /  F11",Action::Fullscreen);
+   button({474,355,332,42},fullscreen?"Fullscreen  /  F11":"Windowed  /  F11",Action::Fullscreen);
    button({474,407,161,42},"Save game",Action::Save); button({645,407,161,42},"Load game",Action::Load);
    button({474,469,332,42},"Exit to desktop",Action::Quit);
-   c.Center(432,545,416,"The world continues while this menu is open.",15,gold);
-   c.Center(432,571,416,"Esc returns to the game. Progress saves with F5.",14,muted);
-   if (!menuNotice.empty()) c.Center(432,605,416,menuNotice,14,gold);
+   c.Center(432,545,416,"The world continues while this menu is open.",14,gold);
+   c.Center(432,571,416,"Esc returns to the game. Save progress with F5.",13,muted);
+   if (!menuNotice.empty()) c.Center(432,605,416,menuNotice,13,gold);
    return;
   }
   const bool map=panel==Panel::Map;
   const Rect frame=map?Rect{130,44,1020,604}:Rect{180,70,920,572};
-  c.Frame(frame);
-  const char* title=panel==Panel::Inventory?"EXPEDITION BAG":panel==Panel::Character?"FRONTIER GUARD":panel==Panel::Map?"ATLAS OF DAWNWATCH":"EXPEDITION JOURNAL";
-  c.Text(frame.x+26,frame.y+18,title,25,gold); button({frame.x+frame.w-53,frame.y+16,32,32},"X",Action::Close);
-  c.RectFill({frame.x+22,frame.y+61,frame.w-44,1},border);
-  if (panel==Panel::Inventory) {
-   c.Text(209,148,"Belongings",19); c.Text(209,177,"Select an item to inspect it.",14,muted);
-   std::vector<Item> items;
-   for (Item item : {Item::Starter,Item::Watchguard,Item::Potion,Item::Tunic,Item::Trousers,Item::Boots,Item::Ward}) if (Owned(s,item)) items.push_back(item);
-   if (!Owned(s,selected)) selected=Item::Starter;
-   for (int i=0;i<24;++i) {
-    Rect rect{209+float(i%6)*65,210+float(i/6)*70,57,60};
-    if (i<int(items.size())) slot(rect,items[i],true,selected==items[i]); else c.Frame(rect,{.055f,.075f,.09f,1});
-   }
-   c.Text(209,505,std::to_string(items.size())+" / 24 slots",15,muted); c.Text(209,539,std::to_string(s.Gold())+" gold",22,gold);
-   c.RectFill({622,153,1,412},border); itemDetails({654,164,410,350},selected);
-   c.Text(209,600,"Equipped gear has a green edge. Consumables show the stack count.",15,muted);
-  } else if (panel==Panel::Character) {
-   c.Text(210,148,"Level "+std::to_string(s.Level())+"  /  Dawnwatch guard",18);
-   c.Frame({292,186,282,370},{.065f,.095f,.12f,1});
-   // Render the same dressed model used in the world, with the actual equipped weapon/armor.
-   const auto p=c.P(306,193);
-   if (renderer.BeginPortrait(p.x,p.y,254*c.layout.scale/renderer.Width(),352*c.layout.scale/renderer.Height())) {
-    DrawCharacter(renderer,{0,0},0,std::sin(time*.35f)*.12f,{.22f,.37f,.54f,1},0,0,s.HasWardArmor(),s.RewardWeaponEquipped());
-    renderer.EndPortrait();
-   }
-   slot({211,200,64,68},s.HasWardArmor()?Item::Ward:Item::Tunic,true);
-   c.Text(217,272,"Chest",13,muted);
-   slot({211,320,64,68},Item::Trousers,true); c.Text(220,392,"Legs",13,muted);
-   slot({211,440,64,68},Item::Boots,true); c.Text(219,512,"Feet",13,muted);
-   slot({591,200,64,68},s.RewardWeaponEquipped()?Item::Watchguard:Item::Starter,true); c.Text(590,272,"Main hand",13,muted);
-   c.Frame({591,320,64,68},{.05f,.07f,.08f,1}); c.Center(591,338,64,"--",22,muted); c.Text(592,392,"Off hand",13,muted);
-   c.Frame({591,440,64,68},{.05f,.07f,.08f,1}); c.Center(591,458,64,"--",22,muted); c.Text(607,512,"Head",13,muted);
-   c.RectFill({685,157,1,405},border);
-   c.Text(714,160,"ATTRIBUTES",15,gold);
-   const std::pair<std::string,std::string> stats[]={
-    {"Health",std::to_string(int(s.Health()))+" / "+std::to_string(int(s.MaxHealth()))},
-    {"Experience",std::to_string(s.Experience())},
-    {"Strike damage",std::to_string(int(s.StrikeDamage()))},
-    {"Heavy damage",std::to_string(int(s.HeavyDamage()))},
-    {"Damage reduction",std::to_string(int(s.DamageReduction()))}};
-   for (int i=0;i<5;++i) { c.Text(714,202+i*44.f,stats[i].first,17,muted); c.Text(957,202+i*44.f,stats[i].second,17); }
-   c.Wrap(714,448,326,"Equipment slots show your current outfit. Click a filled slot to inspect its item in the bag.",16,muted,4);
-   button({714,552,325,42},"Open inventory",Action::Inventory);
-   c.Text(211,600,"Ward armor and the watchguard blade appear on the character when equipped.",15,muted);
-  } else if (panel==Panel::Map) {
+  c.Window(frame); c.Banner({frame.x+27,frame.y-9,frame.w-85,39},map?"Atlas of Dawnwatch":"Expedition journal",23);
+  close({frame.x+frame.w-38,frame.y+9,27,27},panel);
+  if (map) {
    const Rect mapRect{155,126,645,480}; c.Frame({151,122,653,488}); Atlas(c,s,mapRect,false,hasWaypoint,waypoint);
    regions_.push_back({mapRect,{Action::PlaceWaypoint},true});
-   c.Text(833,134,"DAWNWATCH ISLAND",19,gold); c.Text(833,166,"North-up local survey",15,muted);
-   c.Wrap(833,207,286,s.Objective(),18,ink,4);
-   const std::pair<Color,const char*> legend[]={{{.68f,.87f,1,1},"Your position and facing"},{gold,"Keeper / quest objective"},{{.72f,.20f,.15f,1},"Living raider"},{{.59f,.38f,.84f,1},"Astral anchor"}};
-   for (int i=0;i<4;++i) { c.Oval(842,333+i*33.f,4,4,legend[i].first); c.Text(858,322+i*33.f,legend[i].second,16,muted); }
-   c.Wrap(833,478,286,"Click traversable ground to place a waypoint. Right-click to clear it.",16,ink,3);
+   c.Text(833,134,"DAWNWATCH ISLAND",18,gold); c.Text(833,166,"North-up local survey",14,muted);
+   c.Wrap(833,207,286,s.Objective(),17,ink,4);
+   const std::pair<Color,const char*> legend[]={{{.68f,.87f,1,1},"Your position and facing"},{gold,"Keeper / quest objective"},{{.72f,.20f,.15f,1},"Living raider"},{{.59f,.38f,.84f,1},"Astral anchor"},{{.35f,.72f,.76f,1},"Sparring post"},{{.95f,.57f,.22f,1},"Quartermaster"}};
+   for (int i=0;i<6;++i) { c.Oval(842,320+i*27.f,4,4,legend[i].first); c.Text(858,309+i*27.f,legend[i].second,15,muted); }
+   c.Wrap(833,486,286,"Click traversable ground to place a waypoint. Right-click to clear it.",15,ink,3);
    if (hasWaypoint) button({833,562,286,39},"Clear waypoint",Action::ClearWaypoint);
-   c.Text(156,619,"Roads, buildings and markers follow the playable map. Scale: island 34 x 38 m.",14,muted);
+   c.Text(156,619,"Roads and markers follow the playable map. Island: 34 x 38 m.",13,muted);
   } else {
-   c.Frame({208,158,397,339}); c.Text(229,177,"01   Patrol the frontier",23);
-   c.Text(229,216,s.QuestState()==rpg::Quest::Complete?"COMPLETED":"FRONTIER PATROL",14,gold);
-   c.Wrap(229,257,348,"Speak to the gold beacon keeper. Defeat one raider north of the village, then return to claim your reward.",18,ink,5);
-   c.Text(229,390,"REWARD",14,gold); c.Text(229,419,"25 gold  /  60 XP\nWatchguard blade",18);
-   c.Frame({622,158,450,339}); c.Text(643,177,"02   Secure the astral anchor",23);
-   c.Text(643,216,s.AnchorState()==rpg::AnchorQuest::Complete?"COMPLETED":s.AnchorState()==rpg::AnchorQuest::Locked?"UNLOCKS AFTER THE PATROL":"ASTRAL ANCHOR",14,gold);
-   c.Wrap(643,257,402,"Clear all three raiders, stabilize the northern crystal for three seconds, then return to the keeper.",18,ink,5);
-   c.Text(643,390,"REWARD",14,gold); c.Text(643,419,"50 gold  /  120 XP\nAstral ward armor",18);
+   c.Frame({208,158,397,339}); c.Text(229,177,"01   Patrol the frontier",22);
+   c.Text(229,216,s.QuestState()==rpg::Quest::Complete?"COMPLETED":"FRONTIER PATROL",13,gold);
+   c.Wrap(229,257,348,"Speak to the gold beacon keeper. Defeat one raider north of the village, then return to claim your reward.",17,ink,5);
+   c.Text(229,390,"REWARD",13,gold); c.Text(229,419,"25 gold  /  60 XP\nWatchguard blade",17);
+   c.Frame({622,158,450,339}); c.Text(643,177,"02   Secure the astral anchor",22);
+   c.Text(643,216,s.AnchorState()==rpg::AnchorQuest::Complete?"COMPLETED":s.AnchorState()==rpg::AnchorQuest::Locked?"UNLOCKS AFTER THE PATROL":"ASTRAL ANCHOR",13,gold);
+   c.Wrap(643,257,402,"Clear all three raiders, stabilize the northern crystal for three seconds, then return to the keeper.",17,ink,5);
+   c.Text(643,390,"REWARD",13,gold); c.Text(643,419,"50 gold  /  120 XP\nAstral ward armor",17);
    button({734,545,338,43},"Show objective on the atlas",Action::Map);
-   c.Text(209,557,"Raiders defeated: "+std::to_string(s.DefeatedCount())+" / 3",18,muted);
-   c.Text(209,606,"The world remains active while reading the journal.",15,muted);
-  }
-  // Item hover information is drawn last and kept inside the design canvas.
-  for (const auto& region : regions_) if (region.event.action==Action::SelectItem && region.rect.Contains(mouseX_,mouseY_)) {
-   const Item item=static_cast<Item>(region.event.value); const auto& info=Describe(item);
-   const float x=std::clamp(mouseX_+17,8.f,954.f),y=std::clamp(mouseY_+20,8.f,596.f);
-   c.Frame({x,y,318,112},{.025f,.035f,.044f,.99f},gold); c.Text(x+13,y+9,info.name,20);
-   c.Text(x+13,y+39,info.type,14,muted); c.Text(x+13,y+70,Equipped(s,item)?"Equipped  /  Click to inspect":"Click to inspect",15,gold);
-   break;
+   c.Text(209,557,"Raiders defeated: "+std::to_string(s.DefeatedCount())+" / 3",17,muted);
+   c.Text(209,606,"The world remains active while reading the journal.",14,muted);
   }
  }
- if (panel==Panel::None) {
-  for (const auto& region : regions_) if (region.rect.Contains(mouseX_,mouseY_) &&
-    (region.event.action==Action::Ability || region.event.action==Action::UseItem)) {
-   const int ability=region.event.value;
-   const bool potion=region.event.action==Action::UseItem;
+ // Reverse hit order matches pointer dispatch: covered cells never leak tooltips.
+ for (auto it=regions_.rbegin();!dragging_ && it!=regions_.rend();++it) if (it->rect.Contains(mouseX_,mouseY_)) {
+  if (it->event.action==Action::SelectItem) {
+   const Item item=static_cast<Item>(it->event.value); const auto& info=Describe(item);
+   const float x=mouseX_>970?673.f:std::clamp(mouseX_+21,460.f,960.f),y=std::clamp(mouseY_+12,8.f,548.f);
+   c.Window({x,y,309,156}); c.Text(x+14,y+10,info.name,18,gold);
+   c.Text(x+14,y+39,info.type,12,muted); c.Wrap(x+14,y+64,280,info.description,13,ink,3);
+   c.Text(x+14,y+128,Equipped(s,item)?"Right-click: remove  /  Drag: move":item==Item::Potion?"Right-click: drink  /  Drag: move":"Right-click: equip  /  Drag: move",12,gold);
+  } else if (panel!=Panel::Merchant && (it->event.action==Action::Ability || it->event.action==Action::UseItem) && it->rect.y>650) {
+   const bool potion=it->event.action==Action::UseItem; const int ability=it->event.value;
    static const char* names[]={"Strike","Heavy strike","Dash","Mend"};
-   const std::string name=potion?"Healing draught":names[ability];
    const std::string detail=potion?"Restores up to 40 health.":ability==0?std::to_string(int(s.StrikeDamage()))+" melee damage.":
-     ability==1?std::to_string(int(s.HeavyDamage()))+" damage. Interrupts a windup.":ability==2?"Dash in your facing direction.":"Restores up to 35 health.";
+    ability==1?std::to_string(int(s.HeavyDamage()))+" damage. Interrupts a windup.":ability==2?"Dash in your facing direction.":"Restores up to 35 health.";
    const std::string status=potion?(s.Health()<=0?"DEFEATED":s.Potions()==0?"NO POTIONS":s.Health()>=s.MaxHealth()?"FULL HEALTH":s.PotionCooldown()>0?"COOLDOWN":"READY"):s.AbilityStatus(ability);
-   const float x=std::clamp(region.rect.x-70,10.f,970.f);
-   c.Frame({x,483,300,116},{.025f,.035f,.044f,.99f},gold);
-   c.Text(x+14,492,name,21); c.Wrap(x+14,526,272,detail,16,muted,2); c.Text(x+14,571,status,13,gold);
+   const float x=std::clamp(it->rect.x-30,460.f,680.f);
+   c.Window({x,495,300,111}); c.Text(x+14,504,potion?"Healing draught":names[ability],19,gold);
+   c.Wrap(x+14,536,272,detail,14,ink,2); c.Text(x+14,581,status,12,muted);
+  }
+  break;
+ }
+ if (dragging_) {
+  for (auto it=regions_.rbegin();it!=regions_.rend();++it) if (it->rect.Contains(mouseX_,mouseY_)) {
+   bool compatible=it->bag>=0 || (dragBag_>=0 && it->gear==int(Describe(dragItem_).slot));
+   if (it->bag>=0 && dragGear_>=0) {
+    const auto replacement=s.Items().Bag()[it->bag].item;
+    compatible=replacement==Item::None || int(Describe(replacement).slot)==dragGear_;
+   }
+   if (it->bag>=0 || it->gear>=0) c.Frame(it->rect,{.1f,.2f,.1f,.15f},compatible?Color{.5f,.9f,.3f,1}:Color{.9f,.2f,.1f,1});
    break;
   }
+  c.Frame({mouseX_-21,mouseY_-21,42,42},{.04f,.08f,.04f,.8f},gold);
+  Icon(c,{mouseX_-19,mouseY_-19,38,38},dragItem_);
+ }
+ if (noticeTime>0 && panel==Panel::None) {
+  c.Frame({465,111,510,58},{.035f,.06f,.025f,.95f});
+  c.Wrap(477,123,486,inventoryNotice,14,ink,2);
  }
  if (s.Health()<=0 && panel==Panel::None) {
-  c.Frame({380,256,520,174}); c.Center(380,282,520,"Return to Dawnwatch",27,gold);
-  c.Center(380,328,520,"Press Enter to recover with your progress intact.",18);
-  c.Center(380,364,520,"Quests, equipment and collected loot are retained.",15,muted);
+  c.Window({460,285,510,146}); c.Banner({481,276,468,37},"Return to Dawnwatch",23);
+  c.Center(460,336,510,"Press Enter to recover with your progress intact.",17);
+  c.Center(460,374,510,"Quests, equipment and collected loot are retained.",14,muted);
  }
  if (debug) {
-  c.Frame({24,134,360,61}); c.Text(35,143,"Draws "+std::to_string(renderer.LastDrawCalls())+"   GPU "+std::to_string(renderer.GpuMilliseconds()).substr(0,5)+" ms",16);
-  c.Text(35,166,"Meshes "+std::to_string(renderer.MeshBytes()/1024)+" KiB   F2 HUD   F3 metrics",13,muted);
+  c.Frame({24,102,360,58}); c.Text(35,110,"Draws "+std::to_string(renderer.LastDrawCalls())+"   GPU "+std::to_string(renderer.GpuMilliseconds()).substr(0,5)+" ms",15);
+  c.Text(35,133,"Meshes "+std::to_string(renderer.MeshBytes()/1024)+" KiB   F2 HUD   F3 metrics",12,muted);
  }
 }
 }
-
-
