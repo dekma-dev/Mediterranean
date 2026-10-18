@@ -298,6 +298,15 @@ int main() {
     Require(click(1028,274).action==ui::Action::SelectItem,"Item slot did not receive a scaled click.");
     const auto equip=click(1110,620);
     Require(equip.action==ui::Action::UseItem && equip.value==int(ui::Item::Starter),"Equip button did not target the inspected item.");
+    const auto empty=click(1228,400);
+    Require(empty.action==ui::Action::SelectItem && empty.value==int(ui::Item::None),
+      "Clicking an empty bag cell must clear the old inspected item");
+    screen.selected=ui::Item(empty.value); screen.selectedBag=empty.inventory.source;
+    renderer.BeginFrame(); screen.Render(renderer,simulation,0,false); Require(renderer.EndFrame(false),"Empty selection render failed.");
+    Require(click(1110,620).action==ui::Action::None,
+      "Clearing inspection must disable the old item's action");
+    Require(screen.Pointer(layout.x+1228*layout.scale,layout.y+400*layout.scale,float(size.first),float(size.second),false,true).action==ui::Action::None,
+      "Right-clicking an empty bag cell must not issue an item-use command");
     screen.Show(ui::Panel::Character);
     renderer.BeginFrame(); screen.Render(renderer,simulation,0,false); Require(renderer.EndFrame(false),"Combined equipment/bag render failed.");
     Require(click(40,210).action==ui::Action::SelectItem && screen.inventoryOpen,"Worn gear inspection must leave the bag open.");

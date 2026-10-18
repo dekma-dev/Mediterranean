@@ -87,7 +87,7 @@ Event Interface::Pointer(float x,float y,float width,float height,bool clicked,b
   }
   if (rightClicked) {
     CancelDrag();
-    if (hit && hit->enabled && hit->event.action==Action::SelectItem) {
+    if (hit && hit->enabled && hit->event.action==Action::SelectItem && rpg::ValidItem(Item(hit->event.value))) {
       auto result=hit->event; result.action=Action::UseItem; return result;
     }
     return {};

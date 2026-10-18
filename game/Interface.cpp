@@ -280,7 +280,13 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   regions_.push_back({rect,{action,value},enabled});
  };
  const auto slot=[&](Rect rect,Item item,bool selectedSlot=false,int bag=-1,int gear=-1) {
-  if (item==Item::None) { c.EmptySlot(rect); regions_.push_back({rect,{},false,bag,gear}); return; }
+  if (item==Item::None) {
+   c.EmptySlot(rect);
+   // Empty bag cells clear inspection but remain valid drag destinations.
+   regions_.push_back({rect,{Action::SelectItem,int(Item::None)},bag>=0,bag,gear});
+   regions_.back().event.inventory.source=bag;
+   return;
+  }
   const bool rare=item==Item::Ward || item==Item::Watchguard || item==Item::Helm || item==Item::Shield;
   const bool hover=rect.Contains(mouseX_,mouseY_);
   c.Frame(rect,{.03f,.065f,.065f,1},hover || selectedSlot?gold:rare?Color{.35f,.64f,.31f,1}:Color{.44f,.43f,.25f,1});
@@ -414,29 +420,38 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   button({64,579,63,27},"Front",Action::RotatePreview,0);
   button({131,579,34,27},">",Action::RotatePreview,1);
   button({174,579,117,27},inventoryOpen?"Close bag [I]":"Open bag [I]",Action::Inventory);
-  c.Frame({304,152,132,449},{.075f,.11f,.055f,1});
-  c.Center(304,160,132,"Attributes",16,gold);
-  const char* names[]={"Health","Armor","Strike","Heavy"};
-  const std::string values[]={std::to_string(int(s.MaxHealth())),std::to_string(int(s.DamageReduction())),std::to_string(int(s.StrikeDamage())),std::to_string(int(s.HeavyDamage()))};
-  for (int i=0;i<4;++i) {
-   const float x=310+(i%2)*60.f,y=190+(i/2)*83.f;
-   c.Frame({x,y,58,78},{.14f,.18f,.075f,1});
-   c.Center(x,y+5,58,names[i],11);
-   if (i==0) { c.Diamond(x+29,y+39,13,15,{.56f,.38f,.13f,1}); c.Diamond(x+29,y+39,8,10,gold); }
-   else if (i==1) { c.Oval(x+29,y+38,12,16,gold); c.Oval(x+29,y+38,8,12,{.28f,.32f,.11f,1}); }
-   else Icon(c,{x+14,y+23,31,31},i==2?Item::Starter:Item::Watchguard);
-   c.Center(x,y+57,58,values[i],16,gold);
+  c.Frame({304,152,132,449},{.035f,.075f,.07f,1});
+  c.Center(304,163,132,"VITALITY",12,gold);
+  c.Center(310,186,120,std::to_string(int(s.Health()))+" / "+std::to_string(int(s.MaxHealth())),16);
+  c.Frame({314,211,112,12});
+  c.Gradient({317,214,106*std::clamp(s.Health()/s.MaxHealth(),0.f,1.f),6},{.56f,.27f,.20f,1},{.28f,.08f,.07f,1});
+  c.Center(304,239,132,"COMBAT",12,gold);
+  const char* names[]={"Armor","Strike","Heavy strike"};
+  const int values[]={int(s.DamageReduction()),int(s.StrikeDamage()),int(s.HeavyDamage())};
+  for (int i=0;i<3;++i) {
+   const float y=261+i*34.f;
+   c.Gradient({312,y,116,30},{.12f,.19f,.16f,1},{.055f,.10f,.09f,1});
+   c.Text(318,y+8,names[i],11,muted);
+   const auto value=std::to_string(values[i]); c.Text(420-c.Width(value,15),y+6,value,15,ink);
   }
-  c.Line(312,366,428,366,1,border); c.Center(308,378,124,"Progression",14,gold);
-  c.Text(314,408,"XP",12,muted); c.Text(367,408,std::to_string(s.Experience()),13);
-  c.Text(314,435,"Next",12,muted); c.Text(367,435,s.Level()==3?"Max":std::to_string(s.NextLevelExperience()),13);
-  c.Text(314,466,"Gold",12,muted); c.Text(367,466,std::to_string(s.Gold()),13,gold);
-  c.Text(314,493,"Potions",12,muted); c.Text(389,493,std::to_string(s.Potions()),13);
-  c.Wrap(314,536,114,"Equipment changes your combat attributes.",12,muted,4);
+  c.Line(314,374,426,374,1,border);
+  c.Center(304,387,132,"PROGRESSION",12,gold);
+  c.Center(310,409,120,"Level "+std::to_string(s.Level()),19);
+  const float xp=s.Level()==3?1.f:std::clamp(float(s.Experience()-s.LevelStartExperience())/
+    float(s.NextLevelExperience()-s.LevelStartExperience()),0.f,1.f);
+  c.Frame({314,438,112,10}); c.Gradient({317,441,106*xp,4},blue,{.13f,.25f,.42f,1});
+  c.Center(310,457,120,s.Level()==3?"Level cap reached":std::to_string(s.NextLevelExperience()-s.Experience())+" XP to next level",10,muted);
+  c.Line(314,484,426,484,1,border);
+  c.Text(316,501,"Gold",12,muted);
+  const auto wealth=std::to_string(s.Gold()); c.Text(422-c.Width(wealth,14),500,wealth,14,gold);
+  c.Text(316,528,"Potions",12,muted);
+  const auto potions=std::to_string(s.Potions()); c.Text(422-c.Width(potions,14),527,potions,14,ink);
+  int wornCount=0; for(int i=0;i<rpg::Inventory::gearCount;++i) wornCount+=s.Items().Worn(rpg::GearSlot(i))!=Item::None;
+  c.Center(310,572,120,std::to_string(wornCount)+" / 6 slots equipped",10,muted);
  }
  if (inventoryOpen) {
   blockWindow({994,196,276,452}); c.Banner({1023,186,218,31},"Bag",19); close({1239,201,24,24},Panel::Inventory);
-  c.Text(1013,231,"Inventory",13,muted);
+  c.Text(1013,231,"BELONGINGS",11,gold);
   button({1183,223,69,25},"Sort",Action::InventoryChange);
   regions_.back().event.inventory.action=rpg::InventoryAction::Sort;
   if (!Owned(s,selected)) selected=Item::None;
@@ -447,22 +462,25 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    const auto item=s.Items().Bag()[i].item;
    slot(rect,item,selectedBag==i,i);
   }
-  c.Frame({1008,430,248,27},{.055f,.07f,.025f,1}); c.Text(1017,436,std::to_string(s.Items().UsedSlots())+" / 24",12,muted);
+  c.Frame({1008,430,248,27},{.035f,.065f,.06f,1}); c.Text(1017,436,std::to_string(24-s.Items().UsedSlots())+" free slots",12,muted);
   c.Oval(1189,443,5,5,gold); c.Text(1200,434,std::to_string(s.Gold()),14,gold);
   const auto& info=Describe(selected);
-  c.Text(1011,468,info.name,16,selected==Item::Watchguard || selected==Item::Ward?Color{.63f,.85f,.43f,1}:ink);
-  c.Text(1011,493,info.type,12,muted);
+  c.Frame({1008,464,248,104},{.025f,.055f,.05f,1});
+  if(selected!=Item::None) Icon(c,{1017,473,30,30},selected);
+  c.Text(1056,475,selected==Item::None?"Select an item":info.name,13,selected==Item::Watchguard || selected==Item::Ward?Color{.63f,.85f,.43f,1}:ink);
+  c.Text(1056,494,selected==Item::None?"Inspect your belongings":info.type,10,muted);
   std::string detail=info.description;
   const auto delta=[](float value) { return (value>=0?std::string("+"):std::string())+std::to_string(int(value)); };
   if (info.slot==rpg::GearSlot::Weapon) {
    detail="Strike "+std::to_string(int(info.strike)+3*(s.Level()-1))+"  /  Heavy "+std::to_string(int(info.heavy)+5*(s.Level()-1))+" damage.\n";
    const auto& current=Describe(s.Items().Worn(info.slot));
-   detail+=Equipped(s,selected)?"Equipped. Removing uses unarmed damage.":"Compared to worn: "+delta(info.strike-current.strike)+" / "+delta(info.heavy-current.heavy)+".";
+   detail+=Equipped(s,selected)?"Equipped / remove to fight unarmed":"Vs worn: "+delta(info.strike-current.strike)+" strike / "+delta(info.heavy-current.heavy)+" heavy";
   } else if (info.slot!=rpg::GearSlot::None) {
    detail="Damage reduction: "+std::to_string(int(info.armor))+".\n";
-   detail+=Equipped(s,selected)?"Equipped. Right-click to remove.":"Compared to worn: "+delta(info.armor-Describe(s.Items().Worn(info.slot)).armor)+".\nRight-click or drag onto its gear slot.";
+   detail+=Equipped(s,selected)?"Equipped / right-click to remove":"Compared to worn: "+delta(info.armor-Describe(s.Items().Worn(info.slot)).armor)+" armor";
   }
-  c.Wrap(1011,515,238,detail,13,ink,3);
+  if(selected==Item::None) detail="Click a slot to inspect. Drag gear to equip or right-click to use.";
+  c.Wrap(1018,518,230,detail,11,ink,3);
   const int count=selectedBag>=0?s.Items().Bag()[selectedBag].count:0;
   const bool split=count>1 && s.Items().UsedSlots()<rpg::Inventory::capacity && s.Health()>0;
   if (panel==Panel::Merchant) {
@@ -477,7 +495,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   }
   const bool usable=CanUse(s,selected);
   std::string label=selected==Item::Potion?(s.Health()<=0?"Defeated":s.Health()>=s.MaxHealth()?"Full health":s.PotionCooldown()>0?"Cooling down":"Drink draught"):
-   Equipped(s,selected)?"Unequip":"Equip";
+   selected==Item::None?"Select an item":Equipped(s,selected)?"Unequip":"Equip";
   button({1011,606,239,29},label,Action::UseItem,int(selected),usable);
   regions_.back().event.inventory.source=selectedBag;
  }
@@ -566,6 +584,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   if (it->event.action==Action::SelectItem || it->event.action==Action::Purchase) {
    const bool purchase=it->event.action==Action::Purchase;
    const Item item=purchase?rpg::shopOffers[it->event.value].item:static_cast<Item>(it->event.value);
+   if (!rpg::ValidItem(item)) break;
    const auto& info=Describe(item); const auto summary=SummarizeItem(s,item);
    const float x=std::clamp(mouseX_>640?mouseX_-329:mouseX_+21,8.f,963.f),y=std::clamp(mouseY_-42,8.f,466.f);
    c.Window({x,y,309,246}); Icon(c,{x+13,y+12,34,38},item);

@@ -1,5 +1,7 @@
 # Mediterranean Roadmap
 
+Character and inventory usability pass: live vitality/XP meters, aligned combat stats, equipment count, free bag capacity and a dedicated item inspection card are implemented. Manual check 114 covers readability and item workflows.
+
 The interface refinement reduces Escape's footprint and improves contrast, material separation and item detail. See `docs/visual-target.md` for the screenshot comparison and remaining gaps: authored icon/frame artwork, character anatomy/equipment, denser character/bag layout and richer world composition. This pass does not claim Allods-quality art.
 
 Skill 3 is now a timed, animated dash instead of an instantaneous displacement: 3.5 m over 0.28 s with swept collision, eased travel, a dedicated pose, and cancellation/reset handling. Manual check 111 covers visible movement, wall contact, cooldown and evasive timing.
