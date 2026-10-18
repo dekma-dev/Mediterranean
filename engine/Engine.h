@@ -8,6 +8,7 @@
 class Win32Window;
 class Renderer;
 class Game;
+class Audio;
 
 class Engine {
 public:
@@ -27,6 +28,7 @@ private:
   std::unique_ptr<Win32Window> window_;
   std::unique_ptr<Renderer> renderer_;
   std::unique_ptr<Game> game_;
+  std::unique_ptr<Audio> audio_;
   bool running_ = false;
   Input input_;
   int exitCode_ = 0;

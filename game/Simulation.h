@@ -38,6 +38,7 @@ struct Command {
   bool usePotion = false, equipWeapon = false;
   int potionSource=-1;
   bool respawn = false;
+  bool haltMovement = false; // Explicit UI control capture, not ordinary key release.
   InventoryCommand inventory;
   int purchase=-1;
   TradeCommand trade;
@@ -53,7 +54,7 @@ struct CombatFeedback {
 };
 
 // One-update presentation events. Never serialized or used to resolve combat.
-enum class CombatVisualKind { Strike, HeavyStrike, EnemySwing, Hit, HeavyHit, Hurt, Interrupt };
+enum class CombatVisualKind { Strike, HeavyStrike, EnemySwing, Hit, HeavyHit, Hurt, Interrupt, Mend, Potion };
 struct CombatVisualEvent {
   CombatVisualKind kind = CombatVisualKind::Hit;
   Vec2 position;
@@ -73,11 +74,16 @@ public:
   Vec2 Player() const { return player_; }
   float Height() const { return height_; }
   float VerticalSpeed() const { return velocityY_; }
+  bool Grounded() const { return height_==0 && velocityY_<=0; }
   // Impact speed and time since contact within the latest update; zero otherwise.
   float LandingSpeed() const { return landingSpeed_; }
   float LandingElapsed() const { return landingElapsed_; }
+  bool JumpedThisUpdate() const { return jumpedThisUpdate_; }
+  bool DashedThisUpdate() const { return dashedThisUpdate_; }
   float Facing() const { return facing_; }
   float MovementDistance() const { return movementDistance_; } // excludes dash/respawn
+  float GroundMovementDistance() const { return groundMovementDistance_; }
+  void StopMovement() { movementVelocity_={}; movementDistance_=groundMovementDistance_=0; jumpBuffer_=0; }
   float Health() const { return health_; }
   int Experience() const;
   int Level() const;
@@ -157,9 +163,14 @@ private:
   std::vector<Enemy> enemies_;
   Vec2 player_{0,-10};
   float height_ = 0, velocityY_ = 0, facing_ = 0, health_ = 100, attackFlash_ = 0;
-  float movementSpeed_ = 0, movementDistance_ = 0;
+  Vec2 movementVelocity_{};
+  float airSpeedLimit_=4;
+  float jumpBuffer_=0;
+  float movementDistance_ = 0;
+  float groundMovementDistance_ = 0;
   float landingSpeed_ = 0, landingElapsed_ = 0;
   bool damagedThisUpdate_ = false;
+  bool jumpedThisUpdate_ = false, dashedThisUpdate_ = false;
   std::array<float,4> cooldowns_{};
   int target_ = -1, gold_ = 0;
   Inventory inventory_;

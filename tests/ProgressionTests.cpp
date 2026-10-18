@@ -60,8 +60,21 @@ int main() {
   Defeat(game,1); Defeat(game,2);
   Require(game.DefeatedCount()==3 && game.Experience()==180,"All three distinct kills must grant exactly 120 XP");
   Go(game,rpg::WorldMap::astralAnchor);
+  {
+    auto rebound=game; rebound.StopMovement();
+    for(int i=0;i<11;++i) { rpg::Command jump; jump.jump=i==0 || i==10; rebound.Update(.05f,jump); }
+    const float speed=rebound.VerticalSpeed();
+    const float contact=2*rebound.Height()/(std::sqrt(speed*speed+48*rebound.Height())-speed);
+    rpg::Command use; use.interact=true; rebound.Update(contact,use);
+    Require(rebound.Height()==0 && rebound.VerticalSpeed()>0,"Anchor fixture must end at rebound takeoff");
+    Require(!rebound.Channeling(),"Rising at zero height must not permit anchor stabilization");
+  }
   Interact(game);
   Require(game.Channeling(),"Cleared camp must allow anchor stabilization");
+  const auto channelPosition=game.Player();
+  game.Update(.01f,{});
+  Require(Distance(channelPosition,game.Player())==0,
+    "Accepted anchor channel must discard approach momentum instead of drifting while casting");
   c={}; c.movement={1,0}; game.Update(.05f,c);
   Require(!game.Channeling() && game.AnchorState()==rpg::AnchorQuest::Active,"Movement must cancel channel without quest credit");
   Interact(game);

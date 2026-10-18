@@ -49,6 +49,28 @@ double MeanDifference(const Image& a,const Image& b) {
 }
 }
 int main() {
+  // Safe outpost fixture keeps enemy damage out of recovery acceptance checks.
+  rpg::Simulation fresh;
+  auto injured=fresh.Save();
+  const auto healthPosition=injured.find(" 100 ");
+  Require(healthPosition!=std::string::npos,"Recovery fixture health field missing");
+  injured.replace(healthPosition,5," 20 ");
+  for (bool potion : {false,true}) {
+    Game recovery; rpg::Simulation recoveryReference;
+    Require(recovery.RestoreSnapshot(injured) && recoveryReference.Load(injured),"Injured recovery fixture rejected");
+    rpg::Command command; command.usePotion=potion; command.ability=potion?-1:3;
+    recovery.ExecuteCommand(command,.01f); recoveryReference.Update(.01f,command);
+    Require(Has(recovery.State(),potion?K::Potion:K::Mend) && recovery.State().VisualEventCount()==1,
+      "Accepted recovery must emit exactly its own visual event");
+    Require(recovery.State().Health()==(potion?60.f:55.f) && recovery.State().Save()==recoveryReference.Save(),
+      "Recovery cosmetics must preserve healing, inventory and save behavior");
+    recovery.ExecuteCommand(command,.01f);
+    Require(recovery.State().VisualEventCount()==0 && recovery.Effects().BurstCount()==1,"Recovery cooldown must not duplicate effects");
+    for (int i=0;i<17;++i) recovery.ExecuteCommand({},.05f);
+    Require(recovery.Effects().BurstCount()==0,"Recovery residue must expire");
+    recovery.Initialize(); recovery.ExecuteCommand(command,.01f);
+    Require(recovery.State().VisualEventCount()==0 && recovery.Effects().BurstCount()==0,"Full health must not emit recovery effects");
+  }
   Game game; rpg::Simulation reference; rpg::Command strike; strike.nextTarget=true; strike.ability=0;
   Require(game.RestoreSnapshot(duel) && reference.Load(duel),"Duel fixture rejected");
   game.ExecuteCommand(strike,.01f); reference.Update(.01f,strike);
@@ -97,6 +119,13 @@ int main() {
     Require(effects.BurstCount()==0 && effects.TrailCount()==0,"Effect lifetime must be bounded at different update rates");
   }
   CombatEffects pool;
+  pool.Emit({K::Mend,{0,0},0,0});
+  pool.Advance(.05f); pool.Advance(.05f);
+  for (unsigned i=1;i<CombatEffects::maxBursts;++i) pool.Emit({K::Hit,{0,0},1,0});
+  for (int i=0;i<10;++i) pool.Advance(.05f);
+  pool.Emit({K::Hit,{0,0},1,0});
+  Require(pool.BurstCount()==2,"Expired short impacts must be reused before a still-active longer recovery pulse");
+  pool.Reset();
   for (unsigned i=0;i<1000;++i) { pool.Emit({K::Hit,{0,0},1,0}); pool.Emit({K::Strike,{0,0},0,0,100+i}); }
   Require(pool.BurstCount()==CombatEffects::maxBursts && pool.TrailCount()==CombatEffects::maxTrails,"Effects must retain fixed pool bounds under overload");
   for (float dt : {0.f,-1.f,std::numeric_limits<float>::quiet_NaN()}) pool.Advance(dt);
@@ -168,11 +197,64 @@ int main() {
     else Require(MeanDifference(referenceRate,frame)<.05,"Crescents, shock rings and sparks must agree at equal elapsed time across update rates");
   }
   CombatEffects saturated;
+  // At high update rates the fixed history must retain duration, not merely
+  // the latest 32 frames. Keep the synthetic crescent outside the camera.
+  for (int rate : {60,144,1000}) {
+    CombatEffects history; history.Emit({K::Strike,{100,100},0,0});
+    history.TrackWeapon(0,{-1,.8f,-1},{-1,1.2f,-1});
+    float elapsed=0;
+    while (elapsed<.235f) {
+      const float dt=std::min(1.f/rate,.235f-elapsed); history.Advance(dt); elapsed+=dt;
+      const float x=-1+2*elapsed/.235f;
+      history.TrackWeapon(0,{x,.8f,-1},{x,1.2f,-1});
+    }
+    history.Advance(.01f);
+    scene(); history.Render(renderer);
+    const auto path=L"effects-history-"+std::to_wstring(rate)+L".png";
+    const auto frame=Capture(renderer,path.c_str());
+    int first=int(frame.width),last=-1;
+    for (UINT y=0;y<frame.height;++y) for (UINT x=0;x<frame.width;++x) {
+      const auto offset=(size_t(y)*frame.width+x)*4;
+      bool changed=false;
+      for (int c=0;c<3;++c) changed=changed || std::abs(int(frame.pixels[offset+c])-int(base.pixels[offset+c]))>3;
+      if (changed) { first=std::min(first,int(x)); last=std::max(last,int(x)); }
+    }
+    std::cout<<"Blade history width at "<<rate<<" Hz: "<<last-first<<'\n';
+    Require(last-first>150,"High update rates must retain the visible blade trail history");
+  }
   for (unsigned i=0;i<CombatEffects::maxTrails;++i) saturated.Emit({K::HeavyStrike,{0,0},0,0,100+i});
   for (unsigned i=0;i<CombatEffects::maxBursts;++i) saturated.Emit({K::HeavyHit,{0,0},1,0});
   saturated.Advance(.05f); saturated.Advance(.05f); scene(); saturated.Render(renderer);
   Require(renderer.EffectVertices()==Renderer::maxEffectVertices && renderer.EndFrame(false),
     "Overlapping heavy effects must saturate at the existing upload limit without growing or failing");
+
+  for (bool potion : {false,true}) {
+    Image recoveryRate;
+    for (int rate : {30,60,144}) {
+      CombatEffects recovery; recovery.Emit({potion?K::Potion:K::Mend,{0,-1},0,0});
+      float elapsed=0;
+      while (elapsed<.3f) { const float dt=std::min(1.f/rate,.3f-elapsed); recovery.Advance(dt); elapsed+=dt; }
+      scene(); recovery.Render(renderer);
+      Require(renderer.EffectVertices()==(potion?162u:306u),"Recovery geometry must stay within its fixed budget");
+      const auto path=std::wstring(potion?L"effects-potion-rate-":L"effects-mend-rate-")+std::to_wstring(rate)+L".png";
+      const auto frame=Capture(renderer,path.c_str());
+      Require(Difference(base,frame)>40,"Recovery effect must be visible");
+      if (rate==30) recoveryRate=frame;
+      else Require(MeanDifference(recoveryRate,frame)<.05,"Recovery rendering must agree at equal elapsed time");
+      for (int i=0;i<17;++i) recovery.Advance(.05f);
+      scene(); recovery.Render(renderer);
+      Require(renderer.EffectVertices()==0 && recovery.BurstCount()==0 && renderer.EndFrame(false),"Expired recovery must submit no geometry");
+    }
+    Require(game.RestoreSnapshot(injured),"Recovery capture fixture rejected");
+    rpg::Command command; command.usePotion=potion; command.ability=potion?-1:3;
+    game.ExecuteCommand(command,.01f);
+    for (int i=0;i<6;++i) game.ExecuteCommand({},.05f);
+    game.SetCameraOrbit(1.1f,.28f,4.8f);
+    renderer.BeginFrame(); game.Render(renderer,false);
+    Capture(renderer,potion?L"effects-potion-gameplay.png":L"effects-mend-gameplay.png");
+    const auto saved=game.State().Save();
+    Require(game.RestoreSnapshot(saved) && game.Effects().BurstCount()==0,"Reload must clear recovery residue");
+  }
 
   // Real gameplay captures exercise event -> blade samples -> render, including
   // repeat rendering without advancing state and the live Escape menu.
@@ -221,6 +303,6 @@ int main() {
   Require(game.State().Health()<100 && game.Effects().BurstCount()>0,"The Escape menu must not freeze real enemy impact effects");
   renderer.BeginFrame(); game.Render(renderer); Capture(renderer,L"effects-live-menu.png");
   Require(renderer.ValidateDebugMessages(),"Combat effect checks emitted DirectX warnings");
-  std::cout<<"PASS: confirmed combat events, miss/interrupt/death/load lifetimes, bounded pools/uploads, depth/blend/HUD/portrait isolation and 28 diagnostic captures. Fixed effect state bytes: "<<sizeof(CombatEffects)<<'\n';
+  std::cout<<"PASS: confirmed combat and recovery events, miss/interrupt/death/load lifetimes, bounded pools/uploads, depth/blend/HUD/portrait isolation and 39 diagnostic captures. Fixed effect state bytes: "<<sizeof(CombatEffects)<<'\n';
   CoUninitialize();
 }

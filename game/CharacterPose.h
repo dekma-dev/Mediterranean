@@ -8,6 +8,7 @@ struct LimbPose { DirectX::XMFLOAT3 root,joint,end; };
 struct CharacterPose {
   float bodyLift=0,upperPitch=0;
   std::array<LimbPose,2> arms,legs; // Left, right in character space.
+  std::array<float,2> footYaw{};
   DirectX::XMFLOAT3 weaponDirection;
   static constexpr float upperArm=.28f,forearm=.27f,thigh=.40f,shin=.40f;
   DirectX::XMFLOAT3 UpperPoint(DirectX::XMFLOAT3 point) const;

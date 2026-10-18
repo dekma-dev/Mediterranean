@@ -46,7 +46,7 @@ void Simulation::DamagePlayer(float damage,float incomingFacing) {
   if (applied>0) EmitVisual(CombatVisualKind::Hurt,player_,height_+1.2f,incomingFacing);
   if (Channeling()) { channelRemaining_=0; message_="Damage interrupted stabilization."; }
   if (health_==0) {
-    target_=-1; height_=0; velocityY_=0; attackFlash_=0; movementSpeed_=movementDistance_=0;
+    target_=-1; height_=0; velocityY_=0; attackFlash_=0; StopMovement();
     // Defeat suspends combat. Cancel every pending warning, including actors
     // already processed this update, before the remaining actors can advance.
     for (auto& enemy : enemies_) {
@@ -70,7 +70,7 @@ void Simulation::EndSparring(const char* result) {
 
 void Simulation::Respawn() {
   player_=WorldMap::spawn; height_=velocityY_=facing_=0; health_=MaxHealth();
-  movementSpeed_=movementDistance_=0;
+  StopMovement();
   target_=-1; attackFlash_=hurtFlash_=channelRemaining_=0;
   cooldowns_.fill(0); potionCooldown_=0; feedback_.clear();
   for (auto& enemy : enemies_) {

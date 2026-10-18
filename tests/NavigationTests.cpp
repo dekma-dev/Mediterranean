@@ -22,6 +22,45 @@ void CheckRoute(const rpg::WorldMap& map,rpg::Vec2 start,rpg::Vec2 goal) {
 }
 int main() {
   rpg::WorldMap map;
+  const auto wall=map.MoveAndSlide({4,-8},{3,1},.4f);
+  Require(std::abs(wall.x-4.8f)<.0002f && std::abs(wall.z+7)<.0002f,
+    "Swept collision must reach the wall and preserve tangential movement");
+  const auto dash=map.MoveAndSlide({0,-8},{15,0},.4f);
+  Require(std::abs(dash.x-4.8f)<.0002f,"Long displacement must not tunnel through a building");
+  const auto trunk=map.MoveAndSlide({12,-2},{4,0},.4f);
+  Require(std::abs(trunk.x-13.25f)<.0002f,"Long displacement must not tunnel through a thin trunk");
+  const auto edge=map.MoveAndSlide({16,17},{4,4},.4f);
+  Require(map.CanStand(edge,.4f) && std::abs(edge.x-16.6f)<.0002f && std::abs(edge.z-18.6f)<.0002f,
+    "Simultaneous map-edge contacts must slide safely into the corner");
+  for (int hz : {30,60,144}) {
+    rpg::Vec2 p{4,-8};
+    for (int i=0;i<hz;++i) { p=map.MoveAndSlide(p,{3.f/hz,1.f/hz},.4f); Require(map.CanStand(p,.4f),"Wall slide penetrated"); }
+    Require(std::hypot(p.x-wall.x,p.z-wall.z)<.001f,"Wall contact and sliding must agree across update rates");
+  }
+  for (float offset : {-.2f,0.f,.2f}) {
+    const auto right=map.MoveAndSlide({4,-11.5f+offset},{2,2},.4f);
+    const auto left=map.MoveAndSlide({-4,-11.5f+offset},{-2,2},.4f);
+    Require(map.CanStand(right,.4f) && map.CanStand(left,.4f),"Rounded corner sweep penetrated");
+    Require(std::abs(right.x+left.x)<.001f && std::abs(right.z-left.z)<.001f,
+      "Corner response must not favor the X direction or one side of the map");
+  }
+  const auto away=map.MoveAndSlide(wall,{-1,0},.4f);
+  Require(away.x<wall.x-.99f,"Moving away from contact must not stick");
+  const auto invalid=map.MoveAndSlide({0,-10},{std::numeric_limits<float>::quiet_NaN(),1},.4f);
+  Require(invalid.x==0 && invalid.z==-10,"Invalid displacement must leave the actor in place");
+  unsigned sweeps=0;
+  for (int x=-16;x<=16;x+=2) for (int z=-18;z<=18;z+=2) {
+    const rpg::Vec2 start{float(x),float(z)};
+    if (!map.CanStand(start,.4f)) continue;
+    for (int angle=0;angle<16;++angle) {
+      const rpg::Vec2 delta{std::cos(angle*.39269908f)*3.5f,std::sin(angle*.39269908f)*3.5f};
+      const auto end=map.MoveAndSlide(start,delta,.4f);
+      Require(map.CanStand(end,.4f),"Swept movement must always finish outside static obstacles");
+      Require(std::hypot(end.x-start.x,end.z-start.z)<=3.5005f,"Sliding must not add movement energy");
+      ++sweeps;
+    }
+  }
+  std::cout<<"Swept collision safety cases: "<<sweeps<<'\n';
   Require(!map.CanTravel({-12,-8},{-4,-8},.45f),"Direct route through house must fail");
   CheckRoute(map,{-12,-8},{-4,-8});
   CheckRoute(map,{4,-8},{12,-8});

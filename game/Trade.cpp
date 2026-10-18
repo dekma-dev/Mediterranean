@@ -6,7 +6,7 @@ bool Simulation::NearQuartermaster() const {
   const auto position=WorldMap::quartermaster;
   return std::hypot(player_.x-position.x,player_.z-position.z)<=2.75f && HasLineOfSight(player_,position);
 }
-bool Simulation::CanTrade() const { return health_>0 && height_==0 && !sparring_ && NearQuartermaster(); }
+bool Simulation::CanTrade() const { return health_>0 && Grounded() && !sparring_ && NearQuartermaster(); }
 int Simulation::ShopStock(int offer) const {
   return offer>=0 && offer<int(shopOffers.size())?shopOffers[offer].stock-purchases_[offer]:0;
 }

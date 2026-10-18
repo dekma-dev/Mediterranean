@@ -1,13 +1,17 @@
 #pragma once
 #include "game/Motion.h"
+#include <array>
 
 // Presentation-only channels; no collision, combat timing or durable save data.
 namespace animation {
 inline float Unit(float value) { return std::isfinite(value)?std::clamp(value,0.f,1.f):0; }
 inline float Signed(float value) { return std::isfinite(value)?std::clamp(value,-1.f,1.f):0; }
 inline float SmoothStep(float value) { const float t=Unit(value); return t*t*(3-2*t); }
+struct Foot { float x=0,y=.17f,z=0,yaw=0; };
 struct Sample {
   float breath=0,sway=0,air=0,rise=0,landing=0,hit=0,travel=0;
+  std::array<Foot,2> feet{};
+  bool feetActive=false;
 };
 inline Sample Idle(float time,float offset=0) {
   const float seconds=std::isfinite(time)?std::remainder(time,motion::tau*2/1.8f):0;
@@ -33,11 +37,11 @@ struct State {
     height=std::isfinite(height)?std::max(0.f,height):0;
     velocity=std::isfinite(velocity)?std::clamp(velocity,-20.f,20.f):0;
     travel=std::isfinite(travel)?std::max(0.f,travel):0;
-    const bool onGround=height<=0;
+    const bool onGround=height<=0 && velocity<=0;
     landingAge=std::min(2.f,landingAge+dt); hitAge=std::min(2.f,hitAge+dt);
     if (onGround && std::isfinite(landingSpeed) && landingSpeed>0) {
       landingAge=std::isfinite(landingElapsed)?std::clamp(landingElapsed,0.f,dt):0;
-      landingStrength=Unit(landingSpeed/6.f);
+      landingStrength=Unit(landingSpeed/motion::jumpSpeed);
     }
     // Consume actual impact events: a fading tint is neither a timestamp nor
     // evidence of fresh damage. Preserve recoil when a second impact arrives.
@@ -46,7 +50,7 @@ struct State {
     if (!onGround) { landingAge=2; landingStrength=0; }
     phase=std::remainder(phase+dt*1.8f,motion::tau*2);
     airBlend=motion::Ease(airBlend,onGround?0.f:1.f,18.f,dt);
-    riseBlend=motion::Ease(riseBlend,Signed(velocity/6.f),12.f,dt);
+    riseBlend=motion::Ease(riseBlend,Signed(velocity/motion::jumpSpeed),16.f,dt);
     travelBlend=motion::Ease(travelBlend,onGround?Unit(travel/dt/7.f):0.f,12.f,dt);
     pose.hit=hitAge>1?0:std::max(hitCarry*std::exp(-24*hitAge),Pulse(hitAge,.055f));
     pose.landing=landingStrength*Pulse(landingAge,.075f);

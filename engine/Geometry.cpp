@@ -312,34 +312,48 @@ std::vector<std::uint8_t> BuildMaterialLayer(Material material,unsigned size) {
     float value=.86f+.12f*broad,height=0,roughness=.8f;
     switch (material) {
     case Material::Wood: {
-      const float grain=.5f+.5f*std::sin(2*pi*(u*18+.45f*noise(u,v,4)));
+      // Warp fine grain with periodic, elongated growth variation. Keep the
+      // relief shallow so timber reads as wood rather than corrugated metal.
+      const float grain=.5f+.5f*std::sin(2*pi*(u*18+.75f*noise(u*3,v,4)+.15f*noise(u,v,8)));
       const float plank=u*4-std::floor(u*4);
       const float edge=smooth(std::min(plank,1-plank)/.055f);
-      value=(.64f+.21f*grain+.12f*broad)*(.65f+.35f*edge);
-      height=.007f*grain+.013f*edge; roughness=.72f+.18f*broad; break;
+      const float growth=noise(u,v,8);
+      value=(.72f+.10f*grain+.12f*broad)*(.72f+.28f*edge);
+      height=.0025f*grain+.009f*edge+.002f*growth; roughness=.76f+.16f*growth; break;
     }
-    case Material::Stone:
-      value=.68f+.23f*broad+.09f*fine; height=.028f*broad+.008f*fine;
+    case Material::Stone: {
+      // Mineral strata and small pits, periodic in both axes for triplanar wraps.
+      const float strata=.5f+.5f*std::sin(2*pi*(v*5+.35f*noise(u,v,4)));
+      const float pit=smooth((fine-.63f)*7);
+      value=.65f+.22f*broad+.08f*fine+.045f*strata-.09f*pit;
+      height=.022f*broad+.004f*strata-.007f*pit;
       roughness=.78f+.18f*fine; break;
+    }
     case Material::Ground:
       value=.72f+.20f*noise(u,v,10)+.08f*fine; height=.009f*noise(u,v,16);
       roughness=.96f; break;
     case Material::Cloth: {
       const float weave=std::sin(u*2*pi*24)*std::sin(v*2*pi*24);
-      value=.94f+.035f*weave; height=.0008f*weave; roughness=.94f; break;
+      const float fold=std::sin(2*pi*(u*3+.18f*noise(u,v,4)));
+      value=.91f+.035f*weave+.025f*fold+.04f*broad;
+      height=.0008f*weave+.0015f*fold; roughness=.91f+.06f*broad; break;
     }
     case Material::Roof: {
       const float row=std::floor(v*6),ty=v*6-row;
       const float tx=u*4+row*.5f-std::floor(u*4+row*.5f);
       const float edge=smooth(std::min(tx,1-tx)/.09f)*smooth(ty/.12f);
-      value=.56f+edge*(.26f+.10f*ty)+.04f*fine;
+      const int column=int(std::floor(u*4+row*.5f));
+      const float tileShade=Hash(column%4,int(row));
+      value=(.56f+edge*(.26f+.10f*ty)+.04f*fine)*(.84f+.20f*tileShade);
       height=.032f*edge+.012f*ty; roughness=.72f+.16f*fine; break;
     }
     case Material::Plaster:
       value=.87f+.10f*broad+.03f*fine; height=.004f*fine; roughness=.94f; break;
-    case Material::Metal:
-      value=.89f+.08f*broad+.03f*fine; height=.0007f*noise(u,v,32);
-      roughness=.28f+.13f*broad; break;
+    case Material::Metal: {
+      const float scratch=noise(u,v*4,32);
+      value=.85f+.10f*broad+.05f*scratch; height=.00045f*scratch;
+      roughness=.27f+.18f*broad+.06f*scratch; break;
+    }
     case Material::Skin: value=.97f+.03f*broad; roughness=.64f; break;
     case Material::Leaves: value=.87f+.13f*broad; roughness=.86f; break;
     case Material::Plain: case Material::Glow: value=1; break;

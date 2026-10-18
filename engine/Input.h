@@ -33,6 +33,7 @@ public:
     width_=float(frame.width); height_=float(frame.height);
   }
   bool Held(int key) const { return held_[key]; }
+  bool Focused() const { return wasFocused_; }
   bool Pressed(int key) const { return pressed_[key]; }
   bool Released(int key) const { return released_[key]; }
   float MouseX() const { return dx_; }

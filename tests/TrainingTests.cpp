@@ -1,6 +1,7 @@
 #include "game/Simulation.h"
 #include <cstdlib>
 #include <iostream>
+#include <cmath>
 
 void Require(bool value,const char* message) { if (!value) { std::cerr<<message<<'\n'; std::exit(1); } }
 std::string Veteran(int health=140) {
@@ -16,6 +17,15 @@ void FirstHit(rpg::Simulation& s) {
 }
 int main() {
   using namespace rpg;
+  {
+    Simulation rebound; Require(rebound.Load(Veteran()),"Rebound training fixture must load");
+    for(int i=0;i<11;++i) { Command jump; jump.jump=i==0 || i==10; rebound.Update(.05f,jump); }
+    const float speed=rebound.VerticalSpeed();
+    const float contact=2*rebound.Height()/(std::sqrt(speed*speed+48*rebound.Height())-speed);
+    Command use; use.interact=true; rebound.Update(contact,use);
+    Require(rebound.Height()==0 && rebound.VerticalSpeed()>0,"Training fixture must end at rebound takeoff");
+    Require(!rebound.Sparring(),"Rising at zero height must not permit a sparring start");
+  }
   Simulation armored,plain;
   Require(armored.Load(Veteran()) && plain.Load(Veteran()),"Training fixtures must migrate.");
   Command c; c.inventory={InventoryAction::Unequip,int(GearSlot::Chest),23,Item::Ward}; plain.Update(.01f,c);

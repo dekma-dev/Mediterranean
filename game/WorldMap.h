@@ -40,6 +40,7 @@ public:
   GroundSurface SurfaceAt(Vec2 position) const;
   bool CanStand(Vec2 position, float radius) const;
   bool CanTravel(Vec2 from, Vec2 to, float radius) const;
+  Vec2 MoveAndSlide(Vec2 from,Vec2 displacement,float radius) const;
   std::vector<Vec2> FindPath(Vec2 from, Vec2 to, float radius = .45f) const;
   const char* AreaName(Vec2 position) const;
 private:

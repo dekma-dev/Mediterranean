@@ -1,6 +1,7 @@
 #include "engine/Renderer.h"
 #include "engine/SceneShader.h"
 #include "engine/Shadow.h"
+#include "engine/InstanceTransform.h"
 #include <cmath>
 #include <d3dcompiler.h>
 #include <d3d11sdklayers.h>
@@ -255,14 +256,14 @@ void Renderer::DrawMarkerBox(const XMFLOAT3& p,const XMFLOAT3& s,const XMFLOAT4&
  DrawMesh(visual::Mesh::Box,p,s,color,visual::Material::Plain,yaw,0,visual::ShadowMode::None);
 }
 void Renderer::Queue(visual::Mesh mesh,const XMMATRIX& transform,const XMFLOAT4& color,visual::Material material,visual::ShadowMode shadow) {
+ // Private callers construct scaled orthonormal bases, never sheared matrices.
  Item item{};
  XMStoreFloat4x4(&item.instance.world,transform);
- XMStoreFloat4x4(&item.instance.normal,XMMatrixTranspose(XMMatrixInverse(nullptr,transform)));
+ const auto prepared=visual::PrepareInstanceTransform(transform);
+ XMStoreFloat4x4(&item.instance.normal,prepared.normal);
  item.instance.color=color; item.instance.surface={static_cast<float>(material),shadow==visual::ShadowMode::Cast?1.f:0.f,0,0};
  const auto& m=item.instance.world; item.center={m._41,m._42,m._43};
- const float scale=std::max({XMVectorGetX(XMVector3Length(transform.r[0])),
-  XMVectorGetX(XMVector3Length(transform.r[1])),XMVectorGetX(XMVector3Length(transform.r[2]))});
- item.radius=meshes_[static_cast<unsigned>(mesh)].radius*scale;
+ item.radius=meshes_[static_cast<unsigned>(mesh)].radius*prepared.radiusScale;
  world_[static_cast<unsigned>(mesh)].push_back(item);
 }
 void Renderer::DrawMesh(visual::Mesh mesh,const XMFLOAT3& p,const XMFLOAT3& s,const XMFLOAT4& color,

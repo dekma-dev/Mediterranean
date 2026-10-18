@@ -1,4 +1,5 @@
 #include "engine/Geometry.h"
+#include "engine/InstanceTransform.h"
 #include "game/WorldMap.h"
 #include "game/CharacterPose.h"
 #include "game/TerrainSurface.h"
@@ -26,6 +27,21 @@ bool Covers(const visual::Geometry& g,DirectX::XMFLOAT3 p) {
 }
 int main() {
   using namespace DirectX;
+  // Compare the optimized instance path to the general inverse, including
+  // nonuniform scale, arbitrary rotation and distant translated objects.
+  for (int i=0;i<120;++i) {
+    const float x=.01f+i*.17f,y=.03f+(i%7)*.31f,z=.02f+(i%11)*.73f;
+    const auto world=XMMatrixScaling(x,y,z)*XMMatrixRotationRollPitchYaw(i*.13f,i*.37f,-i*.21f)*
+      XMMatrixTranslation(i*13.f,-i*3.f,i*7.f);
+    const auto prepared=visual::PrepareInstanceTransform(world);
+    const auto reference=XMMatrixTranspose(XMMatrixInverse(nullptr,world));
+    for (auto normal : {XMVectorSet(1,0,0,0),XMVectorSet(0,1,0,0),XMVectorSet(0,0,1,0),XMVectorSet(.3f,.7f,-.4f,0)}) {
+      const auto a=XMVector3Normalize(XMVector3TransformNormal(normal,prepared.normal));
+      const auto b=XMVector3Normalize(XMVector3TransformNormal(normal,reference));
+      Check(XMVectorGetX(XMVector3Length(a-b))<.000001f,"Optimized normal transform changed nonuniform-scale lighting.");
+    }
+    Check(std::abs(prepared.radiusScale-std::max({x,y,z}))<.00001f,"Optimized transform changed culling bounds.");
+  }
   std::size_t bytes=0,triangles=0;
   for (unsigned mesh=0;mesh<static_cast<unsigned>(visual::Mesh::Count);++mesh) {
     const auto g=visual::BuildMesh(static_cast<visual::Mesh>(mesh));

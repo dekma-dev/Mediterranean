@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "engine/Renderer.h"
+#include "engine/Audio.h"
 #include "game/Game.h"
 #include "game/CharacterView.h"
 #include "platform/Win32Window.h"
@@ -35,6 +36,11 @@ bool Engine::Initialize(HINSTANCE instance, int width, int height, bool visible)
 
   game_ = std::make_unique<Game>();
   game_->Initialize();
+  if(visible) {
+    audio_=std::make_unique<Audio>();
+    if(!audio_->Initialize()) audio_.reset();
+  }
+  game_->SetAudioAvailable(bool(audio_));
   game_->SetFullscreenState(window_->Fullscreen());
   SetWindowTextW(window_->GetHandle(), game_->WindowTitle().c_str());
 
@@ -238,10 +244,11 @@ bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapsh
     if (!game_->RestoreSnapshot(beforeJump)) return false;
     game_->SetCameraOrbit(3.14159265f,.2f,5);
     const wchar_t* stages[]={L"rise",L"apex",L"fall",L"landing"};
+    const int captureSteps[]={3,6,10,14}; // .15/.30/.50/.70 seconds, matching the current ballistic arc.
     int stage=0;
-    for (int step=1;step<=15;++step) {
+    for (int step=1;step<=14;++step) {
       rpg::Command command; command.jump=step==1; game_->ExecuteCommand(command,.05f);
-      if (step!=3+stage*4) continue;
+      if (step!=captureSteps[stage]) continue;
       renderer_->BeginFrame(); game_->Render(*renderer_,false);
       const auto path=base.parent_path()/(base.stem().wstring()+L"-jump-"+stages[stage++]+base.extension().wstring());
       if (!renderer_->Capture(path.wstring()) || !renderer_->EndFrame()) { error_=renderer_->Error(); return false; }
@@ -395,7 +402,8 @@ int Engine::Run() {
 
     input_.Update(window_->GetHandle());
     if (IsIconic(window_->GetHandle()) || GetForegroundWindow() != window_->GetHandle()) {
-      game_->CancelUiGesture();
+      if(audio_) audio_->Suspend(true);
+      game_->SuspendInput();
       window_->ConsumeWheel();
       WaitMessage();
       QueryPerformanceCounter(&last);
@@ -427,6 +435,10 @@ void Engine::Tick(double deltaSeconds) {
     return;
   }
   game_->Update(deltaSeconds, input_, window_->ConsumeWheel());
+  if(audio_) {
+    audio_->Suspend(false);
+    audio_->Update(game_->State(),game_->AudioGeneration(),game_->MusicVolume(),game_->EffectsVolume());
+  }
   const bool fullscreenRequest=game_->TakeFullscreenRequest();
   if (input_.Pressed(VK_F11) || fullscreenRequest) {
     game_->CancelUiGesture();

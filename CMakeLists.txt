@@ -8,6 +8,15 @@ endif()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Keep compiler debug records in object files instead of a shared PDB server.
+# The linker still emits the executable PDB for Visual Studio debugging. This
+# also permits local builds when mspdbsrv cannot be reached (MSVC C1902).
+if(MSVC)
+  foreach(config DEBUG RELWITHDEBINFO)
+    string(REGEX REPLACE "/Z[iI]" "/Z7" CMAKE_CXX_FLAGS_${config} "${CMAKE_CXX_FLAGS_${config}}")
+  endforeach()
+endif()
+
 if(MSVC AND CMAKE_GENERATOR MATCHES "Ninja")
   include(cmake/DetectMsvcIncludes.cmake)
 endif()
@@ -17,6 +26,7 @@ target_include_directories(MediterraneanSimulation PUBLIC ${CMAKE_CURRENT_SOURCE
 
 add_library(MediterraneanClient STATIC
   engine/Engine.cpp
+  engine/Audio.cpp
   engine/Renderer.cpp
   engine/GpuTimer.cpp
   engine/Geometry.cpp
@@ -47,11 +57,17 @@ if (MSVC)
   target_compile_options(MediterraneanClient PRIVATE /W4 /EHsc)
 endif()
 
-target_link_libraries(MediterraneanClient PUBLIC MediterraneanSimulation d3d11 dxgi dxguid d3dcompiler user32 gdi32 windowscodecs ole32 shell32 psapi)
+target_link_libraries(MediterraneanClient PUBLIC MediterraneanSimulation d3d11 dxgi dxguid d3dcompiler user32 gdi32 windowscodecs ole32 shell32 psapi xaudio2)
 set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT RPGNative)
 
 include(CTest)
 if (BUILD_TESTING)
+  add_executable(AudioTests tests/AudioTests.cpp)
+  target_link_libraries(AudioTests PRIVATE MediterraneanClient)
+  add_test(NAME AudioTests COMMAND AudioTests)
+  add_executable(FootPlacementTests tests/FootPlacementTests.cpp)
+  target_link_libraries(FootPlacementTests PRIVATE MediterraneanClient)
+  add_test(NAME FootPlacementTests COMMAND FootPlacementTests)
   add_executable(CombatEffectsTests tests/CombatEffectsTests.cpp)
   target_link_libraries(CombatEffectsTests PRIVATE MediterraneanClient)
   add_test(NAME CombatEffectsTests COMMAND CombatEffectsTests)

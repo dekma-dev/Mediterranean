@@ -6,6 +6,16 @@
 // world units. Call from Update, never Render, so extra renders cannot advance it.
 namespace motion {
 constexpr float tau=6.283185307f;
+// A deliberate RPG jump: 1.08 m apex, 0.60 s total flight on level ground.
+constexpr float jumpSpeed=7.2f,gravity=24.f;
+// Signed velocity response with its exact displacement integral. Unlike Travel,
+// direction changes preserve momentum and a zero target provides braking.
+inline float IntegrateVelocity(float& velocity,float target,float response,float dt) {
+  const float change=-std::expm1(-response*dt);
+  const float distance=target*dt+(velocity-target)*change/response;
+  velocity+=(target-velocity)*change;
+  return distance;
+}
 inline float Ease(float value,float target,float response,float dt) {
   return value+(target-value)*-std::expm1(-response*dt);
 }
@@ -66,16 +76,19 @@ struct Actor {
   }
 };
 struct CameraBoom {
-  float distance=10,recoveryDelay=0;
-  void Reset(float value) { distance=value; recoveryDelay=0; }
+  float distance=10,recoveryDelay=0,velocity=0;
+  void Reset(float value) { distance=value; recoveryDelay=velocity=0; }
   void Update(float desired,float clearance,float dt) {
+    if (!std::isfinite(dt) || dt<=0 || !std::isfinite(desired) || !std::isfinite(clearance)) return;
     // Retract immediately. Require 100 ms of clearance before moving back out,
     // otherwise alternating samples at a post/tree edge pump the boom in and out.
-    distance=std::min(distance,clearance);
-    if (clearance<desired-.01f && clearance<=distance+.05f) { recoveryDelay=.1f; return; }
+    if (distance>clearance) { distance=clearance; velocity=0; }
+    if (clearance<desired-.01f && clearance<=distance+.05f) { recoveryDelay=.1f; velocity=0; return; }
     const float outwardTime=std::max(0.f,dt-recoveryDelay);
     recoveryDelay=std::max(0.f,recoveryDelay-dt);
-    distance=std::min(clearance,Ease(distance,desired,9.f,desired<=distance?dt:outwardTime));
+    // Preserve velocity across wheel reversals; collision remains authoritative.
+    Spring(distance,velocity,desired,14.f,desired<=distance?dt:outwardTime);
+    if (distance>clearance) { distance=clearance; velocity=0; }
   }
 };
 }

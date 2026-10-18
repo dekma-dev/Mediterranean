@@ -60,10 +60,11 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       renderer.DrawSegment(hip,knee,.26f,.29f,trousers,S::Cloth);
       renderer.DrawMesh(M::Sphere,knee,{.19f,.19f,.20f},outfit.trousers?trousers:skin,outfit.trousers?S::Cloth:S::Skin,yaw);
       renderer.DrawSegment(knee,ankle,.22f,.24f,outfit.boots?leather:outfit.trousers?trousers:skin,outfit.boots || outfit.trousers?S::Cloth:S::Skin);
-      const auto foot=point(leg.end.x,leg.end.y-.035f,leg.end.z+.035f);
-      renderer.DrawMesh(M::Boot,foot,{.23f,.24f,.37f},outfit.boots?leather:skin,outfit.boots?S::Cloth:S::Skin,yaw);
+      const float bootYaw=yaw+pose.footYaw[i];
+      const XMFLOAT3 foot{ankle.x+std::sin(bootYaw)*.035f,ankle.y-.035f,ankle.z+std::cos(bootYaw)*.035f};
+      renderer.DrawMesh(M::Boot,foot,{.23f,.24f,.37f},outfit.boots?leather:skin,outfit.boots?S::Cloth:S::Skin,bootYaw);
       if (outfit.boots) {
-        renderer.DrawMesh(M::Boot,{foot.x,foot.y-.105f,foot.z},{.24f,.035f,.38f},{.09f,.075f,.05f,1},S::Cloth,yaw);
+        renderer.DrawMesh(M::Boot,{foot.x,foot.y-.105f,foot.z},{.24f,.035f,.38f},{.09f,.075f,.05f,1},S::Cloth,bootYaw);
         renderer.DrawSegment({knee.x,knee.y-.025f,knee.z},{knee.x,knee.y+.025f,knee.z},.245f,.26f,{.39f,.29f,.15f,1},S::Cloth);
       }
       const auto shoulder=world(arm.root),elbow=world(arm.joint),hand=world(arm.end);

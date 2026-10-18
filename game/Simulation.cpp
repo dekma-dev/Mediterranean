@@ -32,13 +32,7 @@ bool Simulation::CanStand(Vec2 p, float radius) const {
 }
 
 void Simulation::Move(Vec2& p, Vec2 displacement, float radius) {
-  // Small steps prevent sprint/dash tunneling through thin obstacles.
-  const int steps = std::max(1,static_cast<int>(std::ceil(Length(displacement)/.15f)));
-  displacement.x /= steps; displacement.z /= steps;
-  for (int i=0;i<steps;++i) {
-    Vec2 next{p.x+displacement.x,p.z}; if (CanStand(next,radius)) p=next;
-    next={p.x,p.z+displacement.z}; if (CanStand(next,radius)) p=next;
-  }
+  p=map_.MoveAndSlide(p,displacement,radius);
 }
 
 float Simulation::CameraDistance(Vec2 origin,float originY,Vec2 direction,float slope,float desired) const {
@@ -102,9 +96,11 @@ void Simulation::UseAbility(int index) {
     if (health_>=MaxHealth()) { message_="Health is already full."; return; }
     const float healed=std::min(35.f,MaxHealth()-health_);
     health_+=healed; Emit(FeedbackKind::Heal,player_,static_cast<int>(healed));
+    EmitVisual(CombatVisualKind::Mend,player_,height_,facing_);
     message_="Mend restored health.";
   } else if (index==2) {
     Move(player_,{std::sin(facing_)*3.5f,std::cos(facing_)*3.5f},.4f);
+    dashedThisUpdate_=true;
     message_="Dash.";
   } else {
     if (!TargetActor() || TargetActor()->health<=0) { message_="Press Tab to select an enemy."; return; }
@@ -169,7 +165,7 @@ void Simulation::Interact() {
   }
   if (!nearbyLoot && Length(Difference(player_,WorldMap::trainingPost))<=2.5f && HasLineOfSight(player_,WorldMap::trainingPost)) {
     if (anchorQuest_!=AnchorQuest::Complete) message_="Secure Dawnwatch before starting a sparring round.";
-    else if (height_>0) message_="Land before starting a sparring round.";
+    else if (!Grounded()) message_="Land before starting a sparring round.";
     else StartSparring();
     return;
   }
@@ -179,7 +175,7 @@ void Simulation::Interact() {
       message_=anchorQuest_>=AnchorQuest::Return?"The astral anchor is stable.":"Speak to the beacon keeper about the astral anchor.";
     } else if (DefeatedCount()!=static_cast<int>(enemies_.size())) {
       message_="Defeat all three raiders before stabilizing the anchor.";
-    } else if (height_>0) message_="Land before stabilizing the anchor.";
+    } else if (!Grounded()) message_="Land before stabilizing the anchor.";
     else if (!Channeling()) { channelRemaining_=channelDuration; message_="Stabilizing the anchor. Stand still for three seconds."; }
     // Loot still takes precedence over an unavailable/already stable anchor.
     if (Channeling()) return;
@@ -232,7 +228,9 @@ void Simulation::Update(float seconds,const Command& command) {
   visualEventCount_=0;
   tradeRequested_=false;
   movementDistance_=0;
+  groundMovementDistance_=0;
   landingSpeed_=landingElapsed_=0; damagedThisUpdate_=false;
+  jumpedThisUpdate_=dashedThisUpdate_=false;
   for (auto& enemy : enemies_) { enemy.movementDistance=0; enemy.damagedThisUpdate=false; }
   trainer_.movementDistance=0; trainer_.damagedThisUpdate=false;
   if (!std::isfinite(seconds) || seconds<=0) return;
@@ -246,6 +244,7 @@ void Simulation::Update(float seconds,const Command& command) {
   trainer_.hitFlash=std::max(0.f,trainer_.hitFlash-dt);
   sparringReportTime_=std::max(0.f,sparringReportTime_-dt);
   if (health_<=0) {
+    jumpBuffer_=0;
     if (command.respawn) Respawn();
     else message_="You have fallen. Enter returns to Dawnwatch with progress retained. R resets all.";
     return;
@@ -260,30 +259,81 @@ void Simulation::Update(float seconds,const Command& command) {
   if (Channeling() && (moving || command.jump || command.ability>=0 || command.usePotion || changingGear)) {
     channelRemaining_=0; message_="Stabilization interrupted. Press E at the anchor to try again.";
   }
-  if (moving) {
-    const float speed=(command.sprint?7.f:4.f)*std::min(1.f,length);
-    Vec2 direction{command.movement.x/length,command.movement.z/length};
-    facing_=std::atan2(direction.x,direction.z);
-    const float travel=motion::Travel(movementSpeed_,speed,24.f,dt);
+  // Apply takeoff before horizontal integration, and switch traction at the
+  // actual landing instant rather than at the following frame boundary.
+  if (command.haltMovement) jumpBuffer_=0;
+  else if (command.jump) jumpBuffer_=.12f;
+  const auto launch=[&]() {
+    jumpBuffer_=0;
+    velocityY_=motion::jumpSpeed; jumpedThisUpdate_=true;
+    airSpeedLimit_=command.sprint?7.f:4.f;
+    // A slow directional takeoff has a leg-driven launch impulse. Running
+    // jumps preserve existing momentum, including momentum against new input.
+    // Taper the push continuously with speed rather than using a rest threshold.
+    if (moving) {
+      const float push=airSpeedLimit_*.6f*std::min(1.f,length);
+      const float speed=Length(movementVelocity_);
+      if (speed<push && movementVelocity_.x*command.movement.x+movementVelocity_.z*command.movement.z>=0) {
+        movementVelocity_.x+=command.movement.x/length*(push-speed);
+        movementVelocity_.z+=command.movement.z/length*(push-speed);
+      }
+    }
+  };
+  if (jumpBuffer_>0 && Grounded()) launch();
+  const bool inFlight=!Grounded();
+  float contact=0,impact=0;
+  if (inFlight) {
+    impact=std::sqrt(velocityY_*velocityY_+2*motion::gravity*height_);
+    contact=velocityY_>=0?(velocityY_+impact)/motion::gravity:2*height_/(impact-velocityY_);
+  }
+  const auto integrateHorizontal=[&](float interval,bool airborne) {
+    if (interval<=0) return;
+    Vec2 target{};
+    if (moving) {
+      const float speed=(airborne?airSpeedLimit_:command.sprint?7.f:4.f)*std::min(1.f,length);
+      target={command.movement.x/length*speed,command.movement.z/length*speed};
+      facing_=std::atan2(target.x,target.z);
+    } else if (airborne) target=movementVelocity_; // Keep takeoff momentum without input.
+    const float response=airborne?3.f:moving?24.f:32.f;
+    const Vec2 travel{motion::IntegrateVelocity(movementVelocity_.x,target.x,response,interval),
+      motion::IntegrateVelocity(movementVelocity_.z,target.z,response,interval)};
     const auto before=player_;
-    Move(player_,{direction.x*travel,direction.z*travel},.4f);
-    movementDistance_=Length(Difference(player_,before));
-    // Don't bank full running speed while pushing against a solid wall.
-    if (movementDistance_<travel*.1f) movementSpeed_=0;
-  } else movementSpeed_=0;
-  if (command.jump && height_==0) velocityY_=6;
+    Move(player_,travel,.4f);
+    const auto actual=Difference(player_,before);
+    movementDistance_+=Length(actual);
+    if (!airborne) groundMovementDistance_+=Length(actual);
+    // Remove velocity into the contact, preserving motion along the wall.
+    const Vec2 blocked{travel.x-actual.x,travel.z-actual.z};
+    const float blockedLength=Length(blocked);
+    if (blockedLength>.00001f) {
+      const Vec2 normal{blocked.x/blockedLength,blocked.z/blockedLength};
+      const float into=std::max(0.f,movementVelocity_.x*normal.x+movementVelocity_.z*normal.z);
+      movementVelocity_.x-=normal.x*into; movementVelocity_.z-=normal.z*into;
+    }
+    if (!airborne && !moving && Length(movementVelocity_)<.01f) movementVelocity_={};
+  };
+  if (command.haltMovement) movementVelocity_={};
+  else if (inFlight) integrateHorizontal(std::min(dt,contact),true);
+  else integrateHorizontal(dt,false);
   // Solve contact inside the step, retaining its speed and elapsed time for
   // presentation. End-of-frame velocity has already been zeroed at the floor.
-  if (height_>0 || velocityY_>0) {
-    const float impact=std::sqrt(velocityY_*velocityY_+36*height_);
-    const float contact=velocityY_>=0?(velocityY_+impact)/18:2*height_/(impact-velocityY_);
+  if (inFlight) {
     if (contact<=dt+1e-6f) {
       landingSpeed_=impact; landingElapsed_=std::max(0.f,dt-contact);
       height_=velocityY_=0;
+      // Consume a recent press at the exact contact time, not one frame later.
+      // A rebound gets air steering for the remainder, never ground traction.
+      if (jumpBuffer_>0 && contact<=jumpBuffer_) {
+        launch();
+        integrateHorizontal(landingElapsed_,true);
+        height_=velocityY_*landingElapsed_-.5f*motion::gravity*landingElapsed_*landingElapsed_;
+        velocityY_-=motion::gravity*landingElapsed_;
+      } else if (!command.haltMovement) integrateHorizontal(landingElapsed_,false);
     } else {
-      height_+=velocityY_*dt-9*dt*dt; velocityY_-=18*dt;
+      height_+=velocityY_*dt-.5f*motion::gravity*dt*dt; velocityY_-=motion::gravity*dt;
     }
   }
+  jumpBuffer_=std::max(0.f,jumpBuffer_-dt);
   if (command.nextTarget) SelectTarget();
   if (command.interact) Interact();
   if (command.equipWeapon) {
@@ -305,6 +355,7 @@ void Simulation::Update(float seconds,const Command& command) {
     else if (inventory_.Consume(Item::Potion,command.potionSource)) {
       const float healed=std::min(40.f,MaxHealth()-health_); health_+=healed;
       Emit(FeedbackKind::Heal,player_,static_cast<int>(healed));
+      EmitVisual(CombatVisualKind::Potion,player_,height_,facing_);
       potionCooldown_=3; message_="Healing potion restored health.";
     } else message_="That potion stack has moved. Select it again.";
   }
@@ -318,10 +369,13 @@ void Simulation::Update(float seconds,const Command& command) {
   }
   if (health_>0) SeparateEnemies(dt);
   if (Channeling()) {
-    if (moving || height_>0 || command.ability>=0 || command.usePotion || changingGear ||
+    if (moving || !Grounded() || command.ability>=0 || command.usePotion || changingGear ||
       Length(Difference(player_,WorldMap::astralAnchor))>2.5f || !HasLineOfSight(player_,WorldMap::astralAnchor)) {
       channelRemaining_=0; message_="Stabilization interrupted. Stand still at the anchor.";
     } else {
+      // Only a validated stationary channel ends approach inertia. Retain the
+      // current frame's measured travel for animation; rejected casts do not stop movement.
+      movementVelocity_={};
       channelRemaining_=std::max(0.f,channelRemaining_-dt);
       if (channelRemaining_==0) {
         anchorQuest_=AnchorQuest::Return;

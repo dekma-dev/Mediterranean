@@ -5,6 +5,7 @@
 #include "game/Motion.h"
 #include "game/Animation.h"
 #include "game/CombatEffects.h"
+#include "game/FootPlacement.h"
 class Renderer;
 
 class Game {
@@ -21,6 +22,7 @@ public:
   void OpenPanel(ui::Panel panel) { interface_.SetOnly(panel); }
   void ShowPanel(ui::Panel panel) { interface_.Show(panel); }
   void CancelUiGesture() { interface_.CancelDrag(); CancelOrbit(); }
+  void SuspendInput() { CancelUiGesture(); simulation_.StopMovement(); }
   void ExecuteCommand(const rpg::Command& command,float seconds=.01f);
   const rpg::Simulation& State() const { return simulation_; }
   const motion::Actor& PlayerPose() const { return playerPose_; }
@@ -30,13 +32,20 @@ public:
   float CameraRange() const { return cameraBoom_.distance; }
   float CameraYaw() const { return cameraYaw_; }
   const CombatEffects& Effects() const { return effects_; }
+  unsigned AudioGeneration() const { return audioGeneration_; }
+  float MusicVolume() const { return interface_.musicVolume/100.f; }
+  float EffectsVolume() const { return interface_.effectsVolume/100.f; }
+  void SetAudioAvailable(bool value) { interface_.audioAvailable=value; }
 private:
   rpg::Simulation simulation_;
+  unsigned audioGeneration_=0;
   float yaw_ = 0, pitch_ = .45f, distance_ = 10, time_ = 0;
   motion::Actor playerPose_;
   std::vector<motion::Actor> enemyPoses_;
   animation::State playerAnimation_;
   std::vector<animation::State> enemyAnimations_;
+  animation::FootPlacement playerFeet_;
+  std::vector<animation::FootPlacement> enemyFeet_;
   CombatEffects effects_;
   motion::CameraBoom cameraBoom_;
   float cameraYaw_=0,cameraPitch_=.45f,cameraHeight_=1.4f;

@@ -1,6 +1,14 @@
 # Fullscreen and interface
 
-Updated: 2026-10-18
+Updated: 2026-10-19
+
+## Combat readability
+
+Merchant bag potion tooltips follow the same health/cooldown rules as the bag action button and right-click use. Trading captures movement and disables the action bar; it does not prohibit drinking from the bag.
+
+The target frame shows numeric health and distance, with a countdown and filling amber strip during an enemy windup. Action slots show a draining cooldown mask, a recovery strip and tenths during the last second; positive remaining time rounds up so it never displays zero before becoming ready. Green/rust accents distinguish ready/unavailable slots, and hover cards provide textual status as well as cooldown duration and melee range or potion stock. Potion quantity is also visible on the slot. The objective tracker has a dark backing for contrast.
+
+Indicators derive directly from current simulation state and do not intercept input or change action hitboxes. Three `combat-hud-*.png` diagnostics in each build directory cover 960x600, 1280x720 and 2560x1080, with disabled-click and read-only-state checks. Manual check 102 covers live readability.
 
 ## Display and menu behavior
 
@@ -115,3 +123,7 @@ The 2026-10-18 input fix cancels gestures and invalidates hit regions before pro
 Real keyboard/mouse interaction, Alt-Tab, multiple physical monitors, display scaling changes and longer gameplay sessions still need the manual checklist. Automated pointer tests call the same interface routing with coordinates. Game integration tests feed sampled input frames through the same transition logic used by Win32 polling, including focus loss/restoration; they do not synthesize desktop input.
 
 The historical quartermaster-pass stationary benchmark reported 26 draw submissions and CPU/GPU medians of 0.293/0.179 ms. The current `-BenchmarkSuite` also measures the merchant with character and bag windows, plus walking/orbit and combat/orbit. After the character pass, the merchant workload reports 40 peak submissions, 134,006 peak submitted triangles, CPU median/p95 0.780/0.947 ms and GPU median/p95 0.352/0.368 ms. This uses a hidden 1280x720 window, 90 warmup and 600 measured frames, with 600 asynchronous GPU observations. See [graphics.md](graphics.md) for before/after data and limits. These measurements do not guarantee visible/fullscreen FPS. Re-run `-Backend Ninja -Configuration Release -BenchmarkSuite` for current local results.
+
+## Item comparison hover cards
+
+Bag and equipment cells show a 309x246 reference-pixel card with icon, item type, level-adjusted damage/protection, comparison against worn gear, description, count/value and contextual action. Positive differences are green, negative differences red, with explicit numeric signs as well as color. Shop Buy buttons expose the same pre-purchase comparison and availability. Cards clamp inside the 1280x720 reference canvas and appear to the opposite side of the pointer; they create no interactive hit region. Existing reverse hit order and drag suppression remain authoritative. Six tooltip diagnostics cover 960x600, 1280x720 and 2560x1080. Manual readability/input acceptance is check 91.

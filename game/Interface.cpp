@@ -6,6 +6,7 @@
 #include <array>
 #include <cmath>
 #include <sstream>
+#include <iomanip>
 
 namespace ui {
 namespace {
@@ -24,6 +25,12 @@ template<unsigned Segments> const std::array<Point,Segments+1>& CirclePoints() {
 }
 const Color ink{.94f,.89f,.69f,1},muted{.66f,.69f,.50f,1},gold{.79f,.62f,.25f,1};
 const Color dark{.055f,.09f,.055f,.98f},border{.30f,.30f,.13f,1},blue{.23f,.46f,.63f,1};
+std::string Seconds(float value) {
+ std::ostringstream text;
+ if (value<1) text<<std::fixed<<std::setprecision(1)<<std::ceil(std::max(0.f,value)*10)/10;
+ else text<<int(std::ceil(value));
+ return text.str();
+}
 struct Canvas {
  Renderer& r; Layout layout;
  explicit Canvas(Renderer& renderer):r(renderer),layout(float(r.Width()),float(r.Height())) {}
@@ -277,7 +284,13 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   const auto& target=*s.TargetActor(); c.Window({475,26,278,62}); c.Banner({487,20,254,26},target.Name(),16);
   c.RectFill({491,52,246,14},{.12f,.035f,.02f,1});
   c.Gradient({493,54,242*target.health/target.MaxHealth(),10},{.74f,.30f,.13f,1},{.35f,.06f,.03f,1});
-  c.Center(479,70,270,target.windup>0?"Incoming strike - move!":"Selected target",12,target.windup>0?gold:muted);
+  c.Center(491,50,246,std::to_string(int(std::ceil(target.health)))+" / "+std::to_string(int(target.MaxHealth())),12,ink);
+  const auto distance=std::to_string(int(std::ceil(std::hypot(s.Player().x-target.position.x,s.Player().z-target.position.z))));
+  c.Center(479,69,270,target.windup>0?"Strike in "+Seconds(target.windup)+"s - evade!":distance+" m  /  Selected target",12,target.windup>0?gold:muted);
+  if (target.windup>0) {
+   c.RectFill({491,84,246,3},{.12f,.035f,.02f,1});
+   c.RectFill({491,84,246*std::clamp(1-target.windup/target.WindupDuration(),0.f,1.f),3},{1,.57f,.16f,1});
+  }
  }
  c.Oval(1170,94,81,81,{.025f,.04f,.02f,1});
  Atlas(c,s,{1096,20,148,148},true,hasWaypoint,waypoint);
@@ -291,6 +304,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  c.Banner({1118,158,104,23},"Atlas  [M]",12);
  regions_.push_back({{1090,13,160,168},{Action::Map},true});
  if (!inventoryOpen || panel!=Panel::None) {
+  c.Frame({1001,193,265,hasWaypoint?183.f:158.f},{.025f,.045f,.025f,.82f},border);
   c.Text(1013,202,"EXPEDITION",14,gold); c.Line(1010,226,1260,226,1,border);
   c.Wrap(1013,236,244,s.Objective(),15,ink,4);
   const auto objective=s.ObjectivePosition();
@@ -322,9 +336,15 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    if (i==1) c.Line(x+6,679,x+31,690,2,{.94f,.41f,.12f,1});
   }
   const bool ready=panel!=Panel::Merchant && (i<4?std::string(s.AbilityStatus(i))=="READY":CanUse(s,Item::Potion));
-  if (!ready) c.RectFill({x+3,665,33,34},{.02f,.025f,.01f,.56f});
   const float cooldown=i<4?s.Cooldown(i):s.PotionCooldown();
-  if (cooldown>0) c.Center(x,675,39,std::to_string(int(std::ceil(cooldown))),19);
+  if (!ready) c.RectFill({x+3,665,33,34},{.02f,.025f,.01f,.36f});
+  if (cooldown>0) {
+   const float fraction=std::clamp(cooldown/(i<4?rpg::Simulation::abilityCooldowns[i]:3.f),0.f,1.f);
+   c.RectFill({x+3,665,33,34*fraction},{.015f,.025f,.04f,.65f});
+   c.Center(x,675,39,Seconds(cooldown),cooldown<1?15.f:19.f,ink);
+   c.RectFill({x+4,698,31*(1-fraction),2},blue);
+  } else c.RectFill({x+4,698,31,2},ready?Color{.51f,.78f,.37f,1}:Color{.58f,.25f,.13f,1});
+  if (i==4) { c.RectFill({x+23,688,14,12},{.025f,.035f,.02f,.9f}); c.Center(x+22,686,16,std::to_string(s.Potions()),11,ink); }
   c.Text(x+3,662,i<4?std::to_string(i+1):"Q",12,{1,.96f,.73f,1});
   regions_.push_back({rect,{i<4?Action::Ability:Action::UseItem,i<4?i:static_cast<int>(Item::Potion)},ready});
  }
@@ -478,8 +498,13 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    button({474,355,332,42},fullscreen?"Fullscreen  /  F11":"Windowed  /  F11",Action::Fullscreen);
    button({474,407,161,42},"Save game",Action::Save); button({645,407,161,42},"Load game",Action::Load);
    button({474,469,332,42},"Exit to desktop",Action::Quit);
-   c.Center(432,545,416,"The world continues while this menu is open.",14,gold);
-   c.Center(432,571,416,"Esc returns to the game. Save progress with F5.",13,muted);
+   c.Text(474,526,"Music  "+std::to_string(musicVolume)+"%",14,ink);
+   button({718,520,38,27},"-",Action::MusicVolume,-10,musicVolume>0);
+   button({768,520,38,27},"+",Action::MusicVolume,10,musicVolume<100);
+   c.Text(474,558,"Effects  "+std::to_string(effectsVolume)+"%",14,ink);
+   button({718,552,38,27},"-",Action::EffectsVolume,-10,effectsVolume>0);
+   button({768,552,38,27},"+",Action::EffectsVolume,10,effectsVolume<100);
+   c.Center(432,588,416,audioAvailable?"Live menu. Volume 0 mutes a channel.":"Audio unavailable; gameplay continues.",13,muted);
    if (!menuNotice.empty()) c.Center(432,605,416,menuNotice,13,gold);
    return;
   }
@@ -513,12 +538,24 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  }
  // Reverse hit order matches pointer dispatch: covered cells never leak tooltips.
  for (auto it=regions_.rbegin();!dragging_ && it!=regions_.rend();++it) if (it->rect.Contains(mouseX_,mouseY_)) {
-  if (it->event.action==Action::SelectItem) {
-   const Item item=static_cast<Item>(it->event.value); const auto& info=Describe(item);
-   const float x=mouseX_>970?673.f:std::clamp(mouseX_+21,460.f,960.f),y=std::clamp(mouseY_+12,8.f,548.f);
-   c.Window({x,y,309,156}); c.Text(x+14,y+10,info.name,18,gold);
-   c.Text(x+14,y+39,info.type,12,muted); c.Wrap(x+14,y+64,280,info.description,13,ink,3);
-   c.Text(x+14,y+128,Equipped(s,item)?"Right-click: remove  /  Drag: move":item==Item::Potion?"Right-click: drink  /  Drag: move":"Right-click: equip  /  Drag: move",12,gold);
+  if (it->event.action==Action::SelectItem || it->event.action==Action::Purchase) {
+   const bool purchase=it->event.action==Action::Purchase;
+   const Item item=purchase?rpg::shopOffers[it->event.value].item:static_cast<Item>(it->event.value);
+   const auto& info=Describe(item); const auto summary=SummarizeItem(s,item);
+   const float x=std::clamp(mouseX_>640?mouseX_-329:mouseX_+21,8.f,963.f),y=std::clamp(mouseY_-42,8.f,466.f);
+   c.Window({x,y,309,246}); Icon(c,{x+13,y+12,34,38},item);
+   c.Text(x+57,y+11,info.name,16,gold); c.Text(x+57,y+37,info.type,11,muted);
+   c.RectFill({x+14,y+62,281,1},border);
+   c.Text(x+14,y+73,summary.stats,14,ink);
+   const Color comparison=summary.difference>0?Color{.48f,.86f,.37f,1}:summary.difference<0?Color{1,.43f,.32f,1}:muted;
+   c.Wrap(x+14,y+99,281,summary.comparison,13,comparison,2);
+   c.Wrap(x+14,y+142,281,info.description,12,muted,3);
+   const std::string quantity=it->bag>=0?"Stack "+std::to_string(s.Items().Bag()[it->bag].count):"Owned "+std::to_string(s.Items().Count(item));
+   c.Text(x+14,y+198,purchase?"Price "+std::to_string(rpg::shopOffers[it->event.value].price)+" gold":quantity+"   |   Sell "+std::to_string(rpg::SellPrice(item))+" gold each",12,gold);
+   const std::string action=purchase?(it->enabled?"Click Buy to purchase one":s.PurchaseStatus(it->event.value)):
+     s.Health()<=0?"Recover before using equipment/items":item==Item::Potion?(s.Health()>=s.MaxHealth()?"Health is full":s.PotionCooldown()>0?"Potion is cooling down":"Right-click: drink  /  Drag: move"):
+     Equipped(s,item)?"Right-click: remove  /  Drag: move":"Right-click: equip  /  Drag: move";
+   c.Text(x+14,y+221,action,12,ink);
   } else if (it->event.action==Action::Buyback) {
    const auto item=Item(it->event.value); const float x=std::clamp(mouseX_-140,475.f,659.f);
    c.Window({x,312,309,116}); c.Text(x+14,322,Describe(item).name,17,gold);
@@ -532,8 +569,13 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     ability==1?std::to_string(int(s.HeavyDamage()))+" damage. Interrupts a windup.":ability==2?"Dash in your facing direction.":"Restores up to 35 health.";
    const std::string status=potion?(s.Health()<=0?"DEFEATED":s.Potions()==0?"NO POTIONS":s.Health()>=s.MaxHealth()?"FULL HEALTH":s.PotionCooldown()>0?"COOLDOWN":"READY"):s.AbilityStatus(ability);
    const float x=std::clamp(it->rect.x-30,460.f,680.f);
-   c.Window({x,495,300,111}); c.Text(x+14,504,potion?"Healing draught":names[ability],19,gold);
-   c.Wrap(x+14,536,272,detail,14,ink,2); c.Text(x+14,581,status,12,muted);
+   c.Window({x,470,300,149}); c.Text(x+14,480,potion?"Healing draught":names[ability],19,gold);
+   c.Wrap(x+14,512,272,detail,14,ink,2);
+   const float remaining=potion?s.PotionCooldown():s.Cooldown(ability);
+   c.Text(x+14,554,"Cooldown: "+Seconds(potion?3.f:rpg::Simulation::abilityCooldowns[ability])+"s"+
+     (potion?"  /  Stock: "+std::to_string(s.Potions()):ability<2?"  /  Range: 2.5 m":""),12,muted);
+   c.Line(x+14,576,x+286,576,1,border);
+   c.Text(x+14,589,status+(remaining>0?"  "+Seconds(remaining)+"s":""),12,status=="READY"?Color{.57f,.84f,.40f,1}:Color{1,.64f,.40f,1});
   }
   break;
  }

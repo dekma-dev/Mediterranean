@@ -3,6 +3,7 @@
 #include "game/TerrainSurface.h"
 #include "engine/Renderer.h"
 #include "platform/Win32Window.h"
+#include "platform/GameCursor.h"
 #include <cstdlib>
 #include <cmath>
 #include <fstream>
@@ -15,6 +16,41 @@ std::string Fixture(const char* name) {
   Require(bool(input),"Missing test fixture."); return data.str();
 }
 int main() {
+  for (UINT dpi : {96u,144u,192u,384u}) {
+    const auto cursor=CreateGameCursor(dpi);
+    Require(cursor!=nullptr,"Native game cursor creation failed");
+    ICONINFO info{}; Require(GetIconInfo(cursor,&info)!=FALSE,"Cursor inspection failed");
+    BITMAP bitmap{}; Require(GetObject(info.hbmColor,sizeof(bitmap),&bitmap)!=0,"Cursor bitmap missing");
+    Require(!info.fIcon && info.xHotspot==MulDiv(3,int(dpi),96) && info.yHotspot==MulDiv(2,int(dpi),96),
+      "DPI-scaled cursor must keep its click hotspot at the arrow tip");
+    Require(bitmap.bmWidth==MulDiv(32,int(dpi),96) && bitmap.bmHeight==bitmap.bmWidth && bitmap.bmBitsPixel==32,
+      "Cursor must retain a DPI-scaled color/alpha bitmap");
+    BITMAPINFO format{}; format.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
+    format.bmiHeader.biWidth=bitmap.bmWidth; format.bmiHeader.biHeight=-bitmap.bmHeight;
+    format.bmiHeader.biPlanes=1; format.bmiHeader.biBitCount=32;
+    std::vector<std::uint32_t> pixels(size_t(bitmap.bmWidth)*bitmap.bmHeight);
+    const auto dc=GetDC(nullptr);
+    const int rows=GetDIBits(dc,info.hbmColor,0,bitmap.bmHeight,pixels.data(),&format,DIB_RGB_COLORS);
+    ReleaseDC(nullptr,dc); Require(rows==bitmap.bmHeight,"Cursor pixels unavailable");
+    bool clear=false,solid=false,edge=false;
+    for (auto pixel : pixels) { const auto alpha=pixel>>24; clear|=alpha==0; solid|=alpha==255; edge|=alpha>0 && alpha<255; }
+    Require(clear && solid && edge,"Cursor needs transparent surroundings, solid fill and antialiased edges");
+    if (dpi==384) {
+      // Enlarged diagnostic on a dark neutral background; actual cursor retains alpha.
+      for (auto& pixel : pixels) {
+        const auto background=40*(255-(pixel>>24))/255;
+        pixel=0xff000000u|((((pixel>>16)&255)+background)<<16)|((((pixel>>8)&255)+background)<<8)|((pixel&255)+background);
+      }
+      BITMAPFILEHEADER file{}; file.bfType=0x4d42; file.bfOffBits=sizeof(file)+sizeof(BITMAPINFOHEADER);
+      file.bfSize=file.bfOffBits+DWORD(pixels.size()*4);
+      std::ofstream preview("cursor-preview.bmp",std::ios::binary);
+      preview.write(reinterpret_cast<const char*>(&file),sizeof(file));
+      preview.write(reinterpret_cast<const char*>(&format.bmiHeader),sizeof(BITMAPINFOHEADER));
+      preview.write(reinterpret_cast<const char*>(pixels.data()),std::streamsize(pixels.size()*4));
+      Require(bool(preview),"Cursor diagnostic write failed");
+    }
+    DeleteObject(info.hbmColor); DeleteObject(info.hbmMask); DestroyCursor(cursor);
+  }
   {
     const rpg::WorldMap map;
     const auto pixels=BuildTerrainSurface(map);
@@ -49,9 +85,20 @@ int main() {
     Require(game.State().Health()<before,"Enemy windup/damage must continue while a menu or panel is open.");
   }
   rpg::Simulation simulation; rpg::Command command;
+  const auto upgrade=ui::SummarizeItem(simulation,ui::Item::Watchguard);
+  Require(upgrade.difference==7 && upgrade.comparison.find("+10")!=std::string::npos,
+    "Hover comparison must use actual worn weapon stats");
+  Require(ui::SummarizeItem(simulation,ui::Item::Starter).comparison=="Currently equipped",
+    "Worn item tooltip must identify current equipment");
+  Require(ui::SummarizeItem(simulation,ui::Item::Helm).difference==1,
+    "Shop equipment must compare against an empty gear slot");
+  Require(ui::SummarizeItem(simulation,ui::Item::Potion).comparison=="Shared cooldown: 3 seconds",
+    "Potion tooltip must describe its shared cooldown");
   ui::ApplyItem(command,simulation,ui::Item::Watchguard); Require(command.inventory.action==rpg::InventoryAction::None,"Unowned gear must not equip.");
   ui::ApplyItem(command,simulation,ui::Item::Potion); Require(!command.usePotion,"Full health must disable potion use.");
   Require(simulation.Load(Fixture("veteran-preview.save")),"Veteran fixture must load.");
+  Require(ui::SummarizeItem(simulation,ui::Item::Starter).difference==-7,
+    "Downgrade tooltip must compare against the currently worn reward weapon");
   ui::ApplyItem(command,simulation,ui::Item::Starter); Require(command.inventory.action==rpg::InventoryAction::Equip,"Unequipped starter weapon must be selectable.");
   simulation.Update(.01f,command); Require(!simulation.RewardWeaponEquipped(),"Inventory command must change actual equipment.");
   command={}; ui::ApplyItem(command,simulation,ui::Item::Watchguard); simulation.Update(.01f,command);
@@ -180,6 +227,21 @@ int main() {
   }
   {
     Game game; game.Initialize(); Input input; Input::Frame frame;
+    frame.focused=true; frame.client={1240,685}; frame.screen=frame.client;
+    const auto step=[&]() {
+      input.Update(frame); game.Update(.05,input,0);
+      renderer.BeginFrame(); game.Render(renderer); Require(renderer.EndFrame(false),"Menu movement capture render failed");
+    };
+    step(); frame.down['W']=true; for(int i=0;i<6;++i) step();
+    const auto before=game.State().Player(); frame.down[VK_LBUTTON]=true; step();
+    Require(game.State().Player().x==before.x && game.State().Player().z==before.z,
+      "Clicking the HUD menu while running must stop movement on the same frame");
+    frame.down[VK_LBUTTON]=false; step(); frame.client={630,216}; frame.screen=frame.client;
+    frame.down[VK_LBUTTON]=true; step();
+    Require(game.State().Player().z>before.z,"Clicking Return to game must restore movement on the same frame");
+  }
+  {
+    Game game; game.Initialize(); Input input; Input::Frame frame;
     frame.focused=true; frame.client={1170,94}; frame.screen=frame.client;
     const auto step=[&]() {
       input.Update(frame); game.Update(.05,input,0);
@@ -247,6 +309,10 @@ int main() {
     screen.panel=ui::Panel::Menu;
     renderer.BeginFrame(); screen.Render(renderer,simulation,0,false); Require(renderer.EndFrame(false),"Menu render failed.");
     Require(click(640,375).action==ui::Action::Fullscreen,"Fullscreen button must issue the display command.");
+    Require(click(735,533).action==ui::Action::MusicVolume && click(735,533).value==-10,
+      "Music decrease must remain clickable at every UI scale");
+    Require(click(785,565).action==ui::Action::EffectsVolume && click(785,565).value==10,
+      "Effects increase must remain clickable at every UI scale");
     Require(click(640,220).action==ui::Action::Close,"Return button must close the menu.");
     Require(click(1000,680).action==ui::Action::None,"Menu must prevent clicks reaching the underlying HUD.");
     screen.SetOnly(ui::Panel::Map);
@@ -348,6 +414,40 @@ int main() {
     Require(simulation.Health()==130 && simulation.Items().Bag()[second].item==rpg::Item::None && simulation.Items().Bag()[0].count==4,
       "Right-click must drink from the second stack after a buyback merged into the first.");
   }
+  for (const auto size : {std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
+    Require(renderer.Resize(size.first,size.second),"Tooltip resize failed");
+    ui::Interface tips; rpg::Simulation state; tips.Show(ui::Panel::Inventory);
+    const ui::Layout layout(float(size.first),float(size.second));
+    for (bool shop : {false,true}) {
+      if (shop) tips.Show(ui::Panel::Merchant);
+      renderer.BeginFrame(); tips.Render(renderer,state,0,false); Require(renderer.EndFrame(false),"Tooltip layout failed");
+      const float x=shop?900.f:1028.f,y=shop?278.f:274.f;
+      tips.Pointer(layout.x+x*layout.scale,layout.y+y*layout.scale,float(size.first),float(size.second),false,false);
+      const auto before=state.Save();
+      renderer.BeginFrame(); tips.Render(renderer,state,0,false);
+      const auto path=std::wstring(shop?L"tooltip-shop-":L"tooltip-bag-")+std::to_wstring(size.first)+L".png";
+      Require(renderer.Capture(path) && renderer.EndFrame(false),"Tooltip capture failed");
+      Require(state.Save()==before,"Hovering must not change gameplay or purchase items");
+    }
+  }
   Require(renderer.ValidateDebugMessages(),"DirectX reported an screen validation issue.");
+  for (const auto size : {std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
+    Require(renderer.Resize(size.first,size.second),"Combat HUD resize failed");
+    rpg::Simulation state; Require(state.Load(Fixture("combat-preview.save")),"Combat HUD fixture failed");
+    rpg::Command attack; attack.nextTarget=true; attack.ability=0; state.Update(.01f,attack);
+    Require(state.TargetActor() && state.TargetActor()->windup>0 && state.Cooldown(0)>0,
+      "HUD diagnostic must contain an attack warning and a cooling ability");
+    ui::Interface hud; const ui::Layout layout(float(size.first),float(size.second));
+    renderer.BeginFrame(); hud.Render(renderer,state,0,false); Require(renderer.EndFrame(false),"Combat HUD layout failed");
+    const auto before=state.Save();
+    const auto event=hud.Pointer(layout.x+466*layout.scale,layout.y+681*layout.scale,
+      float(size.first),float(size.second),true,false);
+    Require(event.action==ui::Action::None,"Cooling ability must remain disabled despite new progress indicators");
+    renderer.BeginFrame(); hud.Render(renderer,state,0,false);
+    Require(renderer.Capture(L"combat-hud-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),
+      "Combat HUD diagnostic capture failed");
+    Require(state.Save()==before,"HUD rendering and disabled clicks must not change combat state");
+  }
+  Require(renderer.ValidateDebugMessages(),"Combat HUD emitted a DirectX warning/error");
   std::cout<<"PASS: live menus, item actions, persistence, scaled pointer routing and UI rendering.\n";
 }

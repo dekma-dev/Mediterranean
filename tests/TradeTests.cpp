@@ -17,6 +17,16 @@ void RemoveRecord(std::string& save,const char* tag) {
 }
 int main() {
   using namespace rpg;
+  {
+    Simulation rebound; Require(rebound.Load(Veteran()),"Rebound shop fixture must load");
+    for(int i=0;i<11;++i) { Command jump; jump.jump=i==0 || i==10; rebound.Update(.05f,jump); }
+    const float speed=rebound.VerticalSpeed();
+    const float contact=2*rebound.Height()/(std::sqrt(speed*speed+48*rebound.Height())-speed);
+    Command buy; buy.purchase=1; rebound.Update(contact,buy);
+    Require(rebound.Height()==0 && rebound.VerticalSpeed()>0,"Shop fixture must end exactly at rebound takeoff");
+    Require(!rebound.CanTrade() && rebound.Gold()==90 && rebound.Items().Count(Item::Helm)==0,
+      "A zero-height rising rebound must not permit shopping");
+  }
   Simulation game; Require(game.Load(Veteran()) && game.CanTrade(),"Veteran must reach the quartermaster.");
   const auto initial=game.Save(); Buy(game,-2); Buy(game,99);
   Require(game.Save()==initial,"Unknown purchases must not mutate gold, items or stock.");
@@ -86,6 +96,7 @@ int main() {
   Require(copy.Gold()==0 && copy.ShopStock(1)==1 && copy.Items().Count(Item::Helm)==0,"New expedition must reset purchases and stock.");
   // New recruit can reach the vendor but cannot buy patrol-restricted gear.
   for (int i=0;i<10;++i) { c={}; c.movement={1,0}; copy.Update(.05f,c); }
+  for (int i=0;i<10;++i) copy.Update(.05f,{}); // Finish physical braking before checking transaction atomicity.
   Require(copy.NearQuartermaster(),"Recruit should be within trading range.");
   Require(std::string(copy.PurchaseStatus(1))=="Complete the frontier patrol","Gear must require the actual quest hand-in.");
   const auto recruit=copy.Save(); Buy(copy,1); Require(copy.Save()==recruit,"Locked gear cannot be purchased by direct command.");
@@ -163,6 +174,7 @@ int main() {
   Require(game.Gold()==122 && game.BuybackCount(Item::Starter)==1,"Jumping must reject buyback before charging.");
   Require(game.Load(soldGear),"Reset remote trade scenario.");
   for (int i=0;i<30;++i) { c={}; c.movement={0,1}; game.Update(.05f,c); }
+  for (int i=0;i<10;++i) game.Update(.05f,{});
   const auto away=game.Save(); Trade(game,TradeAction::Sell,Item::Potion,game.Items().Find(Item::Potion)); Trade(game,TradeAction::Buyback,Item::Starter);
   Require(!game.CanTrade() && game.Save()==away,"Remote sale and buyback must reject without side effects.");
   bad=soldGear; at=bad.find("140"); bad.replace(at,3,"0"); Require(game.Load(bad),"Sold-item death fixture.");

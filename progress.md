@@ -1,14 +1,166 @@
 # Mediterranean Progress
 
-Last updated: 2026-10-18
+Last updated: 2026-10-19
 
 ## Current status
 
-The active `main` working tree is native C++ / DirectX 11 only. Allods Online is the primary reference; development is single-player first on one map. **Debug and Release Ninja/MSVC builds pass all thirteen regression suites and 132 hidden smoke captures per configuration, including world/interface layouts, outfits, sparring, the shop, buyback, eight close-up poses and seven environment views.** Representative captures were visually inspected. The map has two quests, levels 1–3, a captain, telegraphed combat, progress-preserving respawn, repeatable nonlethal training and a village quartermaster. The 24-cell bag supports drag/sort, stack splitting and six worn slots; bought helmet/shield change visuals and protection. Selling and persistent buyback conserve ownership and gold. Version 6 preserves exact stacks, gear, purchase stock and merchant-held items and migrates versions 1–5. Character presentation uses shaped heads/boots, fitted hair, fixed-length limb poses and hand-attached equipment. Player/enemy locomotion and camera transitions now have a tested smoothing pass. Full interactive playtesting and finished art remain pending. Repository HEAD is `b3e0510` (`0.0.2 - Improve sun shadows and fix contact-shadow artifacts`), committed externally. The agent has not staged, committed or pushed; the animation, smoothness, shadow and performance changes, their regressions and documentation remain in the working tree.
+Grounded-state bug fix (2026-10-19): reproduced a purchase during the exact zero-height, positive-velocity start of a buffered rebound (`rebound-grounded-repro.log`, TradeTests failed before the fix). Shop, sparring and anchor interaction checks previously tested height alone. They now use a shared Grounded predicate that also requires non-positive vertical velocity; channel validation, gait, foot placement and footstep collection use it too. Added exact-contact regressions for purchasing, sparring and anchor stabilization. Live acceptance is manual check 108.
+
+Debug and Release each pass all fifteen regression suites (`rebound-grounded-validation.log`), including existing collision, animation, audio and foot-placement checks. Whitespace checks pass. Full smoke batches were not repeated for this state-check fix. Nothing staged, committed or pushed.
+
+Buffered-jump movement pass (2026-10-19): a Space press within 120 ms before landing triggers at contact, with the remaining frame integrated as airborne motion. Rebounds preserve horizontal momentum and avoid ground-braking/gait artifacts. Focus suspension, menu capture, defeat/respawn and loading clear queued input. Zero-height positive-velocity takeoff is now airborne for pose/foot-placement state. Tests cover 22/30/60/144 Hz, expiry, cancellation, save/load reset, exact rebound height/velocity, running momentum and one landing/takeoff sound pair without footsteps. Manual feel remains check 107.
+
+Final Debug and Release builds pass all fifteen regression suites (`jump-buffer-validation.log`), including animation/foot-placement rendering diagnostics. Full 132-scene smoke batches were not repeated for this input/contact change. Whitespace checks pass; nothing staged, committed or pushed.
+
+Movement-weight pass (2026-10-19): changed jump from 6 m/s with 18 m/s² gravity to 7.2 m/s with 24 m/s² gravity (0.60 s flight, 1.08 m apex). Slow directional jumps receive a leg-driven horizontal push that tapers with current speed; running jumps preserve momentum. Air steering retains the takeoff speed limit, preventing Sprint toggles from adding propulsion in flight. Movement capture now rejects takeoff. Presentation adds stronger knee tuck, landing compression and body pitch; capture timing follows the revised arc. Motion tests cover the new launch, air Sprint lock and capture behavior alongside exact landing/traction and collision checks; animation fixtures use the new impact speed.
+
+Debug/Release pass all fifteen suites; both generated 132 smoke captures for the revised arc/poses (`jump-weight-validation.log`). Rise and landing captures were visually reviewed. A final continuous-launch adjustment adds a near-rest input-timing regression and passes all fifteen suites again in each build (`jump-launch-final.log`); those suites include the collision and foot-placement diagnostics. Live control feel remains manual check 106. No commits or pushes.
+
+Worn-surface graphics pass (2026-10-19): refined paving shape/relief, joint moss and ambient cavity shading; added mineral/pit detail in stone, restrained cloth folds and brushed metal variation. Texture/mesh allocations and submission counts remain unchanged. Initial tests caught metal roughness below the anti-shimmering floor; it was corrected rather than relaxing the regression. Visual review also reduced excessive cloth fold contrast. Character anatomy and architecture remain prototype art, below the Allods reference.
+
+Final Debug and Release builds pass fifteen suites and 132 smoke captures each (`surface-validation.log`). Village and character views were visually inspected. The short before/after benchmark and its merchant-tail limitation are recorded in `docs/graphics.md`; live acceptance is manual check 105. Nothing staged, committed or pushed.
+
+Sound-design pass (2026-10-19): rebuilt weapon swings, heavy/light impacts, incoming damage, interruption, Mend, potions and movement sounds with distinct transient/body/tail layers. Mend has ascending chimes and quiet baked reflections; potions have bottle/bubble cues. Synthesis remains deterministic and startup-only, with 1,759,146 bytes of resident PCM and the existing twelve-voice overlap headroom. Audio regression checks cover quiet edges, sustained healing tails, distinct cues, memory, accepted events and muted device lifecycle. Listening acceptance remains manual check 104; no downloaded assets or runtime reverb were added.
+
+Debug and Release builds pass all fifteen regression suites (`sound-design-validation.log` in each Ninja directory), including muted XAudio2 startup/suspension/resumption. AudioTests exports the updated `effects-preview.wav`. Full smoke captures were not repeated for this audio-only change. Nothing staged, committed or pushed.
+
+The active `main` working tree is native C++ / DirectX 11 only. Allods Online is the primary reference; development is single-player first on one map. **Debug and Release Ninja/MSVC builds pass all fifteen regression suites and 132 hidden smoke captures per configuration, including world/interface layouts, outfits, sparring, the shop, buyback, eight close-up poses and seven environment views.** Representative captures were visually inspected. The map has two quests, levels 1–3, a captain, telegraphed combat, progress-preserving respawn, repeatable nonlethal training and a village quartermaster. The 24-cell bag supports drag/sort, stack splitting and six worn slots; bought helmet/shield change visuals and protection. Selling and persistent buyback conserve ownership and gold. Version 6 preserves exact stacks, gear, purchase stock and merchant-held items and migrates versions 1–5. Character presentation uses shaped heads/boots, fitted hair, fixed-length limb poses and hand-attached equipment. Player/enemy locomotion and camera transitions now have a tested smoothing pass. Full interactive playtesting and finished art remain pending. Repository HEAD is `e4ea84d` (`0.0.3 - Add combat trails, impact sparks and interrupt effects with lifecycle safeguards`), committed externally. The agent has not staged, committed or pushed; the current foot-placement work and documentation remain in the working tree.
 
 Current environment work adds paved/dirt routes shared with the atlas, 131 grass clumps, 18 shrubs, folded leaf crowns and a dock footprint clear of neighboring props. The focused shadow map adds 4 MiB; combined material/terrain/shadow storage is 9.250 MiB against a revised 10 MiB test budget. Geometry and interface allocations are unchanged. The latest before/after workload report is in [graphics.md](docs/graphics.md).
 
 The committed landmark pass gives all four buildings distinct palettes/details, adds a covered supply stall and masonry ruin, and presents the keeper as a dressed NPC. Camera regressions keep the stall's open bay and above-canopy space clear. That art added about 58 KiB of mesh storage and no additional textures.
+
+## Anchor drift and potion hint fixes - 2026-10-19
+
+Reproduced player drift after starting anchor stabilization: the channel checked movement input, but approach momentum survived after input release. A validated channel now clears horizontal velocity while preserving this frame's actual travel for animation; rejected/interrupted attempts retain normal movement behavior. ProgressionTests checks that position remains fixed on the next channel update, and failed before the fix (`channel-tooltip-repro.log`).
+
+Corrected the bag potion hover hint in the merchant view: drinking from the bag is supported there, so the tooltip now reports health/cooldown/right-click availability instead of incorrectly asking the player to close the shop. The existing selected-stack merchant regression covers the supported action. Debug and Release each pass fifteen suites and 132 hidden smoke captures (`channel-tooltip-validation.log` in both Ninja directories). Whitespace checks pass; live acceptance remains manual check 103. Nothing staged, committed or pushed.
+
+## Combat HUD readability - 2026-10-19
+
+Target frames now display numeric health, target distance and an enemy windup countdown/progress strip. Action slots show draining cooldown masks, recovery strips, tenths in the last second, readiness accents and potion stock. Ability cards include cooldown duration, melee range or potion stock, and colored status/remaining time. The expedition tracker gains a dark backing for contrast against the world. Indicators are stateless/read-only and existing action hitboxes remain unchanged.
+
+New diagnostics at 960x600, 1280x720 and 2560x1080 cover a selected attacking enemy and a cooling Strike tooltip. Tests assert cooling abilities remain unclickable and rendering preserves gameplay state. All three diagnostics and the gameplay view were inspected. Debug and Release each pass fifteen suites and 132 standard smoke captures, plus the new HUD diagnostics; logs are `combat-interface-validation.log` in both Ninja directories. Whitespace checks pass; manual check 102 covers live readability, which remains pending. Nothing staged, committed or pushed.
+
+## Combat effect refinement - 2026-10-19
+
+Slashes now shed five fine edge fragments, hit sparks fan away from the struck surface toward the attacker, and analytic drag slows their horizontal motion as gravity bends the trajectory. Sparks shift toward warm embers or violet as they fade. Heavy impacts and interrupts gain a delayed colored pulse; the main flash/halo is reduced to retain target readability. Healing and enemy warning shapes remain unchanged. State pools, lifetimes, texture storage and the 6,144-vertex upload cap remain fixed; no downloads or new assets.
+
+Debug and Release each pass fifteen suites, 132 standard smoke captures and existing effect diagnostics, including equal-time 30/60/144-Hz rendering, depth/HUD isolation, expiry and saturated-buffer handling. Impact and fade captures were inspected; whitespace checks pass. The hidden combat workload peak increases from 534 to 564 effect vertices without additional effect draws. Logs are `effects-refinement-validation.log` in both Ninja directories; manual check 101 covers live readability, which remains pending. Nothing staged, committed or pushed.
+
+## Weathered building materials - 2026-10-19
+
+Added subtle limewash/rain/foundation staining to plaster, individual roof-tile brightness variation and less regular timber grain with reduced relief. Existing textures and meshes are reused; no downloads, added texture storage or draw calls. Village and stall captures were inspected. This improves surface variation rather than replacing the prototype geometry or reaching finished Allods-quality art.
+
+Debug and Release each pass fifteen suites and 132 smoke captures (`material-weathering-validation.log` in both Ninja directories); whitespace checks pass. Short before/after workload GPU median changes range from +0.002 to +0.011 ms; details and limitations are in `docs/graphics.md`. Manual check 100 covers moving views and live performance. Nothing staged, committed or pushed.
+
+## Focus and mouse-menu momentum fixes - 2026-10-19
+
+Reproduced two regressions from physical momentum: losing focus retained velocity, and mouse-opened menus halted movement one frame late because command capture was read before the pointer action. The engine now calls `Game::SuspendInput()` before waiting while unfocused/minimized, clearing motion without advancing simulation or changing durable state. Unfocused Game updates also halt movement. Pointer-driven modal capture is evaluated after dispatch, so both opening and closing menus affect movement in the same update.
+
+MotionTests covers focus loss/return and repeated suspension without a Game update; InterfaceTests drives real rendered HUD/menu hit regions while holding W. Both original regressions failed before the fixes (`input-momentum-repro.log`). Debug and Release each pass all fifteen suites and 132 hidden smoke captures (`input-momentum-validation.log` in both Ninja directories). Whitespace checks pass; manual check 99 covers live desktop behavior, which remains unverified. Nothing staged, committed or pushed.
+
+## Contact-timed jump physics - 2026-10-18
+
+Takeoff now switches horizontal control to the airborne response before movement, removing a frame of ground acceleration. Landing steps split at the analytically solved floor-contact time: air momentum advances to contact, then ground traction/braking advances through the remaining interval. Both intervals retain swept obstacle collision. A separate transient grounded-distance counter prevents airborne travel in landing frames from advancing walking gait or footstep sound timing; death/respawn/load clear it.
+
+Motion regressions compare takeoff displacement, ballistic distance plus ground braking, grounded travel and single landing events against analytic expectations at 22/30/60/144 Hz. The 22-Hz case exercises landing inside a frame. Debug and Release each pass fifteen suites and 132 hidden smoke captures; logs are `landing-physics-validation.log` in both Ninja directories. Whitespace checks pass. Manual check 98 covers takeoff/landing feel; live playtesting remains pending. No assets or dependencies added; terrain remains flat. Nothing staged, committed or pushed.
+
+## Player momentum and airborne control - 2026-10-18
+
+Replaced scalar player speed with transient horizontal velocity. Ground direction changes now brake existing momentum, key release produces a short stopping step (roughly 0.125 units walking / 0.219 sprinting), and airborne release retains takeoff momentum. Air steering responds more slowly than ground steering. Exact exponential displacement integration keeps constant-target movement consistent across update rates. Swept collision removes inward velocity while preserving travel along walls; menu capture, death, respawn and loading clear movement appropriately. No assets, dependencies or per-update allocations were added.
+
+Expanded MotionTests covers turning/braking trajectory agreement at 30/60/144 Hz, bounded stopping distance, airborne momentum/reversal, wall contact/tangential movement and load resets. Trade atomicity fixtures now finish braking before snapshot comparisons so normal movement does not masquerade as a transaction mutation. Debug and Release each pass fifteen suites and 132 smoke captures; logs are `physics-momentum-validation.log` in both Ninja directories. Whitespace checks pass. Manual check 97 covers feel and interaction; live playtesting remains pending. This remains a flat-ground character controller: no rigid-body props, slopes or climbing. Nothing staged, committed or pushed.
+
+## Movement audio bug fixes - 2026-10-18
+
+Reproduced a missing dash cue when the cooldown expires on the same simulation update as a new dash. Jump/dash playback now reads explicit accepted-action flags instead of inferring actions from height and cooldown history. This also preserves actions on an audio-reset frame without inventing cues from a loaded cooldown or an already ascending jump. Flags clear before every update, including rejected time steps, and are not serialized.
+
+Audio regressions cover cooldown-boundary reuse at 30/60/144 Hz, collector resets on action frames and during ascent, loading with a nonzero cooldown, and clearing cues on zero-time updates. The cooldown-boundary test failed before the fix. Debug and Release each pass all fifteen suites and 132 hidden smoke captures (`bugfix-validation.log` in each Ninja build directory); muted XAudio2 lifecycle checks also pass. Whitespace checks pass. Audible playback remains manual check 96. Nothing staged, committed or pushed.
+
+## Music and gameplay audio - 2026-10-18
+
+Debug and Release each pass fifteen suites and 132 standard smoke captures, plus existing diagnostic images. Muted XAudio2 startup/suspend/resume succeeded on the available endpoint in both builds, and the menu capture was inspected. Diff whitespace checks pass. No audible listening assessment was performed.
+
+Added native XAudio2 playback, an original 32-second ambient pad/plucked-melody loop and thirteen procedural cue types: light/heavy/enemy swings, impacts, hurt, interrupt, Mend, potion, footsteps, jump, landing and dash. Confirmed combat events drive cues; movement cues follow distance/physical transitions. Resident mono 22,050-Hz PCM totals 1,623,320 bytes (about 1.55 MiB), generated once at startup, without downloads. Twelve effect voices bound overlap, and peak-derived effect gain reserves music headroom. This is synthesized prototype audio, not recorded instruments or a finished soundtrack; spatial panning, reverb and adaptive battle music remain future work.
+
+Escape has separate Music/Effects +/- controls, with 0 muting the channel. Settings last for the running session and are not added to saves. Losing focus/minimizing suspends playback and clears effects; resuming preserves the music position. Reload/restart/respawn clears stale effect history. Hidden smoke/benchmark engines do not initialize audio. Initialization failure leaves gameplay available and marks audio unavailable in the menu; live device switching/recovery is not implemented.
+
+AudioTests checks deterministic non-silent PCM, fades/headroom, memory bounds, accepted/rejected cues, landing/dash/footstep timing and save equivalence. It writes `dawnwatch-music.wav` and `effects-preview.wav`; these are dry previews before runtime volume controls. A device test starts at zero volume and exercises suspend/resume if an endpoint is available, otherwise it checks silent fallback. Menu routing is checked at three resolutions. Validation logs are `audio-validation.log` in both Ninja directories. Auditory quality and actual speaker/headphone balance remain manual checks 93–95. Nothing staged, committed or pushed.
+
+## Native fantasy cursor - 2026-10-18
+
+Debug and Release each pass fourteen suites and 132 smoke captures, including the new cursor assertions. The enlarged cursor preview was visually inspected; live desktop input remains pending. Diff whitespace checks pass.
+
+The game client now uses a locally generated emerald arrow with a gold rim and dark outline. A native cursor handle keeps pointer movement independent of the render rate. Its premultiplied-alpha edges use 4x4 coverage sampling; the 32-pixel design scales with window DPI (up to 128 pixels), and the hotspot follows the arrow tip. DPI changes rebuild the owned handle; window borders retain standard system cursors, creation failure falls back to the normal arrow, and shutdown releases cursor resources. No system cursor settings, downloads or external assets are involved.
+
+InterfaceTests checks creation, size, hotspot and transparent/solid/antialiased pixels at 96/144/192/384 DPI and writes an enlarged `cursor-preview.bmp`. Logs are `cursor-validation.log` in both Ninja directories. GPU smoke captures do not include the native OS cursor; actual window entry/exit, clicks and mixed-DPI movement are manual check 92. Nothing staged, committed or pushed.
+
+## Equipment comparison hover cards - 2026-10-18
+
+Debug and Release pass all fourteen suites, 132 standard smoke views, the existing effect/foot diagnostics and six new tooltip captures each. Bag/shop cards were visually inspected at 960x600, 1280x720 and ultrawide. Diff whitespace checks pass; live input acceptance remains pending.
+
+Bag/equipment hover cards now show an item icon, level-adjusted weapon damage or protection, a colored comparison against actual worn gear, description, stack/ownership count, sale value and contextual action. Green means improvement, red means downgrade, and worn items are labeled explicitly. Buy buttons show the same comparison before purchase, with price and availability. Potion hints reflect full health, cooldown, defeat and the shop restriction. Cards clamp to the reference viewport and choose the opposite side of the pointer; they retain existing hit-order/drag suppression and do not consume clicks or change simulation state.
+
+New checks verify upgrade/downgrade values, currently equipped labels, empty-slot shop comparisons and potion cooldown text. Six new bag/shop captures cover 960x600, 1280x720 and 2560x1080; hover/save equivalence and existing pointer routing remain tested. Logs are `item-tooltip-validation.log` in each Ninja directory. Manual check 91 covers live readability. Nothing staged, committed or pushed.
+
+## Swept character collision - 2026-10-18
+
+The deterministic sweep grid covers 4,592 valid-start cases. Debug and Release each pass fourteen suites and 132 smoke views, plus existing effect/foot-placement diagnostics. A short Release workload pair retains gameplay counters and graphics resources, with CPU medians 0.009–0.052 ms higher; this does not isolate collision cost. Detailed timings/limitations are in [graphics.md](docs/graphics.md). Live input acceptance remains pending.
+
+Replaced X-then-Z stepping with continuous swept-circle movement against static rectangle faces, rounded corners and island boundaries. Actors move to the first contact, then project remaining movement onto the surface tangent. Walking, enemy navigation/separation and dash all use the shared path. A 0.0001-unit contact clearance prevents numerical sticking, broad-phase bounds skip distant obstacles, and four contacts bound each move without allocation. Final positions are checked before publication. This remains flat-map kinematic physics: jumping still uses the existing analytic gravity/landing solver, static props do not move, and slopes/stairs/rigid bodies are not implemented.
+
+New navigation regressions cover reaching walls while retaining tangent travel, long movement through buildings/thin trunks, both island edges, mirrored rounded corners, moving away from contact, invalid input and 30/60/144-Hz wall-slide agreement. A deterministic grid of dash-length sweeps checks final clearance and displacement bounds. Full validation logs are `swept-physics-validation.log` in both Ninja directories. Manual check 90 covers actual feel around geometry. Nothing staged, committed or pushed.
+
+## High-update-rate blade trail fix - 2026-10-18
+
+Debug and Release pass all fourteen suites and 132 smoke captures per configuration, plus 39 effect diagnostics and twelve foot-placement views. The repaired fixture measures 304/301/301 pixels at 60/144/1000 Hz; the high-rate capture was inspected. Diff whitespace checks pass.
+
+Reproduced a presentation bug: storing a blade sample every update exhausts the 32-slot history above roughly 200 Hz, shortening the intended 160 ms trail. A rendered linear-sweep fixture measured widths of 304/301/76 pixels at 60/144/1000 Hz before the fix (`trail-history-before.log` in Debug). Samples are now committed no faster than 120 Hz while the newest endpoint stays live. The fixed pool size, lifetime, damage, attack timing and save data remain unchanged. This improves duration consistency rather than promising identical samples at every rate.
+
+Three new render regressions retain visible trail history at 60/144/1000 Hz; existing discontinuity, expiry, overload, reload and gameplay tests remain active. CombatEffectsTests now produces 39 diagnostics, alongside twelve foot-placement views and 132 smoke images. Validation logs are `trail-history-validation.log` in both Ninja directories; manual check 89 covers actual high-refresh play. Nothing staged, committed or pushed.
+
+## Instance submission optimization - 2026-10-18
+
+Debug and Release each pass fourteen regression suites and 132 smoke captures, plus the existing effect/foot-placement diagnostics. Logs are `transform-validation.log` in both Ninja directories. Diff whitespace checks pass; live fullscreen testing remains manual check 88.
+
+Scene submission now derives the normal transform from the scaled orthonormal basis instead of computing a general 4x4 inverse for every object. The same three squared row lengths provide culling radius scale with one square root instead of three. Both private callers supply rotation/scale/translation without shear; future sheared transforms require a general inverse path. Nonuniform-scale/rotation tests compare normalized normals against the previous inverse across 120 transforms, and verify bounding radii.
+
+Three sequential hidden Release runs before and after show median-of-run CPU medians of 0.479 → 0.464 ms stationary, 0.459 → 0.439 ms walking, 0.489 → 0.469 ms combat and 0.914 → 0.904 ms merchant (about 3%, 4%, 4%, 1%). These small gains are workload measurements, not guaranteed fullscreen FPS improvements. GPU work/resources, submission/triangle peaks and gameplay counters are unchanged. Of 132 smoke images, 113 remain byte-identical; the remaining nineteen differ by one intensity level in only one or two color channels per entire image. Old Debug images were verified against baseline Release hashes before comparison. See [graphics.md](docs/graphics.md) for timings and artifacts. Nothing staged, committed or pushed.
+
+## Cubic shadow filtering - 2026-10-18
+
+Debug/Release pass all fourteen suites and 132 standard smoke captures. Debug's tightened-threshold rerun is recorded separately in `shadow-cubic-final-tests.log`; full build/smoke logs are `shadow-cubic-validation.log` in both directories. Contact/village captures were inspected. A short before/after Release comparison retains resource/draw counts and shows GPU medians within 0.004 ms, but merchant GPU p95 rises from 0.534 to 0.687 ms; see the full table and limitations in [graphics.md](docs/graphics.md). Nothing staged, committed or pushed.
+
+Replaced the linear tent weights with normalized cubic B-spline weights in both shadow layers. The filter retains sixteen point depth comparisons and per-tap receiver-plane correction, with continuous first/second weight derivatives across texel boundaries and a tighter central lobe. This improves filtering continuity and thin/contact contrast; it does not eliminate rasterization shimmer or implement variable-distance penumbrae. Shadow resolution, bias, projection, GPU allocations and draw counts are unchanged.
+
+In the existing eight-position thin-post fixture, minimum/mean brightness contrast rises from 34.33/45.33 to 41.00/56.96 (8-bit image units). The 0.05-unit contact fixture rises from 54.67 to 61.00. Snapped-grid motion remains at a maximum one-unit pixel difference. The near/far blend's maximum step rises from 10 to 18, still below the existing 25-unit limit; sharper edges make the resolution transition more visible. The thin-post acceptance floor is now minimum >35 and mean >50. Existing slope, contact, offscreen caster, resize, shadow clearing and portrait isolation regressions remain active. Manual check 87 covers the visual tradeoff in motion.
+
+## Camera distance smoothness - 2026-10-18
+
+Debug and Release each pass all fourteen regression suites, 132 standard smoke captures and the existing 48 effect/foot-placement diagnostic captures. The diff whitespace check also passes.
+
+Replaced first-order camera-distance easing with an exact critically damped spring. Wheel zoom starts gradually and retains velocity when reversing; outward recovery also accelerates smoothly after the existing 100 ms clearance delay. Obstruction retracts immediately and discards momentum, preserving collision safety. Explicit camera placement/reset clears velocity. Invalid time or nonfinite targets are ignored. Gameplay movement, orbit steering, foot placement and save data are unchanged.
+
+A new regression first failed against the old camera on abrupt zoom startup. New checks also cover reversal velocity, convergence and equal-time 30/60/144-Hz results, collision during outward motion, recovery hold and invalid elapsed time. Validation logs are `camera-smoothness-validation.log` in each Ninja directory. Manual check 86 covers actual wheel input and obstacle traversal; live feel remains pending. The controller adds one float with no per-frame allocation or new graphics resources. Nothing staged, committed or pushed.
+
+## Recovery effects - 2026-10-18
+
+Mend now emits green ascending ribbons and motes; potions use a smaller gold pulse. Simulation emits a transient event only after successful healing. The effect remains at the activation position and expires in 0.8 seconds; healing amounts, inventory consumption, cooldowns and save version are unchanged. Shared burst replacement now compares normalized lifetime so an expired short impact is reused before a still-active recovery pulse.
+
+Debug and Release pass all fourteen suites and 132 standard smoke views. CombatEffectsTests now generates 36 diagnostics, including eight new recovery captures; the twelve foot-placement diagnostics are retained. Recovery tests cover accepted and rejected actions, healing/save equivalence, expiry, reload, mixed-lifetime pool reuse, fixed geometry and equal-time 30/60/144-Hz rendering. Mend/potion gameplay captures were visually inspected. Logs are `recovery-validation.log` in each Ninja directory. Manual checks 84–85 remain pending. No new textures, meshes, shaders or GPU buffers; fixed effect state stays at 8,520 bytes. Each visible Mend submits 306 vertices and a potion 162 into the existing capped batch. No new sustained-performance claim or benchmark is made. Nothing staged, committed or pushed.
+
+## Planted-foot movement - 2026-10-18
+
+Added a transient foot-placement controller for the player, campaign enemies and trainer. Supporting feet retain world position and boot heading, then follow lifted steps with eased horizontal movement. Turning and stopping reposition the feet, arms counter-swing with actual ankle travel, and pelvis compensation preserves fixed leg lengths. Jumping releases contacts; landing, large displacements, reload/restart/respawn and a new sparring round rebuild them. The current floor remains flat, and movement, collision, attack timing, damage and save data are unchanged.
+
+The first rate comparison caught a different stepping sequence at 144 Hz. Contact decisions now run at fixed 240 Hz with interpolated actor positions, bounding swing sampling lag to 4.17 ms. Final straight-path ankle differences at equal time are below 0.000006 world units across 30/60/144 Hz; maximum supporting-foot drift in the tested straight/curved paths is below 0.0000005 units. These are numerical fixture results, not a guarantee for every interactive transition. Abrupt reversals, stationary turns, settling, airborne/dead states, teleports, malformed targets, fixed limb lengths, floor/weapon clearance and render immutability also have checks.
+
+Debug and Release pass all fourteen suites, 132 ordinary smoke captures, 28 combat-effect diagnostics and twelve new foot-placement captures without compiler warnings/errors. Logs are `foot-placement-validation.log` in each Ninja directory. Close-up support/recovery/run/turn/landing views and live walking/enemy/combat views were inspected; manual checks 81–83 cover physical input, live feel and fullscreen performance. Authored skeletal clips, uneven-terrain contact and stairs remain future work.
+
+The initial Debug build encountered MSVC C1902. Project-local CMake flags now embed compiler debug records with `/Z7` in Debug/RelWithDebInfo, avoiding the shared compiler PDB server. The Debug executable's linker PDB is still generated. No installed compiler or Windows settings were changed.
+
+Each fixed controller occupies 152 bytes and adds no per-frame allocation; local foot targets enlarge the animation sample by 36 bytes per actor. No meshes, textures, shaders or GPU buffers were added. One hidden Release pair retained the same submission/triangle peaks, effect counts, gameplay counters and fixed GPU allocations. CPU/GPU timings and process memory are recorded in [graphics.md](docs/graphics.md), with saved reports `foot-placement-baseline-benchmark.txt` and `foot-placement-final-benchmark.txt`. The short comparison is not a speedup or sustained FPS claim. No staging, commits or pushes were performed.
 
 ## Layered combat effects - 2026-10-18
 

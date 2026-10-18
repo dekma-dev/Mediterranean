@@ -60,7 +60,7 @@ void TransitionRegressions() {
   check(!game.State().DamagedThisUpdate() && !game.State().Enemies()[0].damagedThisUpdate,
     "Defeat updates must clear old impact events.");
 
-  const float expected=animation::Pulse(.8f-2.f/3.f,.075f);
+  const float expected=animation::Pulse(.8f-.6f,.075f);
   for (int hz : {30,60,144,0}) {
     game.Initialize(); rpg::Command jump; jump.jump=true;
     double elapsed=0; int steps=0,contacts=0;
@@ -70,8 +70,8 @@ void TransitionRegressions() {
       game.ExecuteCommand(elapsed==0?jump:rpg::Command{},dt); elapsed+=dt;
       if (game.State().LandingSpeed()>0) {
         ++contacts;
-        check(std::abs(elapsed-game.State().LandingElapsed()-2.0/3)<.00001 &&
-          std::abs(game.State().LandingSpeed()-6)<.0001f,
+        check(std::abs(elapsed-game.State().LandingElapsed()-.6)<.00001 &&
+          std::abs(game.State().LandingSpeed()-7.2f)<.0001f,
           "Ground contact must report the actual impact time and speed.");
         const auto landingSave=game.State().Save();
         Require(restored.Load(landingSave),"Landing-time save must load.");
@@ -175,10 +175,10 @@ int main() {
   hit.Update(.01f,0,0,0,false,1,1);
   Require(hit.pose.hit==0 && hit.pose.breath==0 && hit.pose.landing==0,"Defeat must clear reactions and breathing.");
   animation::State repeatJump;
-  repeatJump.Update(.01f,0,0,0,true,false,0,6); repeatJump.Update(.05f,0,0,0,true,false,0);
+  repeatJump.Update(.01f,0,0,0,true,false,0,7.2f); repeatJump.Update(.05f,0,0,0,true,false,0);
   Require(repeatJump.pose.landing>.8f,"Landing fixture must compress.");
-  repeatJump.Update(.01f,.1f,5,0,true,0,0);
-  Require(repeatJump.pose.landing==0,"A new takeoff must clear the previous landing.");
+  repeatJump.Update(.01f,0,7.2f,0,true,0,0);
+  Require(repeatJump.pose.landing==0,"A takeoff exactly at floor contact must clear the previous landing.");
   const char* encounter="MEDITERRANEAN 3\n-4 5.8 100 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
     "100 -4 7 80 0 0 1 0 3.14159265\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
   Game game; rpg::Simulation reference;

@@ -68,6 +68,68 @@ bool WorldMap::CanStand(Vec2 p,float radius) const {
   return true;
 }
 
+Vec2 WorldMap::MoveAndSlide(Vec2 from,Vec2 displacement,float radius) const {
+  if (!CanStand(from,radius) || !std::isfinite(displacement.x) || !std::isfinite(displacement.z)) return from;
+  // Sweep a circular actor against rectangle faces and rounded corners. The
+  // residual vector loses only its inward normal component: no axis priority.
+  for (int iteration=0;iteration<4;++iteration) {
+    const float lengthSq=displacement.x*displacement.x+displacement.z*displacement.z;
+    if (!std::isfinite(lengthSq) || lengthSq<1e-12f) break;
+    float hit=1; Vec2 normal{}; bool collided=false;
+    const auto accept=[&](float t,Vec2 n) {
+      if (t>=0 && t<=hit && displacement.x*n.x+displacement.z*n.z<-1e-7f) {
+        hit=t; normal=n; collided=true;
+      }
+    };
+    for (float side : {-1.f,1.f}) {
+      if (side*displacement.x>0) accept((side*(halfWidth-radius)-from.x)/displacement.x,{-side,0});
+      if (side*displacement.z>0) accept((side*(halfDepth-radius)-from.z)/displacement.z,{0,-side});
+    }
+    for (const auto& o : obstacles_) {
+      const Vec2 end{from.x+displacement.x,from.z+displacement.z};
+      if (std::max(from.x,end.x)<o.center.x-o.halfX-radius || std::min(from.x,end.x)>o.center.x+o.halfX+radius ||
+          std::max(from.z,end.z)<o.center.z-o.halfZ-radius || std::min(from.z,end.z)>o.center.z+o.halfZ+radius) continue;
+      for (float side : {-1.f,1.f}) {
+        if (side*displacement.x<0) {
+          const float t=(o.center.x+side*(o.halfX+radius)-from.x)/displacement.x;
+          if (std::abs(from.z+displacement.z*t-o.center.z)<=o.halfZ) accept(t,{side,0});
+        }
+        if (side*displacement.z<0) {
+          const float t=(o.center.z+side*(o.halfZ+radius)-from.z)/displacement.z;
+          if (std::abs(from.x+displacement.x*t-o.center.x)<=o.halfX) accept(t,{0,side});
+        }
+      }
+      for (float sx : {-1.f,1.f}) for (float sz : {-1.f,1.f}) {
+        const Vec2 offset{from.x-o.center.x-sx*o.halfX,from.z-o.center.z-sz*o.halfZ};
+        // Double precision protects the near root for long dash sweeps.
+        const double b=double(offset.x)*displacement.x+double(offset.z)*displacement.z;
+        const double c=double(offset.x)*offset.x+double(offset.z)*offset.z-double(radius)*radius;
+        const double a=double(displacement.x)*displacement.x+double(displacement.z)*displacement.z;
+        const double determinant=b*b-a*c;
+        if (b>=0 || determinant<0) continue;
+        const float t=float(c/(-b+std::sqrt(determinant)));
+        if (t<0 || t>hit) continue;
+        const Vec2 contact{offset.x+displacement.x*t,offset.z+displacement.z*t};
+        if (contact.x*sx>=0 && contact.z*sz>=0) {
+          const float length=std::hypot(contact.x,contact.z);
+          if (length>0) accept(t,{contact.x/length,contact.z/length});
+        }
+      }
+    }
+    Vec2 next{from.x+displacement.x*hit,from.z+displacement.z*hit};
+    if (collided) { next.x+=normal.x*.0001f; next.z+=normal.z*.0001f; }
+    // Never publish a penetrating result after floating-point rounding or a
+    // simultaneous contact. Unconsumed motion is dropped after four contacts.
+    if (!CanStand(next,radius)) break;
+    from=next;
+    if (!collided) break;
+    displacement.x*=1-hit; displacement.z*=1-hit;
+    const float inward=std::min(0.f,displacement.x*normal.x+displacement.z*normal.z);
+    displacement.x-=normal.x*inward; displacement.z-=normal.z*inward;
+  }
+  return from;
+}
+
 bool WorldMap::CanTravel(Vec2 from,Vec2 to,float radius) const {
   if (!CanStand(from,radius) || !CanStand(to,radius)) return false;
   const float distance=std::hypot(to.x-from.x,to.z-from.z);

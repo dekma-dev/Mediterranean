@@ -1,5 +1,73 @@
 # Procedural graphics and performance budget
 
+## Worn surfaces - 2026-10-19
+
+Paving now uses rounded, irregular edges, chipped bevel relief, cooler/warmer stone variation and moss-toned joints. Recessed joints attenuate ambient light only; this is a material cavity approximation, not scene ambient occlusion. Rock surfaces add periodic mineral strata and small pits. Cloth gains restrained folds beneath its weave; metal gains fine directional texture and roughness variation. Texture dimensions, meshes, draw counts and fixed allocations are unchanged. Ground pixels add one noise evaluation and rounded-edge arithmetic; other material changes are generated at startup.
+
+The supplied Allods screenshot and [official media gallery](https://allods.my.games/en/media) remain art references. This pass improves surface depth and material separation, not character anatomy or building silhouettes. Those remain significant gaps from the reference. No external assets were downloaded. Manual check 105 covers moving-camera acceptance and fullscreen performance.
+
+One hidden 1280x720 before/after workload pair (90 warmup + 600 measured frames) reports GPU median/p95 ms: stationary 0.343/0.364 to 0.353/0.376; walking 0.302/0.321 to 0.306/0.325; combat 0.310/0.327 to 0.315/0.331; merchant 0.514/0.561 to 0.515/0.665. The merchant tail increased; this short pair includes run-to-run variation and does not establish fullscreen performance. Mesh bytes (224,320), material/shadow bytes (9,699,312), submissions and gameplay counters are unchanged. Reports: `surface-before.txt` / `surface-after.txt` in Release. Final village and character captures were visually reviewed; matching before/after copies use `surface-village-*` and `surface-character-*` names.
+
+## Directional combat effects - 2026-10-19
+
+Player slash crescents add five thin edge fragments (30 vertices). Heavy impacts and interrupts add one delayed colored ring (6 vertices each). Spark fans follow impact facing, slow horizontally using analytic drag and shift color over their fixed lifetime; the main contact glow is reduced. Interrupts retain a radial upward burst. Existing texture-free additive rendering, depth testing, read-only render behavior, 32 burst / 8 trail pools and the 6,144-vertex upload ceiling are unchanged. Healing geometry is unchanged.
+
+One before/after hidden 1280x720 workload pair (90 warmup + 600 measured frames) reports combat CPU median/p95 0.524/0.649 to 0.486/0.590 ms and GPU 0.309/0.327 to 0.308/0.325 ms. This small unpaired sample includes run-to-run variation and does not establish a speedup or sustained FPS. Combat effect peak vertices rise from 534 to 564; effect frames (265), scene submissions (57), windup frames (270) and received hits (6) remain unchanged. Fixed resource allocations are unchanged. Reports are `effects-refinement-before.txt` / `effects-refinement-after.txt` in Release; build logs use `effects-refinement-validation.log`. Impact/fade captures were visually inspected, and manual check 101 covers moving-camera readability and overlapping effects.
+
+## Weathered building materials - 2026-10-19
+
+Plaster now combines broad limewash variation, elongated rain staining and a muted damp tint near foundations. Roof tiles vary individually in brightness while retaining their existing relief. Timber uses warped periodic grain with shallower relief and subtler stripe contrast, reducing the corrugated appearance on posts, doors and the counter. These are restrained surface refinements; building silhouettes and character anatomy remain prototype geometry. No external assets were downloaded.
+
+Texture dimensions, mesh data, draw counts and resource allocations are unchanged: material/shadow storage remains 9,699,312 bytes. Timber/roof detail is generated once at startup; plaster adds two procedural noise evaluations to affected pixels. Existing material tests cover deterministic generation, roughness bounds, relief and resource budgets. Village and close-up stall captures were visually inspected.
+
+One hidden 1280x720 Release before/after pair (90 warmup + 600 measured frames per workload) gives GPU median/p95 ms: stationary 0.345/0.367 to 0.356/0.372; walk/orbit 0.296/0.314 to 0.300/0.319; combat 0.307/0.323 to 0.309/0.325; merchant 0.511/0.554 to 0.517/0.544. CPU medians are 0.474/0.465/0.477/0.895 before and 0.444/0.429/0.436/0.891 after; this short unpaired sample does not demonstrate CPU improvement or sustained FPS. Geometry/submission counts and gameplay counters are unchanged. Reports: `material-weathering-before.txt` and `material-weathering-after.txt` in the Release directory. Before images are retained as `material-village-before.png` and `material-stall-before.png`. Manual check 100 covers moving-camera quality and fullscreen performance.
+
+## Swept collision workload check - 2026-10-18
+
+The kinematic collision pass adds no rendering resources or allocations. One hidden 1280x720 Release comparison (90 warmup + 600 measured frames per workload) gives CPU median/p95 ms: stationary 0.452/0.560 → 0.492/0.604, walking 0.444/0.518 → 0.455/0.554, combat 0.464/0.590 → 0.473/0.575, merchant 0.873/1.045 → 0.925/1.074. GPU medians remain within 0.003 ms; merchant GPU p95 changes from 0.551 to 0.704 ms. This small unpaired workload sample includes variation and does not isolate collision cost or certify sustained FPS. Walked distance (31.908), windup frames (270) and received hits (6) remain unchanged in these fixtures. Reports: `swept-physics-before.txt` / `swept-physics-after.txt` in the Release directory. Manual check 90 covers live behavior/performance near contacts.
+
+## Blade history regression fix - 2026-10-18
+
+Blade samples are now committed at most 120 times per second while retaining a live endpoint, so the fixed 32-slot trail covers its intended 160 ms at high update rates. Previously the history became shorter above roughly 200 Hz. The synthetic rendered sweep changed from 304/301/76 pixels wide at 60/144/1000 Hz to 304/301/301; this checks visible history retention, not exact rate-independent artwork. State size, GPU buffers and lifetime are unchanged. Three `effects-history-*.png` diagnostics bring CombatEffectsTests to 39 captures; the 1000-Hz result was inspected. Full validation logs are `trail-history-validation.log`; manual high-refresh acceptance is check 89. No new performance claim is made.
+
+## Instance CPU optimization - 2026-10-18
+
+The private instance submission path accepts scaled orthonormal transforms. Its normal basis is each world basis row divided by that row's squared length, equivalent in xyz to inverse-transpose for these transforms. The maximum squared length also yields the culling radius scale with one square root. No GPU formats, shaders, meshes, texture allocations, instance limits or draw ordering change. A new geometry regression compares 120 nonuniformly scaled/rotated/translated transforms to the previous general inverse. Sheared matrices are outside this helper's contract.
+
+Three runs per build, each with four hidden 1280x720 workloads (90 warmup + 600 frames, present interval 0), give these medians across runs:
+
+| Workload | CPU median before → after (ms) | CPU p95 before → after (ms) |
+| --- | --- | --- |
+| Stationary | 0.479 → 0.464 | 0.573 → 0.553 |
+| Walk/orbit | 0.459 → 0.439 | 0.579 → 0.544 |
+| Combat | 0.489 → 0.469 | 0.604 → 0.577 |
+| Merchant | 0.914 → 0.904 | 1.085 → 1.055 |
+
+GPU medians remain similar: stationary 0.327–0.339 → 0.328–0.338 ms, walking 0.295–0.298 → 0.297–0.298, combat 0.306–0.307 → 0.307–0.309, merchant 0.513–0.514 → 0.514–0.515. All before runs preceded the after runs; ordinary run-order/hardware variation may contribute to these small gains. No sustained/fullscreen FPS claim is made. Submissions, triangles, gameplay counters and fixed GPU allocations are unchanged.
+
+Of 132 Release smoke captures, 113 are byte-identical. Nineteen contain only one or two changed channels, each by one 8-bit level, consistent with floating-point rounding. References were matched to original Release hashes. Reports: `transform-before-1.txt` through `transform-before-3.txt`, corresponding `transform-after-*.txt`, `transform-before-images.json` and `transform-image-comparison.txt` in the Release build directory. Full validation logs are `transform-validation.log` in each Ninja directory. Manual check 88 covers live performance and visual acceptance.
+
+## Cubic shadow filtering - 2026-10-18
+
+Both layers use normalized cubic B-spline weights over the same sixteen depth comparisons. Each tap retains receiver-plane depth correction; bias, resolution and texture allocations are unchanged. The tighter central lobe strengthens thin/contact shadows, and weight derivatives remain continuous across texel boundaries. This does not remove caster rasterization aliasing or supply distance-dependent soft shadows. The existing thin-post fixture's minimum/mean contrast improves from 34.33/45.33 to 41.00/56.96; snapped-focus pixel difference remains 1. The near/far blend step increases from 10 to 18, below its existing 25-unit threshold. Review this sharper transition in manual check 87.
+
+One hidden Release before/after pair (1280x720, 90 warmup and 600 measured frames per workload) reports:
+
+| Workload | CPU median/p95 ms, before → after | GPU median/p95 ms, before → after |
+| --- | --- | --- |
+| Stationary | 0.485/0.558 → 0.473/0.584 | 0.349/0.369 → 0.350/0.369 |
+| Walk/orbit | 0.457/0.566 → 0.472/0.584 | 0.295/0.312 → 0.297/0.315 |
+| Combat | 0.474/0.587 → 0.495/0.606 | 0.305/0.322 → 0.307/0.324 |
+| Merchant | 0.885/1.040 → 0.906/1.077 | 0.510/0.534 → 0.514/0.687 |
+
+GPU observations range from 591 to 600 per workload. This short pair is not a sustained FPS result: median GPU changes are small, but the merchant p95 increased and needs live profiling. Peak draws/triangles, gameplay counters and asset allocations are unchanged. End working/private memory is 61.016/88.996 → 61.074/89.832 MiB. Reports are `shadow-cubic-before.txt` and `shadow-cubic-after.txt` in the Release directory. Validation uses the existing fourteen suites and 132 smoke views per configuration, with tightened thin-shadow acceptance thresholds; representative contact and village captures were inspected.
+
+## Recovery effects - 2026-10-18
+
+Successful Mend emits two green ascending ribbons and ten motes; potions emit one gold ribbon and six motes. A restrained central glow completes each pulse. Residue stays at the activation position and fades in 0.8 seconds. Effects reuse the existing depth-tested additive batch, fixed 32-burst pool and capped 6,144-vertex upload. Mend submits 306 vertices, a potion 162; there are no new textures, shaders, meshes or GPU buffers and fixed effect state remains 8,520 bytes. Mixed-lifetime replacement favors expired effects over active longer pulses.
+
+Debug/Release pass fourteen suites, 132 standard smoke views, 36 effect diagnostics and twelve foot-placement views. Recovery diagnostics cover gameplay views and equal-time 30/60/144-Hz rendering; the gameplay views were inspected. Current logs are `recovery-validation.log` in each build directory. Actual fullscreen readability and overlapping-effect cost remain manual checks 84–85; this pass has no new timing benchmark or FPS claim. Existing attack-only benchmark figures below do not measure healing.
+
 The current direction is a more grounded, stylized RPG scene built with C++ and DirectX 11. Triangles remain the GPU representation. The visible box/pyramid blockout has been replaced with shaped meshes, generated surfaces and shadows. This is an initial art pass, not photorealism or finished character art.
 
 No model packs, scanned datasets, downloaded textures, external engine, or runtime asset service is required. The mesh library and material images are generated once during startup and reused. GPU instancing shares geometry between actors and props. Animation moves shaped body parts using fixed-length, two-bone arm/leg poses; there is no skeletal skinning or authored animation clip yet.
@@ -10,6 +78,7 @@ No model packs, scanned datasets, downloaded textures, external engine, or runti
 - Distinct homestead, watch hall, storehouse and training hall with pitched roofs, windows/shutters, timber braces, emblems and lanterns; a covered supply counter, masonry ruin, branched trees, training dummies and floating fragments.
 - Folded leaf crowns, 18 shrubs and 131 grass clumps, placed away from roads, solid props and interaction areas. Small grass clumps receive shadows but do not cast them.
 - Shaped torsos, heads, limbs, boots, faces, blades and armor. Walking and attack poses use procedural joint positions.
+- Flat-ground planted-foot steps for the player and enemies, stable support-boot headings, arm counter-swing and pelvis compensation for fixed-length legs. Airborne/idle portrait poses still use the procedural animation layers; there is no skeletal skinning or terrain-slope adaptation.
 - Eleven packed material layers for ground, stone, wood, plaster, roofs, cloth, metal, leaves, skin and markers. Object-aligned triplanar projection blends color, height slopes and roughness without UV asset files; detail follows animated parts. Ground routes remain in world coordinates.
 - Linear-light surface shading, roughness-dependent highlights, warm sunlight/cool hemisphere fill, overlapping whole-island and focused detail shadow maps, surface-aware tent filtering, distance fog and layered procedural clouds.
 - Combat cones, targeting cues and quest crystals remain deliberately abstract for gameplay readability. Their explicit caster flags keep them out of the world shadow pass; ordinary plain or emissive solids can cast shadows independently of material.
@@ -28,6 +97,7 @@ No model packs, scanned datasets, downloaded textures, external engine, or runti
 | HUD / effect upload (shared) | 16,380 vertices per upload; 655,200 bytes |
 | Combat effect CPU state | 8,520 bytes; 32 bursts, eight trails with 32 samples and attack origin/facing each; test budget 16 KiB |
 | Combat effect CPU vertex queue | 6,144 vertices / 245,760 bytes reserved; newest excess quads are dropped |
+| Foot-placement CPU controller | 152 bytes per actor, fixed two-foot state; 256-byte test budget |
 
 These figures describe specific renderer resources, not total VRAM or process memory. Back buffers, main depth, driver allocations, shaders, CPU caches and the window system are additional. A world/portrait batch uploads at most 4,096 distinct instances visible in any of its passes and fails with a diagnostic if that union exceeds the limit. Each instance is uploaded once; shadow/color passes share its stored transform without multiplying the capacity cost. Dynamic-buffer discard allows the driver to retain data used by earlier frames; the listed buffer size is not a bound on driver backing allocations. Camera and light frustum culling run independently; objects outside the camera can still cast visible shadows. No per-frame mesh or texture regeneration is performed.
 
@@ -425,7 +495,7 @@ Impact bursts combine a compact white-tinted core and soft halo, a short expandi
 
 The existing effect shaders/batch and GPU upload buffer are reused. Storing attack origins/facings adds 128 bytes of fixed CPU state, bringing it to 8,520 bytes. The 240 KiB vertex queue and 6,144-vertex cap remain unchanged. At saturation, newer quads are discarded; an eight-heavy-trail/32-impact stress test reaches that cap and renders successfully. Larger halos increase overdraw and shader work even though fixed GPU allocations and the single effect draw remain unchanged.
 
-Debug and Release each pass all thirteen suites, 132 smoke captures and 28 separate effect diagnostic captures without compiler warnings/errors. Logs: `cinematic-effects-validation.log` in each Ninja directory. New GPU checks cover ring depth occlusion, a transparent ring center, overload and equal-time 30/60/144-Hz rendering (mean channel difference below the unchanged test threshold of 0.05 on a 0–255 scale). Gameplay-distance, front, opposite-side, impact/trail and afterglow captures were visually inspected. Earlier lifecycle, miss/interrupt, reset, unarmed, depth/blend, live-menu and HUD/portrait tests remain active. Manual checks 78–80 cover live feel and fullscreen acceptance.
+Debug and Release each pass all thirteen suites, 132 smoke captures and 28 separate effect diagnostic captures without compiler warnings/errors. Logs: `cinematic-effects-validation.log` in each Ninja directory. New GPU checks cover ring depth occlusion, a transparent ring center, overload and equal-time 30/60/144-Hz rendering (mean channel difference below the test threshold of 0.05 on a 0–255 scale). Gameplay-distance, front, opposite-side, impact/trail and afterglow captures were visually inspected. Earlier lifecycle, miss/interrupt, reset, unarmed, depth/blend, live-menu and HUD/portrait tests remain active. Manual checks 78–80 cover live feel and fullscreen acceptance.
 
 One before/after Release pair uses the initial effect build as the baseline, with the same hidden 1280x720 workload, fixed 1/60-second step, zero presentation interval, 90 warmup and 600 measured frames:
 
@@ -439,3 +509,28 @@ One before/after Release pair uses the initial effect build as the baseline, wit
 Combat effect frames rise from 244 to 265 of 600 measured frames, with peak effect vertices 96 → 534. Peak combat submissions remain 57 and peak triangles change from 309,570 to 309,582; frame maxima need not occur on the same frame. Other workloads still submit zero effect vertices and retain their prior submission/triangle peaks. Walking distance remains 31.908 units, with 270 combat windup frames and six hits. Fixed mesh/material-terrain-shadow/interface allocations remain 224,320/9,699,312/1,529,172 bytes. End working set/private memory changes from 206.305/236.336 to 210.023/240.430 MiB. The measurements are short and GPU observations sparse; they do not prove a speedup, sustained memory ceiling or fullscreen FPS. These workloads also do not represent maximum overlapping heavy bursts.
 
 Reports: `build-ninja-release/cinematic-effects-baseline-benchmark.txt` and `cinematic-effects-final-benchmark.txt`. Initial-effect reference PNGs remain in `build-ninja-release/cinematic-effects-baseline-captures`. No player saves were written.
+
+## Planted-foot movement - 2026-10-18
+
+The grounded locomotion layer replaces the traveling sine's ankle positions with world-space contacts and lifted steps. A supporting boot retains both position and heading until its recovery step starts. Step goals anticipate measured root travel and ease toward new goals after steering/stopping; normal steps alternate, with early support release when running or reversing would otherwise overextend a leg. Horizontal interpolation uses smoothstep and vertical lift has zero endpoint slope. Grounded arms counter-swing from the actual foot offsets. The existing two-bone solver lowers the pelvis as necessary rather than stretching limbs or lifting a planted ankle; extreme/malformed targets are bounded before solving. Both boot meshes use the same contact heading. Actual movement, attack facing, damage and saves are unchanged.
+
+Foot contact decisions use 240 Hz ticks with actor-path interpolation. This fixes a reproduced 144-Hz step-order difference from variable substeps; swing samples can trail the current time by at most 4.17 ms. Contacts release in the air and on death. Landing, displacement above 0.85 units in one update, reset/load/respawn and sparring restart establish fresh anchors. Rendering only consumes local targets and cannot advance the step. The system assumes the existing flat floor: individual feet do not raycast stairs, navigate around props or adapt to slopes. Authored clips, skeletal deformation and more detailed foot rolls remain future work.
+
+The controller occupies 152 fixed bytes per actor; the animation sample adds 36 bytes of local foot data. There are no new meshes, textures, shaders, GPU buffers, effect passes or per-frame heap allocations. State vectors resize with actor-count/reset handling. The extra work is CPU contact scheduling, interpolation and pose solving; normal standing still uses grounded contacts, while portrait/static-NPC poses retain their existing presentation path.
+
+`FootPlacementTests` brings the total to fourteen suites. Debug and Release pass all suites, 132 ordinary smoke captures, 28 effect diagnostics and twelve foot-placement diagnostic PNGs. Final logs are `foot-placement-validation.log` in each Ninja build directory and contain no compiler warnings/errors. Tests cover support drift in straight/curved walking at 1, 4.4 and 7 units/second, 30/60/144-Hz agreement, stopping without endless shuffling, turns, uneven-step reversals, jumping/landing, death, teleports, invalid data, limb lengths, floor/weapon clearance, unchanged durable state and repeat-render stability. Live enemy and combat views exercise the simulation-to-pose path. Inspected close-ups and live views show grounded support, knee bending and attached equipment. Manual checks 81–83 remain necessary for live feel and fullscreen acceptance.
+
+Maximum measured support drift is 0.000000477 world units in these fixtures, and the largest equal-time ankle difference across tested update rates is 0.000005723. Test limits remain 0.002 and 0.065 units respectively. These metrics establish the tested trajectories, not perfect foot contact under every possible input sequence.
+
+The first Debug compilation failed with MSVC C1902 before source compilation. CMake now replaces compiler `/Zi` or `/ZI` debug flags with `/Z7` for Debug/RelWithDebInfo so compiler records live in object files. The linker still creates `RPGNative.pdb`; the installed toolchain and system configuration are untouched. Debug and Release were rebuilt successfully after the change; debugger interaction itself was not tested.
+
+One before/after Release pair uses the same hidden 1280x720 workload, fixed 1/60-second step, zero presentation interval, 90 warmup and 600 measured frames:
+
+| Workload | CPU median / p95 before → after (ms) | GPU median / p95 before → after (ms) | GPU observations before / after |
+| --- | --- | --- | --- |
+| Stationary HUD | 0.473 / 0.575 → 0.468 / 0.562 | 0.350 / 0.367 → 0.333 / 0.357 | 596 / 597 |
+| Walking/orbit | 0.478 / 0.583 → 0.435 / 0.536 | 0.293 / 0.310 → 0.293 / 0.313 | 594 / 600 |
+| Combat/orbit | 0.479 / 0.598 → 0.458 / 0.540 | 0.304 / 0.319 → 0.305 / 0.319 | 600 / 600 |
+| Merchant/character/bag | 0.900 / 1.070 → 0.892 / 1.059 | 0.509 / 0.544 → 0.510 / 0.549 | 600 / 600 |
+
+Peak submissions/triangles remain 58/296,828, 58/301,078, 57/309,582 and 68/285,640. Combat has 265 effect frames of 600 and 534 peak effect vertices, unchanged; other workloads submit no effects. Walking distance remains 31.908 units, with 270 windup frames and six received hits. Fixed mesh/material-terrain-shadow/interface storage remains 224,320/9,699,312/1,529,172 bytes. End working set/private bytes changes from 60.871/89.012 to 61.031/90.879 MiB. These short measurements include run variation and are not a speedup claim, fullscreen FPS estimate or long-session memory bound. Reports: `foot-placement-baseline-benchmark.txt` and `foot-placement-final-benchmark.txt` in the Release build directory. No assets were downloaded or player saves written.

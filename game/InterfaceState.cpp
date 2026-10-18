@@ -47,6 +47,25 @@ bool CanUse(const rpg::Simulation& s,Item item) {
   if (!Owned(s,item) || s.Health()<=0) return false;
   return item==Item::Potion?s.PotionCooldown()==0 && s.Health()<s.MaxHealth():Describe(item).slot!=rpg::GearSlot::None;
 }
+ItemSummary SummarizeItem(const rpg::Simulation& s,Item item) {
+  if (!rpg::ValidItem(item)) return {};
+  const auto& info=Describe(item);
+  const auto signedValue=[](float value) { return (value>=0?std::string("+"):std::string())+std::to_string(int(value)); };
+  if (item==Item::Potion) return {"Restores up to 40 health","Shared cooldown: 3 seconds",0};
+  const auto worn=s.Items().Worn(info.slot); const auto& current=Describe(worn);
+  ItemSummary result;
+  if (info.slot==rpg::GearSlot::Weapon) {
+    result.stats="Strike "+std::to_string(int(info.strike)+3*(s.Level()-1))+"  /  Heavy "+std::to_string(int(info.heavy)+5*(s.Level()-1));
+    result.difference=info.strike-current.strike;
+    result.comparison="Strike "+signedValue(result.difference)+"  /  Heavy "+signedValue(info.heavy-current.heavy);
+  } else {
+    result.stats="Damage reduction: "+std::to_string(int(info.armor));
+    result.difference=info.armor-current.armor;
+    result.comparison="Protection "+signedValue(result.difference);
+  }
+  result.comparison=worn==item?"Currently equipped":result.comparison+(worn==Item::None?" vs empty slot":" vs worn gear");
+  return result;
+}
 void ApplyItem(rpg::Command& command,const rpg::Simulation& s,Item item,int bagSlot) {
   if (!CanUse(s,item)) return;
   if (bagSlot!=-1 && (bagSlot<0 || bagSlot>=rpg::Inventory::capacity || s.Items().Bag()[bagSlot].item!=item)) return;

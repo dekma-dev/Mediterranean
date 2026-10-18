@@ -69,6 +69,13 @@ float2 ShadowGradient(float3 coordinate) {
   gradient=float2(dy.y*dx.z-dx.y*dy.z,dx.x*dy.z-dy.x*dx.z)/determinant;
  return gradient;
 }
+float4 ShadowWeights(float fraction) {
+ // Cubic B-spline weights: continuous first/second derivatives at texel
+ // boundaries, with a tighter central lobe than the old linear tent.
+ float f2=fraction*fraction,f3=f2*fraction;
+ float inv=1-fraction;
+ return float4(inv*inv*inv,3*f3-6*f2+4,-3*f3+3*f2+3*fraction+1,f3)/6;
+}
 float ShadowFilter(float3 coordinate,float2 gradient,float sunFacing,uint layer) {
  float2 uv=coordinate.xy;
  if (any(uv<0) || any(uv>1) || coordinate.z<0 || coordinate.z>1) return 1;
@@ -83,17 +90,16 @@ float ShadowFilter(float3 coordinate,float2 gradient,float sunFacing,uint layer)
  float2 texel=uv*size-.5,base=floor(texel),fraction=texel-base;
  float grazing=1-sunFacing;
  float bias=.000025+.00015*grazing*grazing;
- // Separable tent, equivalent weights to a bilinear 3x3 [1,2,1] filter.
- // Sixteen point comparisons give every tap its own plane-correct depth.
- float4 wx=float4(1-fraction.x,2-fraction.x,1+fraction.x,fraction.x);
- float4 wy=float4(1-fraction.y,2-fraction.y,1+fraction.y,fraction.y);
+ // Sixteen point comparisons retain a separate receiver-plane depth per tap.
+ // Cubic weights reduce filtering-induced speed changes as edges cross texels.
+ float4 wx=ShadowWeights(fraction.x),wy=ShadowWeights(fraction.y);
  float sum=0;
  [unroll] for (int y=0;y<4;++y) [unroll] for (int x=0;x<4;++x) {
   float2 tap=base+float2(x-1,y-1);
   sum+=wx[x]*wy[y]*shadowMap.SampleCmpLevelZero(shadowSampler,float3((tap+.5)/size,layer),
     saturate(coordinate.z+dot(depthStep,tap-texel)-bias));
  }
- return sum/16;
+ return sum;
 }
 float Shadow(float4 widePosition,float4 detailPosition,float sunFacing) {
  float3 wide=ShadowCoordinate(widePosition),detail=ShadowCoordinate(detailPosition);
@@ -127,6 +133,7 @@ float4 PSMain(VOut i) : SV_TARGET {
  float3 slope=weights.x*float3(0,gx.y,gx.x)+weights.y*float3(gy.x,0,gy.y)+weights.z*float3(gz.x,gz.y,0);
  float2 heightDerivative=float2(dot(slope,ddx(i.tp)),dot(slope,ddy(i.tp)))*scale;
  float3 albedo=i.tint.rgb*detail;
+ float cavity=1;
  if (i.material==1) {
   float broad=Noise(i.wp.xz*.16),fine=Noise(i.wp.xz*1.7);
   albedo=lerp(float3(.22,.32,.12),float3(.39,.43,.20),broad)*detail;
@@ -136,21 +143,38 @@ float4 PSMain(VOut i) : SV_TARGET {
   routes*=all(groundUV>=0) && all(groundUV<=1);
   float3 soil=float3(.43,.34,.23)*(.83+fine*.2)*detail;
   float2 tile=i.wp.xz*float2(2.2,3.3);
-  tile+=.075*sin(tile.yx*float2(2.9,3.7));
+  tile+=.10*sin(tile.yx*float2(2.9,3.7));
   tile.x+=floor(tile.y)*.5;
   float2 cell=floor(tile),fraction=frac(tile);
-  float joint=min(min(fraction.x,1-fraction.x),min(fraction.y,1-fraction.y));
+  // Rounded, chipped corners keep the path from reading as a perfect brick grid.
+  float2 edgeDistance=abs(fraction-.5);
+  float joint=.5-pow(pow(edgeDistance.x,6)+pow(edgeDistance.y,6),1.0/6);
+  float chips=Noise(i.wp.xz*17);
+  joint-=(chips-.5)*.055;
   float smoothing=max(max(fwidth(tile.x),fwidth(tile.y)),.012);
   float mortar=smoothstep(.035-smoothing,.075+smoothing,joint);
   float stoneVariation=Hash(cell);
-  float3 paving=lerp(float3(.19,.20,.18),lerp(float3(.43,.43,.40),float3(.58,.54,.45),stoneVariation),mortar)*detail;
+  float3 stoneColor=lerp(float3(.37,.40,.42),float3(.59,.53,.43),stoneVariation);
+  float moss=(1-mortar)*smoothstep(.35,.7,fine);
+  float3 jointColor=lerp(float3(.19,.18,.15),float3(.19,.25,.12),moss);
+  float3 paving=lerp(jointColor,stoneColor*(.92+.12*chips),mortar)*detail;
   albedo=albedo*max(0,1-routes.x-routes.y)+soil*routes.x+paving*routes.y;
   // Shallow stone bevels shade the paving without changing the collision floor.
-  float relief=routes.y*.038*mortar*(.8+stoneVariation*.2);
+  float relief=routes.y*(.042*mortar*(.7+stoneVariation*.3)+.002*chips*mortar);
   heightDerivative+=float2(ddx(relief),ddy(relief));
-  roughness=lerp(.96,.78,routes.y);
+  roughness=lerp(.96,lerp(.93,.68+.14*stoneVariation,mortar),routes.y);
+  cavity=lerp(1,lerp(.65,1,mortar),routes.y);
  }
- if (i.material==4) albedo*=lerp(.76,1,smoothstep(.06,.9,i.wp.y));
+ if (i.material==4) {
+  // Broad limewash variation and rain streaks on static plaster walls. Use
+  // both horizontal axes so weathering continues around building corners.
+  float wash=Noise(i.wp.xz*.65+i.wp.y*.12);
+  float streak=Noise(float2((i.wp.x+i.wp.z)*5.3,i.wp.y*.32));
+  float stain=(1-smoothstep(.12,1.65,i.wp.y))*(.35+.65*streak);
+  albedo*=lerp(.89,1.035,wash);
+  albedo=lerp(albedo,albedo*float3(.63,.66,.53),stain*.65);
+  albedo*=1-.065*smoothstep(.55,.85,streak);
+ }
  // Convert the texture height derivative into a world-space surface gradient.
  // This works for rotated/nonuniform parts without stored tangent vertices.
  float3 dpdx=ddx(i.wp),dpdy=ddy(i.wp);
@@ -176,7 +200,7 @@ float4 PSMain(VOut i) : SV_TARGET {
  float3 ambient=lerp(float3(.29,.23,.16),float3(.52,.68,.91),n.y*.5+.5)*hemisphere;
  float3 sunlight=float3(1,.88,.70)*2.15;
  float specular=pow(saturate(dot(n,halfVector)),exponent)*(exponent+8)/32;
- float3 result=base*(ambient+sunlight*diffuse*visibility)*(1-metal*.45);
+ float3 result=base*(ambient*cavity+sunlight*diffuse*visibility)*(1-metal*.45);
  result+=fresnel*(specular*sunlight*visibility*diffuse+ambient*.45);
  if (i.material==10) result=base*2.3;
  // Resolve lighting in linear space, then apply a restrained highlight shoulder.

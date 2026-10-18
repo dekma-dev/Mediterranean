@@ -1,4 +1,13 @@
 #include "platform/Win32Window.h"
+#include "platform/GameCursor.h"
+
+void Win32Window::RefreshCursor(UINT dpi) {
+  if (auto next=CreateGameCursor(dpi)) {
+    const auto previous=cursor_; cursor_=next;
+    if (previous && GetCursor()==previous) SetCursor(next);
+    if (previous) DestroyCursor(previous);
+  }
+}
 
 LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
   auto* window = reinterpret_cast<Win32Window*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
@@ -8,7 +17,14 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
     SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(window));
   }
   switch (msg) {
+  case WM_SETCURSOR:
+    if (window && LOWORD(lparam)==HTCLIENT) {
+      SetCursor(window->cursor_?window->cursor_:LoadCursor(nullptr,IDC_ARROW));
+      return TRUE;
+    }
+    return DefWindowProc(hwnd,msg,wparam,lparam);
   case WM_DPICHANGED: {
+    if (window) window->RefreshCursor(HIWORD(wparam));
     const auto* suggested=reinterpret_cast<const RECT*>(lparam);
     RECT rect=*suggested;
     if (window && window->fullscreen_) {
@@ -74,6 +90,8 @@ bool Win32Window::Create(HINSTANCE instance, int width, int height, const wchar_
   if (!hwnd_) {
     return false;
   }
+
+  RefreshCursor(GetDpiForWindow(hwnd_));
 
   if (visible) {
     if (!SetFullscreen(true)) return false;

@@ -4,7 +4,7 @@
 class Renderer;
 namespace ui {
 enum class Panel { None,Menu,Character,Inventory,Map,Journal,Merchant };
-enum class Action { None,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview };
+enum class Action { None,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview,MusicVolume,EffectsVolume };
 using Item=rpg::Item;
 struct Rect { float x,y,w,h; bool Contains(float px,float py) const { return px>=x && py>=y && px<x+w && py<y+h; } };
 struct Layout {
@@ -20,6 +20,8 @@ const ItemInfo& Describe(Item item);
 bool Owned(const rpg::Simulation& simulation,Item item);
 bool Equipped(const rpg::Simulation& simulation,Item item);
 bool CanUse(const rpg::Simulation& simulation,Item item);
+struct ItemSummary { std::string stats,comparison; float difference=0; };
+ItemSummary SummarizeItem(const rpg::Simulation& simulation,Item item);
 void ApplyItem(rpg::Command& command,const rpg::Simulation& simulation,Item item,int bagSlot=-1);
 class Interface {
 public:
@@ -50,6 +52,8 @@ public:
   std::string merchantNotice;
   float noticeTime=0;
   float previewYaw=0;
+  int musicVolume=35,effectsVolume=70;
+  bool audioAvailable=false;
   rpg::Vec2 waypoint{},pendingWaypoint{};
 private:
   std::vector<Region> regions_;

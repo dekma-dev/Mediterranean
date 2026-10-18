@@ -60,6 +60,8 @@ void Game::Update(double seconds,const Input& input,float wheel) {
       input.Pressed(VK_LBUTTON),input.Pressed(VK_RBUTTON),input.Held(VK_LBUTTON),input.Released(VK_LBUTTON));
   rpg::Command command;
   switch (event.action) {
+  case ui::Action::MusicVolume: interface_.musicVolume=std::clamp(interface_.musicVolume+event.value,0,100); break;
+  case ui::Action::EffectsVolume: interface_.effectsVolume=std::clamp(interface_.effectsVolume+event.value,0,100); break;
   case ui::Action::Close: interface_.Close(static_cast<ui::Panel>(event.value)); break;
   case ui::Action::Menu: interface_.Escape(); break;
   case ui::Action::Character: interface_.Toggle(ui::Panel::Character); break;
@@ -87,6 +89,8 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   default: break;
   }
   const bool pointerCaptured=uiVisible && interface_.PointerOverUi();
+  // Pointer actions above can open or close a modal panel in this very frame.
+  command.haltMovement=interface_.CapturesMovement() || !input.Focused();
   if (interface_.CapturesMovement() || interface_.Dragging()) CancelOrbit();
   else if (!input.Held(VK_RBUTTON)) orbiting_=false;
   if (input.Pressed(VK_RBUTTON))
@@ -142,23 +146,27 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   for (std::size_t i=0;i<simulation_.VisualEventCount();++i) effects_.Emit(simulation_.VisualEvents()[i]);
   if (simulation_.Health()<=0) effects_.CancelTrails();
   if (wasSparring && !simulation_.Sparring()) effects_.CancelTrail(simulation_.SparringOpponent().id);
-  playerPose_.Update(simulation_.Facing(),simulation_.MovementDistance(),simulation_.Height()==0,
+  playerPose_.Update(simulation_.Facing(),simulation_.GroundMovementDistance(),simulation_.Grounded(),
     simulation_.Health()>0,simulation_.AttackFlash()*5,dt);
   playerAnimation_.Update(dt,simulation_.Height(),simulation_.VerticalSpeed(),simulation_.MovementDistance(),
     simulation_.Health()>0,simulation_.DamagedThisUpdate(),playerPose_.attack,
     simulation_.LandingSpeed(),simulation_.LandingElapsed());
+  playerFeet_.Update(dt,simulation_.Player(),playerPose_.facing,simulation_.Grounded(),
+    simulation_.Health()>0,playerAnimation_.pose);
   const auto& enemies=simulation_.Enemies();
   if (enemyPoses_.size()!=enemies.size()+1) ResetMotion();
   for (std::size_t i=0;i<enemyPoses_.size();++i) {
     const auto& enemy=i<enemies.size()?enemies[i]:simulation_.SparringOpponent();
     if (i==enemies.size() && !wasSparring && simulation_.Sparring()) {
       enemyPoses_[i].Reset(enemy.facing); enemyAnimations_[i].Reset(float(enemy.id)*.37f);
+      enemyFeet_[i].Reset(enemy.position,enemy.facing);
     }
     const float strike=EnemyStrike(enemy,simulation_.Health()>0 && (i<enemies.size() || simulation_.Sparring()));
     // Enemy heading is already smoothed by simulation, then frozen for attacks.
     // Use it exactly so the character always faces the displayed damage cone.
     enemyPoses_[i].Update(enemy.facing,enemy.movementDistance,true,enemy.health>0,strike,dt,true);
     enemyAnimations_[i].Update(dt,0,0,enemy.movementDistance,enemy.health>0,enemy.damagedThisUpdate,strike);
+    enemyFeet_[i].Update(dt,enemy.position,enemy.facing,true,enemy.health>0,enemyAnimations_[i].pose);
   }
   const auto track=[&](rpg::EntityId id,rpg::Vec2 position,float height,const motion::Actor& motion,
     const animation::Sample& animation,bool shield,bool armed) {
@@ -190,15 +198,19 @@ void Game::SetCameraOrbit(float yaw,float pitch,float distance) {
   UpdateCamera(0,true);
 }
 void Game::ResetMotion() {
+  ++audioGeneration_;
   effects_.Reset();
   playerPose_.Reset(simulation_.Facing());
   playerAnimation_.Reset();
+  playerFeet_.Reset(simulation_.Player(),simulation_.Facing());
   enemyPoses_.resize(simulation_.Enemies().size()+1);
   enemyAnimations_.resize(enemyPoses_.size());
+  enemyFeet_.resize(enemyPoses_.size());
   for (std::size_t i=0;i<enemyPoses_.size();++i) {
     const auto& enemy=i<simulation_.Enemies().size()?simulation_.Enemies()[i]:simulation_.SparringOpponent();
     enemyPoses_[i].Reset(enemy.facing);
     enemyAnimations_[i].Reset(float(enemy.id)*.37f);
+    enemyFeet_[i].Reset(enemy.position,enemy.facing);
     enemyPoses_[i].attack=EnemyStrike(enemy,simulation_.Health()>0 &&
       (i<simulation_.Enemies().size() || simulation_.Sparring()));
   }

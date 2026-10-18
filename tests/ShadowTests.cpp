@@ -150,7 +150,7 @@ int main() {
     minimumThin=std::min(minimumThin,drop); totalThin+=drop;
   }
   std::cout<<"Thin post shadow min/mean contrast: "<<minimumThin<<" / "<<totalThin/8<<'\n';
-  Check(minimumThin>12 && totalThin/8>25,"Close thin geometry must keep a readable shadow through sub-texel movement.");
+  Check(minimumThin>35 && totalThin/8>50,"Cubic filtering must retain thin-post contrast through sub-texel movement.");
   const auto focusView=[&](float focus,const wchar_t* path) {
     floor(); renderer.SetShadowFocus({focus,0,0});
     renderer.DrawMesh(M::Box,{0,1,0},{.035f,2,.035f},white,S::Plain);
