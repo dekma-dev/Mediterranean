@@ -24,6 +24,35 @@ bool HasFeedback(const rpg::Simulation& game,rpg::FeedbackKind kind) {
 }
 
 int main() {
+  {
+    bool passed=true;
+    const auto check=[&](bool value,const char* message) {
+      if (!value) { std::cerr<<"Defeat: "<<message<<'\n'; passed=false; }
+    };
+    const std::string crowd="MEDITERRANEAN 3\n-4 5.8 1 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
+      "100 -4 7 80 0 0 1 0.4 3.14159\n101 -4.5 7 80 0 0 1 0.01 2.7468\n102 -4 9.5 120 0 0 1 0 1.0122\n";
+    rpg::Simulation defeated;
+    Require(defeated.Load(crowd),"Crowded fatal encounter must load");
+    const auto before=defeated.Enemies();
+    defeated.Update(.05f,{});
+    Require(defeated.Health()==0,"Second enemy must resolve the fatal strike");
+    check(defeated.Enemies()[0].windup==0,
+      "Defeat must cancel an earlier enemy's pending telegraph in the same update");
+    check(defeated.Enemies()[2].position.x==before[2].position.x && defeated.Enemies()[2].position.z==before[2].position.z,
+      "Enemies later in the update order must not take a final movement step after defeat");
+    for (int i=0;i<2;++i)
+      check(defeated.Enemies()[i].position.x==before[i].position.x && defeated.Enemies()[i].position.z==before[i].position.z,
+        "Cancelling overlapping windups must not permit a separation step on the defeat frame");
+    const auto snapshot=defeated.Save();
+    Wait(defeated,20);
+    check(defeated.Save()==snapshot,"The defeated encounter must remain suspended while cosmetic effects settle");
+    rpg::Command recover; recover.respawn=true; defeated.Update(.05f,recover);
+    check(defeated.Health()==defeated.MaxHealth(),"Recovery must remain available after cancelled enemy attacks");
+    for (const auto& enemy : defeated.Enemies())
+      check(enemy.windup==0 && enemy.attackCooldown==0 && enemy.state==rpg::EnemyState::Idle,
+        "Recovery must reset surviving enemies without replaying cancelled attacks");
+    Require(passed,"Defeat transition regressions failed");
+  }
   rpg::Simulation game;
   Require(game.Load(duel),"Duel fixture must load");
   BeginSwing(game);

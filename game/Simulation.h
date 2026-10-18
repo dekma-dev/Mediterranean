@@ -12,6 +12,7 @@ enum class EnemyKind { Raider, Captain,Trainer };
 struct Enemy {
   Vec2 position, home;
   float health = 80, attackCooldown = 0, hitFlash = 0;
+  bool damagedThisUpdate = false; // transient event, independent of the fading tint
   EntityId id = 0;
   EnemyState state = EnemyState::Idle;
   bool looted = false;
@@ -51,6 +52,15 @@ struct CombatFeedback {
   float age = 0;
 };
 
+// One-update presentation events. Never serialized or used to resolve combat.
+enum class CombatVisualKind { Strike, HeavyStrike, EnemySwing, Hit, HeavyHit, Hurt, Interrupt };
+struct CombatVisualEvent {
+  CombatVisualKind kind = CombatVisualKind::Hit;
+  Vec2 position;
+  float height = 0, facing = 0;
+  EntityId actor = 0; // zero is the player; enemies retain their stable IDs
+};
+
 class Simulation {
 public:
   Simulation();
@@ -62,6 +72,10 @@ public:
   const std::vector<Enemy>& Enemies() const { return enemies_; }
   Vec2 Player() const { return player_; }
   float Height() const { return height_; }
+  float VerticalSpeed() const { return velocityY_; }
+  // Impact speed and time since contact within the latest update; zero otherwise.
+  float LandingSpeed() const { return landingSpeed_; }
+  float LandingElapsed() const { return landingElapsed_; }
   float Facing() const { return facing_; }
   float MovementDistance() const { return movementDistance_; } // excludes dash/respawn
   float Health() const { return health_; }
@@ -77,7 +91,10 @@ public:
   float DamageReduction() const;
   const std::vector<CombatFeedback>& Feedback() const { return feedback_; }
   float HurtFlash() const { return hurtFlash_; }
+  bool DamagedThisUpdate() const { return damagedThisUpdate_; }
   float AttackFlash() const { return attackFlash_; }
+  const auto& VisualEvents() const { return visualEvents_; }
+  std::size_t VisualEventCount() const { return visualEventCount_; }
   int Target() const { return target_; }
   const Enemy* TargetActor() const;
   bool Sparring() const { return sparring_; }
@@ -128,7 +145,8 @@ private:
   void Emit(FeedbackKind kind,Vec2 position,int amount = 0);
   void RestoreForLevel(int previousLevel);
   void Respawn();
-  void DamagePlayer(float damage);
+  void DamagePlayer(float damage,float incomingFacing);
+  void EmitVisual(CombatVisualKind kind,Vec2 position,float height,float facing,EntityId actor=0);
   void StartSparring();
   void EndSparring(const char* result);
   void Buy(int offer);
@@ -140,6 +158,8 @@ private:
   Vec2 player_{0,-10};
   float height_ = 0, velocityY_ = 0, facing_ = 0, health_ = 100, attackFlash_ = 0;
   float movementSpeed_ = 0, movementDistance_ = 0;
+  float landingSpeed_ = 0, landingElapsed_ = 0;
+  bool damagedThisUpdate_ = false;
   std::array<float,4> cooldowns_{};
   int target_ = -1, gold_ = 0;
   Inventory inventory_;
@@ -156,6 +176,8 @@ private:
   AnchorQuest anchorQuest_ = AnchorQuest::Locked;
   float channelRemaining_ = 0, hurtFlash_ = 0;
   std::vector<CombatFeedback> feedback_;
+  std::array<CombatVisualEvent,16> visualEvents_{};
+  std::size_t visualEventCount_ = 0;
   std::string message_ = "Approach the gold beacon and press E to accept the patrol.";
 };
 }

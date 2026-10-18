@@ -5,16 +5,26 @@
 
 namespace visual {
 using namespace DirectX;
-bool VisibleSphere(const XMFLOAT3& center,float radius,const XMFLOAT4X4& m) {
-  const XMFLOAT4 planes[]={
+Frustum::Frustum(const XMFLOAT4X4& m) {
+  planes_={{
     {m._14+m._11,m._24+m._21,m._34+m._31,m._44+m._41},
     {m._14-m._11,m._24-m._21,m._34-m._31,m._44-m._41},
     {m._14+m._12,m._24+m._22,m._34+m._32,m._44+m._42},
     {m._14-m._12,m._24-m._22,m._34-m._32,m._44-m._42},
-    {m._13,m._23,m._33,m._43},{m._14-m._13,m._24-m._23,m._34-m._33,m._44-m._43}};
-  for (const auto& p : planes)
-    if (center.x*p.x+center.y*p.y+center.z*p.z+p.w < -radius*std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z)) return false;
+    {m._13,m._23,m._33,m._43},{m._14-m._13,m._24-m._23,m._34-m._33,m._44-m._43}}};
+  for (std::size_t i=0;i<planes_.size();++i) {
+    const auto& p=planes_[i]; lengths_[i]=std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);
+  }
+}
+bool Frustum::VisibleSphere(const XMFLOAT3& center,float radius) const {
+  for (std::size_t i=0;i<planes_.size();++i) {
+    const auto& p=planes_[i];
+    if (center.x*p.x+center.y*p.y+center.z*p.z+p.w < -radius*lengths_[i]) return false;
+  }
   return true;
+}
+bool VisibleSphere(const XMFLOAT3& center,float radius,const XMFLOAT4X4& m) {
+  return Frustum(m).VisibleSphere(center,radius);
 }
 namespace {
 constexpr float pi=3.14159265359f;
@@ -95,11 +105,6 @@ XMFLOAT3 Edge(float angle,float scale,float height) {
 float Hash(int x,int y) {
   std::uint32_t h=std::uint32_t(x)*374761393u+std::uint32_t(y)*668265263u;
   h=(h^(h>>13))*1274126177u; return float(h^(h>>16))/4294967295.f;
-}
-float Noise(float x,float y) {
-  const int ix=static_cast<int>(std::floor(x)),iy=static_cast<int>(std::floor(y));
-  float a=x-ix,b=y-iy; a=a*a*(3-2*a); b=b*b*(3-2*b);
-  return (Hash(ix,iy)*(1-a)+Hash(ix+1,iy)*a)*(1-b)+(Hash(ix,iy+1)*(1-a)+Hash(ix+1,iy+1)*a)*b;
 }
 }
 
@@ -289,23 +294,70 @@ Geometry BuildMesh(Mesh mesh) {
 
 std::vector<std::uint8_t> BuildMaterialLayer(Material material,unsigned size) {
   std::vector<std::uint8_t> pixels(static_cast<std::size_t>(size)*size*4);
+  std::vector<float> heights(static_cast<std::size_t>(size)*size);
+  // Periodic lattice noise keeps height and color continuous across wrap seams.
+  const auto noise=[](float u,float v,int period) {
+    const float x=u*period,y=v*period;
+    const int ix=int(std::floor(x)),iy=int(std::floor(y));
+    const auto wrap=[&](int value) { return (value%period+period)%period; };
+    const float a=x-std::floor(x),b=y-std::floor(y),sx=a*a*(3-2*a),sy=b*b*(3-2*b);
+    const float low=Hash(wrap(ix),wrap(iy))*(1-sx)+Hash(wrap(ix+1),wrap(iy))*sx;
+    const float high=Hash(wrap(ix),wrap(iy+1))*(1-sx)+Hash(wrap(ix+1),wrap(iy+1))*sx;
+    return low*(1-sy)+high*sy;
+  };
+  const auto smooth=[](float value) { value=std::clamp(value,0.f,1.f); return value*value*(3-2*value); };
   for (unsigned y=0;y<size;++y) for (unsigned x=0;x<size;++x) {
     const float u=float(x)/size,v=float(y)/size;
-    const float fine=Hash(static_cast<int>(x),static_cast<int>(y));
-    float value=.8f+.18f*Noise(u*12,v*12)+.06f*fine;
-    if (material==Material::Wood) value=.72f+.2f*Noise(u*35+Noise(u*3,v*3)*2,v*3)+.08f*std::sin(u*180+Noise(u*5,v*5)*4);
-    if (material==Material::Stone) value=.7f+.23f*Noise(u*8,v*8)+.09f*fine;
-    if (material==Material::Ground) value=.69f+.23f*Noise(u*10,v*10)+.13f*fine;
-    if (material==Material::Cloth) value=.9f+.05f*float((x+y)%2)+.025f*fine;
-    if (material==Material::Roof) {
-      const float row=std::floor(v*8),ty=v*8-row;
-      const float tx=u*5+row*.5f-std::floor(u*5+row*.5f);
-      value=tx<.035f || ty<.08f?.48f:.78f+.14f*ty+.05f*fine;
+    const float broad=noise(u,v,4),fine=noise(u,v,24);
+    float value=.86f+.12f*broad,height=0,roughness=.8f;
+    switch (material) {
+    case Material::Wood: {
+      const float grain=.5f+.5f*std::sin(2*pi*(u*18+.45f*noise(u,v,4)));
+      const float plank=u*4-std::floor(u*4);
+      const float edge=smooth(std::min(plank,1-plank)/.055f);
+      value=(.64f+.21f*grain+.12f*broad)*(.65f+.35f*edge);
+      height=.007f*grain+.013f*edge; roughness=.72f+.18f*broad; break;
     }
-    if (material==Material::Plain || material==Material::Glow) value=1;
-    const auto intensity=static_cast<std::uint8_t>(std::clamp(value,0.f,1.f)*255);
+    case Material::Stone:
+      value=.68f+.23f*broad+.09f*fine; height=.028f*broad+.008f*fine;
+      roughness=.78f+.18f*fine; break;
+    case Material::Ground:
+      value=.72f+.20f*noise(u,v,10)+.08f*fine; height=.009f*noise(u,v,16);
+      roughness=.96f; break;
+    case Material::Cloth: {
+      const float weave=std::sin(u*2*pi*24)*std::sin(v*2*pi*24);
+      value=.94f+.035f*weave; height=.0008f*weave; roughness=.94f; break;
+    }
+    case Material::Roof: {
+      const float row=std::floor(v*6),ty=v*6-row;
+      const float tx=u*4+row*.5f-std::floor(u*4+row*.5f);
+      const float edge=smooth(std::min(tx,1-tx)/.09f)*smooth(ty/.12f);
+      value=.56f+edge*(.26f+.10f*ty)+.04f*fine;
+      height=.032f*edge+.012f*ty; roughness=.72f+.16f*fine; break;
+    }
+    case Material::Plaster:
+      value=.87f+.10f*broad+.03f*fine; height=.004f*fine; roughness=.94f; break;
+    case Material::Metal:
+      value=.89f+.08f*broad+.03f*fine; height=.0007f*noise(u,v,32);
+      roughness=.28f+.13f*broad; break;
+    case Material::Skin: value=.97f+.03f*broad; roughness=.64f; break;
+    case Material::Leaves: value=.87f+.13f*broad; roughness=.86f; break;
+    case Material::Plain: case Material::Glow: value=1; break;
+    default: break;
+    }
     const auto i=(static_cast<std::size_t>(y)*size+x)*4;
-    pixels[i]=pixels[i+1]=pixels[i+2]=intensity; pixels[i+3]=255;
+    pixels[i]=static_cast<std::uint8_t>(std::clamp(value,0.f,1.f)*255);
+    pixels[i+3]=static_cast<std::uint8_t>(roughness*255);
+    heights[static_cast<std::size_t>(y)*size+x]=height;
+  }
+  for (unsigned y=0;y<size;++y) for (unsigned x=0;x<size;++x) {
+    const float du=(heights[static_cast<std::size_t>(y)*size+(x+1)%size]-
+      heights[static_cast<std::size_t>(y)*size+(x+size-1)%size])*size*.5f;
+    const float dv=(heights[static_cast<std::size_t>((y+1)%size)*size+x]-
+      heights[static_cast<std::size_t>((y+size-1)%size)*size+x])*size*.5f;
+    const auto encode=[](float slope) { return static_cast<std::uint8_t>(std::lround(std::clamp(128.f+slope*32.f,0.f,255.f))); };
+    const auto i=(static_cast<std::size_t>(y)*size+x)*4;
+    pixels[i+1]=encode(du); pixels[i+2]=encode(dv);
   }
   return pixels;
 }

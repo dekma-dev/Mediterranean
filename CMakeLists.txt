@@ -27,6 +27,7 @@ add_library(MediterraneanClient STATIC
   game/LandmarkView.cpp
   game/CharacterView.cpp
   game/CharacterPose.cpp
+  game/CombatEffects.cpp
   game/Interface.cpp
   game/InterfaceState.cpp
   game/MapArtwork.cpp
@@ -51,6 +52,12 @@ set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT RPGNative)
 
 include(CTest)
 if (BUILD_TESTING)
+  add_executable(CombatEffectsTests tests/CombatEffectsTests.cpp)
+  target_link_libraries(CombatEffectsTests PRIVATE MediterraneanClient)
+  add_test(NAME CombatEffectsTests COMMAND CombatEffectsTests)
+  add_executable(AnimationTests tests/AnimationTests.cpp)
+  target_link_libraries(AnimationTests PRIVATE MediterraneanClient)
+  add_test(NAME AnimationTests COMMAND AnimationTests)
   add_executable(ShadowTests tests/ShadowTests.cpp)
   target_link_libraries(ShadowTests PRIVATE MediterraneanClient)
   add_test(NAME ShadowTests COMMAND ShadowTests)

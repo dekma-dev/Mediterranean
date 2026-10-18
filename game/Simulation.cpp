@@ -122,12 +122,15 @@ void Simulation::UseAbility(int index) {
     enemy.health-=damage;
     if (trainingTarget) sparringDealt_+=int(damage);
     Emit(FeedbackKind::Damage,enemy.position,static_cast<int>(damage));
-    enemy.hitFlash=.2f; attackFlash_=.2f;
+    EmitVisual(index==0?CombatVisualKind::Strike:CombatVisualKind::HeavyStrike,player_,height_,facing_);
+    EmitVisual(index==0?CombatVisualKind::Hit:CombatVisualKind::HeavyHit,enemy.position,1.25f,facing_,enemy.id);
+    enemy.hitFlash=.2f; enemy.damagedThisUpdate=true; attackFlash_=.2f;
     message_="Hit.";
     enemy.state=EnemyState::Pursuing;
     if (index==1 && enemy.windup>0) {
       enemy.windup=0; enemy.attackCooldown=.8f;
       Emit(FeedbackKind::Interrupt,enemy.position);
+      EmitVisual(CombatVisualKind::Interrupt,enemy.position,1.4f,facing_,enemy.id);
       message_="Heavy strike interrupted the enemy attack.";
     }
     if (enemy.health<=0) {
@@ -226,16 +229,21 @@ void Simulation::Interact() {
 }
 
 void Simulation::Update(float seconds,const Command& command) {
+  visualEventCount_=0;
   tradeRequested_=false;
   movementDistance_=0;
-  for (auto& enemy : enemies_) enemy.movementDistance=0;
-  trainer_.movementDistance=0;
+  landingSpeed_=landingElapsed_=0; damagedThisUpdate_=false;
+  for (auto& enemy : enemies_) { enemy.movementDistance=0; enemy.damagedThisUpdate=false; }
+  trainer_.movementDistance=0; trainer_.damagedThisUpdate=false;
   if (!std::isfinite(seconds) || seconds<=0) return;
   const float dt=std::min(seconds,.05f);
   if (command.restart) { *this=Simulation{}; return; }
   for (auto& feedback : feedback_) feedback.age+=dt;
   feedback_.erase(std::remove_if(feedback_.begin(),feedback_.end(),[](const CombatFeedback& f) { return f.age>=1.5f; }),feedback_.end());
   hurtFlash_=std::max(0.f,hurtFlash_-dt);
+  // Cosmetic flashes must finish even while combat is suspended after defeat.
+  for (auto& enemy : enemies_) enemy.hitFlash=std::max(0.f,enemy.hitFlash-dt);
+  trainer_.hitFlash=std::max(0.f,trainer_.hitFlash-dt);
   sparringReportTime_=std::max(0.f,sparringReportTime_-dt);
   if (health_<=0) {
     if (command.respawn) Respawn();
@@ -264,9 +272,18 @@ void Simulation::Update(float seconds,const Command& command) {
     if (movementDistance_<travel*.1f) movementSpeed_=0;
   } else movementSpeed_=0;
   if (command.jump && height_==0) velocityY_=6;
-  // Constant-gravity integration keeps the same apex/flight at every frame rate.
-  height_+=velocityY_*dt-9*dt*dt; velocityY_-=18*dt;
-  if (height_<=0) { height_=0; velocityY_=0; }
+  // Solve contact inside the step, retaining its speed and elapsed time for
+  // presentation. End-of-frame velocity has already been zeroed at the floor.
+  if (height_>0 || velocityY_>0) {
+    const float impact=std::sqrt(velocityY_*velocityY_+36*height_);
+    const float contact=velocityY_>=0?(velocityY_+impact)/18:2*height_/(impact-velocityY_);
+    if (contact<=dt+1e-6f) {
+      landingSpeed_=impact; landingElapsed_=std::max(0.f,dt-contact);
+      height_=velocityY_=0;
+    } else {
+      height_+=velocityY_*dt-9*dt*dt; velocityY_-=18*dt;
+    }
+  }
   if (command.nextTarget) SelectTarget();
   if (command.interact) Interact();
   if (command.equipWeapon) {
@@ -299,7 +316,7 @@ void Simulation::Update(float seconds,const Command& command) {
     else if (sparringRemaining_==0) EndSparring("Time complete");
     else UpdateEnemy(trainer_,dt);
   }
-  SeparateEnemies(dt);
+  if (health_>0) SeparateEnemies(dt);
   if (Channeling()) {
     if (moving || height_>0 || command.ability>=0 || command.usePotion || changingGear ||
       Length(Difference(player_,WorldMap::astralAnchor))>2.5f || !HasLineOfSight(player_,WorldMap::astralAnchor)) {
@@ -333,8 +350,8 @@ void Simulation::SeparateEnemies(float dt) {
 }
 
 void Simulation::UpdateEnemy(Enemy& enemy,float dt) {
-  enemy.hitFlash=std::max(0.f,enemy.hitFlash-dt);
   if (enemy.health<=0) { enemy.state=EnemyState::Dead; enemy.windup=enemy.movementSpeed=0; return; }
+  if (health_<=0) return;
   enemy.attackCooldown=std::max(0.f,enemy.attackCooldown-dt);
   const float distance=Length(Difference(player_,enemy.position));
   const EnemyState previous=enemy.state;
@@ -353,10 +370,11 @@ void Simulation::UpdateEnemy(Enemy& enemy,float dt) {
     enemy.movementSpeed=0;
     enemy.windup=std::max(0.f,enemy.windup-dt);
     if (enemy.windup==0) {
+      EmitVisual(CombatVisualKind::EnemySwing,enemy.position,0,enemy.facing,enemy.id);
       const auto delta=Difference(player_,enemy.position);
       const float dot=distance<.001f?1.f:(std::sin(enemy.facing)*delta.x+std::cos(enemy.facing)*delta.z)/distance;
       if (distance<=Enemy::attackReach && dot>=std::cos(Enemy::attackHalfAngle) && height_<1.5f &&
-        health_>0 && HasLineOfSight(enemy.position,player_)) DamagePlayer(enemy.Damage());
+        health_>0 && HasLineOfSight(enemy.position,player_)) DamagePlayer(enemy.Damage(),enemy.facing);
       else Emit(FeedbackKind::Miss,enemy.position);
       enemy.attackCooldown=enemy.AttackInterval();
     }

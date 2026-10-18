@@ -3,12 +3,23 @@
 #include "engine/Renderer.h"
 #include "game/WorldView.h"
 #include "game/CharacterView.h"
+#include "game/CharacterPose.h"
 #include "game/TerrainSurface.h"
 #include <algorithm>
 #include <cmath>
 #include <sstream>
 #include <filesystem>
 #include <fstream>
+
+namespace {
+float EnemyStrike(const rpg::Enemy& enemy,bool active) {
+  // Cooldowns are frozen while defeated or outside a sparring round. They must
+  // not keep driving the presentation toward an unfinished strike indefinitely.
+  if (!active || enemy.health<=0) return 0;
+  return enemy.windup>0?1-enemy.windup/enemy.WindupDuration():
+    std::max(0.f,1-(enemy.AttackInterval()-enemy.attackCooldown)/.2f);
+}
+}
 
 void Game::Initialize() {
   simulation_=rpg::Simulation{}; time_=0;
@@ -127,18 +138,47 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   if (dt<=0) return;
   time_+=dt;
   if (command.restart || (wasDead && simulation_.Health()>0)) { ResetMotion(); return; }
+  effects_.Advance(dt);
+  for (std::size_t i=0;i<simulation_.VisualEventCount();++i) effects_.Emit(simulation_.VisualEvents()[i]);
+  if (simulation_.Health()<=0) effects_.CancelTrails();
+  if (wasSparring && !simulation_.Sparring()) effects_.CancelTrail(simulation_.SparringOpponent().id);
   playerPose_.Update(simulation_.Facing(),simulation_.MovementDistance(),simulation_.Height()==0,
     simulation_.Health()>0,simulation_.AttackFlash()*5,dt);
+  playerAnimation_.Update(dt,simulation_.Height(),simulation_.VerticalSpeed(),simulation_.MovementDistance(),
+    simulation_.Health()>0,simulation_.DamagedThisUpdate(),playerPose_.attack,
+    simulation_.LandingSpeed(),simulation_.LandingElapsed());
   const auto& enemies=simulation_.Enemies();
   if (enemyPoses_.size()!=enemies.size()+1) ResetMotion();
   for (std::size_t i=0;i<enemyPoses_.size();++i) {
     const auto& enemy=i<enemies.size()?enemies[i]:simulation_.SparringOpponent();
-    if (i==enemies.size() && !wasSparring && simulation_.Sparring()) enemyPoses_[i].Reset(enemy.facing);
-    const float strike=enemy.windup>0?1-enemy.windup/enemy.WindupDuration():
-      std::max(0.f,1-(enemy.AttackInterval()-enemy.attackCooldown)/.2f);
+    if (i==enemies.size() && !wasSparring && simulation_.Sparring()) {
+      enemyPoses_[i].Reset(enemy.facing); enemyAnimations_[i].Reset(float(enemy.id)*.37f);
+    }
+    const float strike=EnemyStrike(enemy,simulation_.Health()>0 && (i<enemies.size() || simulation_.Sparring()));
     // Enemy heading is already smoothed by simulation, then frozen for attacks.
     // Use it exactly so the character always faces the displayed damage cone.
     enemyPoses_[i].Update(enemy.facing,enemy.movementDistance,true,enemy.health>0,strike,dt,true);
+    enemyAnimations_[i].Update(dt,0,0,enemy.movementDistance,enemy.health>0,enemy.damagedThisUpdate,strike);
+  }
+  const auto track=[&](rpg::EntityId id,rpg::Vec2 position,float height,const motion::Actor& motion,
+    const animation::Sample& animation,bool shield,bool armed) {
+    if (!armed) { effects_.CancelTrail(id); return; }
+    if (!effects_.Tracking(id)) return;
+    const auto pose=BuildCharacterPose(motion.attack,motion.gait,shield,animation);
+    const auto point=[&](float distance) -> DirectX::XMFLOAT3 {
+      const auto p=pose.WeaponPoint(distance);
+      return {position.x+std::cos(motion.facing)*p.x+std::sin(motion.facing)*p.z,height+p.y,
+        position.z-std::sin(motion.facing)*p.x+std::cos(motion.facing)*p.z};
+    };
+    effects_.TrackWeapon(id,point(.22f),point(.96f));
+  };
+  track(0,simulation_.Player(),simulation_.Height(),playerPose_,playerAnimation_.pose,
+    simulation_.Items().Worn(rpg::GearSlot::Offhand)!=rpg::Item::None,
+    simulation_.Health()>0 && simulation_.Items().Worn(rpg::GearSlot::Weapon)!=rpg::Item::None);
+  for (std::size_t i=0;i<enemyPoses_.size();++i) {
+    const auto& enemy=i<enemies.size()?enemies[i]:simulation_.SparringOpponent();
+    track(enemy.id,enemy.position,0,enemyPoses_[i],enemyAnimations_[i].pose,false,
+      simulation_.Health()>0 && enemy.health>0 && (i<enemies.size() || simulation_.Sparring()));
   }
   UpdateCamera(dt);
 }
@@ -150,13 +190,17 @@ void Game::SetCameraOrbit(float yaw,float pitch,float distance) {
   UpdateCamera(0,true);
 }
 void Game::ResetMotion() {
+  effects_.Reset();
   playerPose_.Reset(simulation_.Facing());
+  playerAnimation_.Reset();
   enemyPoses_.resize(simulation_.Enemies().size()+1);
+  enemyAnimations_.resize(enemyPoses_.size());
   for (std::size_t i=0;i<enemyPoses_.size();++i) {
     const auto& enemy=i<simulation_.Enemies().size()?simulation_.Enemies()[i]:simulation_.SparringOpponent();
     enemyPoses_[i].Reset(enemy.facing);
-    if (enemy.health>0) enemyPoses_[i].attack=enemy.windup>0?1-enemy.windup/enemy.WindupDuration():
-      std::max(0.f,1-(enemy.AttackInterval()-enemy.attackCooldown)/.2f);
+    enemyAnimations_[i].Reset(float(enemy.id)*.37f);
+    enemyPoses_[i].attack=EnemyStrike(enemy,simulation_.Health()>0 &&
+      (i<simulation_.Enemies().size() || simulation_.Sparring()));
   }
   UpdateCamera(0,true);
 }
@@ -186,7 +230,7 @@ void Game::Render(Renderer& renderer,bool showInterface) {
   using M=visual::Mesh;
   using S=visual::Material;
   DrawCharacter(renderer,player,y,playerPose_.facing,simulation_.HurtFlash()>0?XMFLOAT4{1,.48f,.35f,1}:
-    XMFLOAT4{.22f,.37f,.54f,1},playerPose_.attack,playerPose_.gait,CharacterOutfit::From(simulation_.Items()));
+    XMFLOAT4{.22f,.37f,.54f,1},playerPose_.attack,playerPose_.gait,CharacterOutfit::From(simulation_.Items()),playerAnimation_.pose);
   const auto anchor=rpg::WorldMap::astralAnchor;
   const bool stable=simulation_.AnchorState()>=rpg::AnchorQuest::Return;
   const XMFLOAT4 crystal=stable?XMFLOAT4{.3f,.95f,.65f,1}:XMFLOAT4{.72f,.4f,.95f,1};
@@ -214,8 +258,8 @@ void Game::Render(Renderer& renderer,bool showInterface) {
     const auto& pose=enemyPoses_[i];
     DrawCharacter(renderer,enemy.position,0,pose.facing,
       enemy.hitFlash>0?XMFLOAT4{1,.7f,.55f,1}:enemy.kind==rpg::EnemyKind::Trainer?XMFLOAT4{.55f,.46f,.22f,1}:captain?XMFLOAT4{.36f,.19f,.48f,1}:XMFLOAT4{.65f,.2f,.25f,1},
-      pose.attack,pose.gait,enemyOutfit);
-    if (enemy.windup>0) {
+      pose.attack,pose.gait,enemyOutfit,enemyAnimations_[i].pose);
+    if (enemy.windup>0 && simulation_.Health()>0) {
       const float progress=1-enemy.windup/enemy.WindupDuration();
       const XMFLOAT4 warning{1,.55f*(1-progress),.12f,1};
       for (int segment=0;segment<=12;++segment) {
@@ -235,6 +279,7 @@ void Game::Render(Renderer& renderer,bool showInterface) {
       renderer.DrawMarkerBox({enemy.position.x,2.5f,enemy.position.z},{enemy.health/enemy.MaxHealth(), .1f,.1f},{.8f,.15f,.2f,1});
     }
   }
+  effects_.Render(renderer);
   const bool drawInterface=showInterface && (hudVisible_ || interface_.HasPanels() || simulation_.Health()<=0);
   for (std::size_t i=0;drawInterface && i<simulation_.Feedback().size();++i) {
     const auto& feedback=simulation_.Feedback()[i];

@@ -67,7 +67,39 @@ int main() {
   // A hidden real renderer validates hit regions at multiple scales against the
   // same layout that draws the screen. No desktop input is synthesized.
   Win32Window window; Require(window.Create(GetModuleHandle(nullptr),1280,720,L"screen checks",false),"Hidden test window failed.");
-  Renderer renderer; Require(renderer.Initialize(window.GetHandle(),1280,720),"screen renderer initialization failed.");
+  Renderer renderer;
+  const bool initialized=renderer.Initialize(window.GetHandle(),1280,720);
+  if (!initialized) std::wcerr<<renderer.Error()<<L'\n';
+  Require(initialized,"screen renderer initialization failed.");
+  {
+    // Older saves can contain a pending swing while the player is already dead.
+    // Render immediately after load, before the first Update.
+    auto snapshot=Fixture("combat-preview.save");
+    const auto health=snapshot.find("5.2 100"); Require(health!=std::string::npos,"Expected combat health field.");
+    snapshot.replace(health,7,"5.2 0");
+    Game game; Require(game.RestoreSnapshot(snapshot),"Defeated windup fixture must load.");
+    Require(game.EnemyPose(0).attack==0,"A defeated save must load with a neutral enemy attack pose.");
+    renderer.BeginFrame(); game.Render(renderer,false);
+    Require(renderer.EndFrame(false),"Defeated windup render failed.");
+    const auto triangles=renderer.Triangles();
+    const auto windup=snapshot.find("1 0.5 3.14159"); Require(windup!=std::string::npos,"Expected pending enemy swing.");
+    snapshot.replace(windup,std::string("1 0.5 3.14159").size(),"1 0 3.14159");
+    Require(game.RestoreSnapshot(snapshot),"Defeated neutral fixture must load.");
+    renderer.BeginFrame(); game.Render(renderer,false);
+    Require(renderer.EndFrame(false),"Defeated neutral render failed.");
+    Require(renderer.Triangles()==triangles,"A defeated save must not render an obsolete attack warning cone.");
+  }
+  {
+    Game game; game.Initialize(); rpg::Command jump; jump.jump=true; game.ExecuteCommand(jump,.05f);
+    game.OpenPanel(ui::Panel::Character); game.ShowPanel(ui::Panel::Inventory);
+    const auto pose=game.PlayerAnimation(); const auto snapshot=game.State().Save();
+    for (int i=0;i<3;++i) {
+      renderer.BeginFrame(); game.Render(renderer); Require(renderer.EndFrame(false),"Animation portrait render failed.");
+    }
+    Require(game.PlayerAnimation().air==pose.air && game.PlayerAnimation().rise==pose.rise &&
+      game.PlayerAnimation().breath==pose.breath && game.State().Save()==snapshot,
+      "Rendering the world and equipment preview must not advance animation or simulation.");
+  }
   {
     Game game; Require(game.RestoreSnapshot(Fixture("veteran-preview.save")),"Fullscreen drag fixture must load.");
     game.OpenPanel(ui::Panel::Character); game.ShowPanel(ui::Panel::Inventory);

@@ -3,6 +3,7 @@
 #include "game/MapArtwork.h"
 #include "engine/Renderer.h"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <sstream>
 
@@ -10,6 +11,17 @@ namespace ui {
 namespace {
 using Color=DirectX::XMFLOAT4;
 using Point=DirectX::XMFLOAT2;
+template<unsigned Segments> const std::array<Point,Segments+1>& CirclePoints() {
+ static const auto points=[] {
+  std::array<Point,Segments+1> result{};
+  for (unsigned i=0;i<=Segments;++i) {
+   const float angle=i*6.2831853f/Segments;
+   result[i]={std::cos(angle),std::sin(angle)};
+  }
+  return result;
+ }();
+ return points;
+}
 const Color ink{.94f,.89f,.69f,1},muted{.66f,.69f,.50f,1},gold{.79f,.62f,.25f,1};
 const Color dark{.055f,.09f,.055f,.98f},border{.30f,.30f,.13f,1},blue{.23f,.46f,.63f,1};
 struct Canvas {
@@ -59,25 +71,35 @@ struct Canvas {
   Triangle({x+dx,y+dy},{tx-dx,ty-dy},{x-dx,y-dy},tint);
  }
  void Oval(float x,float y,float rx,float ry,Color color) {
+  const auto& points=CirclePoints<24>();
   for (int i=0;i<24;++i) {
-   const float a=i*6.2831853f/24,b=(i+1)*6.2831853f/24;
-   Triangle({x,y},{x+std::cos(a)*rx,y+std::sin(a)*ry},{x+std::cos(b)*rx,y+std::sin(b)*ry},color);
+   const auto a=points[i],b=points[i+1];
+   Triangle({x,y},{x+a.x*rx,y+a.y*ry},{x+b.x*rx,y+b.y*ry},color);
   }
  }
  void Ring(float x,float y,float radius,Color tint,float width=1) {
+  const auto& points=CirclePoints<32>();
   for (int i=0;i<32;++i) {
-   const float a=i*6.2831853f/32,b=(i+1)*6.2831853f/32;
-   Line(x+std::cos(a)*radius,y+std::sin(a)*radius,x+std::cos(b)*radius,y+std::sin(b)*radius,width,tint);
+   const auto a=points[i],b=points[i+1];
+   Line(x+a.x*radius,y+a.y*radius,x+b.x*radius,y+b.y*radius,width,tint);
   }
  }
  void Diamond(float x,float y,float rx,float ry,Color tint) {
   Triangle({x,y-ry},{x+rx,y},{x,y+ry},tint); Triangle({x,y-ry},{x,y+ry},{x-rx,y},tint);
  }
  void Scroll(float x,float y,float side=1,float scale=1) {
+  static const auto curve=[] {
+   std::array<DirectX::XMFLOAT3,22> result{};
+   for (int i=1;i<=22;++i) {
+    const float t=i/22.f,angle=t*7.2f;
+    result[i-1]={std::sin(angle),1-std::cos(angle),(1-t)*14};
+   }
+   return result;
+  }();
   Point previous{x,y};
-  for (int i=1;i<=22;++i) {
-   const float t=i/22.f,angle=t*7.2f,rad=(1-t)*14*scale;
-   Point p{x+side*(std::sin(angle)*rad),y+(1-std::cos(angle))*rad};
+  for (const auto& sample : curve) {
+   const float rad=sample.z*scale;
+   Point p{x+side*(sample.x*rad),y+sample.y*rad};
    Line(previous.x,previous.y,p.x,p.y,2*scale,{.22f,.30f,.14f,1});
    Line(previous.x,previous.y-1,p.x,p.y-1,.6f*scale,{.51f,.49f,.25f,.8f}); previous=p;
   }
@@ -332,7 +354,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Oval(159,474,63,12,{.01f,.02f,.01f,.7f});
   const auto p=c.P(70,181);
   if (renderer.BeginPortrait(p.x,p.y,178*c.layout.scale/renderer.Width(),316*c.layout.scale/renderer.Height())) {
-   DrawCharacter(renderer,{0,0},0,previewYaw+std::sin(time*.35f)*.05f,{.22f,.37f,.54f,1},0,0,CharacterOutfit::From(s.Items()));
+   DrawCharacter(renderer,{0,0},0,previewYaw+std::sin(time*.35f)*.05f,{.22f,.37f,.54f,1},0,0,CharacterOutfit::From(s.Items()),animation::Idle(time));
    renderer.EndPortrait();
   }
   const Item worn[]={s.Items().Worn(rpg::GearSlot::Chest),s.Items().Worn(rpg::GearSlot::Legs),s.Items().Worn(rpg::GearSlot::Feet)};

@@ -4,11 +4,130 @@ Last updated: 2026-10-18
 
 ## Current status
 
-The active `main` working tree is native C++ / DirectX 11 only. Allods Online is the primary reference; development is single-player first on one map. **Debug and Release Ninja/MSVC builds pass all eleven regression suites and 122 hidden smoke captures per configuration, including world/interface layouts, outfits, sparring, the shop, buyback, eight close-up poses and seven environment views.** Representative captures were visually inspected. The map has two quests, levels 1–3, a captain, telegraphed combat, progress-preserving respawn, repeatable nonlethal training and a village quartermaster. The 24-cell bag supports drag/sort, stack splitting and six worn slots; bought helmet/shield change visuals and protection. Selling and persistent buyback conserve ownership and gold. Version 6 preserves exact stacks, gear, purchase stock and merchant-held items and migrates versions 1–5. Character presentation uses shaped heads/boots, fitted hair, fixed-length limb poses and hand-attached equipment. Player/enemy locomotion and camera transitions now have a tested smoothing pass. Full interactive playtesting and finished art remain pending. Repository HEAD is `43a0afe` (`0.0.1 - Refine character animation and Dawnwatch world art`), committed externally before this work. The agent has not staged, committed or pushed; the movement and shadow passes, their regressions and documentation remain in the working tree.
+The active `main` working tree is native C++ / DirectX 11 only. Allods Online is the primary reference; development is single-player first on one map. **Debug and Release Ninja/MSVC builds pass all thirteen regression suites and 132 hidden smoke captures per configuration, including world/interface layouts, outfits, sparring, the shop, buyback, eight close-up poses and seven environment views.** Representative captures were visually inspected. The map has two quests, levels 1–3, a captain, telegraphed combat, progress-preserving respawn, repeatable nonlethal training and a village quartermaster. The 24-cell bag supports drag/sort, stack splitting and six worn slots; bought helmet/shield change visuals and protection. Selling and persistent buyback conserve ownership and gold. Version 6 preserves exact stacks, gear, purchase stock and merchant-held items and migrates versions 1–5. Character presentation uses shaped heads/boots, fitted hair, fixed-length limb poses and hand-attached equipment. Player/enemy locomotion and camera transitions now have a tested smoothing pass. Full interactive playtesting and finished art remain pending. Repository HEAD is `b3e0510` (`0.0.2 - Improve sun shadows and fix contact-shadow artifacts`), committed externally. The agent has not staged, committed or pushed; the animation, smoothness, shadow and performance changes, their regressions and documentation remain in the working tree.
 
-Current environment work adds paved/dirt routes shared with the atlas, 131 grass clumps, 18 shrubs, folded leaf crowns and a dock footprint clear of neighboring props. The generated geometry/texture resources remain within the existing test budgets; the latest before/after workload report is in [graphics.md](docs/graphics.md).
+Current environment work adds paved/dirt routes shared with the atlas, 131 grass clumps, 18 shrubs, folded leaf crowns and a dock footprint clear of neighboring props. The focused shadow map adds 4 MiB; combined material/terrain/shadow storage is 9.250 MiB against a revised 10 MiB test budget. Geometry and interface allocations are unchanged. The latest before/after workload report is in [graphics.md](docs/graphics.md).
 
 The committed landmark pass gives all four buildings distinct palettes/details, adds a covered supply stall and masonry ruin, and presents the keeper as a dressed NPC. Camera regressions keep the stall's open bay and above-canopy space clear. That art added about 58 KiB of mesh storage and no additional textures.
+
+## Layered combat effects - 2026-10-18
+
+Expanded the initial effects toward the requested expressive Asian-MMO appearance: tapered gold Strike crescents, larger cyan Heavy Strike crescents with a delayed violet counter-sweep, bright contact cores with soft halos, expanding impact rings, tapered sparks with glowing heads and rising afterglow motes. Enemy sweeps remain restrained orange. The crescents use eased progression and fade over 0.32 seconds; impact particles expire within 0.48 seconds. A weapon discontinuity now cancels the complete trail/crescent so a dash cannot leave a detached old sweep. Damage, range, cooldowns, event validation and save format are unchanged.
+
+The existing additive pass, GPU buffers and texture allocations are reused. Fixed effect state grows by 128 bytes to 8,520 bytes for stored attack origins/facings; the CPU vertex queue remains capped at 6,144 vertices / 240 KiB. The more detailed geometry and halos add vertex and pixel work. A stress case with eight heavy sweeps and 32 impacts reaches the existing cap and renders successfully.
+
+Debug and Release each pass all thirteen suites, 132 smoke captures and 28 effect diagnostics (`cinematic-effects-validation.log` in each Ninja directory), without compiler warnings/errors. New checks verify ring occlusion and transparent centers, equal-time 30/60/144-Hz rendering, maximum overlap, and gameplay/front/opposite-camera/afterglow views. Representative attack images were inspected. Manual checks 78–80 cover live timing, camera angles and fullscreen readability/performance. An attempted external Asian-MMO reference lookup failed; no new reference assets were reviewed or downloaded, and these shapes/colors are original design choices.
+
+One hidden Release comparison gives combat CPU median/p95 0.421/0.518 → 0.420/0.480 ms and GPU 0.414/0.447 → 0.414/0.437 ms, with 36 asynchronous GPU observations per build. This is a short comparison, not a speedup or fullscreen FPS claim. Effect frames increase from 244 to 265 of 600 and peak effect vertices from 96 to 534, while peak combat submissions remain 57 and gameplay counters are unchanged. End working set/private memory changes from 206.305/236.336 to 210.023/240.430 MiB. Reports: `cinematic-effects-baseline-benchmark.txt` and `cinematic-effects-final-benchmark.txt` in the Release build directory; full measurements and limits are in [graphics.md](docs/graphics.md). No staging, commits or pushes were performed.
+
+## Initial combat attack effects - 2026-10-18
+
+Added a gold Strike blade trail, blue-white Heavy Strike with stronger impact sparks and interrupt glints, and orange enemy swing/hit effects. Trail samples use the same posed blade points as the visible weapon. Transient simulation events only emit after attack validation or windup completion: rejected commands cannot make false impacts, missed swings retain only their trail, and interrupted windups never emit an enemy strike. Unarmed attacks omit the sword trail. Effects age during updates, not renders; death cancels trails, final sparks fade, and load/restart/respawn clear old state. Large movement discontinuities break ribbons.
+
+The renderer adds a texture-free additive pass after opaque scenery and before HUD/portrait rendering. It reads depth without writing it, casts no shadows, and reuses the existing HUD upload buffer. Fixed CPU state is 8,392 bytes for 32 bursts/eight trails with 32 samples each; the reserved effect vertex queue is 240 KiB and capped at 6,144 vertices per frame. GPU mesh/material/interface allocation counters are unchanged; two shaders and small pipeline state objects are added.
+
+Debug and Release each pass thirteen suites, 132 smoke captures and 19 additional combat-effect diagnostic captures (`combat-effects-validation.log`). Coverage includes acceptance/rejection, miss/interrupt, death/load/restart/respawn, live menus, update-rate expiration, pool/upload bounds, teleport breaks, scenery occlusion, blend order, HUD/portrait isolation and repeated rendering without advancement. Strike, heavy, enemy-hit and equipment-panel captures were visually inspected. Manual checks 74–77 still govern live feel and fullscreen performance.
+
+One hidden Release pair shows combat CPU median/p95 0.430/0.510 → 0.427/0.501 ms and GPU 0.423/0.446 → 0.420/0.447 ms (36 asynchronous samples per build). This is within run variation, not a speedup claim. Combat adds one draw (peak 56 → 57); 244/600 measured frames contain effects, with a peak 96 effect vertices. Other workloads submit no effects. Fixed asset buffers and gameplay counters are unchanged, while end process working set/private memory changes from 181.031/209.438 to 209.863/238.215 MiB; fixed buffer reuse is not a total-memory guarantee. Full reports and caveats are in [graphics.md](docs/graphics.md).
+
+README, gameplay/architecture/graphics notes, roadmap, launch manual and playtest checklist updated. No downloads, system changes, player-save writes, staging, commits or pushes.
+
+## Graphics bug fixes - 2026-10-18
+
+Reproduced clouds and the horizon remaining glued to the screen during camera rotation (`build-ninja-debug/graphics-bugs-before.log`). Sky rays now use the current inverse view-projection and ignore camera translation. The sky draws once at the first flush, after camera selection and before world/portrait rendering, so capture overrides use the same view as geometry. Initialization supplies a valid default camera. Renderer initialization failures now include shader diagnostics in both GPU test executables.
+
+Debug and Release pass all twelve suites and 132 smoke captures per configuration (`graphics-bugs-validation.log`). New image regressions cover first-frame sky, yaw, pitch, translation, one draw per empty frame and returning to the same view without stale camera state. Existing portrait isolation, resize, material anchoring and all fifteen sloped-shadow probes pass. Village, canopy and sky-direction captures were visually inspected; manual check 73 covers live camera/preview transitions.
+
+The final hidden Release workload report is `build-ninja-release/graphics-bugs-benchmark.txt`: CPU medians are 0.521/0.437/0.423/0.793 ms and GPU medians 0.512/0.429/0.414/0.642 ms for stationary/walking/combat/merchant. Draw counts, geometry, fixed GPU allocations and gameplay counters match the preceding material pass. These short asynchronous samples do not certify fullscreen FPS. No player saves, system settings, staging, commits or pushes were changed.
+
+## Surface depth and lighting - 2026-10-18
+
+Completed a graphics pass toward the supplied Allods visual direction: shallow stone/roof/plaster relief, wood grain and plank seams, woven cloth, roughness-dependent highlights, linear-light shading, warm sun/cool fill, irregular beveled paving and layered clouds. Material detail now uses object-aligned triplanar coordinates, so it blends across curved surfaces and follows animated parts. All eleven 128-square material layers are reused by packing intensity, slopes and roughness into their existing channels. Geometry, texture allocations, draw counts and gameplay remain unchanged; authored characters/foliage and physical atmosphere remain future work. The follow-up above corrects sky orientation.
+
+The new lighting exposed a grazing-angle self-shadow stripe. Correcting the receiver-gradient clamp removes it while retaining existing contact/filter thresholds. New GPU regressions verify material anchoring during translation; deterministic packed surfaces and resource bounds are also checked. Both Debug and Release pass all twelve suites and 132 smoke captures without compiler warnings/errors (`realism-validation.log`). Village, stall, ruin and character captures were visually inspected. Baseline images remain under `build-ninja-release/realism-baseline-captures`.
+
+One paired hidden Release benchmark measures about +0.083 ms walking and +0.068 ms combat in GPU medians at 1280x720, with sparse asynchronous samples. Fixed mesh/material/interface storage remains 224,320 / 9,699,312 / 1,529,172 bytes. Total process end working set/private memory rises from 181.004/209.461 to 194.559/224.727 MiB. See [graphics.md](docs/graphics.md) for all workload timings, reference sources and limits; manual checks 70–72 cover visible performance and temporal appearance. This pass adds shader work and is not an FPS improvement claim.
+
+Updated README, launch/debug instructions, architecture, graphics notes, roadmap and manual checklist. Earlier uncommitted changes remain intact. No staging, commits, pushes, asset downloads, system changes or player-save writes were performed.
+
+## Defeat transition bug fixes - 2026-10-18
+
+New regressions reproduced frozen enemy finishing strikes (also after loading), pending warning cones left behind by an earlier enemy in the update order, and a final movement step by later enemies after fatal damage. The failing AnimationTests/CombatTests output is retained in `build-ninja-debug/defeat-fixes-before.log`.
+
+Fatal damage now cancels every enemy windup, and remaining enemy updates and separation stop immediately. Suspended combat no longer drives strike presentation from frozen cooldowns: living enemies settle to neutral, including after load. Rendering also suppresses obsolete warning cones from older defeated saves. Respawn still resets surviving enemies at home and retains campaign progress. No save-format, resource-budget or combat-balance change was required.
+
+Debug and Release pass all twelve suites and 132 smoke captures per configuration (`defeat-fixes-validation.log` in each build directory). A final Debug InterfaceTests run verifies the corrected legacy-save fixture (`defeat-fixes-final-tests.log`). New coverage includes overlapping windups, update-order independence after death, suspended-state stability, recovery and immediate rendering after loading a defeated save. The defeat/recovery capture was inspected. Manual check 69 covers live presentation; these checks do not replace interactive playtesting. The prior performance benchmark remains applicable as historical evidence and was not repeated for this transition fix.
+
+Earlier uncommitted work is preserved. No staging, commits, pushes, downloads, system changes or player-save writes were performed.
+
+## CPU rendering performance - 2026-10-18
+
+Prepared camera/light frusta now reuse their planes and normal lengths across objects. Visibility grouping uses counts, offsets and one stable scatter instead of seven mesh-queue rescans. Interface ovals, rings and ornamental scrolls reuse 728 bytes of fixed curve samples instead of recalculating their trigonometry every frame. Shadow quality, draw order, geometry, animation and gameplay remain intact; no GPU resources were added.
+
+All 132 Release PNGs are byte-for-byte identical to the saved pre-change captures. Debug and Release each pass all twelve suites and 132 captures, including offscreen shadows, portrait isolation, resizing and the 4,096/4,097-instance boundary. Logs are `performance-validation.log` in each build directory. The comparison is recorded in `build-ninja-release/performance-image-comparison.csv`.
+
+Three paired Release runs alternate baseline/optimized order. Median-of-run CPU medians improve from 0.369 to 0.349 ms walking (5.4%), 0.404 to 0.357 ms combat (11.6%), and 0.827 to 0.778 ms merchant (5.9%). Stationary timing changes from 0.435 to 0.456 ms with wide overlapping run variation, so no stationary improvement is claimed. Draw/triangle peaks and fixed GPU allocations are unchanged. Full before/after tables, sample counts and limitations are in [graphics.md](docs/graphics.md). These hidden unpaced results are not an interactive FPS guarantee; manual check 68 remains pending.
+
+Earlier changes are preserved. No staging, commits, pushes, downloads, system-setting changes or player-save writes were performed.
+
+Suggested commit text: `Optimize frustum culling, instance packing and interface curve generation`
+
+## Shadow queue and capacity fixes - 2026-10-18
+
+Reproduced two directions of stale geometry leakage: a fully culled world queue could render inside the character portrait, and a fully culled portrait queue could render back into the world. Maximum pixel differences against clean references were 255 and 195 respectively; both are now zero. Flushing consumes submitted queues even when nothing survives culling, while an already empty flush remains a no-op.
+
+The extra shadow pass also made a 1,400-object scene exceed the cumulative upload budget. Visibility masks now group each distinct visible object into one uploaded record shared by the two shadow passes and the color pass. The scene renders successfully, an exact 4,096-object scene succeeds, and 4,097 is rejected with a capacity diagnostic. The existing 655,360-byte instance buffer, shadow resolution/filter and all fixed mesh/texture allocations are preserved.
+
+Failing reproductions are retained in `build-ninja-debug/shadow-fixes-before.log`. Debug and Release pass all twelve suites and 132 smoke captures without compiler warnings/errors (`shadow-fixes-validation.log` in each build directory). Character/preview images were inspected. The Release report `build-ninja-release/shadow-fixes-benchmark.txt` retains the previous draw/triangle peaks and fixed resource sizes; timings and process-memory snapshots are in [graphics.md](docs/graphics.md). Manual check 67 covers preview transitions during live play. Earlier development is preserved. No files have been staged, committed or pushed, no assets downloaded, and no system settings or player saves changed.
+
+Suggested commit text: `Fix culled geometry leaking between views and shadow upload overflow`
+
+## Focused shadow detail - 2026-10-18
+
+Added a 20-unit detail projection beside the fixed 62-unit whole-island map, using two 1024-square depth layers. Nearby sampling is 3.1 times finer, improving boot, weapon and thin-prop shadows. The detail origin moves in whole light-space texels, and coverage blends smoothly into the distant map. Both receiver gradients are calculated before coverage branches. Independent light culling and a depth-only vertex shader limit extra work; the existing 4,096-instance upload capacity is preserved.
+
+A thin-post regression reproduced shadows disappearing at some sub-texel offsets: the weakest sample improves from zero to 78.67 intensity levels of contrast (eight offsets). Low 0.05-unit contact improves from 65 to 102.33. The focused-grid probe changes pixels by at most one level, and overlap steps remain below the 25-level acceptance threshold. Existing slope, moving/offscreen caster, no-caster clearing, resize and portrait-isolation checks still pass. These synthetic comparisons do not replace live visual acceptance.
+
+Debug and Release pass all twelve suites and 132 hidden smoke captures without compiler warnings/errors. Character, village and thin-post captures were inspected. Logs: `shadow-detail-validation.log` in each Ninja build directory; failing reproduction: Debug `shadow-detail-before.log`. The saved Release report is `build-ninja-release/shadow-detail-benchmark.txt`, compared with `smoothness-benchmark.txt` in [graphics.md](docs/graphics.md). The additional map costs exactly 4 MiB of depth storage; measured GPU medians rise by 0.030 ms for walking, 0.041 ms for combat and 0.028 ms for the merchant in these short hidden runs. Manual checks 64–66 cover temporal appearance and visible performance.
+
+Earlier animation/smoothness work is preserved. All current changes remain unstaged and uncommitted; no commits, pushes, downloads, system changes or player-save writes were performed.
+
+Suggested commit text: `Improve close-up shadows with a stable detail map and blended coverage`
+
+## Smooth pose transitions - 2026-10-18
+
+Player turning and player/enemy gait/attack presentation now use critically damped responses with retained velocity. Turning accelerates and settles over the shortest arc. The gait solver integrates the moving sine target and its derivative over each interval, preserving update-rate agreement while removing abrupt changes when walking stops or speed changes. Physical input release still stops displacement immediately; enemy facing remains exactly aligned with its authoritative attack cone.
+
+Positive stride/ascent lift is squared, and airborne extension uses a cubic height envelope, removing sharp slope changes at neutral stride, the apex and the grounded/full-air boundaries. Joint lengths, attachment transforms, collision, combat timing and save version 6 remain intact. Resets clear the new velocity state. No assets, GPU resources or dependencies were added.
+
+New acceptance checks failed on the prior blends (`build-ninja-debug/smoothness-before.log`). The gait stop's finite-difference velocity jump at a 0.1 ms probe drops from 10.9279 to 0.0488758 pose units/second. MotionTests covers gradual turn/attack starts, stop/reversal continuity, bounded repeated retargeting, exact enemy facing, reset velocities and 30/60/144-Hz agreement. AnimationTests covers the softened foot/air boundaries alongside existing landing/recoil regressions.
+
+Debug and Release pass all twelve suites and 132 hidden smoke captures without compiler warnings/errors. Logs: `smoothness-validation.log` in each Ninja build directory. Walking and falling captures were inspected; live acceptance remains manual checks 61–63. The Release report `build-ninja-release/smoothness-benchmark.txt` retains fixed GPU allocations and the same walking distance/combat hit counts; see [graphics.md](docs/graphics.md) for timings and limits. All work remains unstaged and uncommitted; no commits, pushes, downloads, system changes or player-save writes were performed.
+
+Suggested commit text: `Smooth character turning, locomotion and attack transitions`
+
+## Animation transition bug fixes - 2026-10-18
+
+Three failing reproductions exposed missed recoil when frame duration increased between consecutive strikes, recoil held by an enemy's frozen damage flash after player defeat, and frame-dependent landing timing/strength. The failing output is retained in `build-ninja-debug/animation-fixes-before.log`.
+
+Simulation now publishes transient damage events separately from the fading tint. Enemy/trainer tints decay even after combat stops, and an old flash cannot trigger fresh recoil. Ground contact is solved within the simulation step; animation receives the impact speed and time elapsed since contact. At 0.8 seconds after takeoff, the landing channel previously measured 0.955375 / 0.775920 / 0.849328 at 30 / 60 / 144 Hz. It now measures 0.816757 at all three rates and with uneven steps. Launch speed, gravity, apex, damage rules and save version 6 are preserved.
+
+AnimationTests covers the reproductions, rejected commands, one-update event lifetimes, exactly one contact per jump, within-frame timing, and saving/loading on impact. Both Debug and Release pass all twelve suites and 132 smoke captures; logs are `animation-fixes-validation.log` in their respective Ninja build directories and report no compiler warnings/errors. Landing/recoil captures were visually inspected. The Release workload report is `build-ninja-release/animation-fixes-benchmark.txt`; fixed GPU allocations are unchanged. Physical playtesting remains pending (manual checks 59–60).
+
+The preceding animation work is preserved. This follow-up remains unstaged and uncommitted; no commits, pushes, downloads, system changes or player-save writes were performed.
+
+Suggested commit text: `Fix recoil events, defeat flashes and frame-dependent landings`
+
+## Character animation layers - 2026-10-18
+
+- Added transient player/enemy animation channels for breathing/sway, travel lean, rising/falling poses, landing compression and damage recoil. Airborne legs extend near the floor; landing lowers the hips while the two-bone solver holds the ankle targets. NPCs and the equipment preview now have restrained idle movement.
+- Shared upper-body transforms keep clothing, head, shoulders, sword and shield aligned during lean/recoil. The existing limb lengths, geometry, textures, shadow resources and version 6 saves are preserved. This is procedural part animation, without skeletal skinning or walking foot locks.
+- Recoil follows actual hit flashes; consecutive equal-maximum flashes count as fresh hits, preserving the current recoil amplitude instead of snapping to neutral. New takeoffs clear the previous landing compression. Defeat, restart, respawn, loading and new training rounds clear the appropriate transient state. Rendering cannot advance animation or simulation.
+- Added AnimationTests covering extreme channel combinations, fixed limb lengths, ground/weapon clearance, idle phase continuity, 30/60/144-Hz jump transitions, reaction refresh and reset paths. A player/enemy encounter reproduces the same authoritative state/save output as a standalone Simulation. The interface integration test checks repeated world/portrait renders for unintended updates.
+- Both configurations pass twelve suites and 132 smoke captures. Ten new views inspect six animation layers plus four live jump stages. Rise, fall, landing and recoil captures were visually inspected. Logs: `build-ninja-debug/animation-validation.log` and `build-ninja-release/animation-validation.log`; Release before/after reports: `animation-baseline-benchmark.txt` and `animation-final-benchmark.txt`. Details and limits are in [graphics.md](docs/graphics.md).
+- Fixed GPU resource allocations are unchanged. No assets were downloaded, no machine settings changed and no player saves written by validation. Visible playtesting remains pending in manual checks 56–58. The externally committed movement/shadow work is preserved; this animation batch remains unstaged and uncommitted.
+
+Suggested commit text: `Add layered character animation, jump landings and hit reactions`
 
 ## Sun shadow refinement and regressions - 2026-10-18
 

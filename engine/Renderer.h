@@ -20,6 +20,7 @@ public:
   std::size_t MeshBytes() const { return meshBytes_; }
   std::size_t MaterialBytes() const { return materialBytes_+terrainBytes_; }
   void SetCamera(const DirectX::XMFLOAT3& eye, const DirectX::XMFLOAT3& target);
+  void SetShadowFocus(const DirectX::XMFLOAT3& focus);
   bool Project(const DirectX::XMFLOAT3& world, DirectX::XMFLOAT2& screen) const;
   void DrawMarkerBox(const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& scale,
     const DirectX::XMFLOAT4& color, float yaw = 0);
@@ -30,6 +31,14 @@ public:
     const DirectX::XMFLOAT4& color,visual::Material material);
   void DrawMeshBetween(visual::Mesh mesh,const DirectX::XMFLOAT3& from,const DirectX::XMFLOAT3& to,float width,float depth,
     const DirectX::XMFLOAT4& color,visual::Material material,DirectX::XMFLOAT3 facing={0,0,1});
+  // Texture-free, additive world effects: depth tested, no depth writes/shadows.
+  static constexpr unsigned maxEffectVertices=6144;
+  void DrawEffectRibbon(DirectX::XMFLOAT3 a,DirectX::XMFLOAT3 b,DirectX::XMFLOAT3 c,DirectX::XMFLOAT3 d,
+    DirectX::XMFLOAT4 color,float startAlpha=1,float endAlpha=1);
+  void DrawEffectGlow(DirectX::XMFLOAT3 center,float radius,DirectX::XMFLOAT4 color);
+  void DrawEffectRing(DirectX::XMFLOAT3 center,float radius,DirectX::XMFLOAT4 color);
+  void DrawEffectStreak(DirectX::XMFLOAT3 from,DirectX::XMFLOAT3 to,float width,DirectX::XMFLOAT4 color);
+  unsigned EffectVertices() const { return effectVertices_+static_cast<unsigned>(effects_.size()); }
   UINT LastDrawCalls() const { return lastDrawCalls_; }
   bool Capture(const std::wstring& path);
   bool ValidateDebugMessages();
@@ -37,7 +46,7 @@ public:
   int Height() const { return height_; }
   bool BeginPortrait(float x,float y,float width,float height);
   bool EndPortrait();
-  UINT DrawCalls() const { return drawCalls_ + static_cast<UINT>((hud_.size()+16379)/16380); }
+  UINT DrawCalls() const { return drawCalls_ + static_cast<UINT>((hud_.size()+16379)/16380) + UINT(!effects_.empty()); }
   void DrawHudRect(float x, float y, float width, float height, const DirectX::XMFLOAT4& color);
   void DrawHudTriangle(DirectX::XMFLOAT2 a,DirectX::XMFLOAT2 b,DirectX::XMFLOAT2 c,const DirectX::XMFLOAT4& color);
   float TextWidth(const std::string& text,float size) const;
@@ -56,24 +65,36 @@ private:
   bool CreatePipeline();
   bool FlushHud();
   bool CreateMaterials();
+  void DrawSky();
   bool FlushWorld();
+  bool FlushEffects();
+  void EffectQuad(DirectX::XMFLOAT3 a,DirectX::XMFLOAT3 b,DirectX::XMFLOAT3 c,DirectX::XMFLOAT3 d,
+    DirectX::XMFLOAT4 color,float startAlpha,float endAlpha,float radial);
+  void EffectBillboard(DirectX::XMFLOAT3 center,float radius,DirectX::XMFLOAT4 color,float shape);
   void Queue(visual::Mesh mesh,const DirectX::XMMATRIX& world,const DirectX::XMFLOAT4& color,visual::Material material,
     visual::ShadowMode shadow = visual::ShadowMode::Cast);
   static constexpr unsigned meshCount = static_cast<unsigned>(visual::Mesh::Count);
   static constexpr unsigned maxInstances = 4096;
   struct Instance { DirectX::XMFLOAT4X4 world,normal; DirectX::XMFLOAT4 color,surface; };
-  struct Item { Instance instance; DirectX::XMFLOAT3 center; float radius; };
+  struct Item { Instance instance; DirectX::XMFLOAT3 center; float radius; unsigned visibility = 0; };
   struct MeshRange { UINT start = 0,count = 0; float radius = 0; };
   std::array<MeshRange,meshCount> meshes_{};
   std::array<std::vector<Item>,meshCount> world_;
   std::vector<Instance> instanceScratch_;
   std::vector<visual::Vertex> hud_;
+  std::vector<visual::Vertex> effects_;
+  unsigned effectVertices_=0;
   FontAtlas font_;
   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> mapView_;
   std::size_t mapBytes_ = 0;
   Microsoft::WRL::ComPtr<ID3D11SamplerState> fontSampler_;
   Microsoft::WRL::ComPtr<ID3D11BlendState> hudBlend_;
-  bool portrait_ = false,frameFailed_ = false;
+  Microsoft::WRL::ComPtr<ID3D11BlendState> effectBlend_;
+  Microsoft::WRL::ComPtr<ID3D11RasterizerState> effectRasterizer_;
+  Microsoft::WRL::ComPtr<ID3D11DepthStencilState> effectDepth_;
+  Microsoft::WRL::ComPtr<ID3D11VertexShader> effectVertexShader_;
+  Microsoft::WRL::ComPtr<ID3D11PixelShader> effectPixelShader_;
+  bool portrait_ = false,frameFailed_ = false,skyPending_ = false;
   D3D11_VIEWPORT portraitViewport_{};
   DirectX::XMFLOAT4X4 savedCamera_{};
   DirectX::XMFLOAT3 savedEye_{};
@@ -89,18 +110,18 @@ private:
   Microsoft::WRL::ComPtr<ID3D11InputLayout> layout_;
   Microsoft::WRL::ComPtr<ID3D11Buffer> vertices_, constants_, hudVertices_;
   Microsoft::WRL::ComPtr<ID3D11Buffer> indices_,instances_;
-  Microsoft::WRL::ComPtr<ID3D11VertexShader> worldShader_,skyShader_;
+  Microsoft::WRL::ComPtr<ID3D11VertexShader> worldShader_,shadowShader_,skyShader_;
   Microsoft::WRL::ComPtr<ID3D11PixelShader> skyPixel_;
   Microsoft::WRL::ComPtr<ID3D11InputLayout> worldLayout_;
   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> materialView_,shadowView_;
   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> terrainView_;
-  Microsoft::WRL::ComPtr<ID3D11DepthStencilView> shadowDepth_;
+  std::array<Microsoft::WRL::ComPtr<ID3D11DepthStencilView>,visual::shadowLayers> shadowDepth_;
   Microsoft::WRL::ComPtr<ID3D11SamplerState> surfaceSampler_,shadowSampler_;
   Microsoft::WRL::ComPtr<ID3D11RasterizerState> shadowRasterizer_;
   Microsoft::WRL::ComPtr<ID3D11RasterizerState> rasterizer_;
   Microsoft::WRL::ComPtr<ID3D11DepthStencilState> depthOn_, depthOff_;
   DirectX::XMFLOAT4X4 viewProjection_{};
-  DirectX::XMFLOAT4X4 shadowProjection_{};
+  std::array<DirectX::XMFLOAT4X4,visual::shadowLayers> shadowProjection_{};
   DirectX::XMFLOAT3 eye_{};
   int width_ = 1, height_ = 1;
   UINT drawCalls_ = 0;

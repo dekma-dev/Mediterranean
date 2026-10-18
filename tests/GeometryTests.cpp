@@ -113,14 +113,24 @@ int main() {
   Check(!visual::VisibleSphere({0,0,-5},.5f,camera),"Object behind the camera was retained.");
   Check(!visual::VisibleSphere({0,0,30},.5f,camera),"Object beyond the far plane was retained.");
   Check(!visual::VisibleSphere({20,0,5},.5f,camera),"Object outside the side plane was retained.");
-  std::size_t textureBytes=visual::shadowSize*visual::shadowSize*4;
+  std::size_t textureBytes=visual::shadowSize*visual::shadowSize*4*visual::shadowLayers;
   for (unsigned layer=0;layer<static_cast<unsigned>(visual::Material::Count);++layer) {
     const auto pixels=visual::BuildMaterialLayer(static_cast<visual::Material>(layer),visual::materialSize);
     Check(pixels.size()==visual::materialSize*visual::materialSize*4,"Material upload dimensions are invalid.");
-    for (std::size_t i=3;i<pixels.size();i+=4) Check(pixels[i]==255,"Opaque materials contain unintended transparency.");
+    Check(pixels==visual::BuildMaterialLayer(static_cast<visual::Material>(layer),visual::materialSize),
+      "Procedural materials must be deterministic.");
+    int relief=0;
+    for (std::size_t i=0;i<pixels.size();i+=4) {
+      Check(pixels[i+3]>=64,"Packed roughness must keep subpixel highlights broad enough to filter.");
+      relief+=std::abs(int(pixels[i+1])-128)+std::abs(int(pixels[i+2])-128);
+      if (layer==unsigned(visual::Material::Plain) || layer==unsigned(visual::Material::Glow))
+        Check(pixels[i]==255 && pixels[i+1]==128 && pixels[i+2]==128,"Plain/glow layers must retain a neutral surface.");
+    }
+    if (layer==unsigned(visual::Material::Stone) || layer==unsigned(visual::Material::Wood) || layer==unsigned(visual::Material::Roof))
+      Check(relief>1000,"Authored hard surfaces must contain a usable relief signal.");
     for (unsigned size=visual::materialSize;size;size/=2) textureBytes+=size*size*4;
   }
   for (unsigned size=terrainSurfaceSize;size;size/=2) textureBytes+=size*size*4;
-  Check(textureBytes<6*1024*1024,"Materials, ground weights and shadow map exceeded the 6 MiB budget.");
+  Check(textureBytes<10*1024*1024,"Materials, ground weights and both shadow maps exceeded the 10 MiB budget.");
   std::cout << "PASS: mesh topology, fixed-length poses, floor coverage, joined boundary and resource budgets. Mesh bytes: "<<bytes<<"; triangles: "<<triangles<<"\n";
 }

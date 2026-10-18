@@ -215,6 +215,39 @@ bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapsh
       if (!renderer_->Capture(path.wstring()) || !renderer_->EndFrame()) { error_=renderer_->Error(); return false; }
     }
   }
+  if (game_->State().HasWardArmor()) {
+    struct AnimationView { const wchar_t* name; const char* label; animation::Sample sample; };
+    const AnimationView views[]={
+      {L"idle-inhale","Idle / inhale",{1,.7f}}, {L"idle-exhale","Idle / exhale",{-1,-.7f}},
+      {L"jump-rise","Jump / rising",{0,0,1,1}}, {L"jump-fall","Jump / falling",{0,0,1,-1}},
+      {L"landing","Landing / knee compression",{0,0,0,0,1}}, {L"recoil","Hit / upper-body recoil",{0,0,0,0,0,1}}};
+    const auto base=std::filesystem::path(capturePath);
+    for (const auto& view : views) {
+      renderer_->BeginFrame();
+      if (!renderer_->BeginPortrait(0,0,1,1)) { error_=renderer_->Error(); return false; }
+      renderer_->SetCamera({0,1.2f,4},{0,1.2f,0});
+      CharacterOutfit outfit; outfit.armor=outfit.helm=outfit.shield=outfit.rewardWeapon=true;
+      DrawCharacter(*renderer_,{0,0},0,.55f,{.22f,.37f,.54f,1},0,0,outfit,view.sample);
+      if (!renderer_->EndPortrait()) { error_=renderer_->Error(); return false; }
+      renderer_->DrawText(.03f,.04f,view.label,{.94f,.89f,.69f,1},2);
+      const auto path=base.parent_path()/(base.stem().wstring()+L"-animation-"+view.name+base.extension().wstring());
+      if (!renderer_->Capture(path.wstring()) || !renderer_->EndFrame()) { error_=renderer_->Error(); return false; }
+    }
+    // Exercise the actual simulation-to-animation path, not just authored poses.
+    const auto beforeJump=game_->State().Save();
+    if (!game_->RestoreSnapshot(beforeJump)) return false;
+    game_->SetCameraOrbit(3.14159265f,.2f,5);
+    const wchar_t* stages[]={L"rise",L"apex",L"fall",L"landing"};
+    int stage=0;
+    for (int step=1;step<=15;++step) {
+      rpg::Command command; command.jump=step==1; game_->ExecuteCommand(command,.05f);
+      if (step!=3+stage*4) continue;
+      renderer_->BeginFrame(); game_->Render(*renderer_,false);
+      const auto path=base.parent_path()/(base.stem().wstring()+L"-jump-"+stages[stage++]+base.extension().wstring());
+      if (!renderer_->Capture(path.wstring()) || !renderer_->EndFrame()) { error_=renderer_->Error(); return false; }
+    }
+    if (!game_->RestoreSnapshot(beforeJump)) return false;
+  }
   if (!renderer_->ValidateDebugMessages()) { error_=renderer_->Error(); return false; }
   return true;
 }
@@ -293,7 +326,7 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath) {
       }
       game_->OpenPanel(ui::Panel::Merchant); game_->ShowPanel(ui::Panel::Character);
     }
-    std::vector<double> cpu,gpu; double distance=0; unsigned drawPeak=0,trianglePeak=0,windups=0,hits=0;
+    std::vector<double> cpu,gpu; double distance=0; unsigned drawPeak=0,trianglePeak=0,windups=0,hits=0,effectPeak=0,effectFrames=0;
     const rpg::Vec2 route[]={{3,-10},{3,-6},{0,-6},{0,-10}}; unsigned waypoint=0;
     for (int frame=0;frame<690;++frame) {
       if (scene==2 && frame%180==0 && !game_->RestoreSnapshot(combat)) return false;
@@ -314,17 +347,20 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath) {
       cpu.push_back(1000.0*double(finish.QuadPart-start.QuadPart)/double(frequency.QuadPart));
       if (renderer_->GpuSamples()!=samples) gpu.push_back(renderer_->GpuMilliseconds());
       drawPeak=std::max(drawPeak,renderer_->DrawCalls()); trianglePeak=std::max(trianglePeak,renderer_->Triangles());
+      effectPeak=std::max(effectPeak,renderer_->EffectVertices());
+      if (renderer_->EffectVertices()>0) ++effectFrames;
       const auto after=game_->State().Player(); distance+=std::hypot(after.x-before.x,after.z-before.z);
       if (game_->State().Health()<health) ++hits;
       for (const auto& enemy : game_->State().Enemies()) if (enemy.windup>0) { ++windups; break; }
     }
-    if ((scene==1 && distance<10) || (scene==2 && (windups==0 || hits==0))) {
+    if ((scene==1 && distance<10) || (scene==2 && (windups==0 || hits==0 || effectFrames==0)) || (scene!=2 && effectFrames>0)) {
       error_=L"Benchmark workload did not exercise movement or combat."; return false;
     }
     report<<"\n"<<names[scene]<<"\nCPU samples: "<<cpu.size()<<"; GPU observations: "<<gpu.size()
       <<"\nCPU median / p95 / max ms: "<<percentile(cpu,.5)<<" / "<<percentile(cpu,.95)<<" / "<<percentile(cpu,1)
       <<"\nGPU median / p95 ms: "<<percentile(gpu,.5)<<" / "<<percentile(gpu,.95)
       <<"\nPeak submissions / triangles: "<<drawPeak<<" / "<<trianglePeak
+      <<"\nCombat effect frames / peak vertices: "<<effectFrames<<" / "<<effectPeak
       <<"\nWalked distance / windup frames / received hits: "<<distance<<" / "<<windups<<" / "<<hits<<'\n';
   }
   report<<"\nImmutable mesh bytes: "<<renderer_->MeshBytes()<<"\nMaterial/shadow bytes: "<<renderer_->MaterialBytes()

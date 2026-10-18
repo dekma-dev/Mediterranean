@@ -1,5 +1,6 @@
 #include "engine/Renderer.h"
 #include "engine/SceneShader.h"
+#include "engine/Shadow.h"
 #include <cmath>
 #include <d3dcompiler.h>
 #include <d3d11sdklayers.h>
@@ -12,8 +13,9 @@ using namespace DirectX;
 using Microsoft::WRL::ComPtr;
 namespace {
 using Vertex = visual::Vertex;
-struct Constants { XMFLOAT4X4 world, wvp, normalWorld, shadowVP; XMFLOAT4 color, eyeAndHud; };
+struct Constants { XMFLOAT4X4 world, wvp, normalWorld, shadowVP[visual::shadowLayers]; XMFLOAT4 color, eyeAndHud; };
 static_assert(sizeof(Constants)%16==0,"D3D constant buffers require 16-byte alignment.");
+static_assert(visual::shadowLayers==2,"The scene shader uses a whole-island and a detail shadow layer.");
 }
 bool Renderer::Check(HRESULT result, const wchar_t* operation) {
  if (SUCCEEDED(result)) return true;
@@ -40,7 +42,9 @@ bool Renderer::Initialize(HWND window, int width, int height) {
  ComPtr<IDXGIFactory> factory;
  if (SUCCEEDED(swapChain_->GetParent(IID_PPV_ARGS(factory.GetAddressOf()))))
   factory->MakeWindowAssociation(window,DXGI_MWA_NO_ALT_ENTER);
- return CreateTargets(width,height) && CreatePipeline();
+ if (!CreateTargets(width,height) || !CreatePipeline()) return false;
+ SetCamera({0,3,-6},{0,1,0});
+ return true;
 }
 bool Renderer::CreateTargets(int width, int height) {
  ComPtr<ID3D11Texture2D> back;
@@ -60,7 +64,7 @@ bool Renderer::Resize(int width, int height) {
  return CreateTargets(width,height);
 }
 bool Renderer::CreatePipeline() {
- ComPtr<ID3DBlob> vs,ps,world,sky,skyPs,errors;
+ ComPtr<ID3DBlob> vs,ps,world,shadow,sky,skyPs,effectVs,effectPs,errors;
  auto compile = [&](const char* entry,const char* profile,ComPtr<ID3DBlob>& output) {
   errors.Reset(); const HRESULT hr=D3DCompile(sceneShader,std::strlen(sceneShader),"BuiltInScene",nullptr,nullptr,entry,profile,
    D3DCOMPILE_ENABLE_STRICTNESS,0,output.GetAddressOf(),errors.GetAddressOf());
@@ -72,9 +76,14 @@ bool Renderer::CreatePipeline() {
   return Check(hr,L"Compile scene shader");
  };
  if (!compile("VSMain","vs_5_0",vs) || !compile("PSMain","ps_5_0",ps) ||
-   !compile("VSWorld","vs_5_0",world) || !compile("VSSky","vs_5_0",sky) || !compile("PSSky","ps_5_0",skyPs)) return false;
+   !compile("VSWorld","vs_5_0",world) || !compile("VSShadow","vs_5_0",shadow) ||
+   !compile("VSSky","vs_5_0",sky) || !compile("PSSky","ps_5_0",skyPs) ||
+   !compile("VSEffect","vs_5_0",effectVs) || !compile("PSEffect","ps_5_0",effectPs)) return false;
+ if (!Check(device_->CreateVertexShader(effectVs->GetBufferPointer(),effectVs->GetBufferSize(),nullptr,effectVertexShader_.GetAddressOf()),L"Create effect vertex shader") ||
+   !Check(device_->CreatePixelShader(effectPs->GetBufferPointer(),effectPs->GetBufferSize(),nullptr,effectPixelShader_.GetAddressOf()),L"Create effect pixel shader")) return false;
  if (!Check(device_->CreateVertexShader(vs->GetBufferPointer(),vs->GetBufferSize(),nullptr,vertexShader_.GetAddressOf()),L"Create HUD shader") ||
    !Check(device_->CreateVertexShader(world->GetBufferPointer(),world->GetBufferSize(),nullptr,worldShader_.GetAddressOf()),L"Create instance shader") ||
+   !Check(device_->CreateVertexShader(shadow->GetBufferPointer(),shadow->GetBufferSize(),nullptr,shadowShader_.GetAddressOf()),L"Create shadow shader") ||
    !Check(device_->CreateVertexShader(sky->GetBufferPointer(),sky->GetBufferSize(),nullptr,skyShader_.GetAddressOf()),L"Create sky shader") ||
    !Check(device_->CreatePixelShader(ps->GetBufferPointer(),ps->GetBufferSize(),nullptr,pixelShader_.GetAddressOf()),L"Create surface shader") ||
    !Check(device_->CreatePixelShader(skyPs->GetBufferPointer(),skyPs->GetBufferSize(),nullptr,skyPixel_.GetAddressOf()),L"Create sky pixel shader")) return false;
@@ -110,19 +119,23 @@ bool Renderer::CreatePipeline() {
  if (!Check(device_->CreateBuffer(&b,nullptr,hudVertices_.GetAddressOf()),L"Create HUD buffer")) return false;
  b.ByteWidth=maxInstances*sizeof(Instance);
  if (!Check(device_->CreateBuffer(&b,nullptr,instances_.GetAddressOf()),L"Create bounded instance buffer")) return false;
- instanceScratch_.reserve(maxInstances); hud_.reserve(16380);
+ instanceScratch_.reserve(maxInstances); hud_.reserve(16380); effects_.reserve(maxEffectVertices);
  D3D11_RASTERIZER_DESC r{}; r.FillMode=D3D11_FILL_SOLID; r.CullMode=D3D11_CULL_BACK; r.DepthClipEnable=TRUE;
  if (!Check(device_->CreateRasterizerState(&r,rasterizer_.GetAddressOf()),L"Create rasterizer")) return false;
+ r.CullMode=D3D11_CULL_NONE;
+ if (!Check(device_->CreateRasterizerState(&r,effectRasterizer_.GetAddressOf()),L"Create effect rasterizer")) return false;
+ r.CullMode=D3D11_CULL_BACK;
  // Receiver-plane filtering handles slopes; a large raster bias erases boot/step
  // contact shadows. Keep only a small, bounded floating-point raster offset.
  r.DepthBias=16; r.SlopeScaledDepthBias=.15f; r.DepthBiasClamp=.0001f;
  if (!Check(device_->CreateRasterizerState(&r,shadowRasterizer_.GetAddressOf()),L"Create shadow rasterizer")) return false;
  D3D11_DEPTH_STENCIL_DESC z{}; z.DepthEnable=TRUE; z.DepthWriteMask=D3D11_DEPTH_WRITE_MASK_ALL; z.DepthFunc=D3D11_COMPARISON_LESS;
  if (!Check(device_->CreateDepthStencilState(&z,depthOn_.GetAddressOf()),L"Create depth state")) return false;
+ z.DepthWriteMask=D3D11_DEPTH_WRITE_MASK_ZERO; z.DepthFunc=D3D11_COMPARISON_LESS_EQUAL;
+ if (!Check(device_->CreateDepthStencilState(&z,effectDepth_.GetAddressOf()),L"Create effect depth state")) return false;
  z.DepthEnable=FALSE; z.DepthWriteMask=D3D11_DEPTH_WRITE_MASK_ZERO;
  if (!Check(device_->CreateDepthStencilState(&z,depthOff_.GetAddressOf()),L"Create HUD depth state")) return false;
- const auto lightView=XMMatrixLookAtLH(XMVectorSet(-30,51,-24,1),XMVectorZero(),XMVectorSet(0,1,0,0));
- XMStoreFloat4x4(&shadowProjection_,lightView*XMMatrixOrthographicLH(62,62,1,110));
+ shadowProjection_=visual::ShadowProjections({0,0,0});
  if (!gpuTimer_.Initialize(device_.Get())) { error_=L"Could not create GPU timing queries."; return false; }
  if (!font_.Initialize(device_.Get())) { error_=L"Could not rasterize the interface font."; return false; }
  D3D11_SAMPLER_DESC fontSampler{}; fontSampler.Filter=D3D11_FILTER_MIN_MAG_MIP_LINEAR;
@@ -134,6 +147,8 @@ bool Renderer::CreatePipeline() {
  channel.SrcBlendAlpha=D3D11_BLEND_ONE; channel.DestBlendAlpha=D3D11_BLEND_INV_SRC_ALPHA; channel.BlendOpAlpha=D3D11_BLEND_OP_ADD;
  channel.RenderTargetWriteMask=D3D11_COLOR_WRITE_ENABLE_ALL;
  if (!Check(device_->CreateBlendState(&blend,hudBlend_.GetAddressOf()),L"Create interface blending")) return false;
+ channel.DestBlend=D3D11_BLEND_ONE; channel.SrcBlendAlpha=D3D11_BLEND_ZERO; channel.DestBlendAlpha=D3D11_BLEND_ONE;
+ if (!Check(device_->CreateBlendState(&blend,effectBlend_.GetAddressOf()),L"Create effect blending")) return false;
  return CreateMaterials();
 }
 
@@ -152,16 +167,22 @@ bool Renderer::CreateMaterials() {
  if (!Check(device_->CreateShaderResourceView(materials.Get(),nullptr,materialView_.GetAddressOf()),L"Create material view")) return false;
  context_->GenerateMips(materialView_.Get());
  for (UINT dimension=size;dimension;dimension/=2) materialBytes_+=dimension*dimension*4*layers;
- texture={}; texture.Width=texture.Height=visual::shadowSize; texture.MipLevels=texture.ArraySize=1; texture.SampleDesc.Count=1;
+ texture={}; texture.Width=texture.Height=visual::shadowSize; texture.MipLevels=1;
+ texture.ArraySize=visual::shadowLayers; texture.SampleDesc.Count=1;
  texture.Format=DXGI_FORMAT_R32_TYPELESS; texture.BindFlags=D3D11_BIND_DEPTH_STENCIL|D3D11_BIND_SHADER_RESOURCE;
  ComPtr<ID3D11Texture2D> shadow;
- if (!Check(device_->CreateTexture2D(&texture,nullptr,shadow.GetAddressOf()),L"Create 1024-square shadow map")) return false;
- D3D11_DEPTH_STENCIL_VIEW_DESC depth{}; depth.Format=DXGI_FORMAT_D32_FLOAT; depth.ViewDimension=D3D11_DSV_DIMENSION_TEXTURE2D;
- if (!Check(device_->CreateDepthStencilView(shadow.Get(),&depth,shadowDepth_.GetAddressOf()),L"Create shadow depth view")) return false;
+ if (!Check(device_->CreateTexture2D(&texture,nullptr,shadow.GetAddressOf()),L"Create two-layer shadow map")) return false;
+ D3D11_DEPTH_STENCIL_VIEW_DESC depth{}; depth.Format=DXGI_FORMAT_D32_FLOAT; depth.ViewDimension=D3D11_DSV_DIMENSION_TEXTURE2DARRAY;
+ depth.Texture2DArray.ArraySize=1;
+ for (unsigned layer=0;layer<visual::shadowLayers;++layer) {
+  depth.Texture2DArray.FirstArraySlice=layer;
+  if (!Check(device_->CreateDepthStencilView(shadow.Get(),&depth,shadowDepth_[layer].GetAddressOf()),L"Create shadow layer depth view")) return false;
+ }
  D3D11_SHADER_RESOURCE_VIEW_DESC resource{}; resource.Format=DXGI_FORMAT_R32_FLOAT;
- resource.ViewDimension=D3D11_SRV_DIMENSION_TEXTURE2D; resource.Texture2D.MipLevels=1;
+ resource.ViewDimension=D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+ resource.Texture2DArray.MipLevels=1; resource.Texture2DArray.ArraySize=visual::shadowLayers;
  if (!Check(device_->CreateShaderResourceView(shadow.Get(),&resource,shadowView_.GetAddressOf()),L"Create shadow resource view")) return false;
- materialBytes_+=visual::shadowSize*visual::shadowSize*4;
+ materialBytes_+=visual::shadowSize*visual::shadowSize*4*visual::shadowLayers;
  D3D11_SAMPLER_DESC sampler{}; sampler.Filter=D3D11_FILTER_ANISOTROPIC; sampler.MaxAnisotropy=4;
  sampler.AddressU=sampler.AddressV=sampler.AddressW=D3D11_TEXTURE_ADDRESS_WRAP;
  sampler.MaxLOD=D3D11_FLOAT32_MAX;
@@ -172,11 +193,12 @@ bool Renderer::CreateMaterials() {
  return Check(device_->CreateSamplerState(&sampler,shadowSampler_.GetAddressOf()),L"Create shadow sampler");
 }
 void Renderer::BeginFrame() {
- drawCalls_=0; frameFailed_=false; portrait_=false;
+ drawCalls_=0; frameFailed_=false; portrait_=false; skyPending_=true;
  context_->OMSetBlendState(nullptr,nullptr,0xffffffff);
  triangles_=0;
  gpuTimer_.Begin(context_.Get());
  hud_.clear();
+ effects_.clear(); effectVertices_=0;
  for (auto& batch : world_) batch.clear();
  const float sky[]={.19f,.23f,.38f,1};
  context_->OMSetRenderTargets(1,target_.GetAddressOf(),depth_.Get());
@@ -184,8 +206,18 @@ void Renderer::BeginFrame() {
  context_->ClearDepthStencilView(depth_.Get(),D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL,1,0);
  D3D11_VIEWPORT v{0,0,static_cast<float>(width_),static_cast<float>(height_),0,1};
  context_->RSSetViewports(1,&v); context_->RSSetState(rasterizer_.Get());
- context_->IASetInputLayout(nullptr); context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
  context_->VSSetConstantBuffers(0,1,constants_.GetAddressOf()); context_->PSSetConstantBuffers(0,1,constants_.GetAddressOf());
+}
+void Renderer::DrawSky() {
+ // SetCamera can arrive after BeginFrame (including capture camera overrides).
+ // Draw once at the first flush, before world geometry or a portrait changes it.
+ if (!skyPending_) return;
+ skyPending_=false;
+ Constants data{};
+ XMStoreFloat4x4(&data.world,XMMatrixTranspose(XMMatrixInverse(nullptr,XMLoadFloat4x4(&viewProjection_))));
+ data.eyeAndHud={eye_.x,eye_.y,eye_.z,0};
+ context_->UpdateSubresource(constants_.Get(),0,nullptr,&data,0,0);
+ context_->IASetInputLayout(nullptr); context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
  context_->VSSetShader(skyShader_.Get(),nullptr,0); context_->PSSetShader(skyPixel_.Get(),nullptr,0);
  context_->OMSetDepthStencilState(depthOff_.Get(),0);
  context_->Draw(3,0); ++drawCalls_; ++triangles_;
@@ -195,6 +227,11 @@ void Renderer::SetCamera(const XMFLOAT3& eye,const XMFLOAT3& target) {
  auto view=XMMatrixLookAtLH(XMLoadFloat3(&eye),XMLoadFloat3(&target),XMVectorSet(0,1,0,0));
  auto projection=XMMatrixPerspectiveFovLH(XM_PIDIV4,static_cast<float>(width_)/height_,.1f,160.f);
  XMStoreFloat4x4(&viewProjection_,view*projection);
+ if (!portrait_) SetShadowFocus(target);
+}
+void Renderer::SetShadowFocus(const XMFLOAT3& focus) {
+ if (portrait_ || !std::isfinite(focus.x) || !std::isfinite(focus.y) || !std::isfinite(focus.z)) return;
+ shadowProjection_=visual::ShadowProjections(focus);
 }
 bool Renderer::Project(const XMFLOAT3& world,XMFLOAT2& screen) const {
  XMFLOAT4 clip;
@@ -254,48 +291,80 @@ void Renderer::DrawMeshBetween(visual::Mesh mesh,const XMFLOAT3& from,const XMFL
   XMMatrixTranslation((from.x+to.x)*.5f,(from.y+to.y)*.5f,(from.z+to.z)*.5f),color,material);
 }
 bool Renderer::FlushWorld() {
+ DrawSky();
+ if (std::all_of(world_.begin(),world_.end(),[](const auto& batch) { return batch.empty(); })) return true;
  struct Batch { unsigned mesh; UINT first,count; };
- std::array<std::array<Batch,meshCount>,2> passes{};
- std::array<unsigned,2> batchCounts{};
+ constexpr unsigned colorPass=visual::shadowLayers,passCount=colorPass+1;
+ // This mask order gives each pass at most two contiguous ranges per mesh.
+ // A shared object occupies one upload slot, regardless of how many passes use it.
+ constexpr unsigned maskOrder[]={1,3,7,5,4,6,2};
+ static_assert(passCount==3,"Visibility ordering assumes two shadow passes and one color pass.");
+ std::array<std::array<Batch,meshCount*2>,passCount> passes{};
+ std::array<unsigned,passCount> batchCounts{};
+ const std::array<visual::Frustum,passCount> frusta={visual::Frustum(shadowProjection_[0]),
+   visual::Frustum(shadowProjection_[1]),visual::Frustum(viewProjection_)};
  instanceScratch_.clear();
- for (unsigned pass=portrait_?1u:0u;pass<2;++pass) for (unsigned mesh=0;mesh<meshCount;++mesh) {
-  const auto start=static_cast<UINT>(instanceScratch_.size());
-  for (const auto& item : world_[mesh]) {
-   // Casting is an authored property; opaque plain/emissive surfaces can cast too.
-   if (pass==0 && item.instance.surface.y==0) continue;
-   if (!visual::VisibleSphere(item.center,item.radius,pass==0?shadowProjection_:viewProjection_)) continue;
-   if (instanceScratch_.size()==maxInstances) { error_=L"Scene exceeded the 4096 visible-instance budget."; return false; }
-   instanceScratch_.push_back(item.instance);
+ for (unsigned mesh=0;mesh<meshCount;++mesh) {
+  std::array<UINT,8> counts{},offsets{};
+  for (auto& item : world_[mesh]) {
+   item.visibility=0;
+   for (unsigned pass=portrait_?colorPass:0u;pass<passCount;++pass) {
+    if (pass<colorPass && item.instance.surface.y==0) continue;
+    if (frusta[pass].VisibleSphere(item.center,item.radius))
+      item.visibility|=1u<<pass;
+   }
+   ++counts[item.visibility];
   }
-  const auto count=static_cast<UINT>(instanceScratch_.size())-start;
-  if (count) passes[pass][batchCounts[pass]++]={mesh,start,count};
+  UINT end=static_cast<UINT>(instanceScratch_.size());
+  for (unsigned mask : maskOrder) {
+   const UINT start=end,count=counts[mask]; offsets[mask]=start;
+   if (count>maxInstances-end) { error_=L"Scene exceeded the 4096 visible-instance budget."; return false; }
+   end+=count;
+   if (!count) continue;
+   for (unsigned pass=0;pass<passCount;++pass) if (mask&(1u<<pass)) {
+    auto& used=batchCounts[pass];
+    if (used && passes[pass][used-1].mesh==mesh && passes[pass][used-1].first+passes[pass][used-1].count==start)
+      passes[pass][used-1].count+=count;
+    else passes[pass][used++]={mesh,start,count};
+   }
+  }
+  instanceScratch_.resize(end);
+  // Stable counting scatter preserves the old mask/mesh draw order in one scan.
+  for (const auto& item : world_[mesh]) if (item.visibility)
+    instanceScratch_[offsets[item.visibility]++]=item.instance;
  }
- if (instanceScratch_.empty()) return true;
- D3D11_MAPPED_SUBRESOURCE mapped{};
- if (!Check(context_->Map(instances_.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&mapped),L"Upload scene instances")) return false;
- std::memcpy(mapped.pData,instanceScratch_.data(),instanceScratch_.size()*sizeof(Instance));
- context_->Unmap(instances_.Get(),0);
+ if (!instanceScratch_.empty()) {
+  D3D11_MAPPED_SUBRESOURCE mapped{};
+  if (!Check(context_->Map(instances_.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&mapped),L"Upload scene instances")) return false;
+  std::memcpy(mapped.pData,instanceScratch_.data(),instanceScratch_.size()*sizeof(Instance));
+  context_->Unmap(instances_.Get(),0);
+ }
  ID3D11Buffer* buffers[]={vertices_.Get(),instances_.Get()};
  const UINT strides[]={sizeof(Vertex),sizeof(Instance)},offsets[]={0,0};
  context_->IASetVertexBuffers(0,2,buffers,strides,offsets);
  context_->IASetIndexBuffer(indices_.Get(),DXGI_FORMAT_R32_UINT,0);
- context_->IASetInputLayout(worldLayout_.Get()); context_->VSSetShader(worldShader_.Get(),nullptr,0);
+ context_->IASetInputLayout(worldLayout_.Get());
  context_->OMSetDepthStencilState(depthOn_.Get(),0);
  context_->OMSetBlendState(nullptr,nullptr,0xffffffff);
  ID3D11ShaderResourceView* nullView=nullptr; context_->PSSetShaderResources(1,1,&nullView);
- if (!portrait_) context_->OMSetRenderTargets(0,nullptr,shadowDepth_.Get());
- if (!portrait_) context_->ClearDepthStencilView(shadowDepth_.Get(),D3D11_CLEAR_DEPTH,1,0);
- for (unsigned pass=portrait_?1u:0u;pass<2;++pass) {
-  Constants data{}; XMStoreFloat4x4(&data.wvp,XMMatrixTranspose(XMLoadFloat4x4(pass==0?&shadowProjection_:&viewProjection_)));
-  XMStoreFloat4x4(&data.shadowVP,XMMatrixTranspose(XMLoadFloat4x4(&shadowProjection_)));
+ for (unsigned pass=portrait_?colorPass:0u;pass<passCount;++pass) {
+  const bool shadowPass=pass<colorPass;
+  if (shadowPass) {
+   context_->OMSetRenderTargets(0,nullptr,shadowDepth_[pass].Get());
+   context_->ClearDepthStencilView(shadowDepth_[pass].Get(),D3D11_CLEAR_DEPTH,1,0);
+  }
+  Constants data{}; XMStoreFloat4x4(&data.wvp,XMMatrixTranspose(XMLoadFloat4x4(shadowPass?&shadowProjection_[pass]:&viewProjection_)));
+  for (unsigned layer=0;layer<visual::shadowLayers;++layer)
+   XMStoreFloat4x4(&data.shadowVP[layer],XMMatrixTranspose(XMLoadFloat4x4(&shadowProjection_[layer])));
   data.color={1,1,1,1}; data.eyeAndHud={eye_.x,eye_.y,eye_.z,portrait_?-1.f:0.f};
   context_->UpdateSubresource(constants_.Get(),0,nullptr,&data,0,0);
-  D3D11_VIEWPORT viewport{0,0,pass==0?float(visual::shadowSize):float(width_),pass==0?float(visual::shadowSize):float(height_),0,1};
+  D3D11_VIEWPORT viewport{0,0,shadowPass?float(visual::shadowSize):float(width_),shadowPass?float(visual::shadowSize):float(height_),0,1};
   if (portrait_) viewport=portraitViewport_;
   context_->RSSetViewports(1,&viewport);
-  context_->RSSetState(pass==0?shadowRasterizer_.Get():rasterizer_.Get());
-  context_->PSSetShader(pass==0?nullptr:pixelShader_.Get(),nullptr,0);
-  if (pass==1) {
+  context_->RSSetState(shadowPass?shadowRasterizer_.Get():rasterizer_.Get());
+  context_->VSSetShader(shadowPass?shadowShader_.Get():worldShader_.Get(),nullptr,0);
+  context_->PSSetShader(shadowPass?nullptr:pixelShader_.Get(),nullptr,0);
+  if (!shadowPass) {
    context_->OMSetRenderTargets(1,target_.GetAddressOf(),depth_.Get());
    ID3D11ShaderResourceView* views[]={materialView_.Get(),shadowView_.Get()};
    ID3D11SamplerState* samplers[]={surfaceSampler_.Get(),shadowSampler_.Get()};
@@ -310,8 +379,68 @@ bool Renderer::FlushWorld() {
    ++drawCalls_; triangles_+=mesh.count/3*batch.count;
   }
  }
+ // Consume even a fully culled queue before changing camera/portrait state.
  for (auto& batch : world_) batch.clear();
  return true;
+}
+void Renderer::EffectQuad(XMFLOAT3 a,XMFLOAT3 b,XMFLOAT3 c,XMFLOAT3 d,XMFLOAT4 color,float startAlpha,float endAlpha,float radial) {
+ // Cosmetic saturation drops the newest quad, never grows an unbounded queue.
+ if (portrait_ || color.w<=0 || effects_.size()+6+effectVertices_>maxEffectVertices) return;
+ const XMFLOAT4 first{color.x,color.y,color.z,color.w*std::clamp(startAlpha,0.f,1.f)};
+ const XMFLOAT4 last{color.x,color.y,color.z,color.w*std::clamp(endAlpha,0.f,1.f)};
+ const Vertex va{a,{0,0,radial},first},vb{b,{0,1,radial},first},vc{c,{1,1,radial},last},vd{d,{1,0,radial},last};
+ effects_.insert(effects_.end(),{va,vb,vc,va,vc,vd});
+}
+void Renderer::DrawEffectRibbon(XMFLOAT3 a,XMFLOAT3 b,XMFLOAT3 c,XMFLOAT3 d,XMFLOAT4 color,float startAlpha,float endAlpha) {
+ EffectQuad(a,b,c,d,color,startAlpha,endAlpha,0);
+}
+void Renderer::DrawEffectGlow(XMFLOAT3 center,float radius,XMFLOAT4 color) {
+ EffectBillboard(center,radius,color,1);
+}
+void Renderer::DrawEffectRing(XMFLOAT3 center,float radius,XMFLOAT4 color) {
+ EffectBillboard(center,radius,color,2);
+}
+void Renderer::EffectBillboard(XMFLOAT3 center,float radius,XMFLOAT4 color,float shape) {
+ if (radius<=0 || color.w<=0) return;
+ auto forward=XMLoadFloat3(&eye_)-XMLoadFloat3(&center);
+ if (XMVectorGetX(XMVector3LengthSq(forward))<.00001f) return;
+ forward=XMVector3Normalize(forward);
+ const auto axis=std::abs(XMVectorGetY(forward))>.99f?XMVectorSet(1,0,0,0):XMVectorSet(0,1,0,0);
+ const auto right=XMVector3Normalize(XMVector3Cross(axis,forward))*radius;
+ const auto up=XMVector3Normalize(XMVector3Cross(forward,right))*radius;
+ const auto origin=XMLoadFloat3(&center);
+ XMFLOAT3 a,b,c,d;
+ XMStoreFloat3(&a,origin-right-up); XMStoreFloat3(&b,origin-right+up);
+ XMStoreFloat3(&c,origin+right+up); XMStoreFloat3(&d,origin+right-up);
+ EffectQuad(a,b,c,d,color,1,1,shape);
+}
+void Renderer::DrawEffectStreak(XMFLOAT3 from,XMFLOAT3 to,float width,XMFLOAT4 color) {
+ if (width<=0 || color.w<=0) return;
+ const auto start=XMLoadFloat3(&from),finish=XMLoadFloat3(&to),direction=finish-start;
+ auto side=XMVector3Cross(direction,XMLoadFloat3(&eye_)-(start+finish)*.5f);
+ if (XMVectorGetX(XMVector3LengthSq(side))<1e-10f) { DrawEffectGlow(to,width,color); return; }
+ side=XMVector3Normalize(side)*width;
+ XMFLOAT3 a,b,c,d;
+ XMStoreFloat3(&a,start-side); XMStoreFloat3(&b,start+side);
+ XMStoreFloat3(&c,finish+side); XMStoreFloat3(&d,finish-side);
+ EffectQuad(a,b,c,d,color,1,1,3);
+}
+bool Renderer::FlushEffects() {
+ if (effects_.empty()) return true;
+ const UINT stride=sizeof(Vertex),offset=0,count=static_cast<UINT>(effects_.size());
+ D3D11_MAPPED_SUBRESOURCE mapped{};
+ if (!Check(context_->Map(hudVertices_.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&mapped),L"Upload combat effects")) return false;
+ std::memcpy(mapped.pData,effects_.data(),count*sizeof(Vertex)); context_->Unmap(hudVertices_.Get(),0);
+ Constants data{}; XMStoreFloat4x4(&data.wvp,XMMatrixTranspose(XMLoadFloat4x4(&viewProjection_)));
+ data.eyeAndHud={eye_.x,eye_.y,eye_.z,0}; context_->UpdateSubresource(constants_.Get(),0,nullptr,&data,0,0);
+ context_->IASetVertexBuffers(0,1,hudVertices_.GetAddressOf(),&stride,&offset);
+ context_->IASetInputLayout(layout_.Get()); context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+ context_->VSSetShader(effectVertexShader_.Get(),nullptr,0); context_->PSSetShader(effectPixelShader_.Get(),nullptr,0);
+ context_->RSSetState(effectRasterizer_.Get()); context_->OMSetDepthStencilState(effectDepth_.Get(),0);
+ context_->OMSetBlendState(effectBlend_.Get(),nullptr,0xffffffff);
+ context_->Draw(count,0); ++drawCalls_; triangles_+=count/3; effectVertices_+=count;
+ context_->RSSetState(rasterizer_.Get()); context_->OMSetBlendState(nullptr,nullptr,0xffffffff);
+ effects_.clear(); return true;
 }
 void Renderer::DrawHudTriangle(XMFLOAT2 a,XMFLOAT2 b,XMFLOAT2 c,const XMFLOAT4& color) {
  // A consistent screen-space winding keeps all authored UI polygons visible.
@@ -324,7 +453,7 @@ void Renderer::DrawHudRect(float x,float y,float width,float height,const XMFLOA
  DrawHudTriangle({x,y},{x+width,y+height},{x,y+height},color);
 }
 bool Renderer::FlushHud() {
- if (!FlushWorld()) return false;
+ if (!FlushWorld() || !FlushEffects()) return false;
  if (hud_.empty()) return true;
  const UINT stride=sizeof(Vertex),offset=0;
  context_->IASetVertexBuffers(0,1,hudVertices_.GetAddressOf(),&stride,&offset);

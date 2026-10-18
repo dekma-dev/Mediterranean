@@ -3,6 +3,8 @@
 #include "game/Simulation.h"
 #include "game/Interface.h"
 #include "game/Motion.h"
+#include "game/Animation.h"
+#include "game/CombatEffects.h"
 class Renderer;
 
 class Game {
@@ -23,13 +25,19 @@ public:
   const rpg::Simulation& State() const { return simulation_; }
   const motion::Actor& PlayerPose() const { return playerPose_; }
   const motion::Actor& EnemyPose(std::size_t index) const { return enemyPoses_.at(index); }
+  const animation::Sample& PlayerAnimation() const { return playerAnimation_.pose; }
+  const animation::Sample& EnemyAnimation(std::size_t index) const { return enemyAnimations_.at(index).pose; }
   float CameraRange() const { return cameraBoom_.distance; }
   float CameraYaw() const { return cameraYaw_; }
+  const CombatEffects& Effects() const { return effects_; }
 private:
   rpg::Simulation simulation_;
   float yaw_ = 0, pitch_ = .45f, distance_ = 10, time_ = 0;
   motion::Actor playerPose_;
   std::vector<motion::Actor> enemyPoses_;
+  animation::State playerAnimation_;
+  std::vector<animation::State> enemyAnimations_;
+  CombatEffects effects_;
   motion::CameraBoom cameraBoom_;
   float cameraYaw_=0,cameraPitch_=.45f,cameraHeight_=1.4f;
   bool debugOverlay_ = false;

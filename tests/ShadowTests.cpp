@@ -1,10 +1,12 @@
 #include "engine/Renderer.h"
+#include "engine/Shadow.h"
 #include "platform/Win32Window.h"
 #include <wincodec.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <cstring>
 #include <vector>
 
 using namespace DirectX;
@@ -52,13 +54,50 @@ Image Capture(Renderer& renderer,const wchar_t* path,bool present=true) {
   Require(SUCCEEDED(converter->CopyPixels(nullptr,image.width*4,UINT(image.pixels.size()),image.pixels.data())),"PNG pixels failed.");
   return image;
 }
+float MaximumDifference(const Image& a,const Image& b) {
+  Require(a.width==b.width && a.height==b.height,"Image comparison size changed.");
+  int maximum=0;
+  for (size_t i=0;i<a.pixels.size();++i) maximum=std::max(maximum,std::abs(int(a.pixels[i])-int(b.pixels[i])));
+  return float(maximum);
+}
 }
 int main() {
+  const auto origin=visual::ShadowProjections({0,0,0}),tiny=visual::ShadowProjections({.0001f,0,.0001f});
+  Check(std::memcmp(origin.data(),tiny.data(),sizeof(origin))==0,"Sub-texel focus movement must leave the light grid unchanged.");
+  for (int i=0;i<80;++i) {
+    const auto moved=visual::ShadowProjections({i*.07f,i*.013f,-i*.03f});
+    Check(std::memcmp(&origin[0],&moved[0],sizeof(origin[0]))==0,"Detail focus must not move the whole-island projection.");
+    const float x=(moved[1]._41-origin[1]._41)*visual::shadowSize*.5f;
+    const float y=(moved[1]._42-origin[1]._42)*visual::shadowSize*.5f;
+    Check(std::abs(x-std::round(x))<.001f && std::abs(y-std::round(y))<.001f,
+      "Detail projection must translate by whole texels without changing its extent.");
+  }
   Require(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"COM initialization failed.");
   Win32Window window;
   Require(window.Create(GetModuleHandle(nullptr),960,720,L"shadow checks",false),"Hidden shadow window failed.");
   Renderer renderer;
-  Require(renderer.Initialize(window.GetHandle(),960,720),"Shadow renderer initialization failed.");
+  const bool initialized=renderer.Initialize(window.GetHandle(),960,720);
+  if (!initialized) std::wcerr<<renderer.Error()<<L'\n';
+  Require(initialized,"Shadow renderer initialization failed.");
+  {
+    renderer.BeginFrame();
+    const auto initial=Capture(renderer,L"sky-default.png");
+    Check(initial.At({.5f,.5f})>80,"The first frame needs a valid sky before the caller sets a camera.");
+    const auto sky=[&](XMFLOAT3 eye,XMFLOAT3 target,const wchar_t* path) {
+      renderer.BeginFrame(); renderer.SetCamera(eye,target);
+      return Capture(renderer,path);
+    };
+    const auto north=sky({0,0,0},{0,.3f,1},L"sky-north.png");
+    const auto east=sky({0,0,0},{1,.3f,0},L"sky-east.png");
+    const auto upward=sky({0,0,0},{0,1,1},L"sky-upward.png");
+    Check(MaximumDifference(north,east)>20,"Clouds must respond to camera yaw instead of remaining glued to the screen.");
+    Check(MaximumDifference(north,upward)>20,"The sky horizon must respond to camera pitch.");
+    const auto translated=sky({3,2,4},{3,2.3f,5},L"sky-translated.png");
+    Check(MaximumDifference(north,translated)<=2,"Distant sky must not shift when only camera position changes.");
+    Check(renderer.LastDrawCalls()==1,"An empty world must render its sky exactly once.");
+    const auto returned=sky({0,0,0},{0,.3f,1},L"sky-returned.png");
+    Check(MaximumDifference(north,returned)==0,"Returning to a view must restore its sky without frame-lagged camera state.");
+  }
   const XMFLOAT4 white{.8f,.8f,.8f,1};
   const auto floor=[&]() {
     renderer.BeginFrame(); renderer.SetCamera({3,4,5},{0,0,0});
@@ -99,6 +138,44 @@ int main() {
     std::cout<<"Low object "<<height<<" shadow contrast: "<<drop<<'\n';
     Check(drop>10,"Low opaque geometry must retain its ground contact shadow.");
   }
+  float minimumThin=255,totalThin=0;
+  for (int i=0;i<8;++i) {
+    const float shift=i*.0125f;
+    floor(); renderer.DrawMesh(M::Box,{shift,1,0},{.035f,2,.035f},white,S::Plain,0,0,Shadow::None);
+    const auto reference=Capture(renderer,L"shadow-thin-reference.png");
+    floor(); renderer.DrawMesh(M::Box,{shift,1,0},{.035f,2,.035f},white,S::Plain);
+    const auto thin=Capture(renderer,L"shadow-thin.png");
+    const auto probe=screen({shift+30.f/51,0,24.f/51});
+    const float drop=reference.At(probe,0)-thin.At(probe,0);
+    minimumThin=std::min(minimumThin,drop); totalThin+=drop;
+  }
+  std::cout<<"Thin post shadow min/mean contrast: "<<minimumThin<<" / "<<totalThin/8<<'\n';
+  Check(minimumThin>12 && totalThin/8>25,"Close thin geometry must keep a readable shadow through sub-texel movement.");
+  const auto focusView=[&](float focus,const wchar_t* path) {
+    floor(); renderer.SetShadowFocus({focus,0,0});
+    renderer.DrawMesh(M::Box,{0,1,0},{.035f,2,.035f},white,S::Plain);
+    return Capture(renderer,path);
+  };
+  auto previousFocus=focusView(0,L"shadow-focus-origin.png");
+  float gridChange=0;
+  for (int i=1;i<=12;++i) {
+    auto current=focusView(i*.02f,L"shadow-focus-step.png");
+    gridChange=std::max(gridChange,MaximumDifference(previousFocus,current)); previousFocus=std::move(current);
+  }
+  std::cout<<"Snapped-focus pixel change: "<<gridChange<<'\n';
+  Check(gridChange<=2,"Moving the focused light grid must not make stationary shadow edges swim.");
+  previousFocus=focusView(4,L"shadow-blend-start.png");
+  float blendChange=0;
+  for (int i=1;i<=32;++i) {
+    auto current=focusView(4+i*.5f,L"shadow-blend-step.png");
+    blendChange=std::max(blendChange,MaximumDifference(previousFocus,current)); previousFocus=std::move(current);
+  }
+  std::cout<<"Detail/far blend max pixel step: "<<blendChange<<'\n';
+  Check(blendChange<25,"Detail/far transitions must blend instead of popping between resolutions.");
+  floor(); renderer.SetShadowFocus({40,0,40});
+  renderer.DrawMesh(M::Box,{0,1,0},{.5f,2,.5f},white,S::Plain);
+  const auto farOnly=Capture(renderer,L"shadow-far-only.png");
+  Check(lit.At(postProbe)-farOnly.At(postProbe)>25,"Leaving the detail region must retain whole-island shadows.");
   for (float pitch : {0.f,.6f,-.6f,1.1f,XM_PIDIV2}) for (float yaw : {0.f,.7f,2.4f}) {
     const auto transform=XMMatrixRotationX(pitch)*XMMatrixRotationY(yaw);
     XMFLOAT3 eye; XMStoreFloat3(&eye,XMVector3TransformCoord(XMVectorSet(2,7,2,1),transform));
@@ -170,6 +247,71 @@ int main() {
   Check(std::abs(portraitLit.At({.8f,.4f})-portraitShadow.At({.8f,.4f}))<2,"Portrait lighting must be independent of world shadows.");
   floor(); const auto restored=Capture(renderer,L"shadow-restored.png");
   Check(restored.pixels==lit.pixels,"Closing the preview must restore world shadow/viewport state.");
+  // Translating an object and its camera together must preserve its material:
+  // world-projected grain/relief previously slid through moving body parts.
+  for (auto material : {S::Stone,S::Wood,S::Roof,S::Cloth,S::Metal}) {
+    const auto surface=[&](float shift,const wchar_t* path) {
+      renderer.BeginFrame(); renderer.SetCamera({3+shift,2,4+shift*.7f},{shift,0,shift*.7f});
+      renderer.DrawMesh(M::Sphere,{shift,0,shift*.7f},{2,1.5f,1.7f},white,material,.37f,.23f,Shadow::None);
+      return Capture(renderer,path);
+    };
+    const auto before=surface(0,L"material-anchored-reference.png");
+    const auto after=surface(.73f,L"material-anchored-moved.png");
+    double difference=0;
+    for (std::size_t i=0;i<before.pixels.size();++i)
+      difference+=std::abs(int(before.pixels[i])-int(after.pixels[i]));
+    difference/=double(before.pixels.size());
+    std::cout<<"Anchored material "<<int(material)<<" mean channel difference: "<<difference<<'\n';
+    Check(difference<.15,"Material grain and relief must remain attached during movement.");
+  }
+  // A fully culled queue is still consumed at a world/portrait boundary.
+  const auto culledWorld=[&](bool queued,const wchar_t* path) {
+    renderer.BeginFrame(); renderer.SetCamera({0,1,-5},{0,1,-10});
+    if (queued) renderer.DrawMesh(M::Box,{0,1,0},{2,2,2},{1,0,1,1},S::Plain,0,0,Shadow::None);
+    Require(renderer.BeginPortrait(.65f,.1f,.3f,.6f),"Begin culled-world portrait failed.");
+    renderer.DrawMesh(M::Sphere,{0,1,0},{.7f,1,.7f},white,S::Metal);
+    Require(renderer.EndPortrait(),"End culled-world portrait failed.");
+    return Capture(renderer,path);
+  };
+  const auto emptyWorld=culledWorld(false,L"shadow-culled-world-reference.png");
+  const auto hiddenWorld=culledWorld(true,L"shadow-culled-world.png");
+  const float worldLeak=MaximumDifference(emptyWorld,hiddenWorld);
+  std::cout<<"Culled world to portrait pixel difference: "<<worldLeak<<'\n';
+  Check(worldLeak==0,"Culled world geometry must not leak into the portrait.");
+  const auto culledPortrait=[&](bool queued,const wchar_t* path) {
+    floor();
+    Require(renderer.BeginPortrait(.65f,.1f,.3f,.6f),"Begin culled portrait failed.");
+    // This object is behind the preview camera but visible in the world camera.
+    if (queued) renderer.DrawMesh(M::Box,{0,1,6},{.5f,.5f,.5f},{1,0,1,1},S::Plain);
+    Require(renderer.EndPortrait(),"End culled portrait failed.");
+    renderer.SetCamera({3,4,10},{0,0,4});
+    return Capture(renderer,path);
+  };
+  const auto emptyPortrait=culledPortrait(false,L"shadow-culled-portrait-reference.png");
+  const auto hiddenPortrait=culledPortrait(true,L"shadow-culled-portrait.png");
+  const float portraitLeak=MaximumDifference(emptyPortrait,hiddenPortrait);
+  std::cout<<"Culled portrait to world pixel difference: "<<portraitLeak<<'\n';
+  Check(portraitLeak==0,"Culled portrait geometry must not return to the world or its shadows.");
+  // 1,400 scene objects fitted the previous two-pass upload budget. Adding a
+  // detail shadow pass must not turn repeated draws into extra scene objects.
+  floor();
+  for (int i=0;i<1400;++i)
+    renderer.DrawMesh(M::Box,{(i%40-20)*.03f,.5f,(i/40-17)*.03f},{.02f,.5f,.02f},white,S::Plain);
+  const bool denseFrame=renderer.EndFrame(false);
+  std::cout<<"Dense shadow scene rendered: "<<denseFrame<<'\n';
+  Check(denseFrame,"A supported scene must not overflow merely because objects appear in both shadow maps.");
+  // Sharing uploaded instances must preserve a hard scene bound, including its exact
+  // edge. Keep overflow last: a rejected frame is not submitted for presentation.
+  for (int count : {4096,4097}) {
+    renderer.BeginFrame(); renderer.SetCamera({3,4,5},{0,0,0});
+    for (int i=0;i<count;++i)
+      renderer.DrawMesh(M::Box,{(i%64-32)*.025f,.5f,(i/64-32)*.025f},{.02f,.5f,.02f},white,S::Plain);
+    const bool rendered=renderer.EndFrame(false);
+    Check(rendered==(count==4096),"The scene instance budget must accept its boundary and reject overflow.");
+    if (!rendered) Check(renderer.Error()==L"Scene exceeded the 4096 visible-instance budget.",
+      "An over-budget scene must report the actual capacity error.");
+  }
+  Require(renderer.ValidateDebugMessages(),"Queue regressions emitted a DirectX warning/error.");
   std::cout<<(failures?"FAILED: ":"PASS: ")<<"GPU shadow contact, materials, slopes, moving/offscreen casters, clearing, resize and preview isolation.\n";
   CoUninitialize(); return failures?1:0;
 }

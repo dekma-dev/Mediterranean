@@ -26,20 +26,33 @@ void Simulation::Emit(FeedbackKind kind,Vec2 position,int amount) {
   feedback_.push_back({position,kind,amount,0});
 }
 
+void Simulation::EmitVisual(CombatVisualKind kind,Vec2 position,float height,float facing,EntityId actor) {
+  if (visualEventCount_<visualEvents_.size())
+    visualEvents_[visualEventCount_++]={kind,position,height,facing,actor};
+}
+
 void Simulation::RestoreForLevel(int previousLevel) {
   if (Level()<=previousLevel) return;
   health_=MaxHealth();
   Emit(FeedbackKind::LevelUp,player_,Level());
 }
 
-void Simulation::DamagePlayer(float damage) {
+void Simulation::DamagePlayer(float damage,float incomingFacing) {
   if (health_<=0) return;
   const float applied=std::min(sparring_?std::max(0.f,health_-1):health_,std::max(1.f,damage-DamageReduction()));
-  health_-=applied; hurtFlash_=.25f;
+  health_-=applied; hurtFlash_=.25f; damagedThisUpdate_=damagedThisUpdate_ || applied>0;
   if (sparring_) sparringTaken_+=int(applied);
   Emit(FeedbackKind::Hurt,player_,static_cast<int>(applied));
+  if (applied>0) EmitVisual(CombatVisualKind::Hurt,player_,height_+1.2f,incomingFacing);
   if (Channeling()) { channelRemaining_=0; message_="Damage interrupted stabilization."; }
-  if (health_==0) { target_=-1; height_=0; velocityY_=0; attackFlash_=0; movementSpeed_=movementDistance_=0; }
+  if (health_==0) {
+    target_=-1; height_=0; velocityY_=0; attackFlash_=0; movementSpeed_=movementDistance_=0;
+    // Defeat suspends combat. Cancel every pending warning, including actors
+    // already processed this update, before the remaining actors can advance.
+    for (auto& enemy : enemies_) {
+      enemy.windup=enemy.movementSpeed=enemy.movementDistance=0;
+    }
+  }
   if (sparring_ && health_<=1) EndSparring("Yielded");
 }
 void Simulation::StartSparring() {

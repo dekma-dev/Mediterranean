@@ -8,19 +8,20 @@ CharacterOutfit CharacterOutfit::From(const rpg::Inventory& inventory) {
   inventory.Worn(rpg::GearSlot::Legs)!=rpg::Item::None,inventory.Worn(rpg::GearSlot::Feet)!=rpg::Item::None,
   inventory.Worn(rpg::GearSlot::Head)==rpg::Item::Helm,inventory.Worn(rpg::GearSlot::Offhand)==rpg::Item::Shield};
 }
-void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::XMFLOAT4 color,float swing,float gait,CharacterOutfit outfit) {
+void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::XMFLOAT4 color,float swing,float gait,CharacterOutfit outfit,animation::Sample dynamics) {
  using namespace DirectX; using M=visual::Mesh; using S=visual::Material;
-    const auto pose=BuildCharacterPose(swing,gait,outfit.shield);
+    const auto pose=BuildCharacterPose(swing,gait,outfit.shield,dynamics);
     const XMFLOAT4 skin{.72f,.51f,.35f,1},leather{.20f,.14f,.095f,1},steel{.52f,.59f,.61f,1};
     const XMFLOAT4 blade=outfit.rewardWeapon?XMFLOAT4{.76f,.67f,.42f,1}:steel;
     const XMFLOAT4 cloth=outfit.tunic?color:XMFLOAT4{.61f,.58f,.46f,1};
     const auto point=[&](float x,float h,float z) -> XMFLOAT3 {
       return {p.x+std::cos(yaw)*x+std::sin(yaw)*z,base+h,p.z-std::sin(yaw)*x+std::cos(yaw)*z};
     };
-    const auto part=[&](M mesh,float x,float h,float z,XMFLOAT3 scale,XMFLOAT4 tint,S material) {
-      renderer.DrawMesh(mesh,point(x,h+pose.bodyLift,z),scale,tint,material,yaw);
-    };
     const auto world=[&](XMFLOAT3 local) { return point(local.x,local.y,local.z); };
+    const auto upper=[&](XMFLOAT3 local) { return world(pose.UpperPoint(local)); };
+    const auto part=[&](M mesh,float x,float h,float z,XMFLOAT3 scale,XMFLOAT4 tint,S material) {
+      renderer.DrawMesh(mesh,upper({x,h,z}),scale,tint,material,yaw,pose.upperPitch);
+    };
     part(M::Torso,0,1.23f,0,{.61f,.64f,.36f},outfit.armor?steel:cloth,outfit.armor?S::Metal:S::Cloth);
     part(M::Limb,0,.95f,0,{.51f,.08f,.32f},leather,S::Cloth);
     part(M::Box,0,.95f,.16f,{.10f,.075f,.025f},{.67f,.49f,.22f,1},S::Metal);
@@ -28,7 +29,7 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       part(M::Torso,0,.83f,.015f,{.54f,.27f,.36f},cloth,S::Cloth);
       const XMFLOAT3 seam[]={{0,1.02f,.139f},{0,1.064f,.135f},{0,1.198f,.149f},{0,1.371f,.171f},{0,1.448f,.149f}};
       for (int i=0;i<4;++i) renderer.DrawMeshBetween(M::Box,
-        point(0,seam[i].y+pose.bodyLift,seam[i].z),point(0,seam[i+1].y+pose.bodyLift,seam[i+1].z),
+        upper(seam[i]),upper(seam[i+1]),
         .022f,.009f,{.63f,.50f,.25f,1},S::Cloth,{std::sin(yaw),0,std::cos(yaw)});
       part(M::Torso,0,1.51f,0,{.25f,.065f,.24f},leather,S::Cloth);
     }
@@ -71,9 +72,9 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       renderer.DrawSegment(elbow,hand,.19f,.21f,outfit.armor?steel:skin,outfit.armor?S::Metal:S::Skin);
       renderer.DrawMesh(M::Sphere,hand,{.14f,.17f,.14f},skin,S::Skin,yaw);
       if (side>0 && outfit.weapon) {
-        const auto along=[&](float distance) { return point(arm.end.x+pose.weaponDirection.x*distance,
-          arm.end.y+pose.weaponDirection.y*distance,arm.end.z+pose.weaponDirection.z*distance); };
-        const XMFLOAT3 facing{std::sin(yaw),0,std::cos(yaw)};
+        const auto along=[&](float distance) { return world(pose.WeaponPoint(distance)); };
+        const auto forward=pose.UpperDirection({0,0,1});
+        const XMFLOAT3 facing{std::sin(yaw)*forward.z,forward.y,std::cos(yaw)*forward.z};
         renderer.DrawMeshBetween(M::Blade,along(.10f),along(.96f),.12f,.07f,blade,S::Metal,facing);
         renderer.DrawMeshBetween(M::Limb,along(-.09f),along(.10f),.065f,.065f,leather,S::Cloth,facing);
         auto guard=along(.10f);
@@ -82,12 +83,15 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
         renderer.DrawMesh(M::Sphere,along(-.11f),{.08f,.08f,.08f},blade,S::Metal,yaw);
       }
       if (side<0 && outfit.shield) {
-        const auto shield=point(arm.end.x-.035f,arm.end.y-.04f,arm.end.z+.12f);
-        renderer.DrawMesh(M::Torso,shield,{.54f,.75f,.15f},{.66f,.49f,.22f,1},S::Metal,yaw);
-        renderer.DrawMesh(M::Torso,{shield.x+std::sin(yaw)*.085f,shield.y,shield.z+std::cos(yaw)*.085f},
-          {.45f,.64f,.045f},{.18f,.31f,.43f,1},S::Cloth,yaw);
-        renderer.DrawMesh(M::Sphere,{shield.x+std::sin(yaw)*.13f,shield.y+.04f,shield.z+std::cos(yaw)*.13f},
-          {.16f,.16f,.09f},steel,S::Metal,yaw);
+        const auto shieldPoint=[&](XMFLOAT3 local) {
+          const auto offset=pose.UpperDirection(local);
+          return point(arm.end.x+offset.x,arm.end.y+offset.y,arm.end.z+offset.z);
+        };
+        renderer.DrawMesh(M::Torso,shieldPoint({-.035f,-.04f,.12f}),{.54f,.75f,.15f},{.66f,.49f,.22f,1},S::Metal,yaw,pose.upperPitch);
+        renderer.DrawMesh(M::Torso,shieldPoint({-.035f,-.04f,.205f}),
+          {.45f,.64f,.045f},{.18f,.31f,.43f,1},S::Cloth,yaw,pose.upperPitch);
+        renderer.DrawMesh(M::Sphere,shieldPoint({-.035f,0,.25f}),
+          {.16f,.16f,.09f},steel,S::Metal,yaw,pose.upperPitch);
       }
     }
     if (outfit.armor) {

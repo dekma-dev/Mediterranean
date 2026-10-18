@@ -79,8 +79,8 @@ void DrawWorld(Renderer& r,const rpg::WorldMap& map,float time,bool sparring) {
   }
   const auto giver=rpg::WorldMap::questGiver;
   CharacterOutfit merchant; merchant.weapon=false; merchant.helm=true;
-  DrawCharacter(r,rpg::WorldMap::quartermaster,0,0,{.28f,.39f,.22f,1},0,0,merchant);
+  DrawCharacter(r,rpg::WorldMap::quartermaster,0,0,{.28f,.39f,.22f,1},0,0,merchant,animation::Idle(time,1.7f));
   CharacterOutfit keeper; keeper.weapon=false;
-  DrawCharacter(r,giver,0,1.25f,{.57f,.45f,.26f,1},0,0,keeper);
+  DrawCharacter(r,giver,0,1.25f,{.57f,.45f,.26f,1},0,0,keeper,animation::Idle(time,4.1f));
   r.DrawMesh(M::Crystal,{giver.x,2.9f+std::sin(time*2)*.15f,giver.z},{.30f,.55f,.30f},{1,.8f,.25f,1},S::Glow,time,0,visual::ShadowMode::None);
 }

@@ -13,6 +13,14 @@ inline float AngleDelta(float from,float to) { return std::remainder(to-from,tau
 inline float FollowAngle(float value,float target,float response,float dt) {
   return std::remainder(value+AngleDelta(value,target)*-std::expm1(-response*dt),tau);
 }
+// Exact critically damped response to a fixed target. Keeping velocity across
+// target changes avoids the instantaneous start/stop of a first-order blend.
+inline void Spring(float& value,float& velocity,float target,float response,float dt) {
+  const float offset=value-target,impulse=velocity+response*offset;
+  const float decay=std::exp(-response*dt);
+  value=target+(offset+impulse*dt)*decay;
+  velocity=(velocity-response*impulse*dt)*decay;
+}
 inline float Turn(float value,float target,float radiansPerSecond,float dt) {
   return std::remainder(value+std::clamp(AngleDelta(value,target),-radiansPerSecond*dt,radiansPerSecond*dt),tau);
 }
@@ -27,23 +35,34 @@ inline float Travel(float& speed,float target,float response,float dt) {
 }
 struct Actor {
   float facing=0,phase=0,gait=0,attack=0;
-  void Reset(float heading) { facing=heading; phase=gait=attack=0; }
+  float turnVelocity=0,gaitVelocity=0,attackVelocity=0;
+  void Reset(float heading) { facing=heading; phase=gait=attack=turnVelocity=gaitVelocity=attackVelocity=0; }
   void Update(float heading,float travel,bool grounded,bool alive,float strike,float dt,bool committed=false) {
     if (!std::isfinite(dt) || dt<=0) return;
-    facing=committed?heading:Turn(facing,heading,18.f,dt);
-    if (!alive) { gait=attack=0; return; }
+    if (committed) { facing=heading; turnVelocity=0; }
+    else {
+      Spring(facing,turnVelocity,facing+AngleDelta(facing,heading),22.f,dt);
+      facing=std::remainder(facing,tau);
+    }
+    if (!alive) { gait=attack=gaitVelocity=attackVelocity=0; return; }
     // Integrate the moving sine target over this entire travel interval. Filtering
     // only its end sample made the stride longer and phase earlier at low FPS.
-    constexpr float response=24.f;
+    // Subtract the sinusoidal particular solution, advance the homogeneous
+    // spring, then restore the wave. Its derivative also remains continuous.
+    constexpr float response=36.f;
     if (grounded && travel>.00001f) {
       const float previous=phase,omega=travel*4.f/dt;
       phase=std::remainder(phase+travel*4.f,tau);
-      const float a=response*response/(response*response+omega*omega);
-      const float b=response*omega/(response*response+omega*omega);
-      const auto wave=[&](float angle) { return a*std::sin(angle)-b*std::cos(angle); };
-      gait=wave(phase)+(gait-wave(previous))*std::exp(-response*dt);
-    } else gait=Ease(gait,0.f,response,dt);
-    attack=Ease(attack,std::clamp(strike,0.f,1.f),strike>attack?55.f:22.f,dt);
+      const float sum=response*response+omega*omega;
+      const float a=response*response*(response*response-omega*omega)/(sum*sum);
+      const float b=-2*response*response*response*omega/(sum*sum);
+      const auto wave=[&](float angle) { return a*std::sin(angle)+b*std::cos(angle); };
+      const auto slope=[&](float angle) { return omega*(a*std::cos(angle)-b*std::sin(angle)); };
+      gait-=wave(previous); gaitVelocity-=slope(previous);
+      Spring(gait,gaitVelocity,0,response,dt);
+      gait+=wave(phase); gaitVelocity+=slope(phase);
+    } else Spring(gait,gaitVelocity,0,response,dt);
+    Spring(attack,attackVelocity,std::clamp(strike,0.f,1.f),72.f,dt);
   }
 };
 struct CameraBoom {

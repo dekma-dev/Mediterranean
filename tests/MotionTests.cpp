@@ -11,6 +11,57 @@ void Require(bool value,const char* message) {
 float Distance(rpg::Vec2 a,rpg::Vec2 b) { return std::hypot(a.x-b.x,a.z-b.z); }
 const char* pursuit="MEDITERRANEAN 3\n-4 3 100 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
   "100 -4 7 80 1 0 1 0 3.14159265\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
+void SmoothPoseTransitions() {
+  bool passed=true;
+  const auto check=[&](bool value,const char* message) {
+    if (!value) { std::cerr<<"Smoothness: "<<message<<'\n'; passed=false; }
+  };
+  motion::Actor actor;
+  actor.Update(1.5f,0,true,true,1,.001f);
+  check(actor.facing>0 && actor.facing<.002f,"Turning must accelerate from rest instead of starting at full angular speed.");
+  check(actor.attack>0 && actor.attack<.01f,"Attack presentation must ease into motion without delaying the combat event.");
+  actor.Reset(0);
+  for (int i=0;i<20;++i) actor.Update(0,4.f/120,true,true,0,1.f/120);
+  constexpr float dt=.0001f;
+  const float before=actor.gait; actor.Update(0,4*dt,true,true,0,dt);
+  const float during=actor.gait; actor.Update(0,0,true,true,0,dt);
+  const float beforeVelocity=(during-before)/dt,afterVelocity=(actor.gait-during)/dt;
+  std::cout<<"Gait stop velocity change: "<<std::abs(afterVelocity-beforeVelocity)<<'\n';
+  check(std::abs(afterVelocity-beforeVelocity)<.3f,"Stopping must preserve pose velocity while physical travel stops immediately.");
+  float reference=0;
+  for (int hz : {30,60,144}) {
+    actor.Reset(3.05f); float previous=std::abs(motion::AngleDelta(actor.facing,-2.1f));
+    for (int i=0;i<hz/2;++i) {
+      actor.Update(-2.1f,0,true,true,0,1.f/hz);
+      const float error=std::abs(motion::AngleDelta(actor.facing,-2.1f));
+      check(error<=previous+.000001f,"A stationary turn target must settle without oscillation."); previous=error;
+    }
+    check(previous<.001f,"Turning must remain responsive and settle within half a second.");
+    if (hz!=30) check(std::abs(motion::AngleDelta(actor.facing,reference))<.00001f,"Turn response must agree across update rates.");
+    reference=actor.facing;
+  }
+  actor.Reset(0);
+  for (int i=0;i<15;++i) actor.Update(1.5f,4.f/120,true,true,1,1.f/120);
+  const auto beforeReverse=actor;
+  actor.Update(-1.5f,7*dt,true,true,0,dt);
+  check(std::abs(actor.turnVelocity-beforeReverse.turnVelocity)<.3f &&
+    std::abs(actor.gaitVelocity-beforeReverse.gaitVelocity)<.5f &&
+    std::abs(actor.attackVelocity-beforeReverse.attackVelocity)<1,
+    "Retargeting turn, sprint and attack must preserve continuous pose velocities.");
+  for (int i=0;i<480;++i) {
+    const float speed=i%120<60?7.f:0;
+    actor.Update(i%80<40?-1.5f:1.5f,speed/120,true,true,i%60<30?1.f:0.f,1.f/120);
+    check(std::isfinite(actor.facing) && std::abs(actor.gait)<=1.00001f &&
+      actor.attack>=-.00001f && actor.attack<=1.00001f,
+      "Repeated reversals must keep turns finite and limb channels bounded.");
+  }
+  actor.Update(-.7f,0,true,true,0,.01f,true);
+  check(actor.facing==-.7f && actor.turnVelocity==0,"Committed enemy facing must override visual turn momentum.");
+  actor.Reset(.2f);
+  check(actor.gaitVelocity==0 && actor.attackVelocity==0 && actor.turnVelocity==0,
+    "Reset must discard pose velocity, not just pose position.");
+  Require(passed,"Smooth pose transition checks failed.");
+}
 void TransitionRegressions() {
   bool passed=true;
   const auto check=[&](bool value,const char* message) {
@@ -83,6 +134,7 @@ void TransitionRegressions() {
 }
 }
 int main() {
+  SmoothPoseTransitions();
   TransitionRegressions();
   // Compare actual domain displacement, not just the interpolation helper.
   float reference=0;
@@ -131,8 +183,8 @@ int main() {
   const auto standing=game.State().Player(); const float gait=game.PlayerPose().gait;
   Require(std::abs(gait)>.01f,"Walking must actually animate the player");
   game.ExecuteCommand({},1.f/60);
-  Require(Distance(standing,game.State().Player())==0 && std::abs(game.PlayerPose().gait)<std::abs(gait) &&
-    std::abs(game.PlayerPose().gait)>0,"Stopping must settle the pose without sliding the player");
+  Require(Distance(standing,game.State().Player())==0 && std::abs(game.PlayerPose().gait-gait)<.25f &&
+    std::abs(game.PlayerPose().gait)>0,"Stopping must settle the pose without sliding the player or snapping the feet");
   for (int i=0;i<30;++i) game.ExecuteCommand({},1.f/60);
   Require(std::abs(game.PlayerPose().gait)<.0001f,"Idle pose must settle without walking in place");
   const float phase=game.PlayerPose().phase;
@@ -164,7 +216,9 @@ int main() {
   Require(game.State().Height()>0 && game.PlayerPose().phase==0,"Airborne travel must not advance grounded footsteps");
 
   motion::Actor actor; actor.Reset(3.13f); actor.Update(-3.13f,0,true,true,0,.01f);
-  Require(std::abs(motion::AngleDelta(actor.facing,-3.13f))<.001f,"Turning across pi must use the short arc");
+  Require(motion::AngleDelta(3.13f,actor.facing)>0 &&
+    std::abs(motion::AngleDelta(actor.facing,-3.13f))<std::abs(motion::AngleDelta(3.13f,-3.13f)),
+    "Turning across pi must ease forward along the short arc");
   actor.Update(0,0,true,true,1,1.f/60);
   Require(actor.attack>0 && actor.attack<1,"Attack pose must blend into the strike");
   actor.Update(0,0,true,false,1,1.f/60);
