@@ -9,6 +9,11 @@ std::string Veteran(int health=140) {
 }
 void Interact(rpg::Simulation& s) { rpg::Command c; c.interact=true; s.Update(.01f,c); }
 void Wait(rpg::Simulation& s,int frames) { for (int i=0;i<frames;++i) s.Update(.05f,{}); }
+void FirstHit(rpg::Simulation& s) {
+  const float health=s.Health();
+  for (int i=0;i<40 && s.Health()==health;++i) s.Update(.05f,{});
+  Require(s.Health()<health,"Training opponent must turn, telegraph and hit within two seconds.");
+}
 int main() {
   using namespace rpg;
   Simulation armored,plain;
@@ -16,7 +21,7 @@ int main() {
   Command c; c.inventory={InventoryAction::Unequip,int(GearSlot::Chest),23,Item::Ward}; plain.Update(.01f,c);
   Interact(armored); Interact(plain);
   Require(armored.Sparring() && armored.TargetActor() && armored.TargetActor()->kind==EnemyKind::Trainer,"Practice must select a dedicated opponent.");
-  Wait(armored,20); Wait(plain,20);
+  FirstHit(armored); FirstHit(plain);
   Require(armored.Health()==134 && plain.Health()==132,"Actual sparring hits must apply the worn armor's reduction.");
   Require(armored.SparringDamageTaken()==6 && plain.SparringDamageTaken()==8,"Training report must count actual damage taken.");
   const auto durable=armored.Save(); Simulation loaded;
@@ -28,7 +33,7 @@ int main() {
   Require(armored.Gold()==90 && armored.Experience()==300 && armored.Potions()==5 && armored.DefeatedCount()==3,"Practice victory must not grant loot, XP, gold or quest kills.");
   const float remainingHealth=armored.Health(); Interact(armored); Interact(armored);
   Require(!armored.Sparring() && armored.Health()==remainingHealth && armored.Experience()==300,"Restarting/stopping must not heal or duplicate rewards.");
-  Require(armored.Load(Veteran(5)),"Low-health practice fixture."); Interact(armored); Wait(armored,20);
+  Require(armored.Load(Veteran(5)),"Low-health practice fixture."); Interact(armored); FirstHit(armored);
   Require(!armored.Sparring() && armored.Health()==1 && armored.SparringResult()=="Yielded","Practice must end nonlethally at one health.");
   Require(armored.Load(Veteran(90)),"Consumable practice fixture."); Interact(armored); c={}; c.usePotion=true; armored.Update(.01f,c); Interact(armored);
   Require(armored.Health()==130 && armored.Potions()==4 && armored.PotionCooldown()>0,"Practice potions are consumed normally and never refunded.");

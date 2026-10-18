@@ -18,6 +18,7 @@ struct Enemy {
   float repathTimer = 0;
   // Successful navigation travel in the latest update; transient, never saved.
   float movementDistance = 0;
+  float movementSpeed = 0; // transient acceleration state
   std::vector<Vec2> path;
   std::size_t waypoint = 0;
   EnemyKind kind = EnemyKind::Raider;
@@ -62,6 +63,7 @@ public:
   Vec2 Player() const { return player_; }
   float Height() const { return height_; }
   float Facing() const { return facing_; }
+  float MovementDistance() const { return movementDistance_; } // excludes dash/respawn
   float Health() const { return health_; }
   int Experience() const;
   int Level() const;
@@ -122,7 +124,7 @@ private:
   void Interact();
   bool HasLineOfSight(Vec2 from, Vec2 to) const;
   void UpdateEnemy(Enemy& enemy, float dt);
-  void SeparateEnemies();
+  void SeparateEnemies(float dt);
   void Emit(FeedbackKind kind,Vec2 position,int amount = 0);
   void RestoreForLevel(int previousLevel);
   void Respawn();
@@ -137,6 +139,7 @@ private:
   std::vector<Enemy> enemies_;
   Vec2 player_{0,-10};
   float height_ = 0, velocityY_ = 0, facing_ = 0, health_ = 100, attackFlash_ = 0;
+  float movementSpeed_ = 0, movementDistance_ = 0;
   std::array<float,4> cooldowns_{};
   int target_ = -1, gold_ = 0;
   Inventory inventory_;

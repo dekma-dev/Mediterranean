@@ -21,10 +21,11 @@ public:
   std::size_t MaterialBytes() const { return materialBytes_+terrainBytes_; }
   void SetCamera(const DirectX::XMFLOAT3& eye, const DirectX::XMFLOAT3& target);
   bool Project(const DirectX::XMFLOAT3& world, DirectX::XMFLOAT2& screen) const;
-  void DrawBox(const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& scale,
+  void DrawMarkerBox(const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& scale,
     const DirectX::XMFLOAT4& color, float yaw = 0);
   void DrawMesh(visual::Mesh mesh,const DirectX::XMFLOAT3& position,const DirectX::XMFLOAT3& scale,
-    const DirectX::XMFLOAT4& color,visual::Material material,float yaw = 0,float pitch = 0);
+    const DirectX::XMFLOAT4& color,visual::Material material,float yaw = 0,float pitch = 0,
+    visual::ShadowMode shadow = visual::ShadowMode::Cast);
   void DrawSegment(const DirectX::XMFLOAT3& from,const DirectX::XMFLOAT3& to,float width,float depth,
     const DirectX::XMFLOAT4& color,visual::Material material);
   void DrawMeshBetween(visual::Mesh mesh,const DirectX::XMFLOAT3& from,const DirectX::XMFLOAT3& to,float width,float depth,
@@ -56,7 +57,8 @@ private:
   bool FlushHud();
   bool CreateMaterials();
   bool FlushWorld();
-  void Queue(visual::Mesh mesh,const DirectX::XMMATRIX& world,const DirectX::XMFLOAT4& color,visual::Material material);
+  void Queue(visual::Mesh mesh,const DirectX::XMMATRIX& world,const DirectX::XMFLOAT4& color,visual::Material material,
+    visual::ShadowMode shadow = visual::ShadowMode::Cast);
   static constexpr unsigned meshCount = static_cast<unsigned>(visual::Mesh::Count);
   static constexpr unsigned maxInstances = 4096;
   struct Instance { DirectX::XMFLOAT4X4 world,normal; DirectX::XMFLOAT4 color,surface; };

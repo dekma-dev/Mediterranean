@@ -93,6 +93,11 @@ int main() {
   const std::string returning="MEDITERRANEAN 3\n0 -10 100 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
     "100 -4 5 80 0 0 2 0 3.14159\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
   Require(simulation.Load(returning),"Returning enemy fixture must load");
+  const float initialFacing=simulation.Enemies()[0].facing;
+  simulation.Update(.05f,{});
+  Require(std::abs(std::remainder(simulation.Enemies()[0].facing-initialFacing,6.2831853f))<=.5001f &&
+    simulation.Enemies()[0].movementDistance<.001f,"A returning enemy must turn before walking backward");
+  for (int i=0;i<7;++i) simulation.Update(.05f,{});
   const auto before=simulation.Enemies()[0].position;
   simulation.Update(.05f,{});
   const auto& enemy=simulation.Enemies()[0];
@@ -106,7 +111,7 @@ int main() {
   rpg::Simulation loaded;
   Require(loaded.Load(movingSave) && loaded.Save()==movingSave && loaded.Enemies()[0].movementDistance==0,
     "Loading must retain durable state and reset transient movement feedback");
-  for (int i=0;i<25;++i) simulation.Update(.05f,{});
+  for (int i=0;i<60;++i) simulation.Update(.05f,{});
   Require(simulation.Enemies()[0].state==rpg::EnemyState::Idle && simulation.Enemies()[0].movementDistance==0,
     "Arriving home must stop the walking pose");
 

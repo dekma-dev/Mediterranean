@@ -10,6 +10,12 @@ void Require(bool value,const char* message) {
 void Wait(rpg::Simulation& game,int steps) {
   for (int i=0;i<steps;++i) game.Update(.05f,{});
 }
+void BeginSwing(rpg::Simulation& game,int enemy=0) {
+  const float health=game.Health();
+  for (int i=0;i<50 && game.Enemies()[enemy].windup==0;++i) game.Update(.01f,{});
+  Require(game.Enemies()[enemy].windup>0 && game.Health()==health,
+    "Enemy must turn and begin its telegraph before dealing damage");
+}
 const std::string duel="MEDITERRANEAN 1\n-4 5.2 100 3.14159 0 0\n0 0 0 0\n-4 7 80 0\n4 9 80 0\n0 12 80 0\n";
 bool HasFeedback(const rpg::Simulation& game,rpg::FeedbackKind kind) {
   for (const auto& event : game.Feedback()) if (event.kind==kind) return true;
@@ -20,7 +26,7 @@ bool HasFeedback(const rpg::Simulation& game,rpg::FeedbackKind kind) {
 int main() {
   rpg::Simulation game;
   Require(game.Load(duel),"Duel fixture must load");
-  game.Update(.01f,{});
+  BeginSwing(game);
   Require(game.Enemies()[0].windup>0 && game.Health()==100,"A swing must telegraph before causing damage");
   const auto committed=game.Enemies()[0].position;
   Wait(game,10);
@@ -32,7 +38,7 @@ int main() {
   Require(game.Health()==92,"Recovery must prevent damage every frame");
 
   Require(game.Load(duel),"Reload duel");
-  game.Update(.01f,{});
+  BeginSwing(game);
   rpg::Simulation restored;
   const auto midSwing=game.Save();
   Require(restored.Load(midSwing) && restored.Save()==midSwing,"Committed swing must survive save/load exactly");
@@ -44,7 +50,7 @@ int main() {
   Require(game.Health()==100 && HasFeedback(game,rpg::FeedbackKind::Miss),"Dash out of range must avoid a committed swing");
 
   Require(game.Load(duel),"Reload interrupt scenario");
-  game.Update(.01f,{});
+  BeginSwing(game);
   command={}; command.nextTarget=true; command.ability=1;
   game.Update(.05f,command);
   Require(game.Enemies()[0].windup==0 && game.Enemies()[0].health==45 &&
@@ -62,7 +68,7 @@ int main() {
   const std::string captain="MEDITERRANEAN 3\n0 10.2 100 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
     "100 -12 -10 80 0 0 2 0 0\n101 12 -10 80 0 0 2 0 0\n102 0 12 120 0 0 0 0 0\n";
   Require(game.Load(captain),"Captain scenario must load");
-  game.Update(.01f,{}); Wait(game,15);
+  BeginSwing(game,2); Wait(game,15);
   Require(game.Health()==100 && game.Enemies()[2].windup>0,"Captain must provide a longer readable windup");
   Wait(game,6);
   Require(game.Health()==84,"Captain must use its own damage profile");

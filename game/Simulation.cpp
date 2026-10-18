@@ -1,4 +1,5 @@
 #include "game/Simulation.h"
+#include "game/Motion.h"
 #include <algorithm>
 #include <cmath>
 #include <sstream>
@@ -226,6 +227,7 @@ void Simulation::Interact() {
 
 void Simulation::Update(float seconds,const Command& command) {
   tradeRequested_=false;
+  movementDistance_=0;
   for (auto& enemy : enemies_) enemy.movementDistance=0;
   trainer_.movementDistance=0;
   if (!std::isfinite(seconds) || seconds<=0) return;
@@ -251,13 +253,19 @@ void Simulation::Update(float seconds,const Command& command) {
     channelRemaining_=0; message_="Stabilization interrupted. Press E at the anchor to try again.";
   }
   if (moving) {
-    const float speed=command.sprint?7.f:4.f;
-    Vec2 direction{command.movement.x/std::max(1.f,length),command.movement.z/std::max(1.f,length)};
+    const float speed=(command.sprint?7.f:4.f)*std::min(1.f,length);
+    Vec2 direction{command.movement.x/length,command.movement.z/length};
     facing_=std::atan2(direction.x,direction.z);
-    Move(player_,{direction.x*speed*dt,direction.z*speed*dt},.4f);
-  }
+    const float travel=motion::Travel(movementSpeed_,speed,24.f,dt);
+    const auto before=player_;
+    Move(player_,{direction.x*travel,direction.z*travel},.4f);
+    movementDistance_=Length(Difference(player_,before));
+    // Don't bank full running speed while pushing against a solid wall.
+    if (movementDistance_<travel*.1f) movementSpeed_=0;
+  } else movementSpeed_=0;
   if (command.jump && height_==0) velocityY_=6;
-  velocityY_-=18*dt; height_+=velocityY_*dt;
+  // Constant-gravity integration keeps the same apex/flight at every frame rate.
+  height_+=velocityY_*dt-9*dt*dt; velocityY_-=18*dt;
   if (height_<=0) { height_=0; velocityY_=0; }
   if (command.nextTarget) SelectTarget();
   if (command.interact) Interact();
@@ -291,7 +299,7 @@ void Simulation::Update(float seconds,const Command& command) {
     else if (sparringRemaining_==0) EndSparring("Time complete");
     else UpdateEnemy(trainer_,dt);
   }
-  SeparateEnemies();
+  SeparateEnemies(dt);
   if (Channeling()) {
     if (moving || height_>0 || command.ability>=0 || command.usePotion || changingGear ||
       Length(Difference(player_,WorldMap::astralAnchor))>2.5f || !HasLineOfSight(player_,WorldMap::astralAnchor)) {
@@ -306,7 +314,7 @@ void Simulation::Update(float seconds,const Command& command) {
   }
 }
 
-void Simulation::SeparateEnemies() {
+void Simulation::SeparateEnemies(float dt) {
   for (std::size_t i=0;i<enemies_.size();++i) for (std::size_t j=i+1;j<enemies_.size();++j) {
     auto& a=enemies_[i]; auto& b=enemies_[j];
     if (a.health<=0 || b.health<=0 || a.windup>0 || b.windup>0) continue;
@@ -315,15 +323,18 @@ void Simulation::SeparateEnemies() {
     if (distance>=.9f) continue;
     if (distance<.0001f) delta={1,0};
     else { delta.x/=distance; delta.z/=distance; }
-    const float correction=(.9f-distance)*.5f;
+    const float correction=std::min((.9f-distance)*.5f,1.5f*dt);
+    const auto beforeA=a.position,beforeB=b.position;
     Move(a.position,{delta.x*correction,delta.z*correction},.45f);
     Move(b.position,{-delta.x*correction,-delta.z*correction},.45f);
+    a.movementDistance+=Length(Difference(a.position,beforeA));
+    b.movementDistance+=Length(Difference(b.position,beforeB));
   }
 }
 
 void Simulation::UpdateEnemy(Enemy& enemy,float dt) {
   enemy.hitFlash=std::max(0.f,enemy.hitFlash-dt);
-  if (enemy.health<=0) { enemy.state=EnemyState::Dead; enemy.windup=0; return; }
+  if (enemy.health<=0) { enemy.state=EnemyState::Dead; enemy.windup=enemy.movementSpeed=0; return; }
   enemy.attackCooldown=std::max(0.f,enemy.attackCooldown-dt);
   const float distance=Length(Difference(player_,enemy.position));
   const EnemyState previous=enemy.state;
@@ -332,13 +343,14 @@ void Simulation::UpdateEnemy(Enemy& enemy,float dt) {
   if (enemy.state==EnemyState::Pursuing && (Length(Difference(player_,enemy.home))>13 || health_<=0))
     enemy.state=EnemyState::Returning;
   if (enemy.state==EnemyState::Returning) enemy.windup=0;
-  if (enemy.state==EnemyState::Returning && Length(Difference(enemy.position,enemy.home))<.15f) {
+  if (enemy.state==EnemyState::Returning && Length(Difference(enemy.position,enemy.home))<.015f) {
     enemy.position=enemy.home; enemy.health=enemy.MaxHealth(); enemy.state=EnemyState::Idle; enemy.path.clear();
   }
-  if (enemy.state==EnemyState::Idle) return;
+  if (enemy.state==EnemyState::Idle) { enemy.movementSpeed=0; return; }
   // Commit facing and position during a windup. Players can step outside its cone,
   // dash away, or interrupt it with heavy strike before the impact is resolved.
   if (enemy.windup>0) {
+    enemy.movementSpeed=0;
     enemy.windup=std::max(0.f,enemy.windup-dt);
     if (enemy.windup==0) {
       const auto delta=Difference(player_,enemy.position);
@@ -366,31 +378,47 @@ void Simulation::UpdateEnemy(Enemy& enemy,float dt) {
   }
   const float remaining=Length(Difference(goal,enemy.position));
   enemy.repathTimer-=dt;
-  if (previous!=enemy.state || enemy.repathTimer<=0) {
+  if (map_.CanTravel(enemy.position,goal,.45f)) {
+    // Track a visible moving destination every update; a cached goal produced
+    // sideways pursuit and sharp course corrections every 650 ms.
+    enemy.path.resize(1); enemy.path[0]=goal;
+    enemy.waypoint=0; enemy.repathTimer=.65f;
+  } else if (previous!=enemy.state || enemy.repathTimer<=0 || enemy.waypoint>=enemy.path.size()) {
     // Stop just short of the player's center; navigation uses static world clearance.
     enemy.path=map_.FindPath(enemy.position,goal,.45f);
     enemy.waypoint=0; enemy.repathTimer=.65f;
   }
   const bool pursuing=enemy.state==EnemyState::Pursuing;
-  if ((pursuing?distance>1.6f:remaining>.1f) && enemy.waypoint<enemy.path.size()) {
-    const auto waypoint=enemy.path[enemy.waypoint];
-    const auto direction=Difference(waypoint,enemy.position);
+  const bool clearSight=pursuing && HasLineOfSight(enemy.position,player_);
+  // Consume reached waypoints in the same update instead of idling for a frame.
+  while (enemy.waypoint<enemy.path.size() && Length(Difference(enemy.path[enemy.waypoint],enemy.position))<.001f)
+    ++enemy.waypoint;
+  const bool navigating=!(clearSight && distance<=1.6f) && remaining>.001f && enemy.waypoint<enemy.path.size();
+  const auto heading=navigating?Difference(enemy.path[enemy.waypoint],enemy.position):Difference(player_,enemy.position);
+  const float desiredFacing=std::atan2(heading.x,heading.z);
+  enemy.facing=motion::Turn(enemy.facing,desiredFacing,10.f,dt);
+  const float alignment=std::max(0.f,std::cos(motion::AngleDelta(enemy.facing,desiredFacing)));
+  // Close range alone is not arrival: a trunk/corner can still block the swing.
+  const float arrival=clearSight?std::max(0.f,distance-1.6f):remaining;
+  float budget=motion::Travel(enemy.movementSpeed,navigating?std::min(2.2f,arrival*8.f)*alignment:0.f,16.f,dt);
+  budget=std::min(budget,arrival);
+  while (budget>.00001f && enemy.waypoint<enemy.path.size()) {
+    const auto direction=Difference(enemy.path[enemy.waypoint],enemy.position);
     const float length=Length(direction);
-    if (length<.15f) ++enemy.waypoint;
-    else {
-      const float step=std::min(length,2.2f*dt);
-      const auto before=enemy.position;
-      Move(enemy.position,{direction.x/length*step,direction.z/length*step},.45f);
-      const auto travel=Difference(enemy.position,before);
-      enemy.movementDistance=Length(travel);
-      if (!pursuing && enemy.movementDistance>.0001f)
-        enemy.facing=std::atan2(travel.x,travel.z);
-    }
+    if (length<.001f) { ++enemy.waypoint; continue; }
+    const float step=std::min(length,budget);
+    const auto before=enemy.position;
+    Move(enemy.position,{direction.x/length*step,direction.z/length*step},.45f);
+    const float travel=Length(Difference(enemy.position,before));
+    enemy.movementDistance+=travel; budget-=step;
+    if (travel<step*.5f) { enemy.movementSpeed=0; enemy.repathTimer=0; break; }
+    if (Length(Difference(enemy.path[enemy.waypoint],enemy.position))<.001f) ++enemy.waypoint;
   }
-  if (pursuing) enemy.facing=std::atan2(player_.x-enemy.position.x,player_.z-enemy.position.z);
+  if (enemy.waypoint==enemy.path.size()) enemy.repathTimer=0;
+  const float attackFacing=std::atan2(player_.x-enemy.position.x,player_.z-enemy.position.z);
   if (pursuing && Length(Difference(player_,enemy.position))<=2 && height_<1.5f && health_>0 && enemy.attackCooldown<=0 &&
-    HasLineOfSight(enemy.position,player_)) {
-    enemy.windup=enemy.WindupDuration(); enemy.path.clear();
+    std::abs(motion::AngleDelta(enemy.facing,attackFacing))<.1f && HasLineOfSight(enemy.position,player_)) {
+    enemy.windup=enemy.WindupDuration(); enemy.path.clear(); enemy.movementSpeed=0;
   }
 }
 

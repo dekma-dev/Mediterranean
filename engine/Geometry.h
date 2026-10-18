@@ -4,6 +4,7 @@
 #include <vector>
 
 namespace visual {
+enum class ShadowMode { Cast, None };
 inline constexpr unsigned materialSize=128,shadowSize=1024;
 enum class Mesh : unsigned { Box, Roof, Sphere, Rock, Trunk, Foliage, Torso, Limb, Blade, Crystal, Terrain, Cliff, Head, Boot, Hair, Grass, Barrel,Arch,Canopy,Masonry,Count };
 enum class Material : unsigned { Plain, Ground, Stone, Wood, Plaster, Roof, Cloth, Metal, Leaves, Skin, Glow, Count };

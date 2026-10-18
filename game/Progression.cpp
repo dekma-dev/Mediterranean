@@ -39,7 +39,7 @@ void Simulation::DamagePlayer(float damage) {
   if (sparring_) sparringTaken_+=int(applied);
   Emit(FeedbackKind::Hurt,player_,static_cast<int>(applied));
   if (Channeling()) { channelRemaining_=0; message_="Damage interrupted stabilization."; }
-  if (health_==0) { target_=-1; height_=0; velocityY_=0; attackFlash_=0; }
+  if (health_==0) { target_=-1; height_=0; velocityY_=0; attackFlash_=0; movementSpeed_=movementDistance_=0; }
   if (sparring_ && health_<=1) EndSparring("Yielded");
 }
 void Simulation::StartSparring() {
@@ -57,12 +57,14 @@ void Simulation::EndSparring(const char* result) {
 
 void Simulation::Respawn() {
   player_=WorldMap::spawn; height_=velocityY_=facing_=0; health_=MaxHealth();
+  movementSpeed_=movementDistance_=0;
   target_=-1; attackFlash_=hurtFlash_=channelRemaining_=0;
   cooldowns_.fill(0); potionCooldown_=0; feedback_.clear();
   for (auto& enemy : enemies_) {
     if (enemy.health<=0) continue;
     enemy.position=enemy.home; enemy.health=enemy.MaxHealth(); enemy.state=EnemyState::Idle;
     enemy.windup=enemy.attackCooldown=enemy.hitFlash=enemy.repathTimer=0;
+    enemy.movementSpeed=enemy.movementDistance=0;
     enemy.path.clear(); enemy.waypoint=0;
   }
   message_="Returned to Dawnwatch. Quests, XP, equipment, gold, and loot retained.";

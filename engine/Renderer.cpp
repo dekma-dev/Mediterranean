@@ -113,7 +113,9 @@ bool Renderer::CreatePipeline() {
  instanceScratch_.reserve(maxInstances); hud_.reserve(16380);
  D3D11_RASTERIZER_DESC r{}; r.FillMode=D3D11_FILL_SOLID; r.CullMode=D3D11_CULL_BACK; r.DepthClipEnable=TRUE;
  if (!Check(device_->CreateRasterizerState(&r,rasterizer_.GetAddressOf()),L"Create rasterizer")) return false;
- r.DepthBias=500; r.SlopeScaledDepthBias=1.5f;
+ // Receiver-plane filtering handles slopes; a large raster bias erases boot/step
+ // contact shadows. Keep only a small, bounded floating-point raster offset.
+ r.DepthBias=16; r.SlopeScaledDepthBias=.15f; r.DepthBiasClamp=.0001f;
  if (!Check(device_->CreateRasterizerState(&r,shadowRasterizer_.GetAddressOf()),L"Create shadow rasterizer")) return false;
  D3D11_DEPTH_STENCIL_DESC z{}; z.DepthEnable=TRUE; z.DepthWriteMask=D3D11_DEPTH_WRITE_MASK_ALL; z.DepthFunc=D3D11_COMPARISON_LESS;
  if (!Check(device_->CreateDepthStencilState(&z,depthOn_.GetAddressOf()),L"Create depth state")) return false;
@@ -164,7 +166,7 @@ bool Renderer::CreateMaterials() {
  sampler.AddressU=sampler.AddressV=sampler.AddressW=D3D11_TEXTURE_ADDRESS_WRAP;
  sampler.MaxLOD=D3D11_FLOAT32_MAX;
  if (!Check(device_->CreateSamplerState(&sampler,surfaceSampler_.GetAddressOf()),L"Create surface sampler")) return false;
- sampler.Filter=D3D11_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT; sampler.ComparisonFunc=D3D11_COMPARISON_LESS_EQUAL;
+ sampler.Filter=D3D11_FILTER_COMPARISON_MIN_MAG_MIP_POINT; sampler.ComparisonFunc=D3D11_COMPARISON_LESS_EQUAL;
  sampler.AddressU=sampler.AddressV=sampler.AddressW=D3D11_TEXTURE_ADDRESS_BORDER;
  for (auto& channel : sampler.BorderColor) channel=1;
  return Check(device_->CreateSamplerState(&sampler,shadowSampler_.GetAddressOf()),L"Create shadow sampler");
@@ -212,14 +214,14 @@ void Renderer::Draw(const XMMATRIX& world,const XMMATRIX& vp,const XMFLOAT4& col
  context_->UpdateSubresource(constants_.Get(),0,nullptr,&data,0,0);
  context_->OMSetDepthStencilState(hud?depthOff_.Get():depthOn_.Get(),0); context_->Draw(count,start);
 }
-void Renderer::DrawBox(const XMFLOAT3& p,const XMFLOAT3& s,const XMFLOAT4& color,float yaw) {
- DrawMesh(visual::Mesh::Box,p,s,color,visual::Material::Plain,yaw);
+void Renderer::DrawMarkerBox(const XMFLOAT3& p,const XMFLOAT3& s,const XMFLOAT4& color,float yaw) {
+ DrawMesh(visual::Mesh::Box,p,s,color,visual::Material::Plain,yaw,0,visual::ShadowMode::None);
 }
-void Renderer::Queue(visual::Mesh mesh,const XMMATRIX& transform,const XMFLOAT4& color,visual::Material material) {
+void Renderer::Queue(visual::Mesh mesh,const XMMATRIX& transform,const XMFLOAT4& color,visual::Material material,visual::ShadowMode shadow) {
  Item item{};
  XMStoreFloat4x4(&item.instance.world,transform);
  XMStoreFloat4x4(&item.instance.normal,XMMatrixTranspose(XMMatrixInverse(nullptr,transform)));
- item.instance.color=color; item.instance.surface={static_cast<float>(material),0,0,0};
+ item.instance.color=color; item.instance.surface={static_cast<float>(material),shadow==visual::ShadowMode::Cast?1.f:0.f,0,0};
  const auto& m=item.instance.world; item.center={m._41,m._42,m._43};
  const float scale=std::max({XMVectorGetX(XMVector3Length(transform.r[0])),
   XMVectorGetX(XMVector3Length(transform.r[1])),XMVectorGetX(XMVector3Length(transform.r[2]))});
@@ -227,10 +229,10 @@ void Renderer::Queue(visual::Mesh mesh,const XMMATRIX& transform,const XMFLOAT4&
  world_[static_cast<unsigned>(mesh)].push_back(item);
 }
 void Renderer::DrawMesh(visual::Mesh mesh,const XMFLOAT3& p,const XMFLOAT3& s,const XMFLOAT4& color,
- visual::Material material,float yaw,float pitch) {
+ visual::Material material,float yaw,float pitch,visual::ShadowMode shadow) {
  if (s.x<=0 || s.y<=0 || s.z<=0) return;
  Queue(mesh,XMMatrixScaling(s.x,s.y,s.z)*XMMatrixRotationX(pitch)*XMMatrixRotationY(yaw)*
-  XMMatrixTranslation(p.x,p.y,p.z),color,material);
+  XMMatrixTranslation(p.x,p.y,p.z),color,material,shadow);
 }
 void Renderer::DrawSegment(const XMFLOAT3& from,const XMFLOAT3& to,float width,float depth,
  const XMFLOAT4& color,visual::Material material) {
@@ -259,9 +261,8 @@ bool Renderer::FlushWorld() {
  for (unsigned pass=portrait_?1u:0u;pass<2;++pass) for (unsigned mesh=0;mesh<meshCount;++mesh) {
   const auto start=static_cast<UINT>(instanceScratch_.size());
   for (const auto& item : world_[mesh]) {
-   // Interface cues and emissive quest markers should not cast world shadows.
-   if (pass==0 && (mesh==static_cast<unsigned>(visual::Mesh::Grass) || item.instance.surface.x==static_cast<float>(visual::Material::Plain) ||
-     item.instance.surface.x==static_cast<float>(visual::Material::Glow))) continue;
+   // Casting is an authored property; opaque plain/emissive surfaces can cast too.
+   if (pass==0 && item.instance.surface.y==0) continue;
    if (!visual::VisibleSphere(item.center,item.radius,pass==0?shadowProjection_:viewProjection_)) continue;
    if (instanceScratch_.size()==maxInstances) { error_=L"Scene exceeded the 4096 visible-instance budget."; return false; }
    instanceScratch_.push_back(item.instance);

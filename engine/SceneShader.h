@@ -42,16 +42,39 @@ float Noise(float2 p) {
  float2 cell=floor(p),f=frac(p); f=f*f*(3-2*f);
  return lerp(lerp(Hash(cell),Hash(cell+float2(1,0)),f.x),lerp(Hash(cell+float2(0,1)),Hash(cell+1),f.x),f.y);
 }
-float Shadow(float4 position,float3 n) {
+float Shadow(float4 position,float sunFacing) {
  float3 projected=position.xyz/position.w;
  float2 uv=projected.xy*float2(.5,-.5)+.5;
+ // Derivatives must be evaluated before the per-pixel coverage branch. Fit the
+ // receiver plane in shadow UV space so adjacent PCF taps compare at its depth,
+ // instead of compensating for every slope with a detached, oversized bias.
+ float3 coordinate=float3(uv,projected.z);
+ float3 dx=ddx(coordinate),dy=ddy(coordinate);
+ float determinant=dx.x*dy.y-dx.y*dy.x;
+ float2 gradient=0;
+ if (abs(determinant)>max(length(dx.xy)*length(dy.xy),1e-20)*.0001)
+  gradient=float2(dy.y*dx.z-dx.y*dy.z,dx.x*dy.z-dy.x*dx.z)/determinant;
  if (any(uv<0) || any(uv>1) || projected.z<0 || projected.z>1) return 1;
- float bias=max(.0005,.0015*(1-saturate(dot(n,normalize(float3(-.5,.85,-.4))))));
- float sum=0;
  uint width,height; shadowMap.GetDimensions(width,height);
- [unroll] for (int y=-1;y<=1;++y) [unroll] for (int x=-1;x<=1;++x)
-  sum+=shadowMap.SampleCmpLevelZero(shadowSampler,uv+float2(x,y)/float2(width,height),projected.z-bias);
- return sum/9;
+ float2 size=float2(width,height);
+ // Bound ill-conditioned grazing planes. Compare at each actual texel center:
+ // one comparison depth for a hardware bilinear footprint produces scalloped
+ // edges on wall trim, even with a receiver-plane correction between taps.
+ float2 depthStep=clamp(gradient/size,-.002,.002);
+ float2 texel=uv*size-.5,base=floor(texel),fraction=texel-base;
+ float grazing=1-sunFacing;
+ float bias=.000025+.00015*grazing*grazing;
+ // Separable tent, equivalent weights to a bilinear 3x3 [1,2,1] filter.
+ // Sixteen point comparisons give every tap its own plane-correct depth.
+ float4 wx=float4(1-fraction.x,2-fraction.x,1+fraction.x,fraction.x);
+ float4 wy=float4(1-fraction.y,2-fraction.y,1+fraction.y,fraction.y);
+ float sum=0;
+ [unroll] for (int y=0;y<4;++y) [unroll] for (int x=0;x<4;++x) {
+  float2 tap=base+float2(x-1,y-1);
+  sum+=wx[x]*wy[y]*shadowMap.SampleCmpLevelZero(shadowSampler,(tap+.5)/size,
+    saturate(projected.z+dot(depthStep,tap-texel)-bias));
+ }
+ return sum/16;
 }
 float4 PSMain(VOut i) : SV_TARGET {
  if (eyeAndHud.w>.5) {
@@ -84,7 +107,7 @@ float4 PSMain(VOut i) : SV_TARGET {
  }
  float3 lightDir=normalize(eyeAndHud.w<0?float3(-.3,.6,1):float3(-.5,.85,-.4));
  float diffuse=saturate(dot(n,lightDir));
- float visibility=eyeAndHud.w<0?1:Shadow(i.shadow,n);
+ float visibility=eyeAndHud.w<0?1:Shadow(i.shadow,diffuse);
  float hemisphere=lerp(.19,.48,n.y*.5+.5);
  // A small transmitted-light term keeps the backs of opaque leaves readable.
  if (i.material==8) { hemisphere=max(hemisphere,.40); diffuse+=saturate(dot(-n,lightDir))*.25; }

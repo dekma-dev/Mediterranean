@@ -18,7 +18,7 @@ void Barrel(Renderer& r,XMFLOAT3 p,float width,float height) {
     r.DrawMesh(M::Barrel,{p.x,p.y+level*height,p.z},{width*.96f,.055f,width*.96f},{.25f,.28f,.28f,1},S::Metal);
 }
 void Lantern(Renderer& r,float x,float y,float z) {
-  Box(r,{x,y,z},{.22f,.32f,.16f},{.93f,.69f,.28f,1},S::Glow);
+  r.DrawMesh(M::Box,{x,y,z},{.22f,.32f,.16f},{.93f,.69f,.28f,1},S::Glow,0,0,visual::ShadowMode::None);
   for (float side : {-1.f,1.f}) {
     Box(r,{x+side*.12f,y,z},{.035f,.38f,.2f},brass,S::Metal);
     Box(r,{x,y+side*.19f,z},{.28f,.045f,.2f},brass,S::Metal);
@@ -150,5 +150,5 @@ void DrawWatchRuin(Renderer& r,const rpg::Obstacle& o,float time) {
   }
   for (int i=0;i<5;++i)
     r.DrawMesh(M::Rock,{x-1.35f+i*.66f,1.94f,z},{.70f,.37f+i%2*.17f,1.65f},stone,S::Stone,i*.5f);
-  r.DrawMesh(M::Crystal,{x,3.4f+std::sin(time)*.12f,z},{.7f,1.5f,.7f},{.35f,.68f,.81f,1},S::Glow,time*.3f);
+  r.DrawMesh(M::Crystal,{x,3.4f+std::sin(time)*.12f,z},{.7f,1.5f,.7f},{.35f,.68f,.81f,1},S::Glow,time*.3f,0,visual::ShadowMode::None);
 }

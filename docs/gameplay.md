@@ -59,6 +59,12 @@ There is no repeatable income, retail refund or automatic restock. Buy/sell lose
 
 ## Combat
 
+Movement responds on the first input frame, then approaches 4 units/second walking or 7 sprinting with a short exponential ramp (95% of target speed in about 125 ms). Releasing input stops immediately; there is no physical braking slide. Changing sprint speed blends while moving. Diagonal input shares the same speed limit. Walking poses settle after release, turn over the shortest arc, and derive footstep phase from actual travel rather than elapsed global time. Jumping and dash do not generate grounded footsteps.
+
+Enemies turn at up to 10 radians/second, accelerate toward a 2.2-unit/second pursuit speed and slow near their destination. Returning enemies turn before walking backward, traverse reached waypoints without a deliberate idle frame, and settle within 0.015 units of home. Separation moves each actor at most 1.5 units/second per pair, respects collision and never displaces a committed swing. An enemy must face the player before beginning its full telegraph; damage, range, cooldowns and interruption rules remain as listed below. These tuning values are original prototype decisions.
+
+Unobstructed pursuit tracks the current player position each update. Being close but behind a tree/corner does not count as arriving in melee: the enemy must navigate to clear sight before stopping or starting a swing. Jump launch speed is 6 units/second under gravity of 18 units/second squared: a one-unit apex at one-third of a second and roughly two-thirds of a second airborne, independent of update rate (landing is observed on the next frame). Walking pose filtering is also independent of frame subdivision at constant travel speed. Camera-relative keys follow the displayed, filtered view; opening a central panel or cancelling a gesture discards pending orbit. The boom waits for 100 ms of continuous clearance before easing outward to avoid bouncing at obstacle edges.
+
 | Enemy | Health | Swing damage | Windup | Recovery after impact |
 | --- | --- | --- | --- | --- |
 | Raider | 80 | 8 | 0.7 seconds | 1.4 seconds |

@@ -10,19 +10,23 @@
 #include <filesystem>
 #include <fstream>
 
-void Game::Initialize() { simulation_ = rpg::Simulation{}; }
+void Game::Initialize() {
+  simulation_=rpg::Simulation{}; time_=0;
+  yaw_=0; pitch_=.45f; distance_=10;
+  ResetMotion();
+}
 
 bool Game::RestoreSnapshot(const std::string& snapshot) {
   if (!simulation_.Load(snapshot)) return false;
   CancelUiGesture();
   interface_.SetOnly(ui::Panel::None);
   interface_.previewYaw=0;
-  yaw_=0; pitch_=.45f; distance_=10; walkBlend_=walkPhase_=0;
+  yaw_=0; pitch_=.45f; distance_=10; time_=0; ResetMotion();
   return true;
 }
 
 void Game::Update(double seconds,const Input& input,float wheel) {
-  const float dt=static_cast<float>(seconds);
+  const float dt=std::isfinite(seconds)?static_cast<float>(std::clamp(seconds,0.0,.05)):0.f;
   interface_.noticeTime=std::max(0.f,interface_.noticeTime-dt);
   // Engine changes the window after this update. Cancel before dispatching a
   // simultaneous mouse release, or that release would commit a stale drop.
@@ -72,15 +76,23 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   default: break;
   }
   const bool pointerCaptured=uiVisible && interface_.PointerOverUi();
-  if (!input.Held(VK_RBUTTON) || interface_.CapturesMovement() || interface_.Dragging()) orbiting_=false;
+  if (interface_.CapturesMovement() || interface_.Dragging()) CancelOrbit();
+  else if (!input.Held(VK_RBUTTON)) orbiting_=false;
   if (input.Pressed(VK_RBUTTON))
     orbiting_=!pointerCaptured && !interface_.CapturesMovement() && !interface_.Dragging();
   if (!interface_.CapturesMovement()) {
-    if (!pointerCaptured && !interface_.Dragging())
-      SetCameraOrbit(yaw_+(orbiting_?input.MouseX()*.006f:0),pitch_+(orbiting_?input.MouseY()*.004f:0),distance_-wheel);
+    if (!pointerCaptured && !interface_.Dragging()) {
+      yaw_=std::remainder(yaw_+(orbiting_?input.MouseX()*.006f:0),motion::tau);
+      pitch_=std::clamp(pitch_+(orbiting_?input.MouseY()*.004f:0),.15f,1.1f);
+      if (std::isfinite(wheel)) distance_=std::clamp(distance_-wheel,3.f,18.f);
+    }
     const float forward=float(input.Held('W'))-float(input.Held('S'));
     const float right=float(input.Held('D'))-float(input.Held('A'));
-    command.movement={std::sin(yaw_)*forward+std::cos(yaw_)*right,std::cos(yaw_)*forward-std::sin(yaw_)*right};
+    // Predict the same filtered heading used by UpdateCamera below. Steering
+    // against the raw target makes WASD drift sideways during fast mouse turns.
+    const float movementYaw=motion::FollowAngle(cameraYaw_,yaw_,30.f,dt);
+    command.movement={std::sin(movementYaw)*forward+std::cos(movementYaw)*right,
+      std::cos(movementYaw)*forward-std::sin(movementYaw)*right};
     command.sprint=input.Held(VK_SHIFT); command.jump=input.Pressed(VK_SPACE);
     command.nextTarget=input.Pressed(VK_TAB); command.interact=input.Pressed('E') && !closingMerchant;
     command.restart=input.Pressed('R');
@@ -110,15 +122,54 @@ void Game::Update(double seconds,const Input& input,float wheel) {
 }
 void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   const float dt=std::isfinite(seconds)?std::clamp(seconds,0.f,.05f):0.f;
-  const auto before=simulation_.Player(); simulation_.Update(dt,command);
-  const auto after=simulation_.Player(); time_+=dt;
-  const float distance=std::hypot(after.x-before.x,after.z-before.z);
-  walkBlend_=!command.restart && !command.respawn && distance>.0001f && simulation_.Height()==0?1.f:0.f;
-  walkPhase_+=walkBlend_?distance*4:0;
+  const bool wasDead=simulation_.Health()<=0,wasSparring=simulation_.Sparring();
+  simulation_.Update(dt,command);
+  if (dt<=0) return;
+  time_+=dt;
+  if (command.restart || (wasDead && simulation_.Health()>0)) { ResetMotion(); return; }
+  playerPose_.Update(simulation_.Facing(),simulation_.MovementDistance(),simulation_.Height()==0,
+    simulation_.Health()>0,simulation_.AttackFlash()*5,dt);
+  const auto& enemies=simulation_.Enemies();
+  if (enemyPoses_.size()!=enemies.size()+1) ResetMotion();
+  for (std::size_t i=0;i<enemyPoses_.size();++i) {
+    const auto& enemy=i<enemies.size()?enemies[i]:simulation_.SparringOpponent();
+    if (i==enemies.size() && !wasSparring && simulation_.Sparring()) enemyPoses_[i].Reset(enemy.facing);
+    const float strike=enemy.windup>0?1-enemy.windup/enemy.WindupDuration():
+      std::max(0.f,1-(enemy.AttackInterval()-enemy.attackCooldown)/.2f);
+    // Enemy heading is already smoothed by simulation, then frozen for attacks.
+    // Use it exactly so the character always faces the displayed damage cone.
+    enemyPoses_[i].Update(enemy.facing,enemy.movementDistance,true,enemy.health>0,strike,dt,true);
+  }
+  UpdateCamera(dt);
 }
 void Game::SetCameraOrbit(float yaw,float pitch,float distance) {
+  if (!std::isfinite(yaw) || !std::isfinite(pitch) || !std::isfinite(distance)) return;
   yaw_=std::remainder(yaw,6.2831853f);
   pitch_=std::clamp(pitch,.15f,1.1f); distance_=std::clamp(distance,3.f,18.f);
+  // Explicit positioning is used by captures/tools; interactive input sets targets.
+  UpdateCamera(0,true);
+}
+void Game::ResetMotion() {
+  playerPose_.Reset(simulation_.Facing());
+  enemyPoses_.resize(simulation_.Enemies().size()+1);
+  for (std::size_t i=0;i<enemyPoses_.size();++i) {
+    const auto& enemy=i<simulation_.Enemies().size()?simulation_.Enemies()[i]:simulation_.SparringOpponent();
+    enemyPoses_[i].Reset(enemy.facing);
+    if (enemy.health>0) enemyPoses_[i].attack=enemy.windup>0?1-enemy.windup/enemy.WindupDuration():
+      std::max(0.f,1-(enemy.AttackInterval()-enemy.attackCooldown)/.2f);
+  }
+  UpdateCamera(0,true);
+}
+void Game::UpdateCamera(float dt,bool immediate) {
+  const float height=simulation_.Height()+1.4f;
+  cameraYaw_=immediate?yaw_:motion::FollowAngle(cameraYaw_,yaw_,30.f,dt);
+  cameraPitch_=immediate?pitch_:motion::Ease(cameraPitch_,pitch_,30.f,dt);
+  cameraHeight_=immediate?height:motion::Ease(cameraHeight_,height,18.f,dt);
+  const rpg::Vec2 direction{-std::sin(cameraYaw_)*std::cos(cameraPitch_),-std::cos(cameraYaw_)*std::cos(cameraPitch_)};
+  const float probe=immediate?distance_:std::max(distance_,cameraBoom_.distance);
+  const float clearance=simulation_.CameraDistance(simulation_.Player(),cameraHeight_,direction,std::sin(cameraPitch_),probe);
+  if (immediate) cameraBoom_.Reset(clearance);
+  else cameraBoom_.Update(distance_,clearance,dt);
 }
 
 void Game::Render(Renderer& renderer,bool showInterface) {
@@ -127,24 +178,24 @@ void Game::Render(Renderer& renderer,bool showInterface) {
   using DirectX::XMFLOAT4;
   const auto player=simulation_.Player();
   const float y=simulation_.Height();
-  const rpg::Vec2 direction{-std::sin(yaw_)*std::cos(pitch_),-std::cos(yaw_)*std::cos(pitch_)};
-  const float cameraDistance=simulation_.CameraDistance(player,y+1.4f,direction,std::sin(pitch_),distance_);
-  renderer.SetCamera({player.x+direction.x*cameraDistance,y+1.4f+std::sin(pitch_)*cameraDistance,
-    player.z+direction.z*cameraDistance},{player.x,y+1.4f,player.z});
+  const rpg::Vec2 direction{-std::sin(cameraYaw_)*std::cos(cameraPitch_),-std::cos(cameraYaw_)*std::cos(cameraPitch_)};
+  const float cameraDistance=cameraBoom_.distance;
+  renderer.SetCamera({player.x+direction.x*cameraDistance,cameraHeight_+std::sin(cameraPitch_)*cameraDistance,
+    player.z+direction.z*cameraDistance},{player.x,cameraHeight_,player.z});
   DrawWorld(renderer,simulation_.Map(),time_,simulation_.Sparring());
   using M=visual::Mesh;
   using S=visual::Material;
-  DrawCharacter(renderer,player,y,simulation_.Facing(),simulation_.HurtFlash()>0?XMFLOAT4{1,.48f,.35f,1}:
-    XMFLOAT4{.22f,.37f,.54f,1},simulation_.AttackFlash()*5,std::sin(walkPhase_)*walkBlend_,CharacterOutfit::From(simulation_.Items()));
+  DrawCharacter(renderer,player,y,playerPose_.facing,simulation_.HurtFlash()>0?XMFLOAT4{1,.48f,.35f,1}:
+    XMFLOAT4{.22f,.37f,.54f,1},playerPose_.attack,playerPose_.gait,CharacterOutfit::From(simulation_.Items()));
   const auto anchor=rpg::WorldMap::astralAnchor;
   const bool stable=simulation_.AnchorState()>=rpg::AnchorQuest::Return;
   const XMFLOAT4 crystal=stable?XMFLOAT4{.3f,.95f,.65f,1}:XMFLOAT4{.72f,.4f,.95f,1};
   renderer.DrawMesh(M::Rock,{anchor.x,.12f,anchor.z},{1.2f,.32f,1.2f},{.45f,.42f,.55f,1},S::Stone);
-  renderer.DrawMesh(M::Crystal,{anchor.x,1.1f+std::sin(time_*2)*.12f,anchor.z},{.65f,1.4f,.65f},crystal,S::Glow,time_*.5f);
+  renderer.DrawMesh(M::Crystal,{anchor.x,1.1f+std::sin(time_*2)*.12f,anchor.z},{.65f,1.4f,.65f},crystal,S::Glow,time_*.5f,0,visual::ShadowMode::None);
   if (simulation_.Channeling()) {
     for (int i=0;i<8;++i) {
       const float angle=time_*2+i*.7854f;
-      renderer.DrawBox({anchor.x+std::sin(angle),.5f+simulation_.ChannelProgress(),anchor.z+std::cos(angle)},
+      renderer.DrawMarkerBox({anchor.x+std::sin(angle),.5f+simulation_.ChannelProgress(),anchor.z+std::cos(angle)},
         {.15f,.15f,.15f},crystal,angle);
     }
   }
@@ -154,35 +205,34 @@ void Game::Render(Renderer& renderer,bool showInterface) {
     if (enemy.health<=0) {
       if (!enemy.looted) {
         renderer.DrawMesh(M::Rock,{enemy.position.x,.22f,enemy.position.z},{.55f,.44f,.45f},{.51f,.34f,.15f,1},S::Cloth);
-        renderer.DrawMesh(M::Crystal,{enemy.position.x,1.f+std::sin(time_*3)*.1f,enemy.position.z},{.18f,.3f,.18f},{1,.82f,.3f,1},S::Glow);
+        renderer.DrawMesh(M::Crystal,{enemy.position.x,1.f+std::sin(time_*3)*.1f,enemy.position.z},{.18f,.3f,.18f},{1,.82f,.3f,1},S::Glow,0,0,visual::ShadowMode::None);
       }
       continue;
     }
     const bool captain=enemy.kind==rpg::EnemyKind::Captain;
     CharacterOutfit enemyOutfit; enemyOutfit.armor=captain; enemyOutfit.helm=captain;
-    const float attackPose=enemy.windup>0?1-enemy.windup/enemy.WindupDuration():
-      std::max(0.f,1-(enemy.AttackInterval()-enemy.attackCooldown)/.2f);
-    DrawCharacter(renderer,enemy.position,0,enemy.facing,
+    const auto& pose=enemyPoses_[i];
+    DrawCharacter(renderer,enemy.position,0,pose.facing,
       enemy.hitFlash>0?XMFLOAT4{1,.7f,.55f,1}:enemy.kind==rpg::EnemyKind::Trainer?XMFLOAT4{.55f,.46f,.22f,1}:captain?XMFLOAT4{.36f,.19f,.48f,1}:XMFLOAT4{.65f,.2f,.25f,1},
-      attackPose,enemy.windup>0 || enemy.movementDistance<=.0001f?0.f:std::sin(time_*7+float(i)),enemyOutfit);
+      pose.attack,pose.gait,enemyOutfit);
     if (enemy.windup>0) {
       const float progress=1-enemy.windup/enemy.WindupDuration();
       const XMFLOAT4 warning{1,.55f*(1-progress),.12f,1};
       for (int segment=0;segment<=12;++segment) {
         const float angle=enemy.facing-rpg::Enemy::attackHalfAngle+segment*rpg::Enemy::attackHalfAngle/6;
-        renderer.DrawBox({enemy.position.x+std::sin(angle)*rpg::Enemy::attackReach,.075f,
+        renderer.DrawMarkerBox({enemy.position.x+std::sin(angle)*rpg::Enemy::attackReach,.075f,
           enemy.position.z+std::cos(angle)*rpg::Enemy::attackReach},{.42f,.05f,.09f},warning,angle);
       }
       for (float side : {-1.f,1.f}) {
         const float angle=enemy.facing+side*rpg::Enemy::attackHalfAngle;
-        renderer.DrawBox({enemy.position.x+std::sin(angle)*rpg::Enemy::attackReach*.5f,.075f,
+        renderer.DrawMarkerBox({enemy.position.x+std::sin(angle)*rpg::Enemy::attackReach*.5f,.075f,
           enemy.position.z+std::cos(angle)*rpg::Enemy::attackReach*.5f},
           {.06f,.05f,rpg::Enemy::attackReach},warning,angle);
       }
     }
     if (i==simulation_.Target()) {
-      renderer.DrawBox({enemy.position.x,.04f,enemy.position.z},{1.3f,.06f,1.3f},{1,.72f,.2f,1});
-      renderer.DrawBox({enemy.position.x,2.5f,enemy.position.z},{enemy.health/enemy.MaxHealth(), .1f,.1f},{.8f,.15f,.2f,1});
+      renderer.DrawMarkerBox({enemy.position.x,.04f,enemy.position.z},{1.3f,.06f,1.3f},{1,.72f,.2f,1});
+      renderer.DrawMarkerBox({enemy.position.x,2.5f,enemy.position.z},{enemy.health/enemy.MaxHealth(), .1f,.1f},{.8f,.15f,.2f,1});
     }
   }
   const bool drawInterface=showInterface && (hudVisible_ || interface_.HasPanels() || simulation_.Health()<=0);

@@ -23,7 +23,7 @@ void DrawWorld(Renderer& r,const rpg::WorldMap& map,float time,bool sparring) {
       r.DrawMesh(M::Foliage,{cover.position.x,.30f*scale,cover.position.z},{1.1f*scale,.65f*scale,1.05f*scale},
         {.30f,.40f,.16f,1},S::Leaves,cover.yaw);
     } else r.DrawMesh(M::Grass,{cover.position.x,0,cover.position.z},{scale,.65f*scale,scale},
-      {.35f,.43f,.19f,1},S::Leaves,cover.yaw);
+      {.35f,.43f,.19f,1},S::Leaves,cover.yaw,0,visual::ShadowMode::None);
   }
   // Small verge stones follow the same route segments as the ground and atlas.
   for (const auto& trail : map.Trails()) {
@@ -82,5 +82,5 @@ void DrawWorld(Renderer& r,const rpg::WorldMap& map,float time,bool sparring) {
   DrawCharacter(r,rpg::WorldMap::quartermaster,0,0,{.28f,.39f,.22f,1},0,0,merchant);
   CharacterOutfit keeper; keeper.weapon=false;
   DrawCharacter(r,giver,0,1.25f,{.57f,.45f,.26f,1},0,0,keeper);
-  r.DrawMesh(M::Crystal,{giver.x,2.9f+std::sin(time*2)*.15f,giver.z},{.30f,.55f,.30f},{1,.8f,.25f,1},S::Glow,time);
+  r.DrawMesh(M::Crystal,{giver.x,2.9f+std::sin(time*2)*.15f,giver.z},{.30f,.55f,.30f},{1,.8f,.25f,1},S::Glow,time,0,visual::ShadowMode::None);
 }

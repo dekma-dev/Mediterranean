@@ -24,7 +24,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield) {
   using namespace DirectX;
   swing=std::isfinite(swing)?std::clamp(swing,0.f,1.f):0;
   gait=std::isfinite(gait)?std::clamp(gait,-1.f,1.f):0;
-  CharacterPose pose; pose.bodyLift=std::abs(gait)*.015f;
+  CharacterPose pose; pose.bodyLift=gait*gait*.015f;
   for (int i=0;i<2;++i) {
     const float side=i==0?-1.f:1.f,stride=side*gait;
     pose.legs[i]=Solve({side*.17f,.93f+pose.bodyLift,0},{side*.18f,.17f+std::max(0.f,stride)*.055f,stride*.22f},
