@@ -18,6 +18,13 @@ void RemoveRecord(std::string& save,const char* tag) {
 int main() {
   using namespace rpg;
   {
+    Simulation dash; Require(dash.Load(Veteran()),"Dash shop fixture must load");
+    Command input; input.ability=2; input.purchase=1; dash.Update(.01f,input);
+    Require(dash.Dashing() && dash.Gold()==90 && dash.ShopStock(1)==1 &&
+      dash.Items().Count(Item::Helm)==0,
+      "Dash activation must reject a simultaneous purchase before changing gold or stock");
+  }
+  {
     Simulation rebound; Require(rebound.Load(Veteran()),"Rebound shop fixture must load");
     for(int i=0;i<11;++i) { Command jump; jump.jump=i==0 || i==10; rebound.Update(.05f,jump); }
     const float speed=rebound.VerticalSpeed();

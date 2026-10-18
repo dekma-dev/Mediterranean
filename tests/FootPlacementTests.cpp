@@ -93,7 +93,7 @@ int main() {
     rpg::Command command; command.movement={i<80?1.f:-1.f,0}; command.jump=i==30; command.ability=i==100?2:-1;
     game.ExecuteCommand(command,1.f/60); reference.Update(1.f/60,command);
     Require(game.State().Save()==reference.Save(),"Foot placement cannot change movement, combat or persistent state");
-    Require(game.PlayerAnimation().feetActive==(game.State().Height()==0 && game.State().Health()>0),"Player contact activation must follow actual ground state");
+    Require(game.PlayerAnimation().feetActive==(game.State().Grounded() && !game.State().Dashing() && game.State().Health()>0),"Player contact activation must follow actual ground/dash state");
     Geometry(BuildCharacterPose(game.PlayerPose().attack,game.PlayerPose().gait,false,game.PlayerAnimation()));
   }
   const auto saved=game.State().Save(); Require(game.RestoreSnapshot(saved),"Foot-placement save fixture");
@@ -160,6 +160,15 @@ int main() {
   for (int i=0;i<7;++i) game.ExecuteCommand({},.02f);
   Require(game.Effects().TrailCount()>0,"Combat stance capture must contain an accepted strike");
   liveCapture(L"feet-live-combat.png");
+  game.Initialize(); game.SetCameraOrbit(2.2f,.28f,4.8f);
+  rpg::Command dash; dash.ability=2; game.ExecuteCommand(dash,.04f);
+  liveCapture(L"dash-start.png");
+  for(int i=0;i<2;++i) game.ExecuteCommand({},.05f);
+  Require(game.PlayerAnimation().dash>.9f && !game.PlayerAnimation().feetActive,"Dash peak must use its own pose, not planted walking feet");
+  liveCapture(L"dash-peak.png");
+  for(int i=0;i<4;++i) game.ExecuteCommand({},.05f);
+  Require(!game.State().Dashing() && game.PlayerAnimation().feetActive,"Finished dash must restore ground contacts");
+  liveCapture(L"dash-finish.png");
   std::cout<<"PASS: planted support, fixed joints, turning, stop/jump/landing/reset, authoritative-state isolation and twelve foot-placement captures. Controller bytes: "<<sizeof(animation::FootPlacement)<<'\n';
   CoUninitialize();
 }

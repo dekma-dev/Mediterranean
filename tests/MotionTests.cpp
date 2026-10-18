@@ -285,6 +285,8 @@ int main() {
     const auto beforeReverse=momentum.Player(); command.movement={0,-1};
     momentum.Update(1.f/hz,command);
     Require(momentum.Player().z>beforeReverse.z,"Reversal must brake existing momentum before changing direction");
+    Require(std::abs(momentum.Facing())<.001f,
+      "A reversal must face the remaining forward travel until momentum actually changes direction");
     momentum=rpg::Simulation{}; command.movement={0,1};
     for(int i=0;i<hz/2;++i) momentum.Update(1.f/hz,command);
     command.jump=true; momentum.Update(1.f/hz,command);
@@ -367,8 +369,37 @@ int main() {
   const float phase=game.PlayerPose().phase;
   rpg::Command dash; dash.ability=2; game.ExecuteCommand(dash);
   Require(game.State().MovementDistance()==0 && game.PlayerPose().phase==phase,
-    "Dash must not count teleport distance as several walking steps");
+    "Dash must not count burst distance as several walking steps");
+  for(int hz : {22,30,60,144}) {
+    Game burst; burst.Initialize(); const auto start=burst.State().Player();
+    float elapsed=0; bool animated=false;
+    while(elapsed<.35f-1e-6f) {
+      const float dt=std::min(1.f/hz,.35f-elapsed); rpg::Command input;
+      if(elapsed==0) input.ability=2;
+      const auto before=burst.State().Player(); burst.ExecuteCommand(input,dt);
+      Require(Distance(before,burst.State().Player())<1.f,"Dash must move continuously rather than teleport");
+      animated=animated || burst.PlayerAnimation().dash>.5f;
+      Require(burst.State().GroundMovementDistance()==0,"Dash must not generate walking steps");
+      elapsed+=dt;
+    }
+    Require(std::abs(Distance(start,burst.State().Player())-3.5f)<.0001f && !burst.State().Dashing(),
+      "Timed dash must cover 3.5 m and finish independently of update rate");
+    Require(animated && burst.PlayerAnimation().dash==0,"Dash must animate through its lifetime then settle");
+    burst.Initialize(); burst.ExecuteCommand(dash,.05f); const auto stopped=burst.State().Player();
+    burst.SuspendInput(); burst.ExecuteCommand({},.05f);
+    Require(Distance(stopped,burst.State().Player())==0 && !burst.State().Dashing(),"Suspension must cancel a timed dash");
+    burst.Initialize(); burst.ExecuteCommand(dash,.05f); const auto dashSave=burst.State().Save();
+    Require(burst.RestoreSnapshot(dashSave) && !burst.State().Dashing(),"Loading must discard unfinished dash movement");
+  }
   const auto save=game.State().Save();
+  {
+    rpg::Simulation blocked;
+    Require(blocked.Load("MEDITERRANEAN 3\n3 -8 100 1.5707963 0 0\n2 0 0 0\n0\n0 0 0 0\n"
+      "100 -4 7 80 0 0 0 0 0\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n"),"Dash wall fixture must load");
+    for(int frame=0;frame<20;++frame) blocked.Update(.05f,frame==0?dash:rpg::Command{});
+    Require(blocked.CanStand(blocked.Player()) && blocked.Player().x<=4.801f && !blocked.Dashing(),
+      "Timed dash must stop at a wall without tunnelling or persistent force");
+  }
   game.ExecuteCommand(move,.05f);
   Require(game.RestoreSnapshot(save) && game.PlayerPose().gait==0 && game.PlayerPose().attack==0 &&
     game.PlayerPose().facing==game.State().Facing(),"Loading must reset motion without changing durable save state");

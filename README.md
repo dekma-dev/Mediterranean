@@ -1,6 +1,6 @@
 # Mediterranean
 
-The project uses C++17 and a custom DirectX 11 engine for Windows PC, with Allods Online as the primary reference for setting, visuals, and gameplay. The active tree is native-only. The original JavaScript prototype is preserved in Git history and on the local `codex/archive-js-prototype` branch.
+The project uses C++17 and a custom DirectX 11 engine for Windows PC. The active tree is native-only. The original JavaScript prototype is preserved in Git history and on the local `codex/archive-js-prototype` branch.
 
 ## Native build and launch
 
@@ -87,7 +87,7 @@ After both quests, visit the eastern training post (cyan map marker) and press E
 
 Enemy swings lock their facing during the orange ground telegraph. Step outside the cone, dash away, or interrupt with heavy strike. Enter after death retains progress and restores living enemies at home; R explicitly resets the expedition.
 
-Simulation pauses when unfocused or minimized. All panels and the Escape menu keep the world active. C and I open independent character/bag windows together, leaving the world visible and keyboard movement/combat available; pointer input over a window is captured. The central menu, atlas, journal and shop capture movement/combat keys. The UI uses green/gold carved frames, a circular minimap and compact slots following the supplied Allods screenshot. Normal gameplay starts fullscreen; F11 restores windowed mode. Version 6 saves preserve both quests, derived progression, exact split bag stacks, six worn slots, purchased stock, buyback items, gold and committed campaign enemy windups. Valid versions 1–5 migrate. Jump, camera, target, panels, unfinished anchor channels and sparring sessions reset. Invalid saves leave current progress unchanged. Saves remain in the ignored `saves/` directory.
+Simulation pauses when unfocused or minimized. All panels and the Escape menu keep the world active. C and I open independent character/bag windows together, leaving the world visible and keyboard movement/combat available; pointer input over a window is captured. The central menu, atlas, journal and shop capture movement/combat keys. The UI uses green/gold carved frames, a circular minimap and compact slots. Normal gameplay starts fullscreen; F11 restores windowed mode. Version 6 saves preserve both quests, derived progression, exact split bag stacks, six worn slots, purchased stock, buyback items, gold and committed campaign enemy windups. Valid versions 1–5 migrate. Jump, camera, target, panels, unfinished anchor channels and sparring sessions reset. Invalid saves leave current progress unchanged. Saves remain in the ignored `saves/` directory.
 
 The `-Test` switch runs animation, shadow, motion, interface, geometry, simulation, navigation, inventory, combat, progression, training and trade suites. Add `-SmokeTest` for hidden fullscreen restoration and rendered scenarios, including the shop, all other panels, inspection angles, outfit changes and sparring. Use `-BenchmarkSuite` with Release to measure stationary HUD, walking with camera orbit, repeated combat and the merchant with both side windows open. `-Benchmark` retains the shorter stationary report. These hidden workloads do not establish interactive FPS. Images and logs are written in the selected build directory:
 

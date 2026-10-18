@@ -80,10 +80,13 @@ public:
   float LandingElapsed() const { return landingElapsed_; }
   bool JumpedThisUpdate() const { return jumpedThisUpdate_; }
   bool DashedThisUpdate() const { return dashedThisUpdate_; }
+  bool Dashing() const { return dashRemaining_>0; }
+  float DashPhase() const { return Dashing()?1-dashRemaining_/.28f:0; }
   float Facing() const { return facing_; }
   float MovementDistance() const { return movementDistance_; } // excludes dash/respawn
+  Vec2 MovementVelocity() const { return movementVelocity_; }
   float GroundMovementDistance() const { return groundMovementDistance_; }
-  void StopMovement() { movementVelocity_={}; movementDistance_=groundMovementDistance_=0; jumpBuffer_=0; }
+  void StopMovement() { movementVelocity_={}; movementDistance_=groundMovementDistance_=0; jumpBuffer_=0; dashRemaining_=0; }
   float Health() const { return health_; }
   int Experience() const;
   int Level() const;
@@ -166,6 +169,8 @@ private:
   Vec2 movementVelocity_{};
   float airSpeedLimit_=4;
   float jumpBuffer_=0;
+  float dashRemaining_=0;
+  Vec2 dashDirection_{};
   float movementDistance_ = 0;
   float groundMovementDistance_ = 0;
   float landingSpeed_ = 0, landingElapsed_ = 0;

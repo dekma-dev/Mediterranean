@@ -99,7 +99,8 @@ void Simulation::UseAbility(int index) {
     EmitVisual(CombatVisualKind::Mend,player_,height_,facing_);
     message_="Mend restored health.";
   } else if (index==2) {
-    Move(player_,{std::sin(facing_)*3.5f,std::cos(facing_)*3.5f},.4f);
+    dashDirection_={std::sin(facing_),std::cos(facing_)};
+    dashRemaining_=.28f; movementVelocity_={}; jumpBuffer_=0;
     dashedThisUpdate_=true;
     message_="Dash.";
   } else {
@@ -165,7 +166,7 @@ void Simulation::Interact() {
   }
   if (!nearbyLoot && Length(Difference(player_,WorldMap::trainingPost))<=2.5f && HasLineOfSight(player_,WorldMap::trainingPost)) {
     if (anchorQuest_!=AnchorQuest::Complete) message_="Secure Dawnwatch before starting a sparring round.";
-    else if (!Grounded()) message_="Land before starting a sparring round.";
+    else if (!Grounded() || Dashing()) message_="Finish moving before starting a sparring round.";
     else StartSparring();
     return;
   }
@@ -175,7 +176,7 @@ void Simulation::Interact() {
       message_=anchorQuest_>=AnchorQuest::Return?"The astral anchor is stable.":"Speak to the beacon keeper about the astral anchor.";
     } else if (DefeatedCount()!=static_cast<int>(enemies_.size())) {
       message_="Defeat all three raiders before stabilizing the anchor.";
-    } else if (!Grounded()) message_="Land before stabilizing the anchor.";
+    } else if (!Grounded() || Dashing()) message_="Finish moving before stabilizing the anchor.";
     else if (!Channeling()) { channelRemaining_=channelDuration; message_="Stabilizing the anchor. Stand still for three seconds."; }
     // Loot still takes precedence over an unavailable/already stable anchor.
     if (Channeling()) return;
@@ -261,8 +262,8 @@ void Simulation::Update(float seconds,const Command& command) {
   }
   // Apply takeoff before horizontal integration, and switch traction at the
   // actual landing instant rather than at the following frame boundary.
-  if (command.haltMovement) jumpBuffer_=0;
-  else if (command.jump) jumpBuffer_=.12f;
+  if (command.haltMovement) { jumpBuffer_=0; dashRemaining_=0; }
+  else if (command.jump && !Dashing()) jumpBuffer_=.12f;
   const auto launch=[&]() {
     jumpBuffer_=0;
     velocityY_=motion::jumpSpeed; jumpedThisUpdate_=true;
@@ -292,7 +293,6 @@ void Simulation::Update(float seconds,const Command& command) {
     if (moving) {
       const float speed=(airborne?airSpeedLimit_:command.sprint?7.f:4.f)*std::min(1.f,length);
       target={command.movement.x/length*speed,command.movement.z/length*speed};
-      facing_=std::atan2(target.x,target.z);
     } else if (airborne) target=movementVelocity_; // Keep takeoff momentum without input.
     const float response=airborne?3.f:moving?24.f:32.f;
     const Vec2 travel{motion::IntegrateVelocity(movementVelocity_.x,target.x,response,interval),
@@ -300,6 +300,9 @@ void Simulation::Update(float seconds,const Command& command) {
     const auto before=player_;
     Move(player_,travel,.4f);
     const auto actual=Difference(player_,before);
+    // Locomotion follows travel, not a desired direction the body has not yet
+    // reached. Combat below still owns the facing of an accepted attack.
+    if (Length(actual)>.00001f) facing_=std::atan2(actual.x,actual.z);
     movementDistance_+=Length(actual);
     if (!airborne) groundMovementDistance_+=Length(actual);
     // Remove velocity into the contact, preserving motion along the wall.
@@ -312,7 +315,8 @@ void Simulation::Update(float seconds,const Command& command) {
     }
     if (!airborne && !moving && Length(movementVelocity_)<.01f) movementVelocity_={};
   };
-  if (command.haltMovement) movementVelocity_={};
+  const bool dashMotion=Dashing() || (command.ability==2 && cooldowns_[2]==0 && !command.haltMovement);
+  if (command.haltMovement || dashMotion) movementVelocity_={};
   else if (inFlight) integrateHorizontal(std::min(dt,contact),true);
   else integrateHorizontal(dt,false);
   // Solve contact inside the step, retaining its speed and elapsed time for
@@ -328,7 +332,7 @@ void Simulation::Update(float seconds,const Command& command) {
         integrateHorizontal(landingElapsed_,true);
         height_=velocityY_*landingElapsed_-.5f*motion::gravity*landingElapsed_*landingElapsed_;
         velocityY_-=motion::gravity*landingElapsed_;
-      } else if (!command.haltMovement) integrateHorizontal(landingElapsed_,false);
+      } else if (!command.haltMovement && !dashMotion) integrateHorizontal(landingElapsed_,false);
     } else {
       height_+=velocityY_*dt-.5f*motion::gravity*dt*dt; velocityY_-=motion::gravity*dt;
     }
@@ -359,7 +363,17 @@ void Simulation::Update(float seconds,const Command& command) {
       potionCooldown_=3; message_="Healing potion restored health.";
     } else message_="That potion stack has moved. Select it again.";
   }
-  UseAbility(command.ability);
+  if(command.ability!=2 || !command.haltMovement) UseAbility(command.ability);
+  if(Dashing()) {
+    const float from=1-dashRemaining_/.28f;
+    dashRemaining_=std::max(0.f,dashRemaining_-dt);
+    const float to=1-dashRemaining_/.28f;
+    const auto curve=[](float t) { return t*t*(3-2*t); };
+    const float distance=3.5f*(curve(to)-curve(from));
+    const auto before=player_;
+    Move(player_,{dashDirection_.x*distance,dashDirection_.z*distance},.4f);
+    if(Length(Difference(player_,before))<distance*.95f) dashRemaining_=0;
+  }
   for (auto& enemy : enemies_) UpdateEnemy(enemy,dt);
   if (sparring_) {
     sparringRemaining_=std::max(0.f,sparringRemaining_-dt);
@@ -369,7 +383,7 @@ void Simulation::Update(float seconds,const Command& command) {
   }
   if (health_>0) SeparateEnemies(dt);
   if (Channeling()) {
-    if (moving || !Grounded() || command.ability>=0 || command.usePotion || changingGear ||
+    if (moving || !Grounded() || Dashing() || command.ability>=0 || command.usePotion || changingGear ||
       Length(Difference(player_,WorldMap::astralAnchor))>2.5f || !HasLineOfSight(player_,WorldMap::astralAnchor)) {
       channelRemaining_=0; message_="Stabilization interrupted. Stand still at the anchor.";
     } else {

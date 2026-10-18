@@ -19,6 +19,27 @@ void WriteWave(const char* path,const std::vector<std::int16_t>& samples) {
   Require(bool(out),"Audio preview write failed");
 }
 int main() {
+  Require(sound::CueLevel(sound::Cue::Step)<sound::CueLevel(sound::Cue::HeavyHit),"Footsteps must sit behind combat impacts");
+  for(unsigned cue=0;cue<unsigned(sound::Cue::Count);++cue) {
+    for(unsigned n=0;n<21;++n) {
+      const float pitch=sound::CuePitch(sound::Cue(cue),n);
+      Require(pitch>.9f && pitch<1.1f,"Playback variation must remain subtle");
+      Require(pitch==sound::CuePitch(sound::Cue(cue),n+7),"Variation must repeat deterministically without gameplay RNG");
+    }
+  }
+  Require(sound::CuePitch(sound::Cue::Step,0)!=sound::CuePitch(sound::Cue::Step,1),"Consecutive footsteps must differ");
+  Require(sound::MixGain(.85f,.5f,.016f)>.8f,"Sparse effects must not pay the twelve-voice attenuation penalty");
+  for(int count=1;count<=12;++count) {
+    const float load=count*.9f,gain=sound::MixGain(.85f,load,.016f);
+    Require(load*gain<=.70001f,"Simultaneous voices must preserve bus headroom before playback");
+  }
+  float recovery=0;
+  for(int hz : {30,60,144}) {
+    float gain=.1f;
+    for(int n=0;n<hz;++n) gain=sound::MixGain(gain,.2f,1.f/hz);
+    if(recovery) Require(std::abs(recovery-gain)<.00001f,"Gain recovery must be frame-rate independent");
+    recovery=gain;
+  }
   size_t bytes=0; std::vector<std::int16_t> preview;
   for(unsigned i=0;i<unsigned(sound::Cue::Count);++i) {
     const auto samples=sound::Generate(sound::Cue(i)); bytes+=samples.size()*2;
@@ -46,6 +67,36 @@ int main() {
   Require(peak>1000 && peak<16000 && energy/music.size()>10000,"Music mix needs headroom and non-silent content");
   Require(bytes<2*1024*1024,"Resident PCM must stay below 2 MiB");
   WriteWave("dawnwatch-music.wav",music); WriteWave("effects-preview.wav",preview);
+  // Offline audition of repeated steps, combat and recovery using the same
+  // cue levels, pitch choices and peak-budget gain as runtime (without music).
+  struct PreviewCue { sound::Cue cue; float start; unsigned variant; };
+  const PreviewCue sequence[]={{sound::Cue::Step,0,0},{sound::Cue::Step,.3f,1},
+    {sound::Cue::Step,.6f,2},{sound::Cue::Strike,1,0},{sound::Cue::Hit,1.08f,0},
+    {sound::Cue::Strike,1.6f,1},{sound::Cue::Hit,1.68f,1},{sound::Cue::Heavy,2.2f,0},
+    {sound::Cue::HeavyHit,2.3f,0},{sound::Cue::Interrupt,2.3f,0},
+    {sound::Cue::Mend,3.2f,0},{sound::Cue::Potion,4.9f,0}};
+  std::array<std::vector<std::int16_t>,size_t(sound::Cue::Count)> bank;
+  std::array<float,size_t(sound::Cue::Count)> peaks{};
+  for(size_t c=0;c<bank.size();++c) {
+    bank[c]=sound::Generate(sound::Cue(c));
+    for(auto value:bank[c]) peaks[c]=std::max(peaks[c],std::abs(int(value))/32767.f);
+  }
+  std::vector<std::int16_t> mixed(sound::sampleRate*7); float gain=.85f;
+  for(size_t frame=0;frame<mixed.size();++frame) {
+    float signal=0,load=0;
+    for(const auto& event:sequence) {
+      const size_t c=size_t(event.cue); const auto& pcm=bank[c];
+      const float position=(float(frame)-event.start*sound::sampleRate)*sound::CuePitch(event.cue,event.variant);
+      if(position<0 || position>=float(pcm.size()-1)) continue;
+      const size_t index=size_t(position); const float blend=position-float(index),level=sound::CueLevel(event.cue);
+      signal+=(pcm[index]*(1-blend)+pcm[index+1]*blend)/32767.f*level;
+      load+=peaks[c]*level;
+    }
+    gain=sound::MixGain(gain,load,1.f/sound::sampleRate);
+    Require(std::abs(signal*gain)<.701f,"Audition mix exceeded its peak budget");
+    mixed[frame]=std::int16_t(signal*gain*32767);
+  }
+  WriteWave("combat-mix-preview.wav",mixed);
 
   rpg::Simulation simulation; sound::Events events; rpg::Command command;
   {
@@ -112,7 +163,12 @@ int main() {
   }
   {
     Audio device;
-    if(device.Initialize()) {
+    if(device.Initialize(true)) {
+      simulation=rpg::Simulation{};
+      for(int frame=0;frame<13;++frame) {
+        command={}; command.jump=frame==0 || frame==10;
+        simulation.Update(.05f,command); device.Update(simulation,0,1,1,.05f);
+      }
       device.Update(simulation,1,0,0); device.Suspend(true); device.Suspend(true);
       device.Suspend(false); device.Update(simulation,2,0,0);
       std::cout<<"Muted XAudio2 device startup, suspend/resume and cleanup exercised.\n";

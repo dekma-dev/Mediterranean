@@ -19,6 +19,29 @@ float Bell(float hz,float t) {
   if(t<0) return 0;
   return Decay(t,.006f,5.f)*(Tone(hz,t)+.28f*Tone(hz*2.01f,t)+.09f*Tone(hz*3.98f,t));
 }
+float Metal(float hz,float t) {
+  if(t<0) return 0;
+  // Inharmonic modes with separately damped partials: a short metal contact,
+  // distinct from the musical bell stack reserved for magic.
+  return Decay(t,.002f,18.f)*(Tone(hz,t)+.45f*Tone(hz*1.47f,t)*std::exp(-12*t)+
+    .22f*Tone(hz*2.09f,t)*std::exp(-30*t));
+}
+float CueLevel(Cue cue) {
+  return cue==Cue::Step?.35f:cue==Cue::Jump?.55f:cue==Cue::Land?.75f:1.f;
+}
+float CuePitch(Cue cue,unsigned sequence) {
+  constexpr float offsets[]={-.65f,.35f,-.2f,.8f,0.f,-.4f,.55f};
+  const float range=cue==Cue::Mend || cue==Cue::Potion || cue==Cue::Interrupt?.012f:
+    cue==Cue::Step?.085f:.045f;
+  return 1+offsets[sequence%7]*range;
+}
+float MixGain(float previous,float peakLoad,float seconds) {
+  const float target=std::min(.85f,.70f/std::max(.0001f,peakLoad));
+  // Attenuate immediately before voices start; recover over 180 ms as tails
+  // finish, avoiding sudden upward gain jumps when a buffer leaves the pool.
+  const float dt=std::isfinite(seconds)?std::clamp(seconds,0.f,.1f):0;
+  return previous>=target?target:previous+(target-previous)*-std::expm1(-dt/.18f);
+}
 std::vector<std::int16_t> Generate(Cue cue) {
   const bool healing=cue==Cue::Mend || cue==Cue::Potion;
   const float duration=cue==Cue::Mend?1.65f:healing?.95f:cue==Cue::Interrupt?.85f:
@@ -55,14 +78,14 @@ std::vector<std::int16_t> Generate(Cue cue) {
       const float swell=std::pow(std::sin(pi*std::min(t/(heavy?.38f:.28f),1.f)),2.f);
       value=swell*((dash?.28f:.18f)*air+(heavy?1.1f:.65f)*low);
       value+=.12f*Sweep(heavy?210.f:450.f,dash?90.f:140.f,duration,t)*Decay(t,.025f,10.f);
-      if(!dash) value+=.08f*Bell(cue==Cue::Enemy?620.f:heavy?780.f:1250.f,t-.07f);
+      if(!dash) value+=.08f*Metal(cue==Cue::Enemy?620.f:heavy?780.f:1250.f,t-.07f);
       break;
     }
     case Cue::Hit: case Cue::HeavyHit: case Cue::Hurt: {
       const bool heavy=cue==Cue::HeavyHit,hurt=cue==Cue::Hurt;
       value=.44f*Sweep(heavy?125.f:190.f,heavy?38.f:65.f,duration,t)*Decay(t,.003f,heavy?12.f:23.f);
       value+=.26f*air*Decay(t,.0015f,65.f)+.65f*body*Decay(t,.004f,19.f);
-      if(!hurt) value+=.13f*Bell(heavy?430.f:1180.f,t)+.055f*Bell(heavy?647.f:1777.f,t-.018f);
+      if(!hurt) value+=.18f*Metal(heavy?430.f:1180.f,t)+.07f*Metal(heavy?647.f:1777.f,t-.018f);
       break;
     }
     case Cue::Interrupt:
@@ -142,19 +165,18 @@ Audio::~Audio() {
   if(engine_) engine_->Release();
   if(ownsCom_) CoUninitialize();
 }
-bool Audio::Initialize() {
+bool Audio::Initialize(bool muteOutput) {
   const HRESULT com=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
   ownsCom_=SUCCEEDED(com);
   if(FAILED(com) && com!=RPC_E_CHANGED_MODE) return false;
   if(FAILED(XAudio2Create(&engine_,0,XAUDIO2_DEFAULT_PROCESSOR)) || FAILED(engine_->CreateMasteringVoice(&master_))) return false;
+  if(muteOutput && FAILED(master_->SetVolume(0))) return false;
   WAVEFORMATEX format{}; format.wFormatTag=WAVE_FORMAT_PCM; format.nChannels=1;
   format.nSamplesPerSec=sound::sampleRate; format.wBitsPerSample=16;
   format.nBlockAlign=2; format.nAvgBytesPerSec=sound::sampleRate*2;
   for(size_t i=0;i<samples_.size();++i) samples_[i]=sound::Generate(sound::Cue(i));
-  int peak=1;
-  for(const auto& sample:samples_) for(auto value:sample) peak=std::max(peak,std::abs(int(value)));
-  // Even twelve coincident peaks leave room for the music bus at full volume.
-  effectGain_=.70f/(float(voices_.size())*peak/32767.f);
+  for(size_t i=0;i<samples_.size();++i)
+    for(auto value:samples_[i]) peaks_[i]=std::max(peaks_[i],std::abs(int(value))/32767.f);
   score_=sound::GenerateMusic();
   for(auto*& voice:voices_) if(FAILED(engine_->CreateSourceVoice(&voice,&format))) return false;
   if(FAILED(engine_->CreateSourceVoice(&music_,&format))) return false;
@@ -165,6 +187,7 @@ bool Audio::Initialize() {
 }
 void Audio::ClearEffects() {
   for(auto* voice:voices_) if(voice) { voice->Stop(); voice->FlushSourceBuffers(); }
+  voiceLevels_.fill(0); voicePeaks_.fill(0); effectGain_=.85f;
 }
 void Audio::Suspend(bool value) {
   if(!engine_ || value==suspended_) return;
@@ -172,22 +195,41 @@ void Audio::Suspend(bool value) {
   if(value) { engine_->StopEngine(); ClearEffects(); events_.Reset(); generation_=~0u; }
   else engine_->StartEngine();
 }
-void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume) {
+void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds) {
   if(!music_ || suspended_) return;
   music_->SetVolume(std::clamp(musicVolume,0.f,1.f)*.30f);
   if(generation!=generation_) {
-    generation_=generation; ClearEffects(); events_.Reset();
+    generation_=generation; ClearEffects(); events_.Reset(); variations_.fill(0);
   }
   events_.Update(state);
-  for(auto* voice:voices_) voice->SetVolume(std::clamp(effectsVolume,0.f,1.f)*effectGain_);
   if(effectsVolume<=0) { ClearEffects(); return; }
-  for(unsigned i=0;i<events_.count;++i) for(auto* voice:voices_) {
+  // Apply the voice changes as one XAudio2 operation set so a new effect never
+  // starts with the preceding frame's louder sparse-mix gain.
+  constexpr UINT32 mixOperation=1;
+  for(unsigned i=0;i<events_.count;++i) for(size_t v=0;v<voices_.size();++v) {
+    auto* voice=voices_[v];
     XAUDIO2_VOICE_STATE status{}; voice->GetState(&status,XAUDIO2_VOICE_NOSAMPLESPLAYED);
     if(status.BuffersQueued) continue;
-    const auto& pcm=samples_[size_t(events_.cues[i])];
+    const auto cue=events_.cues[i]; const auto index=size_t(cue);
+    const auto& pcm=samples_[index];
+    voice->Stop();
+    voice->SetFrequencyRatio(sound::CuePitch(cue,variations_[index]++),mixOperation);
     XAUDIO2_BUFFER buffer{}; buffer.Flags=XAUDIO2_END_OF_STREAM;
     buffer.AudioBytes=UINT32(pcm.size()*2); buffer.pAudioData=reinterpret_cast<const BYTE*>(pcm.data());
-    if(SUCCEEDED(voice->SubmitSourceBuffer(&buffer))) voice->Start();
+    if(SUCCEEDED(voice->SubmitSourceBuffer(&buffer))) {
+      voiceLevels_[v]=sound::CueLevel(cue); voicePeaks_[v]=peaks_[index];
+      voice->Start(0,mixOperation);
+    }
     break;
   }
+  float peakLoad=0;
+  for(size_t v=0;v<voices_.size();++v) {
+    XAUDIO2_VOICE_STATE status{}; voices_[v]->GetState(&status,XAUDIO2_VOICE_NOSAMPLESPLAYED);
+    if(!status.BuffersQueued) voiceLevels_[v]=voicePeaks_[v]=0;
+    peakLoad+=voiceLevels_[v]*voicePeaks_[v];
+  }
+  effectGain_=sound::MixGain(effectGain_,peakLoad,seconds);
+  for(size_t v=0;v<voices_.size();++v)
+    voices_[v]->SetVolume(std::clamp(effectsVolume,0.f,1.f)*effectGain_*voiceLevels_[v],mixOperation);
+  engine_->CommitChanges(mixOperation);
 }

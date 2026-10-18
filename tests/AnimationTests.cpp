@@ -101,8 +101,9 @@ int main() {
   // across extreme combinations, including simultaneous attack and impact.
   for (float air : {0.f,.5f,1.f}) for (float rise : {-1.f,0.f,1.f})
     for (float landing : {0.f,1.f}) for (float hit : {0.f,1.f}) for (float breath : {-1.f,1.f})
-    for (float gait : {-1.f,0.f,1.f}) for (float swing : {0.f,.5f,1.f}) for (bool shield : {false,true}) {
-    const animation::Sample sample{breath,breath,air,rise,landing,hit,1};
+    for (float gait : {-1.f,0.f,1.f}) for (float swing : {0.f,.5f,1.f}) for (bool shield : {false,true})
+    for (float lean : {-1.f,0.f,1.f}) {
+    animation::Sample sample{breath,breath,air,rise,landing,hit,1}; sample.lean=lean;
     const auto pose=BuildCharacterPose(swing,gait,shield,sample);
     for (int side=0;side<2;++side) {
       const auto& arm=pose.arms[side]; const auto& leg=pose.legs[side];
@@ -157,6 +158,25 @@ int main() {
     Require(game.PlayerAnimation().air==0 && game.PlayerAnimation().travel==0,"Restart must discard the previous pose.");
   }
   animation::State hit;
+  for(int hz : {30,60,144}) {
+    Game weighted; weighted.Initialize(); rpg::Command run; run.movement={0,1};
+    weighted.ExecuteCommand(run,1.f/hz);
+    Require(weighted.PlayerAnimation().lean>0,"Acceleration must lean into forward travel");
+    for(int i=0;i<hz;++i) weighted.ExecuteCommand(run,1.f/hz);
+    for(int i=0;i<hz/10;++i) weighted.ExecuteCommand({},1.f/hz);
+    Require(weighted.PlayerAnimation().lean<0,"Braking must counterbalance forward momentum");
+    const auto snapshot=weighted.State().Save();
+    Require(weighted.RestoreSnapshot(snapshot) && weighted.PlayerAnimation().lean==0,"Loading must reset inertial lean");
+    rpg::Command jump; jump.jump=true; float peakHeight=0,peakCamera=0;
+    for(int i=0;i<hz*2;++i) {
+      weighted.ExecuteCommand(i==0?jump:rpg::Command{},1.f/hz);
+      peakHeight=std::max(peakHeight,weighted.State().Height());
+      peakCamera=std::max(peakCamera,weighted.CameraHeight());
+    }
+    Require(peakHeight>1 && peakCamera>1.6f && peakCamera<1.8f,
+      "Jump camera must retain some vertical tracking without following the full jump arc");
+    Require(std::abs(weighted.CameraHeight()-1.4f)<.0001f,"Jump camera must settle back to its ground target");
+  }
   hit.Update(.01f,0,0,0,true,true,0);
   for (int i=0;i<5;++i) hit.Update(.01f,0,0,0,true,false,0);
   Require(hit.pose.hit>.98f,"A hit must produce a bounded recoil peak.");

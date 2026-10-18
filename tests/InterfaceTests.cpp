@@ -308,10 +308,10 @@ int main() {
     Require(click(550,681).action==ui::Action::Ability,"Available Dash must remain usable with both side windows open.");
     screen.panel=ui::Panel::Menu;
     renderer.BeginFrame(); screen.Render(renderer,simulation,0,false); Require(renderer.EndFrame(false),"Menu render failed.");
-    Require(click(640,375).action==ui::Action::Fullscreen,"Fullscreen button must issue the display command.");
-    Require(click(735,533).action==ui::Action::MusicVolume && click(735,533).value==-10,
+    Require(click(640,343).action==ui::Action::Fullscreen,"Fullscreen button must issue the display command.");
+    Require(click(727,439).action==ui::Action::MusicVolume && click(727,439).value==-10,
       "Music decrease must remain clickable at every UI scale");
-    Require(click(785,565).action==ui::Action::EffectsVolume && click(785,565).value==10,
+    Require(click(767,473).action==ui::Action::EffectsVolume && click(767,473).value==10,
       "Effects increase must remain clickable at every UI scale");
     Require(click(640,220).action==ui::Action::Close,"Return button must close the menu.");
     Require(click(1000,680).action==ui::Action::None,"Menu must prevent clicks reaching the underlying HUD.");
@@ -343,7 +343,7 @@ int main() {
     Require(pointer(1068,274,false,false,false,true).action==ui::Action::None,
       "Opening the menu must reject right-clicks against the previous bag layout before redraw.");
     render(); screen.Escape();
-    Require(click(640,500).action==ui::Action::None,"Closing the menu must not activate its invisible Exit button before redraw.");
+    Require(click(640,522).action==ui::Action::None,"Closing the menu must not activate its invisible Exit button before redraw.");
     render(); screen.Close(ui::Panel::Inventory);
     Require(pointer(1068,274,false,false,false,true).action==ui::Action::None,"A closed bag must not accept stale item actions.");
     screen.Show(ui::Panel::Inventory);

@@ -138,6 +138,7 @@ void Game::Update(double seconds,const Input& input,float wheel) {
 void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   const float dt=std::isfinite(seconds)?std::clamp(seconds,0.f,.05f):0.f;
   const bool wasDead=simulation_.Health()<=0,wasSparring=simulation_.Sparring();
+  const auto previousVelocity=simulation_.MovementVelocity();
   simulation_.Update(dt,command);
   if (dt<=0) return;
   time_+=dt;
@@ -146,12 +147,18 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   for (std::size_t i=0;i<simulation_.VisualEventCount();++i) effects_.Emit(simulation_.VisualEvents()[i]);
   if (simulation_.Health()<=0) effects_.CancelTrails();
   if (wasSparring && !simulation_.Sparring()) effects_.CancelTrail(simulation_.SparringOpponent().id);
-  playerPose_.Update(simulation_.Facing(),simulation_.GroundMovementDistance(),simulation_.Grounded(),
+  playerPose_.Update(simulation_.Facing(),simulation_.GroundMovementDistance(),simulation_.Grounded() && !simulation_.Dashing(),
     simulation_.Health()>0,simulation_.AttackFlash()*5,dt);
+  const auto velocity=simulation_.MovementVelocity();
+  const float forwardAcceleration=command.haltMovement?0:
+    ((velocity.x-previousVelocity.x)*std::sin(playerPose_.facing)+
+     (velocity.z-previousVelocity.z)*std::cos(playerPose_.facing))/dt;
   playerAnimation_.Update(dt,simulation_.Height(),simulation_.VerticalSpeed(),simulation_.MovementDistance(),
     simulation_.Health()>0,simulation_.DamagedThisUpdate(),playerPose_.attack,
-    simulation_.LandingSpeed(),simulation_.LandingElapsed());
-  playerFeet_.Update(dt,simulation_.Player(),playerPose_.facing,simulation_.Grounded(),
+    simulation_.LandingSpeed(),simulation_.LandingElapsed(),forwardAcceleration);
+  playerAnimation_.pose.dash=simulation_.Dashing()?std::sin(simulation_.DashPhase()*3.14159265f):0;
+  playerAnimation_.pose.lean*=1-playerAnimation_.pose.dash;
+  playerFeet_.Update(dt,simulation_.Player(),playerPose_.facing,simulation_.Grounded() && !simulation_.Dashing(),
     simulation_.Health()>0,playerAnimation_.pose);
   const auto& enemies=simulation_.Enemies();
   if (enemyPoses_.size()!=enemies.size()+1) ResetMotion();
@@ -217,7 +224,9 @@ void Game::ResetMotion() {
   UpdateCamera(0,true);
 }
 void Game::UpdateCamera(float dt,bool immediate) {
-  const float height=simulation_.Height()+1.4f;
+  // Keep the horizon stable: the actor jumps within the frame instead of
+  // dragging the entire camera through the full ballistic arc.
+  const float height=simulation_.Height()*.35f+1.4f;
   cameraYaw_=immediate?yaw_:motion::FollowAngle(cameraYaw_,yaw_,30.f,dt);
   cameraPitch_=immediate?pitch_:motion::Ease(cameraPitch_,pitch_,30.f,dt);
   cameraHeight_=immediate?height:motion::Ease(cameraHeight_,height,18.f,dt);

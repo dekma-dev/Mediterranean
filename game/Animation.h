@@ -12,6 +12,8 @@ struct Sample {
   float breath=0,sway=0,air=0,rise=0,landing=0,hit=0,travel=0;
   std::array<Foot,2> feet{};
   bool feetActive=false;
+  float lean=0;
+  float dash=0;
 };
 inline Sample Idle(float time,float offset=0) {
   const float seconds=std::isfinite(time)?std::remainder(time,motion::tau*2/1.8f):0;
@@ -30,7 +32,7 @@ struct State {
   float landingAge=2,landingStrength=0,hitAge=2,hitCarry=0;
   void Reset(float offset=0) { *this=State{}; phase=std::isfinite(offset)?std::remainder(offset,motion::tau):0; }
   void Update(float dt,float height,float velocity,float travel,bool alive,bool damaged,float strike,
-              float landingSpeed=0,float landingElapsed=0) {
+              float landingSpeed=0,float landingElapsed=0,float forwardAcceleration=0) {
     if (!std::isfinite(dt) || dt<=0) return;
     dt=std::min(dt,.05f);
     if (!alive) { Reset(); return; }
@@ -52,6 +54,8 @@ struct State {
     airBlend=motion::Ease(airBlend,onGround?0.f:1.f,18.f,dt);
     riseBlend=motion::Ease(riseBlend,Signed(velocity/motion::jumpSpeed),16.f,dt);
     travelBlend=motion::Ease(travelBlend,onGround?Unit(travel/dt/7.f):0.f,12.f,dt);
+    const float leanTarget=onGround?Signed(forwardAcceleration/60.f):0;
+    pose.lean=motion::Ease(pose.lean,leanTarget,16.f,dt);
     pose.hit=hitAge>1?0:std::max(hitCarry*std::exp(-24*hitAge),Pulse(hitAge,.055f));
     pose.landing=landingStrength*Pulse(landingAge,.075f);
     // Extend the legs before touching down, regardless of filtered air state.

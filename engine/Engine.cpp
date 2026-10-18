@@ -437,7 +437,7 @@ void Engine::Tick(double deltaSeconds) {
   game_->Update(deltaSeconds, input_, window_->ConsumeWheel());
   if(audio_) {
     audio_->Suspend(false);
-    audio_->Update(game_->State(),game_->AudioGeneration(),game_->MusicVolume(),game_->EffectsVolume());
+    audio_->Update(game_->State(),game_->AudioGeneration(),game_->MusicVolume(),game_->EffectsVolume(),float(deltaSeconds));
   }
   const bool fullscreenRequest=game_->TakeFullscreenRequest();
   if (input_.Pressed(VK_F11) || fullscreenRequest) {

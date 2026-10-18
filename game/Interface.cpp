@@ -23,8 +23,8 @@ template<unsigned Segments> const std::array<Point,Segments+1>& CirclePoints() {
  }();
  return points;
 }
-const Color ink{.94f,.89f,.69f,1},muted{.66f,.69f,.50f,1},gold{.79f,.62f,.25f,1};
-const Color dark{.055f,.09f,.055f,.98f},border{.30f,.30f,.13f,1},blue{.23f,.46f,.63f,1};
+const Color ink{.97f,.93f,.80f,1},muted{.73f,.77f,.67f,1},gold{.86f,.67f,.30f,1};
+const Color dark{.038f,.075f,.065f,.99f},border{.39f,.38f,.24f,1},blue{.23f,.46f,.63f,1};
 std::string Seconds(float value) {
  std::ostringstream text;
  if (value<1) text<<std::fixed<<std::setprecision(1)<<std::ceil(std::max(0.f,value)*10)/10;
@@ -113,7 +113,12 @@ struct Canvas {
  }
  void Window(Rect a) {
   Frame(a,dark,{.37f,.39f,.17f,1});
-  Gradient({a.x+5,a.y+5,a.w-10,a.h-10},{.16f,.23f,.13f,.99f},{.045f,.075f,.045f,.99f});
+  Gradient({a.x+5,a.y+5,a.w-10,a.h-10},{.13f,.23f,.19f,1},{.035f,.065f,.059f,1});
+  // Fine horizontal tool marks keep large panels from reading as flat plastic.
+  for(float y=a.y+15;y<a.y+a.h-15;y+=7) {
+   const float shade=.025f+.015f*std::sin(y*1.7f);
+   RectFill({a.x+12,y,a.w-24,1},{.55f,.62f,.47f,shade});
+  }
   // Embossed rails and leaf inlays give the frame depth without an art atlas.
   for (float side : {0.f,1.f}) {
    const float x=a.x+side*(a.w-9);
@@ -123,7 +128,7 @@ struct Canvas {
   }
   Gradient({a.x+8,a.y+3,a.w-16,6},{.36f,.40f,.20f,1},{.08f,.13f,.045f,1});
   Gradient({a.x+8,a.y+a.h-9,a.w-16,6},{.08f,.13f,.045f,1},{.32f,.36f,.17f,1});
-  for (float y=a.y+30;y<a.y+a.h-25;y+=31) {
+  for (float y=a.y+35;y<a.y+a.h-25;y+=72) {
    for (float side : {0.f,1.f}) {
     const float x=a.x+12+side*(a.w-24),dir=side==0?1.f:-1.f;
     Scroll(x,y,dir,.55f);
@@ -134,33 +139,45 @@ struct Canvas {
   RectFill({a.x+18,a.y+21,a.w-36,a.h-42},{.015f,.022f,.012f,.24f});
   for (float side : {0.f,1.f}) for (float bottom : {0.f,1.f}) {
    const float x=a.x+side*a.w,y=a.y+bottom*a.h;
-   Diamond(x,y,8,8,{.12f,.17f,.07f,1}); Diamond(x,y,5,5,gold); Diamond(x,y,2,3,{.30f,.39f,.14f,1});
+   Oval(x,y,6,6,{.11f,.14f,.10f,1}); Oval(x,y,4,4,gold); Oval(x-1,y-1,1.5f,1.5f,{1,.88f,.52f,1});
   }
  }
  void Banner(Rect a,const std::string& label,float size=18) {
   const float cy=a.y+a.h*.5f;
   Diamond(a.x+11,cy,18,a.h*.5f,{.16f,.19f,.065f,1}); Diamond(a.x+a.w-11,cy,18,a.h*.5f,{.16f,.19f,.065f,1});
   Frame({a.x+10,a.y,a.w-20,a.h},{.22f,.16f,.055f,1},gold);
-  Gradient({a.x+13,a.y+3,a.w-26,a.h-6},{.48f,.31f,.085f,1},{.14f,.13f,.035f,1});
+  Gradient({a.x+13,a.y+3,a.w-26,a.h-6},{.51f,.34f,.13f,1},{.15f,.115f,.055f,1});
+  Line(a.x+15,a.y+4,a.x+a.w-15,a.y+4,1,{1,.81f,.40f,.75f});
   for (float x : {a.x+8,a.x+a.w-8}) { Diamond(x,cy,7,11,gold); Diamond(x,cy,4,7,{.23f,.29f,.08f,1}); }
   Center(a.x,a.y+(a.h-size)*.5f-2,a.w,label,size,{1,.9f,.51f,1});
  }
  void EmptySlot(Rect a) {
   Frame(a,{.085f,.09f,.04f,1},{.26f,.26f,.12f,1});
-  Scroll(a.x+a.w*.5f,a.y+6,1,a.w/46);
-  Diamond(a.x+a.w*.5f,a.y+a.h*.68f,5,7,{.19f,.21f,.10f,1});
+  Gradient({a.x+4,a.y+4,a.w-8,a.h-8},{.105f,.105f,.075f,1},{.047f,.055f,.043f,1});
+  for(float side : {-1.f,1.f}) {
+   const float x=a.x+a.w*.5f+side*a.w*.20f;
+   Scroll(x,a.y+a.h*.27f,-side,a.w/90);
+   Scroll(x,a.y+a.h*.62f,side,a.w/90);
+  }
  }
 };
 void Icon(Canvas& c,Rect rect,Item item,float alpha=1) {
  const float x=rect.x+rect.w*.5f,y=rect.y+rect.h*.5f,s=rect.w/60;
  const Color metal{.72f,.77f,.77f,alpha},leather{.48f,.30f,.16f,alpha},cloth{.25f,.44f,.60f,alpha};
  if (item==Item::Starter || item==Item::Watchguard) {
+  c.Line(x-12*s,y+17*s,x+15*s,y-18*s,10*s,{.07f,.12f,.15f,alpha});
   c.Line(x-12*s,y+17*s,x+13*s,y-15*s,7*s,item==Item::Watchguard?Color{.84f,.75f,.48f,alpha}:metal);
+  c.Line(x-10*s,y+15*s,x+15*s,y-18*s,2*s,{.94f,.98f,1,alpha});
+  c.Line(x-14*s,y+15*s,x+10*s,y-15*s,2*s,{.30f,.40f,.46f,alpha});
   c.Triangle({x+10*s,y-17*s},{x+20*s,y-24*s},{x+17*s,y-12*s},metal);
   c.Line(x-16*s,y+5*s,x-1*s,y+17*s,4*s,gold); c.Line(x-12*s,y+17*s,x-18*s,y+24*s,5*s,leather);
+  c.Oval(x-18*s,y+24*s,4*s,3*s,gold);
+  for(int i=0;i<3;++i) c.Line(x-(13+i*2)*s,y+(18+i*2)*s,x-(16+i*2)*s,y+(16+i*2)*s,.9f*s,metal);
  } else if (item==Item::Potion) {
   c.Oval(x,y+7*s,14*s,17*s,{.33f,.57f,.61f,alpha});
   c.Oval(x,y+11*s,11*s,12*s,{.67f,.13f,.16f,alpha});
+  c.Oval(x-3*s,y+7*s,7*s,9*s,{.95f,.22f,.19f,alpha});
+  c.Oval(x+3*s,y+18*s,7*s,3*s,{.34f,.035f,.09f,alpha});
   c.RectFill({x-6*s,y-17*s,12*s,16*s},{.54f,.72f,.72f,alpha});
   c.RectFill({x-8*s,y-21*s,16*s,6*s},leather); c.Line(x-6*s,y+2*s,x-7*s,y+13*s,2*s,{.92f,.86f,.72f,alpha});
  } else if (item==Item::Tunic || item==Item::Ward) {
@@ -169,13 +186,20 @@ void Icon(Canvas& c,Rect rect,Item item,float alpha=1) {
   c.Triangle({x-14*s,y-18*s},{x+17*s,y+19*s},{x-17*s,y+19*s},tint);
   c.Line(x-15*s,y-14*s,x-22*s,y+1*s,11*s,tint); c.Line(x+15*s,y-14*s,x+22*s,y+1*s,11*s,tint);
   c.RectFill({x-17*s,y+13*s,34*s,4*s},leather); c.Oval(x,y-20*s,7*s,5*s,dark);
+  for(float side : {-1.f,1.f}) {
+   c.Line(x+side*11*s,y-8*s,x+side*13*s,y+11*s,3*s,{.11f,.22f,.29f,alpha});
+   c.Line(x+side*7*s,y-12*s,x+side*8*s,y+9*s,1.3f*s,{.64f,.76f,.80f,alpha});
+  }
+  c.Line(x,y-14*s,x,y+12*s,2*s,gold); c.RectFill({x-3*s,y+12*s,6*s,5*s},gold);
   if (item==Item::Ward) { c.Oval(x-18*s,y-12*s,10*s,7*s,gold); c.Oval(x+18*s,y-12*s,10*s,7*s,gold); }
  } else if (item==Item::Helm) {
   c.Oval(x,y-5*s,20*s,20*s,metal);
+  c.Oval(x-4*s,y-10*s,13*s,11*s,{.86f,.91f,.88f,alpha});
   c.RectFill({x-14*s,y-5*s,28*s,26*s},{.055f,.08f,.07f,alpha});
   c.Line(x-19*s,y-7*s,x+19*s,y-7*s,5*s,gold);
   c.Line(x-18*s,y-3*s,x-15*s,y+20*s,7*s,metal); c.Line(x+18*s,y-3*s,x+15*s,y+20*s,7*s,metal);
   c.Line(x,y-24*s,x,y-10*s,5*s,gold);
+  c.Line(x,y-5*s,x,y+12*s,4*s,metal);
  } else if (item==Item::Shield) {
   c.Diamond(x,y,23*s,28*s,gold); c.Diamond(x,y-1*s,18*s,23*s,cloth);
   c.Line(x,y-20*s,x,y+19*s,3*s,metal); c.Line(x-14*s,y-5*s,x+14*s,y-5*s,3*s,metal);
@@ -488,24 +512,25 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Wrap(490,529,465,merchantNotice.empty()?"Select a bag item, then Sell one. Unequip worn gear first. Buyback items are kept when you leave or save; R resets the expedition.":merchantNotice,13,ink,3);
   c.Text(490,605,"E or X closes trade. C opens your equipment.",12,muted);
  } else if (panel!=Panel::None) {
-  c.RectFill({0,0,1280,720},{0,0,0,.38f}); regions_.clear();
+  c.RectFill({0,0,1280,720},{0,0,0,panel==Panel::Menu?.16f:.30f}); regions_.clear();
   if (panel==Panel::Menu) {
-   c.Window({432,82,416,560}); c.Banner({457,99,366,41},"MEDITERRANEAN",25);
-   c.Center(432,153,416,"Dawnwatch expedition",16,muted);
-   button({474,197,332,44},"Return to game",Action::Close);
-   button({474,251,161,42},"Character",Action::Character); button({645,251,161,42},"Inventory",Action::Inventory);
-   button({474,303,161,42},"Atlas",Action::Map); button({645,303,161,42},"Journal",Action::Journal);
-   button({474,355,332,42},fullscreen?"Fullscreen  /  F11":"Windowed  /  F11",Action::Fullscreen);
-   button({474,407,161,42},"Save game",Action::Save); button({645,407,161,42},"Load game",Action::Load);
-   button({474,469,332,42},"Exit to desktop",Action::Quit);
-   c.Text(474,526,"Music  "+std::to_string(musicVolume)+"%",14,ink);
-   button({718,520,38,27},"-",Action::MusicVolume,-10,musicVolume>0);
-   button({768,520,38,27},"+",Action::MusicVolume,10,musicVolume<100);
-   c.Text(474,558,"Effects  "+std::to_string(effectsVolume)+"%",14,ink);
-   button({718,552,38,27},"-",Action::EffectsVolume,-10,effectsVolume>0);
-   button({768,552,38,27},"+",Action::EffectsVolume,10,effectsVolume<100);
-   c.Center(432,588,416,audioAvailable?"Live menu. Volume 0 mutes a channel.":"Audio unavailable; gameplay continues.",13,muted);
-   if (!menuNotice.empty()) c.Center(432,605,416,menuNotice,13,gold);
+   c.Window({476,148,328,438}); c.Banner({490,137,300,34},"MEDITERRANEAN",20);
+   c.Center(476,177,328,"Dawnwatch expedition",12,muted);
+   button({496,197,288,34},"Return to game",Action::Close);
+   button({496,241,139,32},"Character",Action::Character); button({645,241,139,32},"Inventory",Action::Inventory);
+   button({496,281,139,32},"Atlas",Action::Map); button({645,281,139,32},"Journal",Action::Journal);
+   button({496,327,288,32},fullscreen?"Fullscreen  /  F11":"Windowed  /  F11",Action::Fullscreen);
+   button({496,369,139,32},"Save game",Action::Save); button({645,369,139,32},"Load game",Action::Load);
+   c.Line(500,418,780,418,1,border);
+   c.Text(500,433,"Music  "+std::to_string(musicVolume)+"%",13,ink);
+   button({712,427,30,25},"-",Action::MusicVolume,-10,musicVolume>0);
+   button({752,427,30,25},"+",Action::MusicVolume,10,musicVolume<100);
+   c.Text(500,467,"Effects  "+std::to_string(effectsVolume)+"%",13,ink);
+   button({712,461,30,25},"-",Action::EffectsVolume,-10,effectsVolume>0);
+   button({752,461,30,25},"+",Action::EffectsVolume,10,effectsVolume<100);
+   button({496,506,288,32},"Exit to desktop",Action::Quit);
+   c.Center(476,546,328,audioAvailable?"World remains live  /  Esc to return":"Audio unavailable",12,muted);
+   if (!menuNotice.empty()) c.Center(476,563,328,menuNotice,11,gold);
    return;
   }
   const bool map=panel==Panel::Map;

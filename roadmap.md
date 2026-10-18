@@ -1,5 +1,13 @@
 # Mediterranean Roadmap
 
+The interface refinement reduces Escape's footprint and improves contrast, material separation and item detail. See `docs/visual-target.md` for the screenshot comparison and remaining gaps: authored icon/frame artwork, character anatomy/equipment, denser character/bag layout and richer world composition. This pass does not claim Allods-quality art.
+
+Skill 3 is now a timed, animated dash instead of an instantaneous displacement: 3.5 m over 0.28 s with swept collision, eased travel, a dedicated pose, and cancellation/reset handling. Manual check 111 covers visible movement, wall contact, cooldown and evasive timing.
+
+Audio now has active-voice gain budgeting, quieter movement cues, repeat variation and non-musical weapon resonances. Manual check 110 covers volume balance, dense combat and repeated actions. Spatial audio, surface-specific steps, richer ambience and authored recordings remain substantial sound-design gaps.
+
+Locomotion coherence pass: heading follows actual travel through reversals/wall sliding, player body lean responds to acceleration/braking, and jump-camera height tracking is reduced. These address motion presentation and control coherence; terrain remains flat, obstacles remain horizontally swept colliders, and there is no rigid-body or stair/slope solver. Manual check 109 covers live movement feel.
+
 Fixed ground-only interactions at buffered rebound boundaries: shopping, sparring and anchor stabilization now reject upward takeoff even when height is exactly zero. Shared grounded-state checks keep movement presentation and audio consistent. Manual check 108 covers interaction acceptance after an ordinary landing.
 
 Jump responsiveness now includes a 120 ms pre-landing input buffer, exact-contact relaunch and momentum retention across the rebound. Focus/menu/death/load cancellation prevents delayed unwanted jumps. Manual check 107 covers chained jumps and input feel; slopes/stairs remain future physics work.
