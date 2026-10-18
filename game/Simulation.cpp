@@ -338,6 +338,9 @@ void Simulation::Update(float seconds,const Command& command) {
     }
   }
   jumpBuffer_=std::max(0.f,jumpBuffer_-dt);
+  // Establish the movement state before ground-only interactions. Otherwise a
+  // purchase or training request on the activation frame sees an idle actor.
+  if (command.ability==2 && !command.haltMovement) UseAbility(2);
   if (command.nextTarget) SelectTarget();
   if (command.interact) Interact();
   if (command.equipWeapon) {
@@ -363,7 +366,7 @@ void Simulation::Update(float seconds,const Command& command) {
       potionCooldown_=3; message_="Healing potion restored health.";
     } else message_="That potion stack has moved. Select it again.";
   }
-  if(command.ability!=2 || !command.haltMovement) UseAbility(command.ability);
+  if(command.ability!=2) UseAbility(command.ability);
   if(Dashing()) {
     const float from=1-dashRemaining_/.28f;
     dashRemaining_=std::max(0.f,dashRemaining_-dt);

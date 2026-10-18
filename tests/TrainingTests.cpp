@@ -18,6 +18,12 @@ void FirstHit(rpg::Simulation& s) {
 int main() {
   using namespace rpg;
   {
+    Simulation dash; Require(dash.Load(Veteran()),"Dash training fixture must load");
+    Command input; input.ability=2; input.interact=true; dash.Update(.01f,input);
+    Require(dash.Dashing() && !dash.Sparring(),
+      "Dash activation must reject simultaneous training entry");
+  }
+  {
     Simulation rebound; Require(rebound.Load(Veteran()),"Rebound training fixture must load");
     for(int i=0;i<11;++i) { Command jump; jump.jump=i==0 || i==10; rebound.Update(.05f,jump); }
     const float speed=rebound.VerticalSpeed();
