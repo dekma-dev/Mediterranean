@@ -234,15 +234,21 @@ void Renderer::DrawMesh(visual::Mesh mesh,const XMFLOAT3& p,const XMFLOAT3& s,co
 }
 void Renderer::DrawSegment(const XMFLOAT3& from,const XMFLOAT3& to,float width,float depth,
  const XMFLOAT4& color,visual::Material material) {
+ DrawMeshBetween(visual::Mesh::Limb,from,to,width,depth,color,material);
+}
+void Renderer::DrawMeshBetween(visual::Mesh mesh,const XMFLOAT3& from,const XMFLOAT3& to,float width,float depth,
+ const XMFLOAT4& color,visual::Material material,XMFLOAT3 facing) {
  const auto delta=XMLoadFloat3(&to)-XMLoadFloat3(&from);
  const float length=XMVectorGetX(XMVector3Length(delta));
  if (length<.001f || width<=0 || depth<=0) return;
  const auto up=delta/length;
- const auto reference=std::abs(XMVectorGetZ(up))<.95f?XMVectorSet(0,0,1,0):XMVectorSet(1,0,0,0);
- const auto right=XMVector3Normalize(XMVector3Cross(up,reference));
+ auto right=XMVector3Cross(up,XMLoadFloat3(&facing));
+ if (XMVectorGetX(XMVector3LengthSq(right))<.0001f)
+   right=XMVector3Cross(up,std::abs(XMVectorGetX(up))<.9f?XMVectorSet(1,0,0,0):XMVectorSet(0,1,0,0));
+ right=XMVector3Normalize(right);
  const auto forward=XMVector3Cross(right,up);
  const XMMATRIX basis(right,up,forward,XMVectorSet(0,0,0,1));
- Queue(visual::Mesh::Limb,XMMatrixScaling(width,length,depth)*basis*
+ Queue(mesh,XMMatrixScaling(width,length,depth)*basis*
   XMMatrixTranslation((from.x+to.x)*.5f,(from.y+to.y)*.5f,(from.z+to.z)*.5f),color,material);
 }
 bool Renderer::FlushWorld() {
@@ -254,7 +260,7 @@ bool Renderer::FlushWorld() {
   const auto start=static_cast<UINT>(instanceScratch_.size());
   for (const auto& item : world_[mesh]) {
    // Interface cues and emissive quest markers should not cast world shadows.
-   if (pass==0 && (item.instance.surface.x==static_cast<float>(visual::Material::Plain) ||
+   if (pass==0 && (mesh==static_cast<unsigned>(visual::Mesh::Grass) || item.instance.surface.x==static_cast<float>(visual::Material::Plain) ||
      item.instance.surface.x==static_cast<float>(visual::Material::Glow))) continue;
    if (!visual::VisibleSphere(item.center,item.radius,pass==0?shadowProjection_:viewProjection_)) continue;
    if (instanceScratch_.size()==maxInstances) { error_=L"Scene exceeded the 4096 visible-instance budget."; return false; }
@@ -293,6 +299,8 @@ bool Renderer::FlushWorld() {
    ID3D11ShaderResourceView* views[]={materialView_.Get(),shadowView_.Get()};
    ID3D11SamplerState* samplers[]={surfaceSampler_.Get(),shadowSampler_.Get()};
    context_->PSSetShaderResources(0,2,views); context_->PSSetSamplers(0,2,samplers);
+   context_->PSSetShaderResources(4,1,terrainView_.GetAddressOf());
+   context_->PSSetSamplers(2,1,fontSampler_.GetAddressOf());
   }
   for (unsigned b=0;b<batchCounts[pass];++b) {
    const auto& batch=passes[pass][b];
@@ -425,6 +433,21 @@ float Renderer::TextWidth(const std::string& text,float size) const {
   else line+=font_.Character(ch).advance*size*.5f;
  }
  return std::max(width,line);
+}
+bool Renderer::SetTerrainSurface(const std::vector<std::uint8_t>& pixels,unsigned size) {
+ if (size!=256 || pixels.size()!=static_cast<std::size_t>(size)*size*4) {
+  error_=L"Invalid terrain surface dimensions."; frameFailed_=true; return false;
+ }
+ D3D11_TEXTURE2D_DESC desc{}; desc.Width=desc.Height=size; desc.ArraySize=1; desc.SampleDesc.Count=1;
+ desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM; desc.BindFlags=D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_RENDER_TARGET;
+ desc.MiscFlags=D3D11_RESOURCE_MISC_GENERATE_MIPS;
+ ComPtr<ID3D11Texture2D> texture;
+ if (!Check(device_->CreateTexture2D(&desc,nullptr,texture.GetAddressOf()),L"Create terrain surface")) { frameFailed_=true; return false; }
+ context_->UpdateSubresource(texture.Get(),0,nullptr,pixels.data(),size*4,0);
+ if (!Check(device_->CreateShaderResourceView(texture.Get(),nullptr,terrainView_.ReleaseAndGetAddressOf()),L"Create terrain surface view")) { frameFailed_=true; return false; }
+ context_->GenerateMips(terrainView_.Get()); terrainBytes_=0;
+ for (auto dimension=size;dimension;dimension/=2) terrainBytes_+=dimension*dimension*4;
+ return true;
 }
 bool Renderer::SetMapArtwork(const std::vector<std::uint8_t>& pixels,unsigned size) {
  if (pixels.size()!=static_cast<std::size_t>(size)*size*4 || size!=512) {

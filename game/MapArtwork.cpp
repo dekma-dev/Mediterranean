@@ -1,4 +1,5 @@
 #include "game/MapArtwork.h"
+#include "game/BuildingStyle.h"
 #include "engine/Geometry.h"
 #include <algorithm>
 #include <cmath>
@@ -32,9 +33,13 @@ std::vector<std::uint8_t> BuildMapArtwork(const rpg::WorldMap& world) {
   RGB color{.15f+n*.018f,.25f+n*.026f,.285f+n*.025f};
   if (land) {
    color=Mix({.36f,.43f,.26f},{.60f,.59f,.37f},n);
-   const float road=std::min(std::abs(x)-1.35f,std::min(std::abs(z+11)-1.2f,std::abs(z)-.9f));
-   const float blend=std::clamp(.5f-road*5+(n-.5f)*.5f,0.f,1.f);
-   color=Mix(color,{.68f+fine*.08f,.59f+fine*.065f,.39f+fine*.04f},blend);
+   const auto surface=world.SurfaceAt({x,z});
+   color=Mix(color,{.68f+fine*.08f,.59f+fine*.065f,.39f+fine*.04f},surface.dirt);
+   color=Mix(color,{.61f+fine*.07f,.59f+fine*.065f,.47f+fine*.04f},surface.paving);
+   if (x>rpg::WorldMap::dockMin.x && x<rpg::WorldMap::dockMax.x && z>rpg::WorldMap::dockMin.z && z<rpg::WorldMap::dockMax.z) {
+    const float plank=Fraction(z/.45f)<.08f?.55f:1.f;
+    color={.46f*plank,.34f*plank,.21f*plank};
+   }
    for (const auto& o : world.Obstacles()) {
     const float dx=x-o.center.x,dz=z-o.center.z;
     if (o.kind==rpg::PropKind::Tree) {
@@ -50,21 +55,21 @@ std::vector<std::uint8_t> BuildMapArtwork(const rpg::WorldMap& world) {
     } else {
      if (std::abs(dx-1.f)<o.halfX+.35f && std::abs(dz-.8f)<o.halfZ+.35f) color=Mix(color,{.18f,.23f,.17f},.45f);
      if (std::abs(dx)<o.halfX+.3f && std::abs(dz)<o.halfZ+.3f) {
-      if (o.kind==rpg::PropKind::Counter) color=Mix({.34f,.23f,.12f},{.60f,.44f,.22f},fine);
+      if (o.kind==rpg::PropKind::Counter) {
+       const float stripe=Fraction((dx+1.375f)/.275f* .5f)<.5f?1.f:.58f;
+       color={.33f*stripe,.48f*stripe,.29f*stripe};
+      }
       else if (o.kind==rpg::PropKind::Ruin) color=Mix({.36f,.37f,.32f},{.56f,.54f,.43f},fine);
       else {
        const float tx=Fraction((dx+o.halfX)*4+std::floor(dz*5)*.5f),tz=Fraction(dz*5);
        const float tile=tx<.07f || tz<.09f?.62f:1.f;
        const float slope=dx<0?1.1f:.77f;
-       color={.48f*slope*tile,.29f*slope*tile,.17f*slope*tile};
+       const auto roof=StyleFor(o.role).roof;
+       color={roof.x*slope*tile,roof.y*slope*tile,roof.z*slope*tile};
        if (std::abs(dx)<.07f) color={.67f,.49f,.28f};
       }
      }
     }
-   }
-   if (x>-15.25f && x<-9.75f && z>-3.2f && z<2.6f) {
-    const float plank=Fraction(z/.45f)<.08f?.55f:1.f;
-    color={.46f*plank,.34f*plank,.21f*plank};
    }
    color=Mix(color,{fine,fine*.94f,fine*.75f},.045f);
   }

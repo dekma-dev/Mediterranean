@@ -2,7 +2,7 @@
 
 This guide covers the native C++17 / DirectX 11 game on Windows.
 
-**Validation status:** Debug and Release builds, all nine regression suites, and 107 hidden DirectX world/interface/outfit/sparring/shop captures per configuration pass using Ninja/MSVC. Representative PNG captures have been inspected. A complete interactive playtest remains pending; see [progress.md](progress.md).
+**Validation status:** Debug and Release builds, all nine regression suites, and 122 hidden DirectX world/interface/outfit/sparring/shop/pose/environment captures per configuration pass using Ninja/MSVC. Representative PNG captures have been inspected. A complete interactive playtest remains pending; see [progress.md](progress.md).
 
 To build and play the latest version from PowerShell in `D:\Mediterranean`:
 
@@ -78,6 +78,7 @@ Run these commands from `D:\Mediterranean`:
 | Build, test, and play using Ninja/MSVC | `.\scripts\build-native.ps1 -Backend Ninja -Configuration Debug -Test -Run` |
 | Validate Ninja Release, including rendered captures | `.\scripts\build-native.ps1 -Backend Ninja -Configuration Release -Test -SmokeTest` |
 | Measure Release rendering and memory | `.\scripts\build-native.ps1 -Backend Ninja -Configuration Release -Benchmark` |
+| Profile walking, combat and the merchant interface | `.\scripts\build-native.ps1 -Backend Ninja -Configuration Release -BenchmarkSuite` |
 | Launch the verified Ninja Debug build | `.\build-ninja-debug\RPGNative.exe` |
 | Build Debug | `.\scripts\build-native.ps1 -Configuration Debug` |
 | Build Debug and run regression tests | `.\scripts\build-native.ps1 -Configuration Debug -Test` |
@@ -89,9 +90,13 @@ Run these commands from `D:\Mediterranean`:
 
 `-Run` starts the game without attaching the Visual Studio debugger. Launching an existing executable does not rebuild changed source files. Use Debug for breakpoints and inspecting variables; use Release for later performance checks.
 
-`-SmokeTest` captures spawn, combat windup, captain windup, and a veteran after both quests. Each scene is captured at 960x600, 1600x900, and 1280x720 in the selected build directory. For example, `build-ninja-debug/Debug-combat.png` is the 1280x720 frame and `Debug-combat-960x600.png` is the smaller variant. Each scenario also creates `-overview.png` and `-character.png` without the HUD, plus `-menu`, `-inventory`, `-equipment`, `-atlas`, `-journal` and combined `-equipment-bag` at all three sizes. The veteran adds `-base-outfit`, `-travel-outfit`, `-sparring`, `-sparring-interface`, `-watchman-character` and `-equipped-sparring` at 1280x720, plus `-quartermaster`, `-purchased-equipment` and `-buyback` at all three sizes: 107 smoke captures per configuration. The test also verifies hidden fullscreen size and windowed restoration. The adjacent `.png.log` records the result. `-Test` runs nine suites: `InterfaceTests`, `GeometryTests`, `SimulationTests`, `NavigationTests`, `InventoryTests`, `CombatTests`, `ProgressionTests`, `TrainingTests` and `TradeTests`. InterfaceTests also writes `inventory-drag.png` in the build directory.
+`-SmokeTest` captures spawn, combat windup, captain windup, and a veteran after both quests. Each scene is captured at 960x600, 1600x900, and 1280x720 in the selected build directory. For example, `build-ninja-debug/Debug-combat.png` is the 1280x720 frame and `Debug-combat-960x600.png` is the smaller variant. Each scenario also creates `-overview.png` and `-character.png` without the HUD, plus `-menu`, `-inventory`, `-equipment`, `-atlas`, `-journal` and combined `-equipment-bag` at all three sizes. The veteran adds `-base-outfit`, `-travel-outfit`, `-sparring`, `-sparring-interface`, `-watchman-character` and `-equipped-sparring` at 1280x720, plus `-quartermaster`, `-purchased-equipment` and `-buyback` at all three sizes. Eight further 1280x720 views inspect the character: `-pose-front`, `-pose-profile`, `-pose-back`, `-pose-walk-left`, `-pose-walk-right`, `-pose-strike-start`, `-pose-strike-mid` and `-pose-strike-end`. Total: 122 smoke captures per configuration. The test also verifies hidden fullscreen size and windowed restoration. The adjacent `.png.log` records the result. `-Test` runs nine suites: `InterfaceTests`, `GeometryTests`, `SimulationTests`, `NavigationTests`, `InventoryTests`, `CombatTests`, `ProgressionTests`, `TrainingTests` and `TradeTests`. InterfaceTests also writes `inventory-drag.png` in the build directory.
 
 For a specific render fixture: `RPGNative.exe --smoke-test <absolute-output.png> <absolute-snapshot.save>`. This optional snapshot is validated in memory and never replaces `saves/patrol.save`. Provided fixtures are under `tests/fixtures`. Captures do not replace interactive playtesting. See [graphics and measured budgets](docs/graphics.md) for the generated art, memory limits and benchmark methodology. `-Benchmark` writes `<Configuration>-benchmark.txt`; it runs a hidden stationary scene and does not measure interactive FPS.
+
+The veteran also adds seven environment views: `-environment-overview`, `-environment-canopy`, `-environment-training`, `-environment-dock`, `-environment-village`, `-environment-stall` and `-environment-ruin`. These are part of the 122-capture total. To inspect in game, follow the paved street from the spawn plaza and the dirt branches to the dock, training post and northern anchor; M shows those same routes and building roof colors. Use F2 and mouse orbit to inspect vegetation, house details, the supply canopy and the filled ruin gateway. The gameplay floor remains flat and building interiors remain inaccessible.
+
+`-BenchmarkSuite` writes `<Configuration>-benchmark-suite.txt` in the selected build directory. It runs four hidden 1280x720 workloads: stationary HUD, village walking with an orbiting camera, repeated combat with camera movement, and the merchant with character/bag windows. Each uses 90 warmup and 600 measured frames with a fixed 1/60-second simulation step and presentation interval 0. It reports CPU median/p95/max, asynchronous GPU observations, peak submissions/triangles and resource bytes. Walk distance and combat hits verify the workloads actually ran. Setup and in-memory snapshot loads are excluded; player saves are never written. For an existing executable use `RPGNative.exe --benchmark-suite <absolute-report.txt>`. This is a short scripted workload test; use F3 and the manual checklist for visible-gameplay, input and long-session checks.
 
 ## 5. Debugging basics
 
@@ -128,7 +133,7 @@ For an exception, inspect the call stack and the first relevant project frame be
 
 Normal gameplay opens in borderless fullscreen. Use F11 or the Display button in the Escape menu to restore the previous window placement. This changes only the game window. The intended scene is a floating island with an outpost, blue player, red raiders, and gold quest beacon. A blank window is no longer the expected result.
 
-1. Press **E** near the gold beacon at spawn to accept the patrol.
+1. Press **E** near the dressed keeper beneath the gold marker at spawn to accept the patrol. Existing text calls him the beacon keeper.
 2. Follow the path north with **WASD**. Hold **Shift** to sprint and press **Space** to jump.
 3. Hold the **right mouse button** and drag to orbit; use the **mouse wheel** to zoom.
 4. Press **Tab** to select a raider, move into melee range, and use **1** for strike or **2** for heavy strike.

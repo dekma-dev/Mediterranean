@@ -24,10 +24,13 @@ add_library(MediterraneanClient STATIC
   platform/Win32Window.cpp
   game/Game.cpp
   game/WorldView.cpp
+  game/LandmarkView.cpp
   game/CharacterView.cpp
+  game/CharacterPose.cpp
   game/Interface.cpp
   game/InterfaceState.cpp
   game/MapArtwork.cpp
+  game/TerrainSurface.cpp
 )
 add_executable(RPGNative WIN32 main.cpp)
 target_link_libraries(RPGNative PRIVATE MediterraneanClient)
@@ -52,7 +55,7 @@ if (BUILD_TESTING)
   target_link_libraries(InterfaceTests PRIVATE MediterraneanClient)
   target_compile_definitions(InterfaceTests PRIVATE RPG_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
   add_test(NAME InterfaceTests COMMAND InterfaceTests)
-  add_executable(GeometryTests tests/GeometryTests.cpp engine/Geometry.cpp)
+  add_executable(GeometryTests tests/GeometryTests.cpp engine/Geometry.cpp game/CharacterPose.cpp)
   target_include_directories(GeometryTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   target_compile_definitions(GeometryTests PRIVATE NOMINMAX)
   add_test(NAME GeometryTests COMMAND GeometryTests)

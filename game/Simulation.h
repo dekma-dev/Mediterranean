@@ -16,6 +16,8 @@ struct Enemy {
   EnemyState state = EnemyState::Idle;
   bool looted = false;
   float repathTimer = 0;
+  // Successful navigation travel in the latest update; transient, never saved.
+  float movementDistance = 0;
   std::vector<Vec2> path;
   std::size_t waypoint = 0;
   EnemyKind kind = EnemyKind::Raider;

@@ -11,6 +11,7 @@
 
 #include "engine/Renderer.h"
 #include "game/Game.h"
+#include "game/CharacterView.h"
 #include "platform/Win32Window.h"
 
 Engine::Engine() = default;
@@ -185,6 +186,35 @@ bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapsh
     if (!capture(L"-equipped-sparring")) { error_=renderer_->Error(); return false; }
     if (!game_->RestoreSnapshot(original)) return false;
   }
+  if (game_->State().HasWardArmor()) {
+    struct EnvironmentView { const wchar_t* name; DirectX::XMFLOAT3 eye,target; };
+    const EnvironmentView views[]={
+      {L"overview",{28,42,-36},{0,0,0}}, {L"canopy",{18,4,-7},{14,2.2f,-2}},
+      {L"training",{16,8,-7},{12,0,-2}}, {L"dock",{-17,5,-7},{-12,0,0}},
+      {L"village",{0,8,-25},{0,2.7f,-8}}, {L"stall",{-.6f,3.3f,-17},{3,1.4f,-12.8f}},
+      {L"ruin",{5,4,8},{0,1.6f,15}}};
+    for (const auto& view : views) {
+      renderer_->BeginFrame(); game_->Render(*renderer_,false);
+      renderer_->SetCamera(view.eye,view.target);
+      const auto base=std::filesystem::path(capturePath);
+      const auto path=base.parent_path()/(base.stem().wstring()+L"-environment-"+view.name+base.extension().wstring());
+      if (!renderer_->Capture(path.wstring()) || !renderer_->EndFrame()) { error_=renderer_->Error(); return false; }
+    }
+    const wchar_t* poses[]={L"front",L"profile",L"back",L"walk-left",L"walk-right",L"strike-start",L"strike-mid",L"strike-end"};
+    for (int pose=0;pose<8;++pose) {
+      renderer_->BeginFrame();
+      if (!renderer_->BeginPortrait(0,0,1,1)) { error_=renderer_->Error(); return false; }
+      renderer_->SetCamera({0,1.3f,3.8f},{0,1.3f,0});
+      CharacterOutfit outfit; outfit.armor=pose>=2; outfit.helm=pose>=2; outfit.shield=pose>=2; outfit.rewardWeapon=pose>=2;
+      const float yaw=pose==1?1.5707963f:pose==2?3.14159265f:pose>=3?.4f:0;
+      DrawCharacter(*renderer_,{0,0},0,yaw,{.22f,.37f,.54f,1},pose>=5?float(7-pose)*.5f:0,pose==3?-1.f:pose==4?1.f:0,outfit);
+      if (!renderer_->EndPortrait()) { error_=renderer_->Error(); return false; }
+      renderer_->DrawText(.03f,.04f,"Procedural outfit / pose inspection",{.94f,.89f,.69f,1},2);
+      const auto base=std::filesystem::path(capturePath);
+      const auto path=base.parent_path()/(base.stem().wstring()+L"-pose-"+poses[pose]+base.extension().wstring());
+      if (!renderer_->Capture(path.wstring()) || !renderer_->EndFrame()) { error_=renderer_->Error(); return false; }
+    }
+  }
   if (!renderer_->ValidateDebugMessages()) { error_=renderer_->Error(); return false; }
   return true;
 }
@@ -228,6 +258,83 @@ bool Engine::Benchmark(const std::wstring& reportPath) {
     << "\nProcess private bytes MiB: " << memory.PrivateUsage/1048576.0;
   report << "\nNot an interactive FPS guarantee. Driver, visibility and workload affect results.\n";
   if (!report) { error_=L"Could not write benchmark report."; return false; }
+  return true;
+}
+
+bool Engine::BenchmarkSuite(const std::wstring& reportPath) {
+  // Authored in-memory scenarios. No player save or desktop input is touched.
+  const std::string combat="MEDITERRANEAN 3\n-4 5.2 100 0 1 0\n2 0 0 0\n0\n0 0 0 0\n"
+    "100 -4 7 80 0 0 1 0.5 3.14159\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
+  const std::string veteran="MEDITERRANEAN 3\n3 -10 140 0 3 90\n5 1 1 0\n4\n0 0 0 0\n"
+    "100 -4 7 0 0 1 3 0 0\n101 4 9 0 0 1 3 0 0\n102 0 12 0 0 1 3 0 0\n";
+  const auto original=game_->State().Save();
+  const char* names[]={"Stationary spawn HUD","Village walking and orbit","Repeated combat and orbit","Merchant, character and bag"};
+  const auto percentile=[](std::vector<double> values,double p) {
+    if (values.empty()) return 0.0;
+    std::sort(values.begin(),values.end()); return values[std::size_t((values.size()-1)*p)];
+  };
+  LARGE_INTEGER frequency{},start{},finish{}; QueryPerformanceFrequency(&frequency);
+  std::ofstream report{std::filesystem::path(reportPath)};
+  report<<std::fixed<<std::setprecision(3)
+    <<"Hidden 1280x720 workload suite; present interval 0; fixed simulation step 1/60 s\n"
+    <<"Each workload: 90 warmup + 600 measured frames. Setup/save loads excluded.\n"
+    <<"Combat replays a 3-second window; GPU observations are asynchronous (latest ready sample per frame).\n"
+    <<"Not interactive FPS, a long-session test or a GPU trace. No player saves written.\n";
+  for (int scene=0;scene<4;++scene) {
+    game_->Initialize(); game_->OpenPanel(ui::Panel::None); game_->SetCameraOrbit(0,.45f,10);
+    if ((scene==2 && !game_->RestoreSnapshot(combat)) || (scene==3 && !game_->RestoreSnapshot(veteran))) {
+      error_=L"Benchmark scenario failed save validation."; return false;
+    }
+    if (scene==3) {
+      for (int offer : {1,2}) {
+        rpg::Command c; c.purchase=offer; game_->ExecuteCommand(c);
+        const auto item=rpg::shopOffers[offer].item;
+        c={}; c.inventory={rpg::InventoryAction::Equip,game_->State().Items().Find(item),int(rpg::DescribeItem(item).slot),item}; game_->ExecuteCommand(c);
+      }
+      game_->OpenPanel(ui::Panel::Merchant); game_->ShowPanel(ui::Panel::Character);
+    }
+    std::vector<double> cpu,gpu; double distance=0; unsigned drawPeak=0,trianglePeak=0,windups=0,hits=0;
+    const rpg::Vec2 route[]={{3,-10},{3,-6},{0,-6},{0,-10}}; unsigned waypoint=0;
+    for (int frame=0;frame<690;++frame) {
+      if (scene==2 && frame%180==0 && !game_->RestoreSnapshot(combat)) return false;
+      rpg::Command command;
+      const auto before=game_->State().Player(); const float health=game_->State().Health();
+      if (scene==1) {
+        if (std::hypot(before.x-route[waypoint].x,before.z-route[waypoint].z)<.15f) waypoint=(waypoint+1)%4;
+        command.movement={route[waypoint].x-before.x,route[waypoint].z-before.z};
+      }
+      if (scene==2) { command.nextTarget=frame%180==0; if (frame%180==80) command.ability=0; }
+      QueryPerformanceCounter(&start); const auto samples=renderer_->GpuSamples();
+      game_->ExecuteCommand(command,1.f/60);
+      if (scene==1 || scene==2) game_->SetCameraOrbit(frame*.012f,.4f+.18f*std::sin(frame*.021f),7.5f+1.5f*std::sin(frame*.017f));
+      renderer_->BeginFrame(); game_->Render(*renderer_);
+      if (!renderer_->EndFrame(false)) { error_=renderer_->Error(); return false; }
+      QueryPerformanceCounter(&finish);
+      if (frame<90) continue;
+      cpu.push_back(1000.0*double(finish.QuadPart-start.QuadPart)/double(frequency.QuadPart));
+      if (renderer_->GpuSamples()!=samples) gpu.push_back(renderer_->GpuMilliseconds());
+      drawPeak=std::max(drawPeak,renderer_->DrawCalls()); trianglePeak=std::max(trianglePeak,renderer_->Triangles());
+      const auto after=game_->State().Player(); distance+=std::hypot(after.x-before.x,after.z-before.z);
+      if (game_->State().Health()<health) ++hits;
+      for (const auto& enemy : game_->State().Enemies()) if (enemy.windup>0) { ++windups; break; }
+    }
+    if ((scene==1 && distance<10) || (scene==2 && (windups==0 || hits==0))) {
+      error_=L"Benchmark workload did not exercise movement or combat."; return false;
+    }
+    report<<"\n"<<names[scene]<<"\nCPU samples: "<<cpu.size()<<"; GPU observations: "<<gpu.size()
+      <<"\nCPU median / p95 / max ms: "<<percentile(cpu,.5)<<" / "<<percentile(cpu,.95)<<" / "<<percentile(cpu,1)
+      <<"\nGPU median / p95 ms: "<<percentile(gpu,.5)<<" / "<<percentile(gpu,.95)
+      <<"\nPeak submissions / triangles: "<<drawPeak<<" / "<<trianglePeak
+      <<"\nWalked distance / windup frames / received hits: "<<distance<<" / "<<windups<<" / "<<hits<<'\n';
+  }
+  report<<"\nImmutable mesh bytes: "<<renderer_->MeshBytes()<<"\nMaterial/shadow bytes: "<<renderer_->MaterialBytes()
+    <<"\nInterface bytes: "<<renderer_->InterfaceBytes()<<'\n';
+  PROCESS_MEMORY_COUNTERS_EX memory{}; memory.cb=sizeof(memory);
+  if (GetProcessMemoryInfo(GetCurrentProcess(),reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&memory),sizeof(memory)))
+    report<<"Working set / private MiB at end: "<<memory.WorkingSetSize/1048576.0<<" / "<<memory.PrivateUsage/1048576.0<<'\n';
+  if (!game_->RestoreSnapshot(original)) return false;
+  if (!report) { error_=L"Could not write workload report."; return false; }
+  if (!renderer_->ValidateDebugMessages()) { error_=renderer_->Error(); return false; }
   return true;
 }
 

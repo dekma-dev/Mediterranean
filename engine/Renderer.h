@@ -18,7 +18,7 @@ public:
   std::uint64_t GpuSamples() const { return gpuTimer_.Samples(); }
   UINT Triangles() const { return triangles_; }
   std::size_t MeshBytes() const { return meshBytes_; }
-  std::size_t MaterialBytes() const { return materialBytes_; }
+  std::size_t MaterialBytes() const { return materialBytes_+terrainBytes_; }
   void SetCamera(const DirectX::XMFLOAT3& eye, const DirectX::XMFLOAT3& target);
   bool Project(const DirectX::XMFLOAT3& world, DirectX::XMFLOAT2& screen) const;
   void DrawBox(const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& scale,
@@ -27,6 +27,8 @@ public:
     const DirectX::XMFLOAT4& color,visual::Material material,float yaw = 0,float pitch = 0);
   void DrawSegment(const DirectX::XMFLOAT3& from,const DirectX::XMFLOAT3& to,float width,float depth,
     const DirectX::XMFLOAT4& color,visual::Material material);
+  void DrawMeshBetween(visual::Mesh mesh,const DirectX::XMFLOAT3& from,const DirectX::XMFLOAT3& to,float width,float depth,
+    const DirectX::XMFLOAT4& color,visual::Material material,DirectX::XMFLOAT3 facing={0,0,1});
   UINT LastDrawCalls() const { return lastDrawCalls_; }
   bool Capture(const std::wstring& path);
   bool ValidateDebugMessages();
@@ -39,6 +41,8 @@ public:
   void DrawHudTriangle(DirectX::XMFLOAT2 a,DirectX::XMFLOAT2 b,DirectX::XMFLOAT2 c,const DirectX::XMFLOAT4& color);
   float TextWidth(const std::string& text,float size) const;
   bool HasMapArtwork() const { return mapView_!=nullptr; }
+  bool HasTerrainSurface() const { return terrainView_!=nullptr; }
+  bool SetTerrainSurface(const std::vector<std::uint8_t>& pixels,unsigned size);
   bool SetMapArtwork(const std::vector<std::uint8_t>& pixels,unsigned size);
   void DrawMapArtwork(float x,float y,float width,float height);
   void DrawRoundMapArtwork(float x,float y,float width,float height);
@@ -87,6 +91,7 @@ private:
   Microsoft::WRL::ComPtr<ID3D11PixelShader> skyPixel_;
   Microsoft::WRL::ComPtr<ID3D11InputLayout> worldLayout_;
   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> materialView_,shadowView_;
+  Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> terrainView_;
   Microsoft::WRL::ComPtr<ID3D11DepthStencilView> shadowDepth_;
   Microsoft::WRL::ComPtr<ID3D11SamplerState> surfaceSampler_,shadowSampler_;
   Microsoft::WRL::ComPtr<ID3D11RasterizerState> shadowRasterizer_;
@@ -100,6 +105,7 @@ private:
   UINT triangles_ = 0;
   UINT lastDrawCalls_ = 0;
   std::size_t meshBytes_ = 0, materialBytes_ = 0;
+  std::size_t terrainBytes_ = 0;
   GpuTimer gpuTimer_;
   std::wstring error_;
 };

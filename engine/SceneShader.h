@@ -8,6 +8,7 @@ Texture2DArray materials : register(t0);
 Texture2D<float> shadowMap : register(t1);
 Texture2D<float> fontAtlas : register(t2);
 Texture2D<float4> mapArtwork : register(t3);
+Texture2D<float4> terrainSurface : register(t4);
 SamplerState fontSampler : register(s2);
 SamplerState surfaceSampler : register(s0);
 SamplerComparisonState shadowSampler : register(s1);
@@ -67,14 +68,26 @@ float4 PSMain(VOut i) : SV_TARGET {
  if (i.material==1) {
   float broad=Noise(i.wp.xz*.16),fine=Noise(i.wp.xz*1.7);
   albedo=lerp(float3(.19,.28,.105),float3(.36,.42,.19),broad)*detail;
-  float road=min(abs(i.wp.x)-1.35,min(abs(i.wp.z+11)-1.2,abs(i.wp.z)-.9));
-  float path=1-smoothstep(-.22,.35,road+(fine-.5)*.35);
-  albedo=lerp(albedo,float3(.40,.32,.22)*(.83+fine*.2)*detail,path);
+  // The 256-square weight map shares authored routes with the atlas and cover.
+  float2 groundUV=float2((i.wp.x+21)/42,(23-i.wp.z)/46);
+  float2 weights=terrainSurface.Sample(fontSampler,groundUV).rg;
+  weights*=all(groundUV>=0) && all(groundUV<=1);
+  float3 soil=float3(.40,.32,.22)*(.83+fine*.2)*detail;
+  float2 tile=i.wp.xz*float2(2.2,3.3);
+  tile.x+=floor(tile.y)*.5;
+  float2 cell=floor(tile),fraction=frac(tile);
+  float joint=min(min(fraction.x,1-fraction.x),min(fraction.y,1-fraction.y));
+  float smoothing=max(max(fwidth(tile.x),fwidth(tile.y)),.012);
+  float mortar=smoothstep(.035-smoothing,.075+smoothing,joint);
+  float3 paving=lerp(float3(.21,.22,.20),float3(.48,.46,.39)*(.86+Hash(cell)*.22),mortar)*detail;
+  albedo=albedo*max(0,1-weights.x-weights.y)+soil*weights.x+paving*weights.y;
  }
  float3 lightDir=normalize(eyeAndHud.w<0?float3(-.3,.6,1):float3(-.5,.85,-.4));
  float diffuse=saturate(dot(n,lightDir));
  float visibility=eyeAndHud.w<0?1:Shadow(i.shadow,n);
  float hemisphere=lerp(.19,.48,n.y*.5+.5);
+ // A small transmitted-light term keeps the backs of opaque leaves readable.
+ if (i.material==8) { hemisphere=max(hemisphere,.40); diffuse+=saturate(dot(-n,lightDir))*.25; }
  float3 light=float3(.72,.79,.91)*hemisphere+float3(1.0,.90,.73)*diffuse*visibility*.8;
  float3 result=albedo*light;
  if (i.material==7) {

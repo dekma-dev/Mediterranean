@@ -1,5 +1,6 @@
 #include "game/Game.h"
 #include "game/Interface.h"
+#include "game/TerrainSurface.h"
 #include "engine/Renderer.h"
 #include "platform/Win32Window.h"
 #include <cstdlib>
@@ -14,6 +15,21 @@ std::string Fixture(const char* name) {
   Require(bool(input),"Missing test fixture."); return data.str();
 }
 int main() {
+  {
+    const rpg::WorldMap map;
+    const auto pixels=BuildTerrainSurface(map);
+    Require(pixels.size()==terrainSurfaceSize*terrainSurfaceSize*4,"Invalid ground weight texture dimensions.");
+    for (std::size_t i=0;i<pixels.size();i+=4)
+      Require(unsigned(pixels[i])+pixels[i+1]<=255 && pixels[i+2]==0 && pixels[i+3]==255,
+        "Ground weights must survive quantization without negative grass weights or transparency.");
+    // A vertically inverted upload would put the paved village at the enemy camp.
+    const auto sample=[&](float x,float z,int channel) {
+      const auto col=unsigned((x+21)/42*terrainSurfaceSize),row=unsigned((23-z)/46*terrainSurfaceSize);
+      return pixels[(row*terrainSurfaceSize+col)*4+channel];
+    };
+    Require(sample(0,-10,1)==255 && sample(0,10,1)==0 && sample(0,10,0)>245 && sample(12,-2,0)==255 &&
+      sample(-15,16,0)==0 && sample(-15,16,1)==0,"Ground texture orientation must match world and atlas coordinates.");
+  }
   ui::Interface screen;
   screen.Escape(); Require(screen.panel==ui::Panel::Menu && screen.CapturesMovement(),"Escape must open the menu and capture commands.");
   screen.Escape(); Require(screen.panel==ui::Panel::None,"Escape must close the menu.");

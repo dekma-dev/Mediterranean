@@ -18,7 +18,7 @@ public:
   void OpenPanel(ui::Panel panel) { interface_.SetOnly(panel); }
   void ShowPanel(ui::Panel panel) { interface_.Show(panel); }
   void CancelUiGesture() { interface_.CancelDrag(); orbiting_=false; }
-  void ExecuteCommand(const rpg::Command& command,float seconds=.01f) { simulation_.Update(seconds,command); }
+  void ExecuteCommand(const rpg::Command& command,float seconds=.01f);
   const rpg::Simulation& State() const { return simulation_; }
 private:
   rpg::Simulation simulation_;

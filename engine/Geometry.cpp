@@ -104,11 +104,146 @@ float Noise(float x,float y) {
 }
 
 Geometry BuildMesh(Mesh mesh) {
+  if (mesh==Mesh::Masonry) {
+    Geometry g;
+    const auto face=[&](std::vector<XMFLOAT3> points) {
+      const auto a=XMLoadFloat3(&points[0]),b=XMLoadFloat3(&points[1]),c=XMLoadFloat3(&points[2]);
+      if (XMVectorGetX(XMVector3Dot(XMVector3Cross(b-a,c-a),a+b+c))<0) std::reverse(points.begin(),points.end());
+      const auto first=static_cast<unsigned>(g.vertices.size());
+      for (auto p : points) g.vertices.push_back({p,{}});
+      for (unsigned i=1;i+1<points.size();++i) Triangle(g,first,first+i,first+i+1);
+    };
+    const auto point=[](int axis,float fixed,float u,float v) {
+      if (axis==0) return XMFLOAT3{fixed,u,v};
+      if (axis==1) return XMFLOAT3{v,fixed,u};
+      return XMFLOAT3{u,v,fixed};
+    };
+    for (int axis=0;axis<3;++axis) {
+      for (float side : {-1.f,1.f})
+        face({point(axis,side*.5f,-.4f,-.4f),point(axis,side*.5f,.4f,-.4f),
+          point(axis,side*.5f,.4f,.4f),point(axis,side*.5f,-.4f,.4f)});
+      for (float u : {-1.f,1.f}) for (float v : {-1.f,1.f})
+        face({point(axis,-.4f,u*.5f,v*.4f),point(axis,-.4f,u*.4f,v*.5f),
+          point(axis,.4f,u*.4f,v*.5f),point(axis,.4f,u*.5f,v*.4f)});
+    }
+    for (float x : {-1.f,1.f}) for (float y : {-1.f,1.f}) for (float z : {-1.f,1.f})
+      face({{x*.5f,y*.4f,z*.4f},{x*.4f,y*.5f,z*.4f},{x*.4f,y*.4f,z*.5f}});
+    Normals(g); return g;
+  }
+  if (mesh==Mesh::Barrel) return Lathe({{-.5f,.40f,.40f},{-.43f,.43f,.43f},{-.25f,.48f,.48f},
+    {0,.50f,.50f},{.25f,.48f,.48f},{.43f,.43f,.43f},{.5f,.40f,.40f}},16);
+  if (mesh==Mesh::Arch) {
+    Geometry g;
+    // Separate masonry wedges retain mortar gaps and crisp face normals.
+    for (int stone=0;stone<12;++stone) {
+      const float a=stone*pi/12+.012f,b=(stone+1)*pi/12-.012f;
+      const auto p=[](float angle,float radius,float depth) {
+        return XMFLOAT3{std::cos(angle)*radius,std::sin(angle)*radius,depth};
+      };
+      const auto ia=p(a,.36f,-.5f),ib=p(b,.36f,-.5f),oa=p(a,.5f,-.5f),ob=p(b,.5f,-.5f);
+      const auto iA=p(a,.36f,.5f),iB=p(b,.36f,.5f),oA=p(a,.5f,.5f),oB=p(b,.5f,.5f);
+      Quad(g,ia,ib,ob,oa); Quad(g,iA,oA,oB,iB);
+      Quad(g,oa,ob,oB,oA); Quad(g,ia,iA,iB,ib);
+      Quad(g,ia,oa,oA,iA); Quad(g,ib,iB,oB,ob);
+    }
+    Normals(g); return g;
+  }
+  if (mesh==Mesh::Canopy) {
+    Geometry g;
+    // A bowed sheet with stripes and a short valance, opaque both sides.
+    const auto panel=[&](XMFLOAT3 a,XMFLOAT3 b,XMFLOAT3 c,XMFLOAT3 d,float shade) {
+      const auto start=g.vertices.size(); Quad(g,a,b,c,d); Quad(g,d,c,b,a);
+      for (auto i=start;i<g.vertices.size();++i) g.vertices[i].color={shade,shade,shade,1};
+    };
+    for (int strip=0;strip<10;++strip) {
+      const float left=-.5f+strip*.1f,right=left+.1f,shade=strip%2?.58f:1.f;
+      for (int row=0;row<8;++row) {
+        const float z=-.5f+row*.125f,next=z+.125f;
+        const auto height=[](float depth) { return .10f*std::cos(depth*pi)-.12f*depth; };
+        panel({left,height(z),z},{left,height(next),next},{right,height(next),next},{right,height(z),z},shade);
+      }
+      panel({left,.06f,-.5f},{left,-.09f,-.5f},{right,-.09f,-.5f},{right,.06f,-.5f},shade);
+    }
+    Normals(g); return g;
+  }
+  if (mesh==Mesh::Foliage) {
+    Geometry g;
+    // Folded, opaque leaves with separate back faces give the crown real gaps.
+    // No alpha texture, transparency sorting or per-frame mesh generation.
+    for (unsigned leaf=0;leaf<144;++leaf) {
+      const float y=-.92f+1.84f*(leaf%108+.5f)/108,angle=leaf*2.399963f+Hash(int(leaf),5)*.3f;
+      const float radial=std::sqrt(1-y*y),radius=(leaf<108?.30f:.18f)+Hash(int(leaf),9)*.08f;
+      const XMFLOAT3 center{std::sin(angle)*radial*radius,y*radius,std::cos(angle)*radial*radius};
+      const auto normal=XMVector3Normalize(XMVectorSet(std::sin(angle)*radial,y+.6f,std::cos(angle)*radial,0));
+      const auto tangent=XMVector3Normalize(XMVector3Cross(normal,XMVectorSet(0,1,0,0)));
+      const auto bitangent=XMVector3Cross(tangent,normal);
+      const float roll=Hash(int(leaf),13)*6.2831853f;
+      const auto right=tangent*std::cos(roll)+bitangent*std::sin(roll);
+      const auto up=XMVector3Cross(right,normal);
+      const float width=.035f+Hash(int(leaf),3)*.03f,length=.075f+Hash(7,int(leaf))*.045f;
+      const auto c=XMLoadFloat3(&center);
+      const XMVECTOR points[]={c-up*length,c-right*width,c+up*length,c+right*width,c+normal*.024f};
+      const float shade=.72f+Hash(int(leaf),11)*.28f;
+      for (unsigned side=0;side<2;++side) {
+        const auto start=static_cast<unsigned>(g.vertices.size());
+        for (const auto& point : points) { XMFLOAT3 p; XMStoreFloat3(&p,point); g.vertices.push_back({p,{},{shade,shade,shade,1}}); }
+        for (unsigned edge=0;edge<4;++edge)
+          if (side==0) Triangle(g,start+edge,start+(edge+1)%4,start+4);
+          else Triangle(g,start+(edge+1)%4,start+edge,start+4);
+      }
+    }
+    Normals(g); return g;
+  }
+  if (mesh==Mesh::Grass) {
+    Geometry g;
+    for (unsigned blade=0;blade<12;++blade) {
+      const float angle=blade*2.399963f,width=.022f+Hash(int(blade),1)*.018f,height=.22f+Hash(2,int(blade))*.23f;
+      const float radius=.22f*std::sqrt(Hash(int(blade),6));
+      const float x=std::sin(angle)*radius,z=std::cos(angle)*radius,dx=std::cos(angle)*width,dz=-std::sin(angle)*width;
+      const XMFLOAT3 points[]={{x-dx,.005f,z-dz},{x+dx,.005f,z+dz},
+        {x-dx*.6f,height*.58f,z-dz*.6f},{x+dx*.6f,height*.58f,z+dz*.6f},
+        {x+std::sin(angle)*.10f,height,z+std::cos(angle)*.10f}};
+      for (unsigned side=0;side<2;++side) {
+        const auto start=static_cast<unsigned>(g.vertices.size());
+        for (const auto& p : points) {
+          const float shade=.6f+.4f*p.y/height; g.vertices.push_back({p,{},{shade,shade,shade,1}});
+        }
+        const unsigned faces[][3]={{0,2,1},{1,2,3},{2,4,3}};
+        for (const auto& face : faces) Triangle(g,start+face[0],start+face[side?2:1],start+face[side?1:2]);
+      }
+    }
+    Normals(g); return g;
+  }
+  if (mesh==Mesh::Hair) {
+    auto g=Lathe({{.17f,.46f,.45f},{.24f,.45f,.44f},{.39f,.39f,.38f},{.51f,.19f,.19f}},20);
+    for (auto& v : g.vertices) if (v.position.z>0) v.position.z=std::min(v.position.z,.36f);
+    Normals(g); return g;
+  }
+  if (mesh==Mesh::Head) {
+    auto g=Lathe({{-.5f,.20f,.26f},{-.38f,.34f,.35f},{-.19f,.43f,.40f},{.02f,.46f,.44f},
+      {.21f,.45f,.44f},{.38f,.38f,.37f},{.49f,.19f,.19f}},20);
+    // A narrower jaw, flatter face, cheekbones and brow replace the spherical head.
+    for (auto& v : g.vertices) {
+      auto& p=v.position;
+      if (p.z>0) {
+        p.z=std::min(p.z,.34f);
+        const float brow=(p.y-.05f)*8,cheekHeight=p.y*7,cheekWidth=(std::abs(p.x)-.28f)*10;
+        p.z+=.045f*std::exp(-brow*brow);
+        p.z+=.035f*std::exp(-cheekHeight*cheekHeight)*std::exp(-cheekWidth*cheekWidth);
+      }
+    }
+    Normals(g); return g;
+  }
+  if (mesh==Mesh::Boot) {
+    auto g=Lathe({{-.5f,.37f,.44f},{-.38f,.44f,.49f},{-.18f,.43f,.47f},{.02f,.36f,.37f},
+      {.19f,.28f,.24f},{.5f,.27f,.24f}},16);
+    // Flat sole and extended toe; the upper rows form an ankle instead of a ball.
+    for (auto& v : g.vertices) v.position.z+=.12f*(.5f-v.position.y);
+    Normals(g); return g;
+  }
   if (mesh==Mesh::Sphere) return Lathe(SphereProfile(),16);
   if (mesh==Mesh::Rock) return Lathe(SphereProfile(),12,.24f,.05f);
   if (mesh==Mesh::Trunk) return Lathe({{-.5f,.5f,.5f},{-.4f,.38f,.39f},{0,.25f,.28f},{.4f,.19f,.22f},{.5f,.12f,.14f}},10,.12f,.14f);
-  if (mesh==Mesh::Foliage) return Lathe({{-.48f,.13f,.13f},{-.35f,.36f,.36f},{-.18f,.49f,.48f},{.02f,.47f,.5f},
-    {.2f,.38f,.4f},{.37f,.23f,.27f},{.49f,.05f,.07f}},14,.24f,.03f);
   if (mesh==Mesh::Torso) return Lathe({{-.5f,.39f,.4f},{-.26f,.35f,.36f},{-.05f,.37f,.4f},
     {.22f,.5f,.46f},{.34f,.47f,.4f},{.5f,.22f,.25f}},14);
   if (mesh==Mesh::Limb) return Lathe({{-.5f,.24f,.24f},{-.40f,.36f,.36f},{-.1f,.4f,.4f},

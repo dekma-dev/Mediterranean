@@ -7,6 +7,7 @@ param(
   [switch]$Test,
   [switch]$SmokeTest,
   [switch]$Benchmark,
+  [switch]$BenchmarkSuite,
   [Parameter(DontShow)]
   [switch]$DeveloperEnvironment
 )
@@ -34,6 +35,7 @@ if ($Backend -eq 'Ninja' -and -not $DeveloperEnvironment) {
   if ($Test) { $switches += '-Test' }
   if ($SmokeTest) { $switches += '-SmokeTest' }
   if ($Benchmark) { $switches += '-Benchmark' }
+  if ($BenchmarkSuite) { $switches += '-BenchmarkSuite' }
   $childCommand = 'call "' + $developerCommand + '" -no_logo -arch=x64 -host_arch=x64 && "' +
     $shellPath + '" -NoProfile -File "' + $PSCommandPath + '" -Backend Ninja -Configuration ' + $Configuration + ' ' + ($switches -join ' ')
   & $env:ComSpec /d /s /c $childCommand
@@ -93,7 +95,7 @@ if ($SmokeTest) {
     if (Test-Path -LiteralPath "$capturePath.log") { Get-Content -LiteralPath "$capturePath.log" }
     if ($renderCheck.ExitCode -ne 0) { throw "Render smoke test failed for $scene with code $($renderCheck.ExitCode)." }
     Write-Output "Render capture: $capturePath (world, inspection angles, panels and combined equipment/bag)"
-    if ($scene -eq 'veteran') { Write-Output 'Veteran extras: outfits, sparring, quartermaster, purchased equipment and buyback. Total: 107 captures.' }
+    if ($scene -eq 'veteran') { Write-Output 'Veteran extras: outfits, sparring, quartermaster, buyback, eight poses and seven environment inspections. Total: 122 captures.' }
   }
 }
 
@@ -110,6 +112,18 @@ if ($Benchmark) {
   }
   Get-Content -LiteralPath $reportPath
   Write-Output "Benchmark report: $reportPath"
+}
+
+if ($BenchmarkSuite) {
+  $reportPath = Join-Path $buildPath "$Configuration-benchmark-suite.txt"
+  $measurement = Start-Process -FilePath $executablePath -ArgumentList @('--benchmark-suite', ('"' + $reportPath + '"')) -WindowStyle Hidden -PassThru
+  if (-not $measurement.WaitForExit(45000)) { $measurement.Kill(); throw 'Workload benchmark timed out.' }
+  if ($measurement.ExitCode -ne 0) {
+    if (Test-Path -LiteralPath "$reportPath.log") { Get-Content -LiteralPath "$reportPath.log" }
+    throw "Workload benchmark failed with code $($measurement.ExitCode)."
+  }
+  Get-Content -LiteralPath $reportPath
+  Write-Output "Workload benchmark report: $reportPath"
 }
 
 if ($Run) {

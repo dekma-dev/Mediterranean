@@ -1,4 +1,4 @@
-#include "game/WorldMap.h"
+#include "game/Simulation.h"
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -34,5 +34,90 @@ int main() {
   Require(!map.CanStand({14,-2},.4f),"Visible tree trunk must be solid");
   Require(!map.CanTravel({3,-15},{3,-11},.45f),"The visible shop counter must block a direct route.");
   CheckRoute(map,{3,-15},{3,-11});
+
+  for (const auto& trail : map.Trails())
+    Require(map.CanTravel(trail.from,trail.to,.45f),"A visible route must be traversable by the player.");
+  for (float z=rpg::WorldMap::dockMin.z;z<=rpg::WorldMap::dockMax.z;z+=.1f)
+    for (float x=rpg::WorldMap::dockMin.x;x<=rpg::WorldMap::dockMax.x;x+=.1f)
+      Require(map.CanStand({x,z},.1f),"The dock must not overlap a tree trunk or building footprint.");
+  Require(map.SurfaceAt({0,-10}).paving>.99f && map.SurfaceAt({0,-5}).paving>.99f,
+    "The plaza and village street must retain their paved surface.");
+  for (auto p : {rpg::Vec2{-11,-.65f},rpg::WorldMap::trainingPost,rpg::WorldMap::astralAnchor})
+    Require(map.SurfaceAt(p).dirt>.99f,"Dock, training and anchor routes must be visible on the ground.");
+  Require(map.SurfaceAt({-15,16}).dirt+map.SurfaceAt({-15,16}).paving==0,"The outer meadow must remain grass.");
+  for (int z=-38;z<=38;++z) for (int x=-34;x<=34;++x) {
+    const auto surface=map.SurfaceAt({x*.5f,z*.5f});
+    Require(std::isfinite(surface.dirt) && std::isfinite(surface.paving) && surface.dirt>=0 && surface.paving>=0 &&
+      surface.dirt+surface.paving<=1.00001f,"Ground weights must remain finite, nonnegative and normalized.");
+  }
+  for (float invalid : {std::numeric_limits<float>::quiet_NaN(),std::numeric_limits<float>::infinity()}) {
+    const auto surface=map.SurfaceAt({invalid,0});
+    Require(surface.dirt==0 && surface.paving==0,"Invalid positions must not poison the ground texture.");
+  }
+  const rpg::WorldMap repeat;
+  Require(!map.Cover().empty() && map.Cover().size()<=180 && map.Cover().size()==repeat.Cover().size(),
+    "Ground cover must have a bounded, repeatable allocation.");
+  unsigned shrubs=0;
+  for (std::size_t i=0;i<map.Cover().size();++i) {
+    const auto& cover=map.Cover()[i]; const auto& same=repeat.Cover()[i];
+    Require(cover.position.x==same.position.x && cover.position.z==same.position.z && cover.scale==same.scale &&
+      cover.yaw==same.yaw && cover.shrub==same.shrub,"Rebuilding a world must not move vegetation.");
+    Require(map.CanStand(cover.position,.8f),"Ground cover must clear solid props and the island boundary.");
+    const auto surface=map.SurfaceAt(cover.position);
+    Require(surface.dirt+surface.paving<=.06f,"Ground cover must stay off visible roads.");
+    for (auto point : {rpg::WorldMap::questGiver,rpg::WorldMap::quartermaster,rpg::WorldMap::astralAnchor})
+      Require(std::hypot(cover.position.x-point.x,cover.position.z-point.z)>2,
+        "Ground cover must not obscure an interaction point.");
+    Require(std::hypot(cover.position.x-rpg::WorldMap::trainingPost.x,cover.position.z-rpg::WorldMap::trainingPost.z)>4,
+      "The sparring arena must stay clear.");
+    if (cover.shrub) ++shrubs;
+  }
+  Require(shrubs>0 && shrubs<=18,"Shrub population must stay inside the environment budget.");
+  std::cout << "Ground cover: " << map.Cover().size()-shrubs << " grass clumps, " << shrubs << " shrubs.\n";
+
+  rpg::Simulation simulation;
+  Require(simulation.CameraDistance({3,-15},2.65f,{0,1},0,3)<2,
+    "An orbiting camera must stop before entering the supply canopy.");
+  Require(simulation.CameraDistance({3,-15},.5f,{0,1},0,3)<2,
+    "The stall counter must still stop a low camera.");
+  Require(simulation.CameraDistance({3,-15},1.6f,{0,1},0,3)==3,
+    "The open space above the counter must not collapse the camera distance.");
+  Require(simulation.CameraDistance({1.96f,-15},1.6f,{0,1},0,3)<2,
+    "The stall uprights must stop the camera even in the open bay.");
+  Require(simulation.CameraDistance({3,-15},2.95f,{0,1},0,3)==3,
+    "A camera above the cloth must not collide with an empty bounding box.");
+  Require(simulation.CameraDistance({3,-10},1.4f,{0,-std::cos(.45f)},std::sin(.45f),10)==10,
+    "The normal shop camera must clear the awning instead of collapsing into the player.");
+  Require(simulation.CameraDistance({8,-13},5.2f,{0,1},0,4)<2.5f,
+    "The watch hall's decorated gable must remain inside the camera envelope.");
+  const std::string returning="MEDITERRANEAN 3\n0 -10 100 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
+    "100 -4 5 80 0 0 2 0 3.14159\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
+  Require(simulation.Load(returning),"Returning enemy fixture must load");
+  const auto before=simulation.Enemies()[0].position;
+  simulation.Update(.05f,{});
+  const auto& enemy=simulation.Enemies()[0];
+  const float dx=enemy.position.x-before.x,dz=enemy.position.z-before.z;
+  const float distance=std::hypot(dx,dz);
+  Require(distance>.01f && enemy.state==rpg::EnemyState::Returning,"Return fixture must actually move home");
+  Require((std::sin(enemy.facing)*dx+std::cos(enemy.facing)*dz)/distance>.99f,
+    "Returning enemies must face their travel direction instead of walking backward");
+  Require(std::abs(enemy.movementDistance-distance)<.0001f,"Movement feedback must match actual navigation travel");
+  const auto movingSave=simulation.Save();
+  rpg::Simulation loaded;
+  Require(loaded.Load(movingSave) && loaded.Save()==movingSave && loaded.Enemies()[0].movementDistance==0,
+    "Loading must retain durable state and reset transient movement feedback");
+  for (int i=0;i<25;++i) simulation.Update(.05f,{});
+  Require(simulation.Enemies()[0].state==rpg::EnemyState::Idle && simulation.Enemies()[0].movementDistance==0,
+    "Arriving home must stop the walking pose");
+
+  const std::string recovering="MEDITERRANEAN 3\n-4 5.5 100 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
+    "100 -4 7 80 1 0 1 0 3.14159\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
+  Require(simulation.Load(recovering),"Stationary recovery fixture must load");
+  simulation.Update(.05f,{});
+  Require(!simulation.Enemies()[0].path.empty() && simulation.Enemies()[0].movementDistance==0,
+    "A retained navigation path must not imply walking while the enemy is standing in melee range");
+  for (int i=0;i<20;++i) simulation.Update(.05f,{});
+  Require(simulation.Enemies()[0].windup>0 && simulation.Enemies()[0].movementDistance==0,
+    "A committed windup must keep the feet stationary");
   std::cout << "Navigation checks passed.\n";
 }

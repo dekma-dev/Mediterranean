@@ -3,6 +3,7 @@
 #include "engine/Renderer.h"
 #include "game/WorldView.h"
 #include "game/CharacterView.h"
+#include "game/TerrainSurface.h"
 #include <algorithm>
 #include <cmath>
 #include <sstream>
@@ -70,7 +71,6 @@ void Game::Update(double seconds,const Input& input,float wheel) {
     break;
   default: break;
   }
-  time_+=dt;
   const bool pointerCaptured=uiVisible && interface_.PointerOverUi();
   if (!input.Held(VK_RBUTTON) || interface_.CapturesMovement() || interface_.Dragging()) orbiting_=false;
   if (input.Pressed(VK_RBUTTON))
@@ -95,10 +95,9 @@ void Game::Update(double seconds,const Input& input,float wheel) {
     interface_.previewYaw=0;
     if (command.restart) interface_.hasWaypoint=false;
   }
-  const auto before=simulation_.Player();
   const bool wasAlive=simulation_.Health()>0;
   // Menus capture local commands, but never stop simulation time.
-  simulation_.Update(dt,command);
+  ExecuteCommand(command,dt);
   if (wasAlive && simulation_.Health()<=0) {
     CancelUiGesture(); interface_.Close(interface_.panel);
   }
@@ -108,9 +107,14 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   if (command.inventory.action!=rpg::InventoryAction::None) {
     interface_.inventoryNotice=simulation_.Message(); interface_.noticeTime=3;
   }
-  const auto after=simulation_.Player();
+}
+void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
+  const float dt=std::isfinite(seconds)?std::clamp(seconds,0.f,.05f):0.f;
+  const auto before=simulation_.Player(); simulation_.Update(dt,command);
+  const auto after=simulation_.Player(); time_+=dt;
   const float distance=std::hypot(after.x-before.x,after.z-before.z);
-  walkBlend_=distance>.0001f?1.f:0.f; walkPhase_+=distance*4;
+  walkBlend_=!command.restart && !command.respawn && distance>.0001f && simulation_.Height()==0?1.f:0.f;
+  walkPhase_+=walkBlend_?distance*4:0;
 }
 void Game::SetCameraOrbit(float yaw,float pitch,float distance) {
   yaw_=std::remainder(yaw,6.2831853f);
@@ -118,6 +122,7 @@ void Game::SetCameraOrbit(float yaw,float pitch,float distance) {
 }
 
 void Game::Render(Renderer& renderer,bool showInterface) {
+  if (!renderer.HasTerrainSurface() && !renderer.SetTerrainSurface(BuildTerrainSurface(simulation_.Map()),terrainSurfaceSize)) return;
   using DirectX::XMFLOAT3;
   using DirectX::XMFLOAT4;
   const auto player=simulation_.Player();
@@ -130,7 +135,7 @@ void Game::Render(Renderer& renderer,bool showInterface) {
   using M=visual::Mesh;
   using S=visual::Material;
   DrawCharacter(renderer,player,y,simulation_.Facing(),simulation_.HurtFlash()>0?XMFLOAT4{1,.48f,.35f,1}:
-    XMFLOAT4{.22f,.37f,.54f,1},simulation_.AttackFlash()*2,std::sin(walkPhase_)*walkBlend_,CharacterOutfit::From(simulation_.Items()));
+    XMFLOAT4{.22f,.37f,.54f,1},simulation_.AttackFlash()*5,std::sin(walkPhase_)*walkBlend_,CharacterOutfit::From(simulation_.Items()));
   const auto anchor=rpg::WorldMap::astralAnchor;
   const bool stable=simulation_.AnchorState()>=rpg::AnchorQuest::Return;
   const XMFLOAT4 crystal=stable?XMFLOAT4{.3f,.95f,.65f,1}:XMFLOAT4{.72f,.4f,.95f,1};
@@ -154,13 +159,12 @@ void Game::Render(Renderer& renderer,bool showInterface) {
       continue;
     }
     const bool captain=enemy.kind==rpg::EnemyKind::Captain;
+    CharacterOutfit enemyOutfit; enemyOutfit.armor=captain; enemyOutfit.helm=captain;
+    const float attackPose=enemy.windup>0?1-enemy.windup/enemy.WindupDuration():
+      std::max(0.f,1-(enemy.AttackInterval()-enemy.attackCooldown)/.2f);
     DrawCharacter(renderer,enemy.position,0,enemy.facing,
       enemy.hitFlash>0?XMFLOAT4{1,.7f,.55f,1}:enemy.kind==rpg::EnemyKind::Trainer?XMFLOAT4{.55f,.46f,.22f,1}:captain?XMFLOAT4{.36f,.19f,.48f,1}:XMFLOAT4{.65f,.2f,.25f,1},
-      enemy.windup>0?.6f:0,enemy.windup>0 || enemy.path.empty()?0.f:std::sin(time_*7+float(i)),CharacterOutfit{captain});
-    if (captain) {
-      renderer.DrawMesh(M::Sphere,{enemy.position.x,1.92f,enemy.position.z},{.40f,.33f,.40f},
-        {.64f,.49f,.29f,1},S::Metal,enemy.facing);
-    }
+      attackPose,enemy.windup>0 || enemy.movementDistance<=.0001f?0.f:std::sin(time_*7+float(i)),enemyOutfit);
     if (enemy.windup>0) {
       const float progress=1-enemy.windup/enemy.WindupDuration();
       const XMFLOAT4 warning{1,.55f*(1-progress),.12f,1};

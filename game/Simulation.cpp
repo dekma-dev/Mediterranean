@@ -46,6 +46,21 @@ float Simulation::CameraDistance(Vec2 origin,float originY,Vec2 direction,float 
     const Vec2 p{origin.x+direction.x*d,origin.z+direction.z*d};
     const float y=originY+slope*d;
     for (const auto& o : map_.Obstacles()) {
+      // Above the counter, test the open frame and bowed cloth separately.
+      // A full-height box would pull the ordinary shop camera into the player.
+      if (o.kind==PropKind::Counter && y>o.height+.1f) {
+        const float dx=std::abs(p.x-o.center.x),dz=p.z-o.center.z;
+        for (float side : {-1.f,1.f})
+          if (y<2.72f && std::abs(p.x-o.center.x-side*(o.halfX-.06f))<.18f && std::abs(dz)<.21f)
+            return std::max(.25f,d-.2f);
+        const bool brace=y>2.05f && y<2.7f && dx>.5f && dx<o.halfX+.15f && std::abs(dz)<.2f;
+        const float depth=std::clamp(dz/1.35f,-.5f,.5f);
+        const float roofY=2.63f+.10f*std::cos(depth*3.14159265f)-.12f*depth;
+        const bool cloth=dx<1.435f && std::abs(dz)<.735f &&
+          (std::abs(y-roofY)<.06f || (dz<-.60f && y>2.50f && y<2.75f));
+        if (brace || cloth) return std::max(.25f,d-.2f);
+        continue;
+      }
       // The crown begins above the character's shoulders. Extending its wide
       // bounds down to the ground traps the camera beside the training post.
       const bool belowCrown=o.kind==PropKind::Tree && y<1.65f;
@@ -211,6 +226,8 @@ void Simulation::Interact() {
 
 void Simulation::Update(float seconds,const Command& command) {
   tradeRequested_=false;
+  for (auto& enemy : enemies_) enemy.movementDistance=0;
+  trainer_.movementDistance=0;
   if (!std::isfinite(seconds) || seconds<=0) return;
   const float dt=std::min(seconds,.05f);
   if (command.restart) { *this=Simulation{}; return; }
@@ -362,7 +379,12 @@ void Simulation::UpdateEnemy(Enemy& enemy,float dt) {
     if (length<.15f) ++enemy.waypoint;
     else {
       const float step=std::min(length,2.2f*dt);
+      const auto before=enemy.position;
       Move(enemy.position,{direction.x/length*step,direction.z/length*step},.45f);
+      const auto travel=Difference(enemy.position,before);
+      enemy.movementDistance=Length(travel);
+      if (!pursuing && enemy.movementDistance>.0001f)
+        enemy.facing=std::atan2(travel.x,travel.z);
     }
   }
   if (pursuing) enemy.facing=std::atan2(player_.x-enemy.position.x,player_.z-enemy.position.z);

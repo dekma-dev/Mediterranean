@@ -39,7 +39,7 @@ void Simulation::DamagePlayer(float damage) {
   if (sparring_) sparringTaken_+=int(applied);
   Emit(FeedbackKind::Hurt,player_,static_cast<int>(applied));
   if (Channeling()) { channelRemaining_=0; message_="Damage interrupted stabilization."; }
-  if (health_==0) { target_=-1; height_=0; velocityY_=0; }
+  if (health_==0) { target_=-1; height_=0; velocityY_=0; attackFlash_=0; }
   if (sparring_ && health_<=1) EndSparring("Yielded");
 }
 void Simulation::StartSparring() {

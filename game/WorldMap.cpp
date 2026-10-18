@@ -7,11 +7,54 @@
 
 namespace rpg {
 WorldMap::WorldMap() {
-  obstacles_ = {{{-8,-8},2.8f,2.5f,4.f},{{8,-8},2.8f,2.5f,4.f},
-    {{-10,3},1.3f,1.3f,3.f},{{10,1},1.5f,1.5f,3.4f},{{0,15},2,1,2,PropKind::Ruin},
+  obstacles_ = {{{-8,-8},2.8f,2.5f,4.f},{{8,-8},2.8f,2.5f,4.f,PropKind::Building,BuildingRole::WatchHall},
+    {{-10,3},1.3f,1.3f,3.f,PropKind::Building,BuildingRole::Storehouse},
+    {{10,1},1.5f,1.5f,3.4f,PropKind::Building,BuildingRole::TrainingHall},{{0,15},2,1,2,PropKind::Ruin},
     {{3,-13.3f},1.1f,.4f,.85f,PropKind::Counter}};
   for (float x : {-14.f,14.f}) for (float z : {-14.f,-2.f,10.f})
     obstacles_.push_back({{x,z},.35f,.35f,3.9f,PropKind::Tree});
+  trails_={{{0,-17},{0,-10},1.3f,true},{{0,-10},{0,-3},1.25f,true},
+    {{-4.7f,-11},{4.7f,-11},1.f,true},{{0,-3},{-1,3},1.1f,false},{{-1,3},{0,10.8f},1.1f,false},
+    {{0,10.8f},astralAnchor,1.f,false},{{-.5f,0},{-8.8f,0},.85f,false},{{-8.8f,0},{-12.5f,-1},.85f,false},
+    {{-.5f,0},{6,-2},.85f,false},{{6,-2},trainingPost,.9f,false}};
+  // Stable decoration, generated once. Keep routes, services and the arena clear.
+  const auto hash=[](int x,int z) {
+    std::uint32_t h=std::uint32_t(x)*374761393u+std::uint32_t(z)*668265263u;
+    h=(h^(h>>13))*1274126177u; return float(h^(h>>16))/4294967295.f;
+  };
+  unsigned shrubs=0;
+  for (int z=-14;z<=14;++z) for (int x=-12;x<=12;++x) {
+    const float seed=hash(x,z);
+    if (seed<.64f || cover_.size()>=180) continue;
+    const Vec2 p{x*1.3f+(seed-.5f)*.6f,z*1.25f+(hash(z,x)-.5f)*.6f};
+    const auto surface=SurfaceAt(p);
+    if (!CanStand(p,.8f) || surface.dirt+surface.paving>.06f ||
+      std::hypot(p.x-trainingPost.x,p.z-trainingPost.z)<4.3f ||
+      std::hypot(p.x-questGiver.x,p.z-questGiver.z)<2.1f ||
+      std::hypot(p.x-quartermaster.x,p.z-quartermaster.z)<2.1f ||
+      std::hypot(p.x-astralAnchor.x,p.z-astralAnchor.z)<3.1f ||
+      (p.x<dockMax.x+.6f && p.x>dockMin.x-.6f && p.z>dockMin.z-.6f && p.z<dockMax.z+.6f)) continue;
+    const bool shrub=seed>.94f && shrubs<18;
+    if (shrub) ++shrubs;
+    cover_.push_back({p,.7f+hash(x+17,z-3)*.5f,seed*6.2831853f,shrub});
+  }
+}
+
+GroundSurface WorldMap::SurfaceAt(Vec2 p) const {
+  if (!std::isfinite(p.x) || !std::isfinite(p.z)) return {};
+  const auto edge=[](float distance) {
+    const float t=std::clamp((distance+.15f)/.65f,0.f,1.f); return 1-t*t*(3-2*t);
+  };
+  float dirt=0,paving=edge((std::hypot(p.x/4.f,(p.z+10)/2.2f)-1)*2.2f);
+  for (const auto& trail : trails_) {
+    const float dx=trail.to.x-trail.from.x,dz=trail.to.z-trail.from.z;
+    const float t=std::clamp(((p.x-trail.from.x)*dx+(p.z-trail.from.z)*dz)/(dx*dx+dz*dz),0.f,1.f);
+    const float weight=edge(std::hypot(p.x-trail.from.x-t*dx,p.z-trail.from.z-t*dz)-trail.halfWidth);
+    if (trail.paved) paving=std::max(paving,weight); else dirt=std::max(dirt,weight);
+  }
+  dirt=std::max(dirt,edge(std::hypot(p.x-trainingPost.x,p.z-trainingPost.z)-2.8f));
+  dirt=std::max(dirt,edge(std::hypot(p.x-astralAnchor.x,p.z-astralAnchor.z)-2.2f));
+  return {dirt*(1-paving),paving};
 }
 
 bool WorldMap::CanStand(Vec2 p,float radius) const {

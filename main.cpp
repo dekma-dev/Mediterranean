@@ -14,12 +14,13 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
   wchar_t** args=CommandLineToArgvW(GetCommandLineW(),&count);
   const bool smoke=args && count>=2 && std::wstring(args[1])==L"--smoke-test";
   const bool benchmark=args && count>=2 && std::wstring(args[1])==L"--benchmark";
-  const std::wstring report=benchmark && count==3?args[2]:L"";
+  const bool suite=args && count>=2 && std::wstring(args[1])==L"--benchmark-suite";
+  const std::wstring report=(benchmark || suite) && count==3?args[2]:L"";
   const std::wstring capture=smoke && (count==3 || count==4)?args[2]:L"";
   const std::wstring snapshotPath=smoke && count==4?args[3]:L"";
   if (args) LocalFree(args);
   if (smoke && capture.empty()) return 2;
-  if (benchmark && report.empty()) return 2;
+  if ((benchmark || suite) && report.empty()) return 2;
   std::string snapshot;
   if (!snapshotPath.empty()) {
     std::error_code error;
@@ -32,14 +33,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     if (!input) return 2;
   }
   Engine engine;
-  if (!engine.Initialize(instance, 1280, 720, !smoke && !benchmark)) {
+  if (!engine.Initialize(instance, 1280, 720, !smoke && !benchmark && !suite)) {
     if (smoke) { std::wofstream log(std::filesystem::path(capture+L".log")); log << engine.Error(); }
-    else if (benchmark) { std::wofstream log(std::filesystem::path(report+L".log")); log << engine.Error(); }
+    else if (benchmark || suite) { std::wofstream log(std::filesystem::path(report+L".log")); log << engine.Error(); }
     else if (!benchmark) MessageBox(nullptr, engine.Error().c_str(), L"RPG Native", MB_OK | MB_ICONERROR);
     return -1;
   }
-  if (benchmark) {
-    if (engine.Benchmark(report)) return 0;
+  if (benchmark || suite) {
+    if (suite?engine.BenchmarkSuite(report):engine.Benchmark(report)) return 0;
     std::wofstream log(std::filesystem::path(report+L".log")); log << engine.Error(); return 1;
   }
   if (smoke) {
