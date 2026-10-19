@@ -12,16 +12,22 @@ const ItemInfo& DescribeItem(Item item) {
     {Item::Starter,"Frontier sword","Main hand / Common","A serviceable iron blade carried by the\nDawnwatch militia.",GearSlot::Weapon,1,20,35},
     {Item::Watchguard,"Watchguard blade","Main hand / Uncommon","A brass-hilted sword awarded for the\nfrontier patrol.",GearSlot::Weapon,1,27,45},
     {Item::Potion,"Healing draught","Consumable","Restores up to 40 health.\nThree-second shared potion cooldown.",GearSlot::None,20},
-    {Item::Tunic,"Dawnwatch tunic","Chest / Travel clothes","Blue wool, leather belt and brass buckle.\nYour starting chest piece.",GearSlot::Chest,1},
+    {Item::Tunic,"Dawnwatch tunic","Chest / Travel clothes","Blue wool with brass buttons.\nYour starting chest piece.",GearSlot::Chest,1},
     {Item::Trousers,"Traveller's trousers","Legs / Travel clothes","Durable cloth trousers for long patrols.",GearSlot::Legs,1},
     {Item::Boots,"Weathered boots","Feet / Travel clothes","Leather boots with reinforced soles.",GearSlot::Feet,1},
     {Item::Ward,"Astral ward armor","Chest / Uncommon","Plate and pauldrons earned at the anchor.\nReduces incoming damage by 2.",GearSlot::Chest,1,0,0,2},
     {Item::Helm,"Watchman's helm","Head / Uncommon","Steel cap with a brass brow and cheek guards.\nReduces incoming damage by 1.",GearSlot::Head,1,0,0,1},
-    {Item::Shield,"Dawnwatch shield","Off hand / Uncommon","An oak shield faced with blue cloth and brass.\nReduces incoming damage by 2.",GearSlot::Offhand,1,0,0,2}};
+    {Item::Shield,"Dawnwatch shield","Off hand / Uncommon","An oak shield faced with blue cloth and brass.\nReduces incoming damage by 2.",GearSlot::Offhand,1,0,0,2},
+    {Item::Shoulders,"Patrol shoulder guards","Shoulders / Travel gear","Layered leather guards with brass rivets.",GearSlot::Shoulders,1},
+    {Item::Gloves,"Ranger's gloves","Hands / Travel gear","Supple leather gloves with fitted cuffs.",GearSlot::Hands,1},
+    {Item::Belt,"Wayfarer's belt","Waist / Travel gear","A brass-buckled belt with two supply pouches.",GearSlot::Waist,1},
+    {Item::Cloak,"Dawnwatch cloak","Back / Travel gear","A short blue travelling cloak with a brass clasp.",GearSlot::Back,1}};
+  static_assert(sizeof(items)/sizeof(items[0])==int(Item::Count),"Every item needs a catalog entry.");
   return ValidItem(item)?items[int(item)]:empty;
 }
 Inventory::Inventory() {
-  gear_={Item::Starter,Item::Tunic,Item::Trousers,Item::Boots,Item::None,Item::None}; bag_[0]={Item::Potion,2};
+  gear_={Item::Starter,Item::Tunic,Item::Trousers,Item::Boots,Item::None,Item::None,
+    Item::Shoulders,Item::Gloves,Item::Belt,Item::Cloak}; bag_[0]={Item::Potion,2};
 }
 Item Inventory::Worn(GearSlot slot) const { return int(slot)>=0 && int(slot)<gearCount?gear_[int(slot)]:Item::None; }
 int Inventory::Count(Item item) const {
@@ -109,18 +115,19 @@ void Inventory::Write(std::ostream& out) const {
   out<<'\n';
 }
 bool Inventory::Read(std::istream& input,int savedGearCount) {
-  if (savedGearCount!=4 && savedGearCount!=gearCount) return false;
+  if (savedGearCount!=4 && savedGearCount!=6 && savedGearCount!=gearCount) return false;
+  const int itemLimit=savedGearCount==gearCount?int(Item::Count):int(Item::Shoulders);
   Inventory candidate; std::string tag;
   if (!(input>>tag) || tag!="GEAR") return false;
   for (int i=0;i<savedGearCount;++i) {
-    int item=0; if (!(input>>item) || item<-1 || item>=int(Item::Count) ||
+    int item=0; if (!(input>>item) || item<-1 || item>=itemLimit ||
       (item!=-1 && int(DescribeItem(Item(item)).slot)!=i)) return false;
     candidate.gear_[i]=Item(item);
   }
   if (!(input>>tag) || tag!="BAG") return false;
   for (auto& stack : candidate.bag_) {
     int item=0,count=0;
-    if (!(input>>item>>count) || item<-1 || item>=int(Item::Count) || count<0 ||
+    if (!(input>>item>>count) || item<-1 || item>=itemLimit || count<0 ||
       (item==-1 && count!=0) || (item!=-1 && (count==0 || count>DescribeItem(Item(item)).stackLimit))) return false;
     stack={Item(item),count};
   }
@@ -130,7 +137,7 @@ bool Inventory::Read(std::istream& input,int savedGearCount) {
 bool Inventory::MatchesCampaign(bool rewardWeapon,bool wardArmor,int potions,bool helm,bool shield,
   const std::array<int,int(Item::Count)>& sold) const {
   const auto total=[&](Item item) { return Count(item)+sold[int(item)]; };
-  for (auto item : {Item::Starter,Item::Tunic,Item::Trousers,Item::Boots}) if (total(item)!=1) return false;
+  for (auto item : {Item::Starter,Item::Tunic,Item::Trousers,Item::Boots,Item::Shoulders,Item::Gloves,Item::Belt,Item::Cloak}) if (total(item)!=1) return false;
   return total(Item::Watchguard)==int(rewardWeapon) && total(Item::Ward)==int(wardArmor) && Count(Item::Potion)==potions &&
     total(Item::Helm)==int(helm) && total(Item::Shield)==int(shield);
 }

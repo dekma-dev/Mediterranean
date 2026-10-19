@@ -8,6 +8,7 @@
 #include <iostream>
 #include <cstring>
 #include <vector>
+#include <limits>
 
 using namespace DirectX;
 using Microsoft::WRL::ComPtr;
@@ -97,6 +98,24 @@ int main() {
     Check(renderer.LastDrawCalls()==1,"An empty world must render its sky exactly once.");
     const auto returned=sky({0,0,0},{0,.3f,1},L"sky-returned.png");
     Check(MaximumDifference(north,returned)==0,"Returning to a view must restore its sky without frame-lagged camera state.");
+    const auto sun=visual::daylightSun;
+    const auto sunlight=sky({0,0,0},{sun.x,sun.y,sun.z},L"sky-sun.png");
+    Check(sunlight.At({.5f,.5f})>240,"The visible sun must align with the same direction used by shadow projections.");
+    renderer.BeginFrame(); renderer.SetCamera({0,0,0},{sun.x,sun.y,sun.z});
+    const float length=std::sqrt(sun.x*sun.x+sun.y*sun.y+sun.z*sun.z);
+    renderer.DrawMesh(M::Box,{sun.x/length*3,sun.y/length*3,sun.z/length*3},{.5f,.5f,.5f},
+      {.02f,.02f,.02f,1},S::Plain,0,0,Shadow::None);
+    const auto covered=Capture(renderer,L"sky-sun-occluded.png");
+    Check(sunlight.At({.5f,.5f})-covered.At({.5f,.5f})>80,"Opaque geometry must occlude the sun, including its halo.");
+    renderer.SetAtmosphereTime(180);
+    const auto drifted=sky({0,0,0},{0,.3f,1},L"sky-cloud-drift.png");
+    Check(MaximumDifference(north,drifted)>10,"Clouds must drift with simulation time.");
+    renderer.SetAtmosphereTime(std::numeric_limits<double>::quiet_NaN());
+    const auto invalidTime=sky({0,0,0},{0,.3f,1},L"sky-invalid-time.png");
+    Check(MaximumDifference(drifted,invalidTime)==0,"Invalid time must not corrupt atmospheric state.");
+    renderer.SetAtmosphereTime(1800);
+    const auto wrapped=sky({0,0,0},{0,.3f,1},L"sky-cloud-period.png");
+    Check(MaximumDifference(north,wrapped)==0,"Cloud drift must close smoothly without a wrap jump.");
   }
   const XMFLOAT4 white{.8f,.8f,.8f,1};
   const auto floor=[&]() {

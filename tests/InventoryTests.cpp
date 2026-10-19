@@ -54,11 +54,27 @@ int main() {
   Require(items.Count(Item::Starter)==1 && items.Count(Item::Ward)==1 && items.Count(Item::Potion)==2,"Sorting must conserve ownership and counts.");
   std::ostringstream serialized; items.Write(serialized); Inventory copy; std::istringstream input(serialized.str());
   Require(copy.Read(input) && copy.Worn(GearSlot::Weapon)==Item::None && copy.Count(Item::Ward)==1,"Inventory serialization must preserve empty equipment slots.");
+  // Every new travel piece is real, unique, removable equipment.
+  for (auto item : {Item::Shoulders,Item::Gloves,Item::Belt,Item::Cloak}) {
+    Simulation dressed; const auto gear=DescribeItem(item).slot;
+    Require(dressed.Items().Worn(gear)==item && dressed.Items().Count(item)==1 && dressed.DamageReduction()==0,
+      "New characters wear exactly one of each travel piece without changing combat balance.");
+    command={}; command.inventory={InventoryAction::Unequip,int(gear),23,item}; dressed.Update(.01f,command);
+    Require(dressed.Items().Worn(gear)==Item::None && dressed.Items().Bag()[23].item==item,
+      "Every added slot must allow removal into an exact bag cell.");
+    Simulation loaded; Require(loaded.Load(dressed.Save()) && loaded.Save()==dressed.Save(),
+      "Removed travel gear must stay removed after save/load, never regenerated.");
+    command.inventory={InventoryAction::Equip,23,int(gear),item}; loaded.Update(.01f,command);
+    Require(loaded.Items().Worn(gear)==item && loaded.Items().Count(item)==1,"Travel pieces must re-equip without duplication.");
+  }
   Inventory full;
   Require(full.Add(Item::Potion,478) && full.UsedSlots()==24 && !full.Add(Item::Watchguard),"A full bag must reject rewards atomically.");
   Require(!full.Apply({InventoryAction::Unequip,int(GearSlot::Weapon),-1,Item::Starter}) && full.Worn(GearSlot::Weapon)==Item::Starter,"Unequip must retain gear when the bag is full.");
   Require(!full.Apply({InventoryAction::Split,0,-1,Item::Potion,10}) && full.Count(Item::Potion)==480,
     "Splitting a full bag must retain the complete source stack.");
+  for (auto item : {Item::Shoulders,Item::Gloves,Item::Belt,Item::Cloak})
+    Require(!full.Apply({InventoryAction::Unequip,int(DescribeItem(item).slot),-1,item}) && full.Count(item)==1,
+      "Full bags must retain new worn equipment.");
   Inventory stacks; Require(stacks.Add(Item::Potion,3),"Prepare odd potion stack.");
   for (int amount : {-1,0,5,6}) Require(!stacks.Apply({InventoryAction::Split,0,23,Item::Potion,amount}),"Invalid split counts must reject.");
   Require(!stacks.Apply({InventoryAction::Split,0,0,Item::Potion,2}) &&
@@ -93,6 +109,9 @@ int main() {
   bad.replace(at,7,"BAG 2 3"); reject(bad);
   bad=stable; at=bad.find(" -1 0",bad.find("BAG")); bad.replace(at,5," 0 1"); reject(bad);
   bad=stable; at=bad.find(" -1 0",bad.find("BAG")); bad.replace(at,5," 99 1"); reject(bad);
+  bad=stable; at=bad.find(" 9 10 11 12"); Require(at!=std::string::npos,"Expected new worn equipment.");
+  bad.replace(at,11," -1 10 11 12"); reject(bad);
+  bad=stable; at=bad.find(" -1 0",bad.find("BAG")); bad.replace(at,5," 12 1"); reject(bad);
   command={}; command.inventory={InventoryAction::Unequip,0,23,Item::Starter}; baseline.Update(.01f,command);
   Require(baseline.StrikeDamage()==6 && baseline.HeavyDamage()==10,"Unarmed combat must use catalog damage.");
   Require(restored.Load(baseline.Save()) && restored.Items().Worn(GearSlot::Weapon)==Item::None,"Unarmed state must survive a game save.");
@@ -111,5 +130,5 @@ int main() {
     Require(!restored.Load(stranded) && restored.Save()==beforeRejected,
       "A cleared camp with an unadvanced active patrol must reject without replacing progress.");
   }
-  std::cout << "Inventory checks passed: swaps, capacity, stale commands, sorting, equipment and v1-v4 persistence.\n";
+  std::cout << "Inventory checks passed: swaps, capacity, stale commands, sorting, equipment and v1-v7 persistence.\n";
 }

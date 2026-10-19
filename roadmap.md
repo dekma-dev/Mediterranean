@@ -1,5 +1,8 @@
 # Mediterranean Roadmap
 
+Four additional starting wearables and ten equipment slots are implemented in source, with visible shoulder guards, gloves, a pouch belt and a short cloak. Save version 7 migrates versions 1–6; new gear participates in real inventory and two-row buyback. RMB now turns the champion while stationary and keeps camera-facing body direction while strafing/backing. Next acceptance: build Debug/Release, run the expanded inventory/trade/interface/motion suites and existing regressions, inspect equipment diagnostics, then perform manual checks 121–122. The native toolchain remains unavailable; appearance, motion feel and submission cost are unverified.
+
+
 The atlas and minimap now have a hand-drawn parchment treatment in source, with ink coast hatching, illustrated landmarks, muted washes and atlas marginalia. The existing world/waypoint mapping and texture allocation are retained. Build and inspect the new scaled atlas diagnostics, then perform manual check 120 once the native toolchain is available; artistic acceptance remains pending.
 
 RMB camera cursor capture is implemented in source: hide and pin at the press position, rotate using foreground raw motion, restore on release, and cancel safely across focus/menu/display/lifecycle changes. Inventory right-click behavior remains available. Next acceptance is to build Debug/Release, run the expanded InterfaceTests and the existing regression suites, then perform manual check 119. Validation is currently blocked by the unavailable Visual Studio compiler/locator and Windows SDK headers; prior passing results do not validate this source change.

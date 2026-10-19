@@ -3,6 +3,7 @@ inline constexpr char sceneShader[] = R"(
 cbuffer Scene : register(b0) {
  matrix world; matrix wvp; matrix normalWorld; matrix shadowVP[2];
  float4 color; float4 eyeAndHud;
+ float4 sun; float4 atmosphere;
 };
 Texture2DArray materials : register(t0);
 Texture2DArray<float> shadowMap : register(t1);
@@ -53,6 +54,71 @@ float Noise(float2 p) {
  float2 cell=floor(p),f=frac(p); f=f*f*(3-2*f);
  return lerp(lerp(Hash(cell),Hash(cell+float2(1,0)),f.x),lerp(Hash(cell+float2(0,1)),Hash(cell+1),f.x),f.y);
 }
+// Ground-level daylight approximation: wavelength-dependent extinction, Rayleigh
+// phase and forward Mie scattering. Curvature bounds the horizon optical path.
+float3 SunDirection() { return normalize(sun.xyz); }
+float3 AirMass(float elevation) {
+ float mu=max(elevation,0);
+ return float3(8000*rsqrt(mu*mu+.0008),1200*rsqrt(mu*mu+.00012),0);
+}
+float3 SunTransmission() {
+ float3 path=AirMass(SunDirection().y);
+ return exp(-float3(5.8,13.5,33.1)*.000001*path.x-.000004*path.y);
+}
+float3 Daylight() { return float3(2.5,2.44,2.30)*SunTransmission(); }
+float3 SkyRadiance(float3 ray) {
+ float3 light=SunDirection();
+ float cosine=clamp(dot(ray,light),-1,1);
+ float3 path=AirMass(ray.y);
+ float3 rayDepth=float3(5.8,13.5,33.1)*.000001*path.x;
+ float mieDepth=.000004*path.y;
+ float3 extinction=rayDepth+mieDepth;
+ float rayPhase=.0596831*(1+cosine*cosine);
+ const float g=.76;
+ float miePhase=.0795775*(1-g*g)/pow(max(1+g*g-2*g*cosine,.001),1.5);
+ const float forwardG=.94;
+ float forwardPhase=.0795775*(1-forwardG*forwardG)/pow(max(1+forwardG*forwardG-2*forwardG*cosine,.0001),1.5);
+ miePhase=lerp(miePhase,forwardPhase,.15);
+ float3 scatter=(1-exp(-extinction))*(rayDepth*rayPhase+mieDepth*miePhase)/max(extinction,.00001);
+ float3 radiance=scatter*SunTransmission()*18;
+ radiance+=float3(.018,.035,.065)*(1-exp(-path.x/18000));
+ // The floating island has a hazy lower hemisphere, with a continuous horizon.
+ return radiance*lerp(.65,1,smoothstep(-.5,0,ray.y));
+}
+float3 DisplayDaylight(float3 radiance) {
+ float3 x=max(radiance,0)*atmosphere.y;
+ // Fitted filmic shoulder; sky, sun, surfaces and aerial perspective share it.
+ float3 mapped=saturate((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14));
+ return pow(mapped,1/2.2);
+}
+float2 CloudDrift() { return float2(cos(atmosphere.x)-1,sin(atmosphere.x))*.65; }
+float CloudOctave(float2 p,float frequency,float offset,float footprint) {
+ float weight=1-smoothstep(.35,.8,footprint*frequency);
+ return lerp(.5,Noise(p*frequency+offset),weight);
+}
+float CloudField(float2 p) {
+ p+=float2(Noise(p*.71+11.3),Noise(p*.71-7.6))*.65;
+ float footprint=max(length(ddx(p)),length(ddy(p)));
+ return CloudOctave(p,1,0,footprint)*.43+CloudOctave(p,2.03,7.1,footprint)*.25+
+   CloudOctave(p,4.11,-3.7,footprint)*.15+CloudOctave(p,8.23,13.6,footprint)*.09+
+   CloudOctave(p,16.47,-19.1,footprint)*.05+CloudOctave(p,32.91,5.3,footprint)*.03;
+}
+float2 CloudCoordinate(float3 ray) {
+ // Curved projection keeps the horizon bounded and has no longitude seam.
+ return ray.xz/(max(ray.y,0)+.20)*3.5+float2(4.9,1.2)+CloudDrift();
+}
+float CloudDensity(float2 p) { return max(0,(CloudField(p)-atmosphere.w)*5); }
+float CloudSunlight(float3 position) {
+ // Distant cloud deck: a very broad moving shadow, using the same field as the sky.
+ float2 p=CloudCoordinate(SunDirection())+position.xz*.0015;
+ return exp(-CloudDensity(p)*12);
+}
+float AirTransmission(float3 from,float3 to) {
+ float distance=max(0,length(to-from)-8);
+ float density=atmosphere.z*exp(-max(0,(from.y+to.y)*.5)*.035);
+ return exp(-distance*density);
+}
+
 float3 ShadowCoordinate(float4 position) {
  float3 projected=position.xyz/position.w;
  float2 uv=projected.xy*float2(.5,-.5)+.5;
@@ -185,9 +251,10 @@ float4 PSMain(VOut i) : SV_TARGET {
   gradient*=min(1,.7/max(length(gradient),.00001));
   n=normalize(n-gradient);
  }
- float3 lightDir=normalize(eyeAndHud.w<0?float3(-.3,.6,1):float3(-.5,.85,-.4));
+ float3 lightDir=normalize(eyeAndHud.w<0?float3(-.3,.6,1):sun.xyz);
  float diffuse=saturate(dot(n,lightDir));
  float visibility=eyeAndHud.w<0?1:Shadow(i.shadow,i.detailShadow,saturate(dot(geometric,lightDir)));
+ if (eyeAndHud.w>=0) visibility*=CloudSunlight(i.wp);
  float hemisphere=lerp(.20,.58,n.y*.5+.5);
  // A small transmitted-light term keeps the backs of opaque leaves readable.
  if (i.material==8) { hemisphere=max(hemisphere,.48); diffuse+=saturate(dot(-n,lightDir))*.32; }
@@ -197,22 +264,25 @@ float4 PSMain(VOut i) : SV_TARGET {
  float exponent=lerp(96,5,roughness*roughness);
  float3 fresnel=lerp(.035,base,metal);
  fresnel+=(1-fresnel)*pow(1-saturate(dot(view,halfVector)),5);
- float3 ambient=lerp(float3(.29,.23,.16),float3(.52,.68,.91),n.y*.5+.5)*hemisphere;
- float3 sunlight=float3(1,.88,.70)*2.15;
+ float3 skyFill=eyeAndHud.w<0?float3(.52,.68,.91):SkyRadiance(float3(0,1,0))*1.4+float3(.12,.13,.14);
+ float3 ambient=lerp(float3(.29,.23,.16),skyFill,n.y*.5+.5)*hemisphere;
+ float3 sunlight=eyeAndHud.w<0?float3(1,.88,.70)*2.15:Daylight();
  float specular=pow(saturate(dot(n,halfVector)),exponent)*(exponent+8)/32;
  float3 result=base*(ambient*cavity+sunlight*diffuse*visibility)*(1-metal*.45);
  result+=fresnel*(specular*sunlight*visibility*diffuse+ambient*.45);
  if (i.material==10) result=base*2.3;
- // Resolve lighting in linear space, then apply a restrained highlight shoulder.
- result=pow(max(0,result/(1+result)),1/2.2);
- float fog=1-exp(-max(0,length(i.wp-eyeAndHud.xyz)-18)*.012);
- result=lerp(result,float3(.43,.51,.57),fog);
- return float4(result,1);
+ if (eyeAndHud.w<0) return float4(pow(max(0,result/(1+result)),1/2.2),1);
+ // Extinction and in-scattered sky light mix before tone mapping, not in display RGB.
+ float transmission=AirTransmission(eyeAndHud.xyz,i.wp);
+ float3 sight=normalize(i.wp-eyeAndHud.xyz);
+ float3 haze=SkyRadiance(normalize(float3(sight.x,max(sight.y,.035),sight.z)));
+ result=lerp(haze,result,transmission);
+ return float4(DisplayDaylight(result),1);
 }
 struct EffectOut { float4 p : SV_POSITION; float3 uv : TEXCOORD0; float4 tint : COLOR; float fog : TEXCOORD1; };
 EffectOut VSEffect(VIn i) {
  EffectOut o; o.p=mul(float4(i.p,1),wvp); o.uv=i.n; o.tint=i.tint;
- o.fog=exp(-max(0,length(i.p-eyeAndHud.xyz)-18)*.012); return o;
+ o.fog=AirTransmission(eyeAndHud.xyz,i.p); return o;
 }
 float4 PSEffect(EffectOut i) : SV_TARGET {
  float2 p=i.uv.xy*2-1;
@@ -244,13 +314,27 @@ float4 PSSky(SkyOut i) : SV_TARGET {
  // Direction changes with orbit/pitch/aspect, but ignores camera translation.
  float4 farPosition=mul(float4(i.uv*float2(2,-2)+float2(-1,1),1,1),world);
  float3 ray=normalize(farPosition.xyz/farPosition.w-eyeAndHud.xyz);
- float h=saturate(ray.y*.65+.35);
- float3 sky=lerp(float3(.69,.74,.76),float3(.22,.39,.58),pow(h,.65));
- // Direction-domain noise avoids a longitude seam and horizon division spikes.
- float2 p=ray.xz*3.5+ray.y*float2(1.3,-1.7);
- float broad=Noise(p),clouds=broad*.55+Noise(p*2.1)*.26+Noise(p*4.3)*.13+Noise(p*8.1)*.06;
- float cover=smoothstep(.48,.73,clouds)*smoothstep(.08,.5,h);
- float3 cloudColor=lerp(float3(.59,.66,.73),float3(.94,.92,.85),saturate(broad*.7+clouds*.5));
- return float4(lerp(sky,cloudColor,cover*.82),1);
+ float3 light=SunDirection();
+ float3 radiance=SkyRadiance(ray);
+ float angle=length(ray-light),width=max(fwidth(angle),.0001);
+ float disc=1-smoothstep(max(0,sun.w-width),sun.w+width,angle);
+ // Actual angular disc, filtered at pixel width; the surrounding aureole is Mie scattering.
+ float3 solar=SunTransmission()*disc*180;
+ float horizon=smoothstep(.015,.15,ray.y);
+ float2 p=CloudCoordinate(ray);
+ float density=CloudDensity(p)*horizon;
+ float transmission=exp(-density*12);
+ float litDensity=CloudDensity(p+light.xz*.10);
+ float fartherDensity=CloudDensity(p+light.xz*.26);
+ float illumination=exp(-max(0,litDensity-density*.55)*4-max(0,fartherDensity-density*.7)*2);
+ float silver=pow(saturate(dot(ray,light)),12)*pow(saturate(1-density),3);
+ float thickness=exp(-density*2.4);
+ float3 cloud=SkyRadiance(float3(0,1,0))*.55+Daylight()*(.10+.47*illumination*thickness+.20*silver);
+ radiance=lerp(cloud,radiance,transmission)+solar*transmission;
+ // A second, thinner and higher layer breaks up the low cumulus shapes.
+ float2 high=ray.xz/(max(ray.y,0)+.35)*float2(3.5,13)+CloudDrift()*.4;
+ float wisps=smoothstep(.57,.80,Noise(high)*.7+Noise(high*2.1)*.3)*horizon*.07;
+ radiance=lerp(radiance,SkyRadiance(float3(0,1,0))*.6+Daylight()*.45,wisps);
+ return float4(DisplayDaylight(radiance),1);
 }
 )";

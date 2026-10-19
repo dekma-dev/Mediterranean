@@ -2,11 +2,14 @@
 #include "game/CharacterPose.h"
 #include "engine/Renderer.h"
 #include <cmath>
+#include <algorithm>
 CharacterOutfit CharacterOutfit::From(const rpg::Inventory& inventory) {
  return {inventory.Worn(rpg::GearSlot::Chest)==rpg::Item::Ward,inventory.Worn(rpg::GearSlot::Weapon)==rpg::Item::Watchguard,
   inventory.Worn(rpg::GearSlot::Weapon)!=rpg::Item::None,inventory.Worn(rpg::GearSlot::Chest)!=rpg::Item::None,
   inventory.Worn(rpg::GearSlot::Legs)!=rpg::Item::None,inventory.Worn(rpg::GearSlot::Feet)!=rpg::Item::None,
-  inventory.Worn(rpg::GearSlot::Head)==rpg::Item::Helm,inventory.Worn(rpg::GearSlot::Offhand)==rpg::Item::Shield};
+  inventory.Worn(rpg::GearSlot::Head)==rpg::Item::Helm,inventory.Worn(rpg::GearSlot::Offhand)==rpg::Item::Shield,
+  inventory.Worn(rpg::GearSlot::Shoulders)==rpg::Item::Shoulders,inventory.Worn(rpg::GearSlot::Hands)==rpg::Item::Gloves,
+  inventory.Worn(rpg::GearSlot::Waist)==rpg::Item::Belt,inventory.Worn(rpg::GearSlot::Back)==rpg::Item::Cloak};
 }
 void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::XMFLOAT4 color,float swing,float gait,CharacterOutfit outfit,animation::Sample dynamics) {
  using namespace DirectX; using M=visual::Mesh; using S=visual::Material;
@@ -23,8 +26,30 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       renderer.DrawMesh(mesh,upper({x,h,z}),scale,tint,material,yaw,pose.upperPitch);
     };
     part(M::Torso,0,1.23f,0,{.61f,.64f,.36f},outfit.armor?steel:cloth,outfit.armor?S::Metal:S::Cloth);
-    part(M::Limb,0,.95f,0,{.51f,.08f,.32f},leather,S::Cloth);
-    part(M::Box,0,.95f,.16f,{.10f,.075f,.025f},{.67f,.49f,.22f,1},S::Metal);
+    if (outfit.belt) {
+      part(M::Limb,0,.95f,0,{.55f,.085f,.37f},leather,S::Cloth);
+      part(M::Box,0,.95f,.19f,{.10f,.075f,.025f},{.67f,.49f,.22f,1},S::Metal);
+      for (float side : {-1.f,1.f}) {
+        part(M::Torso,side*.245f,.86f,-.10f,{.16f,.22f,.16f},leather,S::Cloth);
+        part(M::Box,side*.245f,.91f,-.005f,{.15f,.065f,.03f},{.36f,.24f,.13f,1},S::Cloth);
+        part(M::Sphere,side*.245f,.90f,.015f,{.025f,.025f,.012f},{.67f,.49f,.22f,1},S::Metal);
+      }
+    }
+    if (outfit.cloak) {
+      // Overlapping cloth panels follow the torso; the hem swings with the gait.
+      const float cloakSway=std::isfinite(gait)?std::clamp(gait,-1.f,1.f):0;
+      for (int panel=0;panel<5;++panel) {
+        const float x=cloakSway*.035f*panel,z=-.215f-panel*.039f-std::abs(cloakSway)*panel*.025f;
+        const float width=.46f+panel*.065f,h=1.43f-panel*.16f;
+        part(M::Torso,x,h,z,{width,.205f,.045f},{.12f,.24f,.36f,1},S::Cloth);
+        for (float side : {-1.f,1.f})
+          part(M::Box,x+side*width*.43f,h,z-.024f,{.014f,.195f,.008f},{.54f,.43f,.23f,1},S::Cloth);
+        if (panel==4) part(M::Box,x,h-.085f,z-.025f,{width*.86f,.025f,.012f},{.54f,.43f,.23f,1},S::Cloth);
+      }
+      for (float side : {-1.f,1.f})
+        part(M::Torso,side*.13f,1.49f,.015f,{.12f,.09f,.39f},{.12f,.24f,.36f,1},S::Cloth);
+      part(M::Sphere,0,1.48f,.195f,{.09f,.065f,.03f},{.72f,.54f,.24f,1},S::Metal);
+    }
     if (outfit.tunic) {
       part(M::Torso,0,.83f,.015f,{.54f,.27f,.36f},cloth,S::Cloth);
       const XMFLOAT3 seam[]={{0,1.02f,.139f},{0,1.064f,.135f},{0,1.198f,.149f},{0,1.371f,.171f},{0,1.448f,.149f}};
@@ -78,13 +103,19 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       renderer.DrawSegment(shoulder,elbow,.25f,.27f,cloth,S::Cloth);
       renderer.DrawMesh(M::Sphere,elbow,{.15f,.15f,.15f},skin,S::Skin,yaw);
       renderer.DrawSegment(elbow,hand,.19f,.21f,outfit.armor?steel:skin,outfit.armor?S::Metal:S::Skin);
-      renderer.DrawMesh(M::Sphere,hand,{.14f,.17f,.14f},skin,S::Skin,yaw);
+      const auto handColor=outfit.gloves?leather:skin;
+      const auto handMaterial=outfit.gloves?S::Cloth:S::Skin;
+      if (outfit.gloves) {
+        const XMFLOAT3 cuff{hand.x+(elbow.x-hand.x)*.32f,hand.y+(elbow.y-hand.y)*.32f,hand.z+(elbow.z-hand.z)*.32f};
+        renderer.DrawSegment(cuff,hand,.205f,.22f,leather,S::Cloth);
+      }
+      renderer.DrawMesh(M::Sphere,hand,{.14f,.17f,.14f},handColor,handMaterial,yaw);
       // A palm, curled finger ridges and thumb replace the featureless mitten.
       renderer.DrawMesh(M::Sphere,{hand.x+side*.052f*std::cos(yaw),hand.y+.015f,hand.z-side*.052f*std::sin(yaw)},
-        {.052f,.085f,.055f},skin,S::Skin,yaw);
+        {.052f,.085f,.055f},handColor,handMaterial,yaw);
       for(int finger=0;finger<3;++finger)
         renderer.DrawMesh(M::Limb,{hand.x+std::sin(yaw)*.054f,hand.y-.045f+finger*.027f,hand.z+std::cos(yaw)*.054f},
-          {.10f,.021f,.032f},{.60f,.40f,.28f,1},S::Skin,yaw);
+          {.10f,.021f,.032f},outfit.gloves?XMFLOAT4{.30f,.22f,.14f,1}:XMFLOAT4{.60f,.40f,.28f,1},handMaterial,yaw);
       if(outfit.armor) {
         renderer.DrawMesh(M::Torso,{knee.x+std::sin(yaw)*.105f,knee.y,knee.z+std::cos(yaw)*.105f},
           {.22f,.24f,.075f},steel,S::Metal,yaw);
@@ -112,13 +143,15 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
           {.16f,.16f,.09f},steel,S::Metal,yaw,pose.upperPitch);
       }
     }
-    if (outfit.armor) {
+    if (outfit.armor || outfit.shoulders) {
+      const auto guardColor=outfit.shoulders?leather:steel;
+      const auto guardMaterial=outfit.shoulders?S::Cloth:S::Metal;
       for (float side : {-1.f,1.f}) {
-        part(M::Torso,side*.31f,1.46f,0,{.26f,.18f,.31f},steel,S::Metal);
+        part(M::Torso,side*.31f,1.46f,0,{.26f,.18f,.31f},guardColor,guardMaterial);
         part(M::Torso,side*.31f,1.41f,0,{.27f,.03f,.32f},{.66f,.50f,.23f,1},S::Metal);
         for(int layer=0;layer<3;++layer) {
           part(M::Torso,side*(.32f+layer*.018f),1.43f-layer*.045f,0,
-            {.27f,.07f,.32f-layer*.015f},layer==2?blade:steel,S::Metal);
+            {.27f,.07f,.32f-layer*.015f},outfit.shoulders?leather:layer==2?blade:steel,guardMaterial);
           part(M::Sphere,side*(.32f+layer*.018f),1.44f-layer*.045f,.13f,
             {.024f,.024f,.018f},blade,S::Metal);
         }

@@ -115,6 +115,11 @@ int main() {
   std::cout << "Ground cover: " << map.Cover().size()-shrubs << " grass clumps, " << shrubs << " shrubs.\n";
 
   rpg::Simulation simulation;
+  for (float pitch : {-.15f,-.4f,-.75f}) {
+    const float range=simulation.CameraDistance({0,-10},1.4f,{0,-std::cos(pitch)},std::sin(pitch),18);
+    Require(range>0 && range<18 && 1.4f+std::sin(pitch)*range>=.2999f,
+      "Upward-looking cameras must retract above the floor before rendering.");
+  }
   Require(simulation.CameraDistance({3,-15},2.65f,{0,1},0,3)<2,
     "An orbiting camera must stop before entering the supply canopy.");
   Require(simulation.CameraDistance({3,-15},.5f,{0,1},0,3)<2,

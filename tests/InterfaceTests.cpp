@@ -1,5 +1,6 @@
 #include "game/Game.h"
 #include "game/Interface.h"
+#include "game/CharacterView.h"
 #include "game/TerrainSurface.h"
 #include "engine/Renderer.h"
 #include "platform/Win32Window.h"
@@ -445,7 +446,7 @@ int main() {
     render();
     const auto invalid=drag(1028,274,277,210); const auto before=simulation.Save(); apply(invalid);
     Require(simulation.Save()==before,"Potion dropped on a weapon slot must preserve all inventory state.");
-    render(); const auto rightUse=pointer(40,410,false,false,false,true); rpg::Command removeBoots;
+    render(); const auto rightUse=pointer(40,338,false,false,false,true); rpg::Command removeBoots;
     ui::ApplyItem(removeBoots,simulation,ui::Item(rightUse.value)); simulation.Update(.01f,removeBoots);
     Require(rightUse.action==ui::Action::UseItem && simulation.Items().Worn(rpg::GearSlot::Feet)==rpg::Item::None,"Right-clicking worn boots must remove them.");
     render(); pointer(1028,274,true,true,false); pointer(1100,350,false,true,false); screen.Escape();
@@ -460,15 +461,44 @@ int main() {
     command={}; command.purchase=purchase.value; simulation.Update(.01f,command); render();
     Require(click(900,293).action==ui::Action::None,"Sold-out Buy must be disabled.");
     const int helmCell=simulation.Items().Find(rpg::Item::Helm);
-    apply(drag(1028+float(helmCell%6)*40,274+float(helmCell/6)*42,277,410));
+    apply(drag(1028+float(helmCell%6)*40,274+float(helmCell/6)*42,277,338));
     Require(simulation.Items().Worn(rpg::GearSlot::Head)==rpg::Item::Helm && screen.panel==ui::Panel::Merchant,
       "Bought helm must drag into Head while trade remains open.");
     render(); purchase=click(900,363); command={}; command.purchase=purchase.value; simulation.Update(.01f,command); render();
     const int shieldCell=simulation.Items().Find(rpg::Item::Shield); Require(shieldCell>=0,"Shield purchase must reach the bag.");
-    apply(drag(1028+float(shieldCell%6)*40,274+float(shieldCell/6)*42,277,310));
+    apply(drag(1028+float(shieldCell%6)*40,274+float(shieldCell/6)*42,277,274));
     Require(simulation.Items().Worn(rpg::GearSlot::Offhand)==rpg::Item::Shield && simulation.DamageReduction()==5,"Off-hand drag must update actual defense.");
     render(); Require(click(550,681).action==ui::Action::None,"Trade must block the underlying action bar.");
     const auto rotate=click(147,593); Require(rotate.action==ui::Action::RotatePreview && rotate.value==1,"Portrait turn control must be clickable at every scale.");
+    for (auto item : {rpg::Item::Shoulders,rpg::Item::Gloves,rpg::Item::Belt,rpg::Item::Cloak}) {
+      const auto gear=ui::Describe(item).slot;
+      const float gx=(item==rpg::Item::Shoulders || item==rpg::Item::Cloak)?40.f:277.f;
+      const float gy=(item==rpg::Item::Shoulders || item==rpg::Item::Gloves)?402.f:466.f;
+      render(); const auto remove=pointer(gx,gy,false,false,false,true);
+      Require(remove.action==ui::Action::UseItem && remove.value==int(item),"Each added slot must route its own right-click.");
+      command={}; ui::ApplyItem(command,simulation,item); simulation.Update(.01f,command);
+      const auto outfit=CharacterOutfit::From(simulation.Items());
+      const bool visible=item==rpg::Item::Shoulders?outfit.shoulders:item==rpg::Item::Gloves?outfit.gloves:
+        item==rpg::Item::Belt?outfit.belt:outfit.cloak;
+      Require(simulation.Items().Worn(gear)==rpg::Item::None && !visible,
+        "Removing a travel piece must remove it from both portrait and world outfit.");
+      screen.selected=item; screen.selectedBag=simulation.Items().Find(item); render();
+      const auto sellTravel=click(1070,587);
+      Require(sellTravel.action==ui::Action::Sell && sellTravel.value==int(item),"Removed travel gear must be sellable.");
+      command={}; command.trade={rpg::TradeAction::Sell,item,sellTravel.inventory.source}; simulation.Update(.01f,command);
+      Require(simulation.BuybackCount(item)==1,"Selling travel gear must put it on the second buyback row.");
+      render(); const auto reclaimTravel=click(511+(int(item)-int(rpg::Item::Shoulders))*51.f,535);
+      Require(reclaimTravel.action==ui::Action::Buyback && reclaimTravel.value==int(item),
+        "Second-row buyback must select the correct added item at every scale.");
+      command={}; command.trade={rpg::TradeAction::Buyback,item}; simulation.Update(.01f,command);
+      const int cell=simulation.Items().Find(item); Require(cell>=0,"Reclaimed travel gear must return to the bag.");
+      render(); apply(drag(1028+float(cell%6)*40,274+float(cell/6)*42,gx,gy));
+      Require(simulation.Items().Worn(gear)==item && simulation.Items().Count(item)==1,
+        "Each added slot must accept its matching reclaimed item without duplication.");
+    }
+    renderer.BeginFrame(); screen.Render(renderer,simulation,0,false);
+    const auto gearCapture=std::wstring(L"equipment-ten-slots-")+std::to_wstring(size.first)+L"x"+std::to_wstring(size.second)+L".png";
+    Require(renderer.Capture(gearCapture.c_str()) && renderer.EndFrame(false),"Expanded equipment capture failed.");
     screen.selected=ui::Item::Shield; screen.selectedBag=-1; render();
     Require(click(1070,587).action==ui::Action::None,"Worn gear cannot be sold directly from the detail panel.");
     screen.selected=ui::Item::Potion; screen.selectedBag=0; render();

@@ -1,5 +1,12 @@
 # Mediterranean Progress
 
+Champion equipment and RMB body steering (2026-10-19): implemented in source. New and migrated champions wear four additional real items: riveted shoulder guards, leather gloves, a belt with supply pouches and a blue travelling cloak. Each has its own slot, icon, ownership, equip/remove, sale/buyback and save behavior; world and portrait use the same outfit flags. Ten slots fit around the portrait, and the merchant shelf wraps thirteen item types over two rows. Travel pieces add no protection; existing combat tuning is retained. Save version 7 adds four worn slots and four buyback counts; versions 1–6 keep prior state and receive the new starting gear once.
+
+Holding RMB over the world now steers the actual body heading with the filtered camera, including when stationary and moving sideways/backward. Existing turn smoothing and planted-foot correction animate the turn. Accepted strikes and active dashes retain their committed heading; UI/focus cancellation ends steering. Cursor hide/pin/release behavior is retained.
+
+Source review and `git diff --check` pass. Regression source covers added-slot ownership/removal/full bags, save round trips and forgery rejection, v4/v5/v6 migration (including sold rewards), every catalog item's persisted buyback, scaled new-slot/right-click/drag and second-row buyback, stationary left/right turns at 30/60/144 Hz, strafing/backing, focus/modal cancellation, nonfinite headings and committed combat. Added `equipment-ten-slots-WIDTHxHEIGHT.png` capture diagnostics. **These tests and visual diagnostics have not run:** `.\scripts\build-native.ps1 -Backend Ninja -Configuration Debug -Test` stops at `Visual Studio locator was not found.` The previously recorded missing compiler/SDK remains the validation blocker. Manual checks 121–122 cover appearance and live controls; no runtime/performance claim is made for this source change. No downloads, system changes, commits or pushes.
+
+
 Last updated: 2026-10-19
 
 ## Current status

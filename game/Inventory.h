@@ -3,8 +3,8 @@
 #include <iosfwd>
 
 namespace rpg {
-enum class Item { None=-1,Starter,Watchguard,Potion,Tunic,Trousers,Boots,Ward,Helm,Shield,Count };
-enum class GearSlot { None=-1,Weapon,Chest,Legs,Feet,Head,Offhand,Count };
+enum class Item { None=-1,Starter,Watchguard,Potion,Tunic,Trousers,Boots,Ward,Helm,Shield,Shoulders,Gloves,Belt,Cloak,Count };
+enum class GearSlot { None=-1,Weapon,Chest,Legs,Feet,Head,Offhand,Shoulders,Hands,Waist,Back,Count };
 struct ItemInfo {
   Item id;
   const char* name;
@@ -26,7 +26,7 @@ struct InventoryCommand {
 };
 class Inventory {
 public:
-  static constexpr int capacity=24,gearCount=6;
+  static constexpr int capacity=24,gearCount=int(GearSlot::Count);
   Inventory();
   const std::array<ItemStack,capacity>& Bag() const { return bag_; }
   Item Worn(GearSlot slot) const;

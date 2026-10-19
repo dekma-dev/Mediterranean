@@ -32,6 +32,7 @@ public:
   const animation::Sample& EnemyAnimation(std::size_t index) const { return enemyAnimations_.at(index).pose; }
   float CameraRange() const { return cameraBoom_.distance; }
   float CameraYaw() const { return cameraYaw_; }
+  float CameraPitch() const { return cameraPitch_; }
   float CameraHeight() const { return cameraHeight_; }
   const CombatEffects& Effects() const { return effects_; }
   unsigned AudioGeneration() const { return audioGeneration_; }

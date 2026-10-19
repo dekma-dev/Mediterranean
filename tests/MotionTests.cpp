@@ -11,6 +11,74 @@ void Require(bool value,const char* message) {
 float Distance(rpg::Vec2 a,rpg::Vec2 b) { return std::hypot(a.x-b.x,a.z-b.z); }
 const char* pursuit="MEDITERRANEAN 3\n-4 3 100 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
   "100 -4 7 80 1 0 1 0 3.14159265\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
+void SkyCameraClearance() {
+  Game game; game.Initialize(); Input input; Input::Frame frame;
+  frame.focused=true; frame.client={600,300}; frame.screen=frame.client; frame.relativeMouse=true;
+  const auto step=[&]() { input.Update(frame); game.Update(1.0/60,input,0); };
+  step(); frame.down[VK_RBUTTON]=true; step(); frame.mouseY=-300; step(); frame.mouseY=0;
+  for (int i=0;i<120;++i) {
+    step();
+    Require(game.CameraHeight()+std::sin(game.CameraPitch())*game.CameraRange()>=.2999f,
+      "Looking up with RMB must keep the camera above the ground throughout the transition.");
+  }
+  Require(game.CameraPitch()<-.70f && game.CameraRange()<3,"RMB must let the player inspect the sun and overhead sky.");
+  game.SetCameraOrbit(0,.45f,10);
+  Require(game.CameraRange()>3,"Returning to the normal view must restore camera distance.");
+}
+void RmbBodySteering() {
+  for (int hz : {30,60,144}) {
+    Game game; game.Initialize(); Input input; Input::Frame frame;
+    frame.focused=true; frame.client={600,300}; frame.screen=frame.client; frame.relativeMouse=true;
+    const auto step=[&]() { input.Update(frame); game.Update(1.0/hz,input,0); };
+    step(); frame.down[VK_RBUTTON]=true; step(); const auto standing=game.State().Player();
+    frame.mouseX=70; step(); frame.mouseX=0;
+    for (int i=0;i<hz;++i) step();
+    Require(Distance(standing,game.State().Player())==0 && game.State().Facing()>.4f &&
+      std::abs(motion::AngleDelta(game.PlayerPose().facing,game.CameraYaw()))<.001f,
+      "RMB must turn the visible body right while planted, at every update rate.");
+    frame.mouseX=-140; step(); frame.mouseX=0;
+    for (int i=0;i<hz;++i) step();
+    Require(Distance(standing,game.State().Player())==0 && game.State().Facing()<-.4f &&
+      std::abs(motion::AngleDelta(game.PlayerPose().facing,game.CameraYaw()))<.001f,
+      "RMB must reverse the planted body smoothly to the left.");
+    frame.down['D']=true;
+    for (int i=0;i<hz/5;++i) {
+      step();
+      Require(std::abs(motion::AngleDelta(game.State().Facing(),game.CameraYaw()))<.0001f,
+        "RMB strafing must keep body heading with the camera, not lateral travel.");
+    }
+    Require(Distance(standing,game.State().Player())>.1f,"RMB strafing must still move the player.");
+    frame.down['D']=false; frame.down['S']=true;
+    for (int i=0;i<hz/5;++i) step();
+    Require(std::abs(motion::AngleDelta(game.State().Facing(),game.CameraYaw()))<.0001f,
+      "RMB backward movement must not flip body heading.");
+    frame.down['S']=false; frame.focused=false; frame.mouseX=100;
+    const float facing=game.State().Facing(); step();
+    Require(game.State().Facing()==facing && !game.WantsMouseLook(),"Focus loss cancels body steering and capture together.");
+  }
+  rpg::Simulation simulation; rpg::Command command; command.steerFacing=true; command.facingYaw=.9f;
+  simulation.Update(.01f,command); const float facing=simulation.Facing();
+  command.facingYaw=std::numeric_limits<float>::quiet_NaN(); simulation.Update(.01f,command);
+  Require(simulation.Facing()==facing,"Nonfinite steering must not corrupt facing or saves.");
+  command.facingYaw=-1; command.haltMovement=true; simulation.Update(.01f,command);
+  Require(simulation.Facing()==facing,"Modal capture must suppress steering.");
+  command.haltMovement=false; command.facingYaw=.9f; command.ability=2; simulation.Update(.01f,command);
+  Require(simulation.Dashing(),"Prepare a committed dash.");
+  command.ability=-1; command.facingYaw=-1; simulation.Update(.01f,command);
+  Require(simulation.Facing()==facing,"Active dashes retain their committed heading despite RMB turns.");
+  rpg::Simulation combat;
+  std::string closeTarget=pursuit; const auto at=closeTarget.find("-4 3 100"); closeTarget.replace(at,8,"-4 5 100");
+  Require(combat.Load(closeTarget),"Close melee steering fixture must load.");
+  command={}; command.nextTarget=true; command.ability=0; command.steerFacing=true; command.facingYaw=1;
+  combat.Update(.01f,command);
+  Require(combat.AttackFlash()>0,"Prepare an accepted strike.");
+  const float strikeFacing=combat.Facing(); command.nextTarget=false; command.ability=-1; command.facingYaw=-1;
+  combat.Update(.01f,command);
+  Require(combat.Facing()==strikeFacing,"RMB cannot turn an accepted strike during its committed presentation.");
+  for (int i=0;i<40;++i) combat.Update(.01f,command);
+  Require(combat.Facing()==-1,"Camera steering resumes when the committed strike finishes.");
+}
+
 void SmoothPoseTransitions() {
   bool passed=true;
   const auto check=[&](bool value,const char* message) {
@@ -163,6 +231,8 @@ void TransitionRegressions() {
 }
 }
 int main() {
+  RmbBodySteering();
+  SkyCameraClearance();
   {
     Game focusedGame; focusedGame.Initialize(); Input input; Input::Frame frame;
     frame.focused=true; input.Update(frame); frame.down['W']=true;

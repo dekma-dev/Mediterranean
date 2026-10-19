@@ -98,7 +98,7 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   if (!interface_.CapturesMovement()) {
     if (!pointerCaptured && !interface_.Dragging()) {
       yaw_=std::remainder(yaw_+(orbiting_?input.MouseX()*.006f:0),motion::tau);
-      pitch_=std::clamp(pitch_+(orbiting_?input.MouseY()*.004f:0),.15f,1.1f);
+      pitch_=std::clamp(pitch_+(orbiting_?input.MouseY()*.004f:0),-.75f,1.1f);
       if (std::isfinite(wheel)) distance_=std::clamp(distance_-wheel,3.f,18.f);
     }
     const float forward=float(input.Held('W'))-float(input.Held('S'));
@@ -106,6 +106,7 @@ void Game::Update(double seconds,const Input& input,float wheel) {
     // Predict the same filtered heading used by UpdateCamera below. Steering
     // against the raw target makes WASD drift sideways during fast mouse turns.
     const float movementYaw=motion::FollowAngle(cameraYaw_,yaw_,30.f,dt);
+    command.steerFacing=orbiting_ && input.Focused(); command.facingYaw=movementYaw;
     command.movement={std::sin(movementYaw)*forward+std::cos(movementYaw)*right,
       std::cos(movementYaw)*forward-std::sin(movementYaw)*right};
     command.sprint=input.Held(VK_SHIFT); command.jump=input.Pressed(VK_SPACE);
@@ -203,7 +204,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
 void Game::SetCameraOrbit(float yaw,float pitch,float distance) {
   if (!std::isfinite(yaw) || !std::isfinite(pitch) || !std::isfinite(distance)) return;
   yaw_=std::remainder(yaw,6.2831853f);
-  pitch_=std::clamp(pitch,.15f,1.1f); distance_=std::clamp(distance,3.f,18.f);
+  pitch_=std::clamp(pitch,-.75f,1.1f); distance_=std::clamp(distance,3.f,18.f);
   // Explicit positioning is used by captures/tools; interactive input sets targets.
   UpdateCamera(0,true);
 }
@@ -241,6 +242,7 @@ void Game::UpdateCamera(float dt,bool immediate) {
 }
 
 void Game::Render(Renderer& renderer,bool showInterface) {
+  renderer.SetAtmosphereTime(time_);
   if (!renderer.HasTerrainSurface() && !renderer.SetTerrainSurface(BuildTerrainSurface(simulation_.Map()),terrainSurfaceSize)) return;
   using DirectX::XMFLOAT3;
   using DirectX::XMFLOAT4;

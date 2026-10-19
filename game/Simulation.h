@@ -42,6 +42,8 @@ struct Command {
   InventoryCommand inventory;
   int purchase=-1;
   TradeCommand trade;
+  bool steerFacing=false;
+  float facingYaw=0;
 };
 enum class Quest { Available, Active, Return, Complete };
 enum class AnchorQuest { Locked, Available, Active, Return, Complete };

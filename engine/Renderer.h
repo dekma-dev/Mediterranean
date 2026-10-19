@@ -21,6 +21,7 @@ public:
   std::size_t MaterialBytes() const { return materialBytes_+terrainBytes_; }
   void SetCamera(const DirectX::XMFLOAT3& eye, const DirectX::XMFLOAT3& target);
   void SetShadowFocus(const DirectX::XMFLOAT3& focus);
+  void SetAtmosphereTime(double seconds);
   bool Project(const DirectX::XMFLOAT3& world, DirectX::XMFLOAT2& screen) const;
   void DrawMarkerBox(const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& scale,
     const DirectX::XMFLOAT4& color, float yaw = 0);
@@ -123,6 +124,7 @@ private:
   DirectX::XMFLOAT4X4 viewProjection_{};
   std::array<DirectX::XMFLOAT4X4,visual::shadowLayers> shadowProjection_{};
   DirectX::XMFLOAT3 eye_{};
+  float atmospherePhase_=0;
   int width_ = 1, height_ = 1;
   UINT drawCalls_ = 0;
   UINT triangles_ = 0;

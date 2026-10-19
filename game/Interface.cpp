@@ -218,6 +218,36 @@ void Icon(Canvas& c,Rect rect,Item item,float alpha=1) {
   c.Diamond(x,y,23*s,28*s,gold); c.Diamond(x,y-1*s,18*s,23*s,cloth);
   c.Line(x,y-20*s,x,y+19*s,3*s,metal); c.Line(x-14*s,y-5*s,x+14*s,y-5*s,3*s,metal);
   c.Oval(x,y-4*s,6*s,6*s,gold);
+ } else if (item==Item::Shoulders) {
+  for (float side : {-1.f,1.f}) {
+   c.Oval(x+side*13*s,y-5*s,13*s,13*s,leather);
+   for (int layer=0;layer<3;++layer)
+    c.Line(x+side*4*s,y+layer*6*s,x+side*25*s,y+(layer*6-4)*s,4*s,metal);
+   c.Oval(x+side*14*s,y-12*s,2*s,2*s,gold);
+  }
+ } else if (item==Item::Gloves) {
+  for (float side : {-1.f,1.f}) {
+   const float cx=x+side*13*s;
+   c.RectFill({cx-7*s,y-20*s,14*s,10*s},gold);
+   c.Oval(cx,y-2*s,9*s,13*s,leather);
+   c.Line(cx+side*6*s,y-7*s,cx+side*11*s,y+4*s,5*s,leather);
+   for (int finger=0;finger<3;++finger)
+    c.Line(cx+(finger-1)*5*s,y+2*s,cx+(finger-1)*5*s,y+(18-finger*2)*s,4*s,leather);
+  }
+ } else if (item==Item::Belt) {
+  c.RectFill({x-25*s,y-7*s,50*s,13*s},leather);
+  c.RectFill({x-6*s,y-9*s,12*s,17*s},gold);
+  c.RectFill({x-3*s,y-5*s,6*s,9*s},leather);
+  for (float side : {-1.f,1.f}) {
+   c.Oval(x+side*17*s,y+10*s,8*s,11*s,leather);
+   c.Line(x+side*17*s-6*s,y+4*s,x+side*17*s+6*s,y+4*s,3*s,gold);
+  }
+ } else if (item==Item::Cloak) {
+  c.Triangle({x,y-24*s},{x+24*s,y+22*s},{x-24*s,y+22*s},cloth);
+  for (float side : {-1.f,1.f})
+   c.Line(x+side*3*s,y-17*s,x+side*21*s,y+21*s,2*s,gold);
+  c.Line(x-21*s,y+21*s,x+21*s,y+21*s,2*s,gold);
+  c.Oval(x,y-15*s,4*s,3*s,gold);
  } else if (item==Item::Trousers) {
   c.RectFill({x-15*s,y-20*s,30*s,15*s},leather);
   c.Line(x-8*s,y-6*s,x-10*s,y+21*s,12*s,{.39f,.43f,.40f,alpha});
@@ -454,13 +484,18 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    DrawCharacter(renderer,{0,0},0,previewYaw+std::sin(time*.35f)*.05f,{.22f,.37f,.54f,1},0,0,CharacterOutfit::From(s.Items()),animation::Idle(time));
    renderer.EndPortrait();
   }
-  const Item worn[]={s.Items().Worn(rpg::GearSlot::Chest),s.Items().Worn(rpg::GearSlot::Legs),s.Items().Worn(rpg::GearSlot::Feet)};
-  const char* labels[]={"Chest","Legs","Feet"};
-  for (int i=0;i<3;++i) { slot({23,190+i*100.f,38,40},worn[i],false,-1,i+1); c.Center(18,234+i*100.f,48,labels[i],11,muted); }
-  slot({258,190,38,40},s.Items().Worn(rpg::GearSlot::Weapon),false,-1,0); c.Center(253,234,48,"Weapon",10,muted);
-  slot({258,290,38,40},s.Items().Worn(rpg::GearSlot::Offhand),false,-1,int(rpg::GearSlot::Offhand));
-  slot({258,390,38,40},s.Items().Worn(rpg::GearSlot::Head),false,-1,int(rpg::GearSlot::Head));
-  c.Center(251,334,52,"Off hand",10,muted); c.Center(251,434,52,"Head",10,muted);
+  using G=rpg::GearSlot;
+  const G left[]={G::Chest,G::Legs,G::Feet,G::Shoulders,G::Back};
+  const G right[]={G::Weapon,G::Offhand,G::Head,G::Hands,G::Waist};
+  const char* leftLabels[]={"Chest","Legs","Feet","Shoulders","Back"};
+  const char* rightLabels[]={"Weapon","Off hand","Head","Hands","Waist"};
+  for (int row=0;row<5;++row) {
+   const float y=190+row*64.f;
+   slot({23,y,38,40},s.Items().Worn(left[row]),false,-1,int(left[row]));
+   slot({258,y,38,40},s.Items().Worn(right[row]),false,-1,int(right[row]));
+   c.Center(15,y+44,54,leftLabels[row],10,muted);
+   c.Center(251,y+44,52,rightLabels[row],10,muted);
+  }
   c.Banner({69,514,180,26},s.WardArmorEquipped()?"Astral ward":"Frontier outfit",14);
   c.Text(28,552,"Drag gear to your bag. Right-click to remove.",11,muted);
   button({26,579,34,27},"<",Action::RotatePreview,-1);
@@ -494,7 +529,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Text(316,528,"Potions",12,muted);
   const auto potions=std::to_string(s.Potions()); c.Text(422-c.Width(potions,14),527,potions,14,ink);
   int wornCount=0; for(int i=0;i<rpg::Inventory::gearCount;++i) wornCount+=s.Items().Worn(rpg::GearSlot(i))!=Item::None;
-  c.Center(310,572,120,std::to_string(wornCount)+" / 6 slots equipped",10,muted);
+  c.Center(310,572,120,std::to_string(wornCount)+" / "+std::to_string(rpg::Inventory::gearCount)+" slots equipped",10,muted);
  }
  if (inventoryOpen) {
   blockWindow({994,196,276,452}); c.Banner({1023,186,218,31},"Bag",19); close({1239,201,24,24},Panel::Inventory);
@@ -549,7 +584,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
 
  if (panel==Panel::Merchant) {
   // Side windows remain interactive while the service window captures movement.
-  blockWindow({470,126,506,502}); c.Banner({487,116,472,35},"Dawnwatch quartermaster",21);
+  blockWindow({470,126,506,522}); c.Banner({487,116,472,35},"Dawnwatch quartermaster",21);
   close({939,158,24,24},Panel::Merchant);
   c.Text(489,168,"FIELD SUPPLIES",13,gold); c.Text(755,168,std::to_string(s.Gold())+" gold",14,gold);
   for (int i=0;i<int(rpg::shopOffers.size());++i) {
@@ -565,17 +600,17 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Text(490,418,"BUYBACK",13,gold); c.Text(590,418,"Click an item to reclaim one at its sale price",12,muted);
   for (int i=0;i<int(Item::Count);++i) {
    const auto item=Item(i); const int count=s.BuybackCount(item);
-   const Rect rect{490+i*51.f,447,43,45};
+   const Rect rect{490+(i%9)*51.f,447+(i/9)*66.f,43,45};
    if (count==0) { c.EmptySlot(rect); continue; }
    const bool available=std::string(s.TradeStatus({rpg::TradeAction::Buyback,item}))=="Available";
    c.Frame(rect,{.08f,.16f,.11f,1},rect.Contains(mouseX_,mouseY_)?gold:border);
    Icon(c,{rect.x+4,rect.y+4,35,37},item,available?1.f:.5f);
    if (count>1) c.Text(rect.x+28,rect.y+28,std::to_string(count),12,gold);
-   c.Center(rect.x,497,rect.w,std::to_string(rpg::SellPrice(item))+" g",12,gold);
+   c.Center(rect.x,rect.y+50,rect.w,std::to_string(rpg::SellPrice(item))+" g",12,gold);
    regions_.push_back({rect,{Action::Buyback,i},available});
   }
-  c.Wrap(490,529,465,merchantNotice.empty()?"Select a bag item, then Sell one. Unequip worn gear first. Buyback items are kept when you leave or save; R resets the expedition.":merchantNotice,13,ink,3);
-  c.Text(490,605,"E or X closes trade. C opens your equipment.",12,muted);
+  c.Wrap(490,582,465,merchantNotice.empty()?"Unequip gear before selling. Buyback is saved until reclaimed or R resets the expedition.":merchantNotice,12,ink,2);
+  c.Text(490,624,"E or X closes trade. C opens your equipment.",12,muted);
  } else if (panel!=Panel::None) {
   c.RectFill({0,0,1280,720},{0,0,0,panel==Panel::Menu?.16f:.30f}); regions_.clear();
   if (panel==Panel::Menu) {

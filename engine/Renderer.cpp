@@ -14,8 +14,12 @@ using namespace DirectX;
 using Microsoft::WRL::ComPtr;
 namespace {
 using Vertex = visual::Vertex;
-struct Constants { XMFLOAT4X4 world, wvp, normalWorld, shadowVP[visual::shadowLayers]; XMFLOAT4 color, eyeAndHud; };
-static_assert(sizeof(Constants)%16==0,"D3D constant buffers require 16-byte alignment.");
+struct Constants {
+ XMFLOAT4X4 world,wvp,normalWorld,shadowVP[visual::shadowLayers]; XMFLOAT4 color,eyeAndHud;
+ XMFLOAT4 sun=visual::daylightSun;
+ XMFLOAT4 atmosphere{0,.85f,.006f,.57f}; // cloud phase, exposure, haze density, cloud threshold
+};
+static_assert(sizeof(Constants)==384,"Keep the HLSL Scene layout and offscreen shader diagnostics in sync.");
 static_assert(visual::shadowLayers==2,"The scene shader uses a whole-island and a detail shadow layer.");
 }
 bool Renderer::Check(HRESULT result, const wchar_t* operation) {
@@ -214,7 +218,7 @@ void Renderer::DrawSky() {
  // Draw once at the first flush, before world geometry or a portrait changes it.
  if (!skyPending_) return;
  skyPending_=false;
- Constants data{};
+ Constants data{}; data.atmosphere.x=atmospherePhase_;
  XMStoreFloat4x4(&data.world,XMMatrixTranspose(XMMatrixInverse(nullptr,XMLoadFloat4x4(&viewProjection_))));
  data.eyeAndHud={eye_.x,eye_.y,eye_.z,0};
  context_->UpdateSubresource(constants_.Get(),0,nullptr,&data,0,0);
@@ -222,6 +226,11 @@ void Renderer::DrawSky() {
  context_->VSSetShader(skyShader_.Get(),nullptr,0); context_->PSSetShader(skyPixel_.Get(),nullptr,0);
  context_->OMSetDepthStencilState(depthOff_.Get(),0);
  context_->Draw(3,0); ++drawCalls_; ++triangles_;
+}
+void Renderer::SetAtmosphereTime(double seconds) {
+ if (portrait_ || !std::isfinite(seconds) || seconds<0) return;
+ // A closed drift path avoids accumulated float error and a visible wrap seam.
+ atmospherePhase_=float(std::fmod(seconds,1800.0)*(6.283185307179586/1800.0));
 }
 void Renderer::SetCamera(const XMFLOAT3& eye,const XMFLOAT3& target) {
  eye_=eye;
@@ -245,7 +254,7 @@ bool Renderer::Project(const XMFLOAT3& world,XMFLOAT2& screen) const {
 void Renderer::Draw(const XMMATRIX& world,const XMMATRIX& vp,const XMFLOAT4& color,bool hud,UINT count,UINT start) {
  ++drawCalls_;
  triangles_+=count/3;
- Constants data{}; XMStoreFloat4x4(&data.world,XMMatrixTranspose(world)); XMStoreFloat4x4(&data.wvp,XMMatrixTranspose(world*vp));
+ Constants data{}; data.atmosphere.x=atmospherePhase_; XMStoreFloat4x4(&data.world,XMMatrixTranspose(world)); XMStoreFloat4x4(&data.wvp,XMMatrixTranspose(world*vp));
  const auto normal=XMMatrixTranspose(XMMatrixInverse(nullptr,world));
  XMStoreFloat4x4(&data.normalWorld,XMMatrixTranspose(normal));
  data.color=color; data.eyeAndHud={eye_.x,eye_.y,eye_.z,hud?1.f:0.f};
@@ -354,7 +363,7 @@ bool Renderer::FlushWorld() {
    context_->OMSetRenderTargets(0,nullptr,shadowDepth_[pass].Get());
    context_->ClearDepthStencilView(shadowDepth_[pass].Get(),D3D11_CLEAR_DEPTH,1,0);
   }
-  Constants data{}; XMStoreFloat4x4(&data.wvp,XMMatrixTranspose(XMLoadFloat4x4(shadowPass?&shadowProjection_[pass]:&viewProjection_)));
+  Constants data{}; data.atmosphere.x=atmospherePhase_; XMStoreFloat4x4(&data.wvp,XMMatrixTranspose(XMLoadFloat4x4(shadowPass?&shadowProjection_[pass]:&viewProjection_)));
   for (unsigned layer=0;layer<visual::shadowLayers;++layer)
    XMStoreFloat4x4(&data.shadowVP[layer],XMMatrixTranspose(XMLoadFloat4x4(&shadowProjection_[layer])));
   data.color={1,1,1,1}; data.eyeAndHud={eye_.x,eye_.y,eye_.z,portrait_?-1.f:0.f};
@@ -432,7 +441,7 @@ bool Renderer::FlushEffects() {
  D3D11_MAPPED_SUBRESOURCE mapped{};
  if (!Check(context_->Map(hudVertices_.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&mapped),L"Upload combat effects")) return false;
  std::memcpy(mapped.pData,effects_.data(),count*sizeof(Vertex)); context_->Unmap(hudVertices_.Get(),0);
- Constants data{}; XMStoreFloat4x4(&data.wvp,XMMatrixTranspose(XMLoadFloat4x4(&viewProjection_)));
+ Constants data{}; data.atmosphere.x=atmospherePhase_; XMStoreFloat4x4(&data.wvp,XMMatrixTranspose(XMLoadFloat4x4(&viewProjection_)));
  data.eyeAndHud={eye_.x,eye_.y,eye_.z,0}; context_->UpdateSubresource(constants_.Get(),0,nullptr,&data,0,0);
  context_->IASetVertexBuffers(0,1,hudVertices_.GetAddressOf(),&stride,&offset);
  context_->IASetInputLayout(layout_.Get()); context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);

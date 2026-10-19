@@ -36,6 +36,8 @@ void Simulation::Move(Vec2& p, Vec2 displacement, float radius) {
 }
 
 float Simulation::CameraDistance(Vec2 origin,float originY,Vec2 direction,float slope,float desired) const {
+  // Looking up retracts the boom before its near plane can enter the flat floor.
+  if (slope<-.0001f) desired=std::min(desired,std::max(.25f,(originY-.30f)/-slope));
   // Conservative camera bounds include pitched roofs, chimneys and tree crowns.
   for (float d=.3f;d<desired;d+=.1f) {
     const Vec2 p{origin.x+direction.x*d,origin.z+direction.z*d};
@@ -253,6 +255,10 @@ void Simulation::Update(float seconds,const Command& command) {
   for (auto& cooldown : cooldowns_) cooldown=std::max(0.f,cooldown-dt);
   potionCooldown_=std::max(0.f,potionCooldown_-dt);
   attackFlash_=std::max(0.f,attackFlash_-dt);
+  const bool steering=command.steerFacing && std::isfinite(command.facingYaw) && !command.haltMovement;
+  // Camera steering owns the body heading, including at rest and while strafing.
+  // Accepted attacks and active dashes keep their committed heading.
+  if (steering && attackFlash_==0 && !Dashing()) facing_=std::remainder(command.facingYaw,6.2831853f);
   const float length=Length(command.movement);
   const bool moving=std::isfinite(command.movement.x) && std::isfinite(command.movement.z) &&
     std::isfinite(length) && length>.001f;
@@ -300,9 +306,9 @@ void Simulation::Update(float seconds,const Command& command) {
     const auto before=player_;
     Move(player_,travel,.4f);
     const auto actual=Difference(player_,before);
-    // Locomotion follows travel, not a desired direction the body has not yet
-    // reached. Combat below still owns the facing of an accepted attack.
-    if (Length(actual)>.00001f) facing_=std::atan2(actual.x,actual.z);
+    // Ordinary locomotion follows actual travel. RMB keeps the camera heading
+    // while strafing or backing up; accepted combat below can commit a new heading.
+    if (!steering && Length(actual)>.00001f) facing_=std::atan2(actual.x,actual.z);
     movementDistance_+=Length(actual);
     if (!airborne) groundMovementDistance_+=Length(actual);
     // Remove velocity into the contact, preserving motion along the wall.
@@ -513,7 +519,7 @@ void Simulation::UpdateEnemy(Enemy& enemy,float dt) {
 
 std::string Simulation::Save() const {
   std::ostringstream out;
-  out << std::setprecision(9) << "MEDITERRANEAN 6\n" << player_.x << ' ' << player_.z << ' '
+  out << std::setprecision(9) << "MEDITERRANEAN 7\n" << player_.x << ' ' << player_.z << ' '
     << health_ << ' ' << facing_ << ' ' << static_cast<int>(quest_) << ' ' << gold_ << '\n';
   out << Potions() << ' ' << HasRewardWeapon() << ' ' << RewardWeaponEquipped() << ' ' << potionCooldown_ << '\n';
   out << static_cast<int>(anchorQuest_) << '\n';
@@ -534,7 +540,7 @@ bool Simulation::Load(const std::string& data) {
   std::istringstream input(data);
   std::string magic; int version=0, quest=0,potions=2,owned=0,equipped=0;
   Simulation candidate;
-  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>6) return false;
+  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>7) return false;
   // The shop counter occupies formerly walkable ground. Preserve old saves by
   // moving only actors overlapping that new prop to its nearest free edge.
   const auto migrateCounter=[&](Vec2& position,float radius) {
@@ -609,7 +615,8 @@ bool Simulation::Load(const std::string& data) {
   }
   if (version>=6) {
     std::string tag; if (!(input>>tag) || tag!="BUYBACK") return false;
-    for (int i=0;i<int(Item::Count);++i)
+    const int savedItems=version>=7?int(Item::Count):int(Item::Shoulders);
+    for (int i=0;i<savedItems;++i)
       if (!(input>>candidate.buyback_[i]) || candidate.buyback_[i]<0 || candidate.buyback_[i]>(Item(i)==Item::Potion?11:1)) return false;
   }
   if ((quest==int(Quest::Active) && defeated>0) || (quest>=2 && defeated==0) ||
@@ -617,7 +624,7 @@ bool Simulation::Load(const std::string& data) {
     potions+candidate.BuybackCount(Item::Potion)>2+looted+candidate.purchases_[0] || candidate.health_>candidate.MaxHealth() ||
     (candidate.anchorQuest_>=AnchorQuest::Return && defeated!=3)) return false;
   if (version>=4) {
-    if (!candidate.inventory_.Read(input,version==4?4:Inventory::gearCount) ||
+    if (!candidate.inventory_.Read(input,version>=7?Inventory::gearCount:version==4?4:6) ||
       !candidate.inventory_.MatchesCampaign(quest==3,candidate.HasWardArmor(),potions,candidate.purchases_[1]!=0,candidate.purchases_[2]!=0,candidate.buyback_) ||
       candidate.HasRewardWeapon()!=(owned!=0) ||
       candidate.RewardWeaponEquipped()!=(equipped!=0)) return false;
