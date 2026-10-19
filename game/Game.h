@@ -43,6 +43,7 @@ private:
   rpg::Simulation simulation_;
   unsigned audioGeneration_=0;
   float yaw_ = 0, pitch_ = .45f, distance_ = 10, time_ = 0;
+  double atmosphereTime_=0;
   motion::Actor playerPose_;
   std::vector<motion::Actor> enemyPoses_;
   animation::State playerAnimation_;

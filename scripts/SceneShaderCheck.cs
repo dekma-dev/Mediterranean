@@ -58,7 +58,13 @@ public static class SceneShaderCheck {
   if(a.Length!=b.Length) throw new ArgumentException("Image dimensions differ.");
   int maximum=0; for(int i=0;i<a.Length;i++) maximum=Math.Max(maximum,Math.Abs(a[i]-b[i])); return maximum;
  }
- public static byte[] Sky(byte[] vs,byte[] ps,int width,int height,float yaw,float elevation,float seconds,string path) {
+ public static double MeanDifference(byte[] a,byte[] b) {
+  if(a.Length!=b.Length) throw new ArgumentException("Image dimensions differ.");
+  double sum=0;
+  for(int i=0;i<a.Length;i++) if(i%4!=3) sum+=Math.Abs(a[i]-b[i]);
+  return sum/(a.Length/4*3);
+ }
+ public static byte[] Sky(byte[] vs,byte[] ps,int width,int height,float yaw,float elevation,float seconds,string path,float cloudThreshold=.57f) {
   var objects=new List<IntPtr>(); IntPtr memory=IntPtr.Zero;
   try {
    IntPtr device,context; uint level;
@@ -81,7 +87,7 @@ public static class SceneShaderCheck {
    for(int i=0;i<3;i++) { constants[i*4]=right[i]*h; constants[i*4+1]=up[i]*v; constants[i*4+3]=forward[i]; }
    constants[15]=1;
    constants[88]=-30; constants[89]=51; constants[90]=-24; constants[91]=.00465f;
-   constants[92]=(float)((seconds%1800)*Math.PI*2/1800); constants[93]=.85f; constants[94]=.006f; constants[95]=.57f;
+   constants[92]=(float)((seconds%1800)*Math.PI*2/1800); constants[93]=.85f; constants[94]=.006f; constants[95]=cloudThreshold;
    memory=Marshal.AllocHGlobal(constants.Length*4); Marshal.Copy(constants,0,memory,constants.Length);
    var initial=new Subresource{Data=memory}; var bd=new BufferDesc{Bytes=(uint)(constants.Length*4),Bind=4};
    Check(Method<BufferCreate>(device,3)(device,ref bd,ref initial,out buffer)); objects.Add(buffer);

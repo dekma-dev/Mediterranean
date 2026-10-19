@@ -1,5 +1,8 @@
 # Mediterranean Roadmap
 
+The sky refinement now uses a shallow ray-marched cloud volume with billows, internal shading, softer edges, a compact sun glow and a cooler horizon. Broad cloud shadows use interpolated vertex lighting; the 384-byte scene constants and GPU texture allocations are unchanged. Eight-entry compilation and isolated WARP opacity/drift/light-agreement diagnostics pass. Next acceptance is native Debug/Release suites, whole-world/portrait/combat inspection and target-resolution CPU/GPU measurements, especially sky march and vertex cost (manual checks 123–124). The native build is still blocked by the missing Visual Studio locator/toolchain. Flying through clouds, temporal reconstruction, full multiple scattering, weather/day-night systems and authored sky art remain future work.
+
+
 Four additional starting wearables and ten equipment slots are implemented in source, with visible shoulder guards, gloves, a pouch belt and a short cloak. Save version 7 migrates versions 1–6; new gear participates in real inventory and two-row buyback. RMB now turns the champion while stationary and keeps camera-facing body direction while strafing/backing. Next acceptance: build Debug/Release, run the expanded inventory/trade/interface/motion suites and existing regressions, inspect equipment diagnostics, then perform manual checks 121–122. The native toolchain remains unavailable; appearance, motion feel and submission cost are unverified.
 
 

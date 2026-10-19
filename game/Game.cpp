@@ -22,7 +22,7 @@ float EnemyStrike(const rpg::Enemy& enemy,bool active) {
 }
 
 void Game::Initialize() {
-  simulation_=rpg::Simulation{}; time_=0;
+  simulation_=rpg::Simulation{}; time_=0; atmosphereTime_=0;
   yaw_=0; pitch_=.45f; distance_=10;
   ResetMotion();
 }
@@ -32,7 +32,7 @@ bool Game::RestoreSnapshot(const std::string& snapshot) {
   CancelUiGesture();
   interface_.SetOnly(ui::Panel::None);
   interface_.previewYaw=0;
-  yaw_=0; pitch_=.45f; distance_=10; time_=0; ResetMotion();
+  yaw_=0; pitch_=.45f; distance_=10; time_=0; atmosphereTime_=0; ResetMotion();
   return true;
 }
 
@@ -143,6 +143,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   simulation_.Update(dt,command);
   if (dt<=0) return;
   time_+=dt;
+  atmosphereTime_=std::fmod(atmosphereTime_+dt,1800.0);
   if (command.restart || (wasDead && simulation_.Health()>0)) { ResetMotion(); return; }
   effects_.Advance(dt);
   for (std::size_t i=0;i<simulation_.VisualEventCount();++i) effects_.Emit(simulation_.VisualEvents()[i]);
@@ -242,7 +243,7 @@ void Game::UpdateCamera(float dt,bool immediate) {
 }
 
 void Game::Render(Renderer& renderer,bool showInterface) {
-  renderer.SetAtmosphereTime(time_);
+  renderer.SetAtmosphereTime(atmosphereTime_);
   if (!renderer.HasTerrainSurface() && !renderer.SetTerrainSurface(BuildTerrainSurface(simulation_.Map()),terrainSurfaceSize)) return;
   using DirectX::XMFLOAT3;
   using DirectX::XMFLOAT4;
