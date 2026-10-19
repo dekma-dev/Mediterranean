@@ -3,10 +3,16 @@ param([switch]$Preview)
 $ErrorActionPreference='Stop'
 $projectRoot=Split-Path -Parent $PSScriptRoot
 $header=[IO.File]::ReadAllText((Join-Path $projectRoot 'engine\SceneShader.h'))
-$start=$header.IndexOf('R"(')+3
-$end=$header.LastIndexOf(')";')
-if($start -lt 3 -or $end -lt $start) { throw 'SceneShader.h raw string not found.' }
-$source=$header.Substring($start,$end-$start)
+# C++ concatenates the raw literals used to stay below MSVC's token limit.
+# Reconstruct that same source for standalone D3D diagnostics.
+$parts=[regex]::Matches($header,'(?s)R"\((.*?)\)"')
+if($parts.Count -eq 0) { throw 'SceneShader.h raw strings not found.' }
+foreach($part in $parts) {
+ if([Text.Encoding]::UTF8.GetByteCount($part.Groups[1].Value) -gt 16000) {
+  throw 'Split the SceneShader.h raw literal before it exceeds MSVC''s 16 KiB token limit.'
+ }
+}
+$source=($parts | ForEach-Object { $_.Groups[1].Value }) -join ''
 Add-Type -Path (Join-Path $PSScriptRoot 'SceneShaderCheck.cs')
 $bytecode=@{}
 foreach($entry in @('VSMain','PSMain','VSWorld','VSShadow','VSSky','PSSky','VSEffect','PSEffect')) {

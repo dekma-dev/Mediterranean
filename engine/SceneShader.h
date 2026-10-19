@@ -1,4 +1,6 @@
 #pragma once
+// Keep each raw literal below MSVC's 16 KiB token limit. Adjacent literals
+// concatenate into the same shader source, without runtime loading or copies.
 inline constexpr char sceneShader[] = R"(
 cbuffer Scene : register(b0) {
  matrix world; matrix wvp; matrix normalWorld; matrix shadowVP[2];
@@ -185,6 +187,8 @@ float3 ShadowCoordinate(float4 position) {
  float2 uv=projected.xy*float2(.5,-.5)+.5;
  return float3(uv,projected.z);
 }
+)"
+R"(
 float2 ShadowGradient(float3 coordinate) {
  // Derivatives must be evaluated before the per-pixel coverage branch. Fit the
  // receiver plane in shadow UV space so adjacent PCF taps compare at its depth,

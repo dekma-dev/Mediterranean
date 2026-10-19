@@ -2,6 +2,10 @@
 
 This guide covers the native C++17 / DirectX 11 game on Windows.
 
+Startup crash recovery (2026-10-19): the access violation in `std::exchange` at `0x43340008` came from incompatible old/new game libraries after a shader compile failure. The shader now builds, and `build-local/Debug/RPGNative.exe` has been rebuilt and passed a hidden startup/render check. Stop the previous debug session and press F5 with RPGNative selected. If any future build fails, cancel launching the older executable; fix the first compiler error, then use **Build > Rebuild Solution** before debugging. Do not edit MSVC's standard-library headers or disable access-violation reporting.
+
+Current validation for this repair: Ninja Debug/Release pass fifteen of sixteen suites. The remaining ShadowTests detail/far transition failure is tracked in progress.md; the historical all-pass statements below describe earlier revisions.
+
 Jump physics: run, jump, release movement and observe landing. Momentum should continue through flight, with ground braking starting at contact. Takeoff no longer gets an extra frame of ground acceleration, and landing frames count only grounded walking distance for gait/audio. Manual check 98 covers live feel; `landing-physics-validation.log` records automated checks in each Ninja build directory.
 
 Audio: launch the visible game for music and gameplay sounds. Escape provides separate Music/Effects +/- controls; 0 mutes a channel. Initial levels are 35% music and 70% effects, retained only during the session. Alt-Tab/minimize suspends playback. If no audio device can initialize, the menu shows "Audio unavailable" and gameplay continues; restart after changing a failed output device. Hidden smoke/benchmark runs stay silent. `AudioTests` writes `dawnwatch-music.wav` and `effects-preview.wav` and runs a muted device check; logs are `audio-validation.log` in each Ninja directory. Manual checks 93–95 cover listening and lifecycle behavior.
