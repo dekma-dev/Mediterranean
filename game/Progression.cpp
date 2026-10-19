@@ -138,9 +138,9 @@ std::string Simulation::InteractionPrompt() const {
   if (sparring_) return "E END SPARRING ROUND";
   if (Channeling()) return "STABILIZING - STAND STILL";
   if (Distance(player_,questGiver)<=3) {
-    if (quest_==Quest::Available) return "E ACCEPT FRONTIER PATROL";
-    if (quest_==Quest::Return || anchorQuest_==AnchorQuest::Return) return "E CLAIM QUEST REWARD";
-    if (anchorQuest_==AnchorQuest::Available) return "E ACCEPT ASTRAL ANCHOR QUEST";
+    if (quest_==Quest::Available) return "E READ FRONTIER PATROL";
+    if (quest_==Quest::Return || anchorQuest_==AnchorQuest::Return) return "E DISCUSS QUEST REWARD";
+    if (anchorQuest_==AnchorQuest::Available) return "E READ ASTRAL ANCHOR QUEST";
     return "E SPEAK TO BEACON KEEPER";
   }
   if (anchorQuest_==AnchorQuest::Active && DefeatedCount()==3 &&

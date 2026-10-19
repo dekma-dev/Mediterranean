@@ -4,6 +4,12 @@ This is an original single-player campaign on one island. Allods Online is the p
 
 ## Campaign
 
+E beside the gold beacon keeper opens a dialogue on the left. Read the full story with Previous/Next; objectives and reward details stay visible on each page. Accept quest starts an offered assignment. Return after finishing its objectives, press E, then choose Complete quest to receive the listed reward. Progress reminders have no completion action; the completed page confirms delivery. The blade enters the bag, while the ward armor equips and returns the previous chest item to the bag. Both hand-ins restore health. Decline or Later leaves progress untouched.
+
+Reading stops local movement, abilities and camera orbit while the world keeps updating. E/X closes the conversation; Escape switches to the normal live menu. Switching panels, losing focus, leaving the keeper's range, death, load and reset close the transient conversation. A stale button, incomplete quest, invalid keeper interaction or full reward bag cannot grant items, gold or XP. Saving stores quest progress, not the open dialogue or a pending click.
+
+Authored dialogue is in [quests/](../quests/README.md): four plain text stages per quest, embedded by CMake when building. Titles, objectives and reward definitions share the same catalog used by the journal. Text changes require a rebuild and do not change existing saved progress.
+
 | Stage | Objective | Reward |
 | --- | --- | --- |
 | Frontier patrol | Accept at the gold beacon, defeat any raider, return | 25 gold, 60 XP, watchguard blade |

@@ -238,32 +238,67 @@ void Simulation::Interact() {
       message_="Move near the gold beacon, astral anchor, or loot bag and press E.";
     return;
   }
-  if (quest_==Quest::Available) {
-    const bool alreadyDefeated=std::any_of(enemies_.begin(),enemies_.end(),[](const Enemy& enemy) { return enemy.health<=0; });
-    quest_=alreadyDefeated?Quest::Return:Quest::Active;
-    message_=alreadyDefeated?"Patrol threat already defeated. Press E to claim the reward.":
+  if (!CanTalkToKeeper()) { message_="Stand beside the beacon keeper to speak."; return; }
+  StopMovement();
+  questDialogue_=quest_!=Quest::Complete?QuestId::Patrol:QuestId::Anchor;
+  message_="Beacon Keeper: read the assignment and its rewards.";
+}
+
+bool Simulation::CanTalkToKeeper() const {
+  return health_>0 && Grounded() && !Dashing() && !sparring_ &&
+    Length(Difference(player_,questGiver))<=3 && HasLineOfSight(player_,questGiver);
+}
+
+QuestStage Simulation::DialogueStage() const {
+  if (questDialogue_==QuestId::Patrol)
+    return quest_==Quest::Available?QuestStage::Offer:quest_==Quest::Active?QuestStage::Progress:
+      quest_==Quest::Return?QuestStage::TurnIn:QuestStage::Complete;
+  if (questDialogue_==QuestId::Anchor)
+    return anchorQuest_==AnchorQuest::Available?QuestStage::Offer:anchorQuest_==AnchorQuest::Active?QuestStage::Progress:
+      anchorQuest_==AnchorQuest::Return?QuestStage::TurnIn:QuestStage::Complete;
+  return QuestStage::Progress;
+}
+
+QuestAction Simulation::QuestPrimaryAction() const {
+  if (questDialogue_==QuestId::Patrol)
+    return quest_==Quest::Available?QuestAction::AcceptPatrol:quest_==Quest::Return?QuestAction::CompletePatrol:QuestAction::None;
+  if (questDialogue_==QuestId::Anchor)
+    return anchorQuest_==AnchorQuest::Available?QuestAction::AcceptAnchor:anchorQuest_==AnchorQuest::Return?QuestAction::CompleteAnchor:QuestAction::None;
+  return QuestAction::None;
+}
+
+const char* Simulation::QuestConfirmStatus() const {
+  if (questDialogue_==QuestId::None || !CanTalkToKeeper()) return "Return to the beacon keeper.";
+  if (QuestPrimaryAction()==QuestAction::None)
+    return DialogueStage()==QuestStage::Complete?"Reward received. Thank you for your service.":"Complete the objectives, then return.";
+  if (DialogueStage()==QuestStage::TurnIn && inventory_.UsedSlots()>=Inventory::capacity)
+    return "Make one free bag slot to claim your reward.";
+  return "READY";
+}
+
+void Simulation::ConfirmQuest(QuestAction action) {
+  if (action==QuestAction::Close) { CloseQuestDialogue(); return; }
+  if (action==QuestAction::None || action!=QuestPrimaryAction() || !CanTalkToKeeper()) return;
+  if (std::string(QuestConfirmStatus())!="READY") { message_=QuestConfirmStatus(); return; }
+  if (action==QuestAction::AcceptPatrol) {
+    quest_=DefeatedCount()>0?Quest::Return:Quest::Active;
+    message_=quest_==Quest::Return?"Patrol threat already defeated. You may complete the quest.":
       "Patrol accepted: defeat one raider beyond the outpost.";
-  }
-  else if (quest_==Quest::Return) {
-    const int previousLevel=Level();
-    if (!inventory_.Add(Item::Watchguard)) { message_="Make room in your bag to claim the blade."; return; }
-    quest_=Quest::Complete; gold_+=25; anchorQuest_=AnchorQuest::Available;
-    Emit(FeedbackKind::Experience,player_,60); RestoreForLevel(previousLevel); health_=MaxHealth();
-    message_="Patrol reward: blade, 25 gold, 60 XP. G equip. E for the next quest.";
-  }
-  else if (quest_==Quest::Active) message_="Defeat one raider, then return here.";
-  else if (anchorQuest_==AnchorQuest::Available) {
+  } else if (action==QuestAction::AcceptAnchor) {
     anchorQuest_=AnchorQuest::Active;
-    message_="Secure the anchor: defeat the camp and stabilize the crystal in the north.";
-  } else if (anchorQuest_==AnchorQuest::Return) {
+    message_="Secure the anchor: defeat the camp and stabilize the northern crystal.";
+  } else {
+    const auto& reward=DescribeQuest(questDialogue_);
+    if (!inventory_.Add(reward.item)) { message_="Make room in your bag to claim the reward."; return; }
     const int previousLevel=Level();
-    if (!inventory_.Add(Item::Ward)) { message_="Make room in your bag to claim the armor."; return; }
-    inventory_.Equip(Item::Ward);
-    anchorQuest_=AnchorQuest::Complete; gold_+=50;
-    Emit(FeedbackKind::Experience,player_,120); RestoreForLevel(previousLevel); health_=MaxHealth();
-    message_="Outpost secured: 50 gold, 120 XP, ward armor. Damage taken reduced by 2.";
-  } else if (anchorQuest_==AnchorQuest::Active) message_="Clear the raider camp, then press E at the northern crystal.";
-  else message_="Dawnwatch is secure. The eastern training post offers repeatable sparring.";
+    if (action==QuestAction::CompletePatrol) { quest_=Quest::Complete; anchorQuest_=AnchorQuest::Available; }
+    else if (action==QuestAction::CompleteAnchor) anchorQuest_=AnchorQuest::Complete;
+    if (reward.autoEquip) inventory_.Equip(reward.item);
+    gold_+=reward.gold;
+    Emit(FeedbackKind::Experience,player_,reward.experience);
+    RestoreForLevel(previousLevel); health_=MaxHealth();
+    message_="Quest completed. Your reward has been delivered.";
+  }
 }
 
 void Simulation::Update(float seconds,const Command& command) {
@@ -286,7 +321,7 @@ void Simulation::Update(float seconds,const Command& command) {
   trainer_.hitFlash=std::max(0.f,trainer_.hitFlash-dt);
   sparringReportTime_=std::max(0.f,sparringReportTime_-dt);
   if (health_<=0) {
-    jumpBuffer_=0;
+    CloseQuestDialogue(); jumpBuffer_=0;
     if (command.respawn) Respawn();
     else message_="You have fallen. Enter returns to Dawnwatch with progress retained. R resets all.";
     return;
@@ -391,6 +426,7 @@ void Simulation::Update(float seconds,const Command& command) {
   // purchase or training request on the activation frame sees an idle actor.
   if (command.ability==2 && !command.haltMovement) UseAbility(2,dt);
   if (command.interact) Interact();
+  if (!command.interact) ConfirmQuest(command.questAction);
   if (command.equipWeapon) {
     const auto next=HasRewardWeapon() && !RewardWeaponEquipped()?Item::Watchguard:Item::Starter;
     if (inventory_.Equip(next)) message_=std::string(DescribeItem(next).name)+" equipped.";
@@ -471,6 +507,7 @@ void Simulation::Update(float seconds,const Command& command) {
       }
     }
   }
+  if (questDialogue_!=QuestId::None && !CanTalkToKeeper()) CloseQuestDialogue();
 }
 
 void Simulation::SeparateEnemies(float dt) {

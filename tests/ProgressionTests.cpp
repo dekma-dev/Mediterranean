@@ -8,7 +8,13 @@ void Require(bool value,const char* message) {
   if (!value) { std::cerr << "FAIL: " << message << '\n'; std::exit(1); }
 }
 float Distance(rpg::Vec2 a,rpg::Vec2 b) { return std::hypot(a.x-b.x,a.z-b.z); }
-void Interact(rpg::Simulation& game) { rpg::Command c; c.interact=true; game.Update(.05f,c); }
+void Interact(rpg::Simulation& game) {
+  rpg::Command c; c.interact=true; game.Update(.05f,c);
+  if (game.QuestDialogue()!=rpg::QuestId::None) {
+    c={}; c.questAction=game.QuestPrimaryAction(); game.Update(.01f,c);
+    c.questAction=rpg::QuestAction::Close; game.Update(.01f,c);
+  }
+}
 void Go(rpg::Simulation& game,rpg::Vec2 destination,float stop=.5f) {
   const auto route=game.Map().FindPath(game.Player(),destination,.4f);
   Require(!route.empty(),"Test destination must have a route");

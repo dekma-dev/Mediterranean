@@ -71,6 +71,26 @@ struct Canvas {
    ++row;
   }
  }
+ std::vector<std::string> Lines(float width,const std::string& text,float size) const {
+  std::vector<std::string> result;
+  std::istringstream paragraphs(text); std::string paragraph;
+  while (std::getline(paragraphs,paragraph)) {
+   std::istringstream words(paragraph); std::string word,line;
+   while (words>>word) {
+    const auto candidate=line.empty()?word:line+" "+word;
+    if (Width(candidate,size)>width && !line.empty()) { result.push_back(line); line.clear(); }
+    // Keep unusually long authored words inside the dialogue frame as well.
+    if (Width(word,size)>width) {
+     for (char ch : word) {
+      if (!line.empty() && Width(line+ch,size)>width) { result.push_back(line); line.clear(); }
+      line+=ch;
+     }
+    } else line+=line.empty()?word:" "+word;
+   }
+   result.push_back(line);
+  }
+  return result;
+ }
  void Triangle(Point a,Point b,Point c,Color tint) { r.DrawHudTriangle(P(a.x,a.y),P(b.x,b.y),P(c.x,c.y),tint); }
  void Line(float x,float y,float tx,float ty,float width,Color tint) {
   const float length=std::hypot(tx-x,ty-y); if (length<.01f) return;
@@ -479,7 +499,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  }
  c.Text(22,674,std::to_string(s.Gold())+" gold",16,gold);
  c.Text(22,695,"WASD  Move     RMB  Orbit     F11  Display",11,muted);
- if (!characterOpen) c.Wrap(22,578,405,s.Message(),14,ink,3);
+ if (!characterOpen && panel!=Panel::Quest) c.Wrap(22,578,405,s.Message(),14,ink,3);
  if (panel==Panel::None && s.Health()>0) {
   const auto prompt=s.InteractionPrompt();
   if (!prompt.empty()) { const float w=std::min(510.f,c.Width(prompt,14)+30); c.Frame({640-w/2,609,w,27}); c.Center(640-w/2,614,w,prompt,14,gold); }
@@ -631,6 +651,56 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   }
   c.Wrap(490,582,465,merchantNotice.empty()?"Unequip gear before selling. Buyback is saved until reclaimed or R resets the expedition.":merchantNotice,12,ink,2);
   c.Text(490,624,"E or X closes trade. C opens your equipment.",12,muted);
+ } else if (panel==Panel::Quest) {
+  // A left-side conversation keeps the world visible, but captures gameplay input.
+  regions_.clear(); blockWindow({16,110,450,526});
+  close({429,121,24,24},Panel::Quest);
+  const auto id=s.QuestDialogue(); const auto stage=s.DialogueStage();
+  const auto& quest=rpg::DescribeQuest(id);
+  const int textKey=int(id)*4+int(stage);
+  if (questTextKey_!=textKey) { questPage=0; questTextKey_=textKey; }
+  c.Text(40,130,quest.speaker,14,gold);
+  const float titleSize=std::min(21.f,21.f*400/std::max(1.f,c.Width(quest.title,21)));
+  c.Text(40,164,quest.title,titleSize,ink);
+  const char* heading=stage==rpg::QuestStage::Offer?"QUEST OFFER":stage==rpg::QuestStage::Progress?"IN PROGRESS":
+    stage==rpg::QuestStage::TurnIn?"READY TO COMPLETE":"QUEST COMPLETED";
+  c.Text(40,202,heading,11,gold);
+  const auto lines=c.Lines(400,rpg::QuestStory(id,stage),16);
+  constexpr int rows=7;
+  const int pages=std::max(1,(int(lines.size())+rows-1)/rows);
+  questPage=std::clamp(questPage,0,pages-1);
+  for (int row=0;row<rows && questPage*rows+row<int(lines.size());++row)
+    c.Text(40,223+row*21.f,lines[questPage*rows+row],16,ink);
+  if (pages>1) {
+   button({40,374,73,25},"Previous",Action::QuestPage,-1,questPage>0);
+   c.Center(130,380,220,"Page "+std::to_string(questPage+1)+" / "+std::to_string(pages),12,muted);
+   button({367,374,73,25},"Next",Action::QuestPage,1,questPage+1<pages);
+  }
+  c.Frame({34,408,414,66},{.045f,.085f,.07f,1});
+  const int required=id==rpg::QuestId::Patrol?1:3;
+  c.Text(46,416,"OBJECTIVES  /  Raiders "+std::to_string(std::min(required,s.DefeatedCount()))+" / "+std::to_string(required)+
+    (id==rpg::QuestId::Anchor && s.AnchorState()>=rpg::AnchorQuest::Return?"  /  Anchor stable":""),12,gold);
+  c.Wrap(46,436,390,quest.objective,14,ink,2);
+  c.Frame({34,484,414,70},{.07f,.12f,.08f,1},gold);
+  if (rpg::ValidItem(quest.item)) {
+   Icon(c,{46,496,42,45},quest.item);
+   c.Text(100,492,std::string(stage==rpg::QuestStage::Complete?"RECEIVED  /  ":"REWARD  /  ")+
+     std::to_string(quest.gold)+" gold  /  "+std::to_string(quest.experience)+" XP",13,gold);
+   c.Text(100,512,Describe(quest.item).name,16,ink);
+   const auto& item=Describe(quest.item);
+   const auto stats=item.slot==rpg::GearSlot::Weapon?
+     "Base strike "+std::to_string(int(item.strike))+" / Heavy "+std::to_string(int(item.heavy))+"  -  In your bag":
+     "Protection "+std::to_string(int(item.armor))+"  -  Equipped on completion";
+   c.Text(100,534,stats,11,muted);
+  }
+  const auto action=s.QuestPrimaryAction();
+  const std::string status=s.QuestConfirmStatus();
+  c.Wrap(40,561,400,status=="READY"?"Read the assignment and rewards before confirming.":status,13,muted,1);
+  if (action!=rpg::QuestAction::None) {
+   button({38,590,160,34},stage==rpg::QuestStage::Offer?"Decline":"Later",Action::Close,int(Panel::Quest));
+   button({242,590,202,34},stage==rpg::QuestStage::Offer?"Accept quest":"Complete quest",
+     Action::QuestConfirm,int(action),status=="READY");
+  } else button({242,590,202,34},"Close",Action::Close,int(Panel::Quest));
  } else if (panel!=Panel::None) {
   c.RectFill({0,0,1280,720},{0,0,0,panel==Panel::Menu?.16f:.30f}); regions_.clear();
   if (panel==Panel::Menu) {
@@ -730,14 +800,16 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    if (hasWaypoint) button({833,562,286,39},"Clear waypoint",Action::ClearWaypoint);
    c.Text(156,619,"Roads and markers follow the playable map. Island: 34 x 38 m.",13,muted);
   } else {
-   c.Frame({208,158,397,339}); c.Text(229,177,"01   Patrol the frontier",22);
+   const auto& patrol=rpg::DescribeQuest(rpg::QuestId::Patrol);
+   const auto& anchor=rpg::DescribeQuest(rpg::QuestId::Anchor);
+   c.Frame({208,158,397,339}); c.Text(229,177,std::string("01   ")+patrol.title,22);
    c.Text(229,216,s.QuestState()==rpg::Quest::Complete?"COMPLETED":"FRONTIER PATROL",13,gold);
-   c.Wrap(229,257,348,"Speak to the gold beacon keeper. Defeat one raider north of the village, then return to claim your reward.",17,ink,5);
-   c.Text(229,390,"REWARD",13,gold); c.Text(229,419,"25 gold  /  60 XP\nWatchguard blade",17);
-   c.Frame({622,158,450,339}); c.Text(643,177,"02   Secure the astral anchor",22);
+   c.Wrap(229,257,348,patrol.objective,17,ink,5);
+   c.Text(229,390,"REWARD",13,gold); c.Text(229,419,std::to_string(patrol.gold)+" gold  /  "+std::to_string(patrol.experience)+" XP\n"+Describe(patrol.item).name,17);
+   c.Frame({622,158,450,339}); c.Text(643,177,std::string("02   ")+anchor.title,22);
    c.Text(643,216,s.AnchorState()==rpg::AnchorQuest::Complete?"COMPLETED":s.AnchorState()==rpg::AnchorQuest::Locked?"UNLOCKS AFTER THE PATROL":"ASTRAL ANCHOR",13,gold);
-   c.Wrap(643,257,402,"Clear all three raiders, stabilize the northern crystal for three seconds, then return to the keeper.",17,ink,5);
-   c.Text(643,390,"REWARD",13,gold); c.Text(643,419,"50 gold  /  120 XP\nAstral ward armor",17);
+   c.Wrap(643,257,402,anchor.objective,17,ink,5);
+   c.Text(643,390,"REWARD",13,gold); c.Text(643,419,std::to_string(anchor.gold)+" gold  /  "+std::to_string(anchor.experience)+" XP\n"+Describe(anchor.item).name,17);
    button({734,545,338,43},"Show objective on the atlas",Action::Map);
    c.Text(209,557,"Raiders defeated: "+std::to_string(s.DefeatedCount())+" / 3",17,muted);
    c.Text(209,606,"The world remains active while reading the journal.",14,muted);

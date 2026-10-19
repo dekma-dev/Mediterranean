@@ -1,5 +1,6 @@
 #include "game/Game.h"
 #include "tests/DashFixture.h"
+#include "tests/QuestFixture.h"
 #include "game/Interface.h"
 #include "game/CharacterView.h"
 #include "game/TerrainSurface.h"
@@ -193,6 +194,80 @@ int main() {
   const bool initialized=renderer.Initialize(window.GetHandle(),1280,720);
   if (!initialized) std::wcerr<<renderer.Error()<<L'\n';
   Require(initialized,"screen renderer initialization failed.");
+  // Quest conversations keep rewards/objectives visible and paginate all prose.
+  for (const auto size : {std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
+    Require(renderer.Resize(size.first,size.second),"Quest dialogue resize");
+    for (int scenario=0;scenario<4;++scenario) {
+      rpg::Simulation state; ui::Interface dialogue;
+      if (scenario==1) Require(state.Load(test::patrolReturn),"Patrol hand-in UI fixture");
+      if (scenario==2) Require(state.Load(test::anchorOffer),"Anchor offer UI fixture");
+      if (scenario==3) Require(state.Load(test::anchorReturn),"Anchor hand-in UI fixture");
+      rpg::Command talk; talk.interact=true; state.Update(.01f,talk); dialogue.SetOnly(ui::Panel::Quest);
+      const auto snapshot=state.Save(); const ui::Layout layout(float(size.first),float(size.second));
+      const auto click=[&](float x,float y) {
+        return dialogue.Pointer(layout.x+x*layout.scale,layout.y+y*layout.scale,
+          float(size.first),float(size.second),true,false);
+      };
+      const auto render=[&](const wchar_t* stage) {
+        renderer.BeginFrame(); dialogue.Render(renderer,state,0,false);
+        const auto path=L"quest-dialogue-"+std::to_wstring(scenario)+L"-"+stage+L"-"+
+          std::to_wstring(size.first)+L"x"+std::to_wstring(size.second)+L".png";
+        Require(renderer.Capture(path) && renderer.EndFrame(false),"Quest dialogue capture");
+      };
+      render(L"preview");
+      Require(state.Save()==snapshot && dialogue.CapturesMovement(),"Reading must preserve progress and capture local movement");
+      Require(click(700,300).action==ui::Action::None && click(550,681).action==ui::Action::None,
+        "Quest dialogue must prevent clicks reaching the world and action bar");
+      Require(click(60,380).action==ui::Action::None,"Previous page is disabled on the first page");
+      auto next=click(400,385);
+      Require(next.action==ui::Action::QuestPage && next.value==1,"Detailed offers/turn-ins must expose a next page");
+      dialogue.questPage=1000; render(L"last-page");
+      Require(dialogue.questPage>0 && click(400,385).action==ui::Action::None,"The last page must clamp and disable Next");
+      Require(click(60,385).action==ui::Action::QuestPage,"Previous must remain reachable on the last page");
+      auto confirm=click(340,608);
+      Require(confirm.action==ui::Action::QuestConfirm &&
+        confirm.value==int(state.QuestPrimaryAction()),"Scaled confirmation must target the displayed quest and stage");
+      rpg::Command chosen; chosen.questAction=rpg::QuestAction(confirm.value); state.Update(.01f,chosen);
+      render(L"result");
+      Require(dialogue.questPage==0 && click(340,608).action==ui::Action::Close,
+        "Accepted/completed dialogue must return to page one and replace the confirmation with Close");
+      const auto result=state.Save(); state.Update(.01f,chosen);
+      Require(state.Save()==result,"A stale UI confirmation must not repeat the transaction");
+    }
+  }
+  Require(renderer.Resize(1280,720),"Restore size after quest captures");
+  {
+    Game game; game.Initialize();
+    Input input; Input::Frame frame; frame.focused=true; frame.client={600,300}; frame.screen=frame.client;
+    const auto step=[&]() {
+      input.Update(frame); game.Update(.01,input,0);
+      renderer.BeginFrame(); game.Render(renderer); Require(renderer.EndFrame(false),"Quest input render");
+    };
+    step(); frame.down[VK_RBUTTON]=true; step();
+    Require(game.WantsMouseLook(),"Quest fixture must start with RMB orbit");
+    frame.down['E']=true; step();
+    Require(game.State().QuestDialogue()==rpg::QuestId::Patrol && !game.WantsMouseLook() &&
+      game.State().QuestState()==rpg::Quest::Available,"E must open the offer and release RMB without accepting");
+    const auto standing=game.State().Player(); frame.down['W']=frame.down['3']=true; step();
+    Require(game.State().Player().x==standing.x && game.State().Player().z==standing.z &&
+      game.State().Cooldown(2)==0,"Reading or holding E must not move, cast, or accept");
+    frame.down['W']=frame.down['3']=frame.down[VK_RBUTTON]=false;
+    frame.client={340,608}; frame.down[VK_LBUTTON]=true; step();
+    Require(game.State().QuestState()==rpg::Quest::Active && game.State().Gold()==0,
+      "Clicking Accept must dispatch a real quest action");
+    frame.down[VK_LBUTTON]=false; frame.down['E']=false; step();
+    frame.down[VK_ESCAPE]=true; step();
+    Require(game.State().QuestDialogue()==rpg::QuestId::None,"Escape must dismiss conversation without reopening it");
+    frame.down[VK_ESCAPE]=false; step(); frame.down[VK_ESCAPE]=true; step();
+    frame.down[VK_ESCAPE]=false; frame.down['E']=true; step();
+    Require(game.State().QuestDialogue()==rpg::QuestId::Patrol,"The keeper must reopen an active reminder");
+    frame.focused=false; step();
+    Require(game.State().QuestDialogue()==rpg::QuestId::None,"Focus loss must discard dialogue confirmation state");
+    const auto saved=game.State().Save();
+    Require(game.RestoreSnapshot(saved) && game.State().QuestDialogue()==rpg::QuestId::None,
+      "Reload must not replay a conversation or pending click");
+  }
+
   {
     // Older saves can contain a pending swing while the player is already dead.
     // Render immediately after load, before the first Update.

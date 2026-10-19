@@ -2,6 +2,8 @@
 
 The project uses C++17 and a custom DirectX 11 engine for Windows PC. The active tree is native-only. The original JavaScript prototype is preserved in Git history and on the local `codex/archive-js-prototype` branch.
 
+Quest acceptance and hand-in now use a left-side dialogue with paginated story, objectives and reward descriptions. Press E at the keeper, then choose Accept quest or Complete quest. Editable story files live in [quests/](quests/README.md); rebuild to embed text changes. Native build and visual acceptance remain pending the C++ toolchain.
+
 ## Native build and launch
 
 For step-by-step setup, launch, breakpoints, controls, saves, and troubleshooting, see [Starting and Debugging](START_AND_DEBUG.md).
@@ -66,7 +68,7 @@ The environment connects the village plaza, dock, training ground and anchor wit
 | Tab | Cycle nearby living targets |
 | 1 / 2 | Strike / heavy strike (also interrupts enemy windups) |
 | 3 / 4 | Dash to selected enemy / heal |
-| E | Talk, loot, stabilize the anchor, browse/close the shop, or start/stop sparring |
+| E | Open/close quest dialogue, loot, stabilize the anchor, browse/close the shop, or start/stop sparring |
 | Q / G | Use a healing potion / switch owned swords |
 | F2 | Hide / restore the HUD for visual inspection |
 | F3 | Show completed-frame draw calls, GPU time and mesh memory |

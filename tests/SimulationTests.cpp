@@ -45,7 +45,9 @@ int main() {
 
   game=rpg::Simulation{};
   command={}; command.interact=true; game.Update(.05f,command);
-  Require(game.QuestState()==rpg::Quest::Active,"Beacon must offer patrol");
+  Require(game.QuestState()==rpg::Quest::Available && game.QuestDialogue()==rpg::QuestId::Patrol,"Beacon must offer a dialogue before accepting");
+  command={}; command.questAction=rpg::QuestAction::AcceptPatrol; game.Update(.01f,command);
+  Require(game.QuestState()==rpg::Quest::Active,"Accept button must start the patrol");
   command={}; command.nextTarget=true; game.Update(.05f,command);
   Require(game.Target()>=0,"Tab must select a living enemy");
   for (int i=0;i<1000 && game.QuestState()!=rpg::Quest::Return;++i) {
@@ -64,7 +66,9 @@ int main() {
     game.Update(.05f,command);
   }
   command={}; command.interact=true; game.Update(.05f,command);
-  Require(game.QuestState()==rpg::Quest::Complete && game.Gold()==25,"Return must award patrol reward");
+  Require(game.QuestState()==rpg::Quest::Return && game.Gold()==0,"Talking must preview the reward without granting it");
+  command={}; command.questAction=rpg::QuestAction::CompletePatrol; game.Update(.01f,command);
+  Require(game.QuestState()==rpg::Quest::Complete && game.Gold()==25,"Complete button must award patrol reward");
   game.Update(.05f,command);
   Require(game.Gold()==25,"Repeated interaction must not duplicate reward");
 

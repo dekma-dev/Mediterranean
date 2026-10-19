@@ -3,8 +3,8 @@
 #include <vector>
 class Renderer;
 namespace ui {
-enum class Panel { None,Menu,Character,Inventory,Map,Journal,Merchant,Build };
-enum class Action { None,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview,MusicVolume,EffectsVolume,Build,SelectTalent,LearnTalent };
+enum class Panel { None,Menu,Character,Inventory,Map,Journal,Merchant,Build,Quest };
+enum class Action { None,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview,MusicVolume,EffectsVolume,Build,SelectTalent,LearnTalent,QuestConfirm,QuestPage };
 using Item=rpg::Item;
 struct Rect { float x,y,w,h; bool Contains(float px,float py) const { return px>=x && py>=y && px<x+w && py<y+h; } };
 struct Layout {
@@ -45,6 +45,7 @@ public:
   Panel panel=Panel::None;
   bool characterOpen=false,inventoryOpen=false;
   int selectedTalent=0;
+  int questPage=0;
   Item selected=Item::Starter;
   int selectedBag=-1;
   bool fullscreen=true,hasWaypoint=false;
@@ -59,6 +60,7 @@ public:
 private:
   std::vector<Region> regions_;
   unsigned renderedState_=~0u;
+  int questTextKey_=-1;
   float renderedWidth_=0,renderedHeight_=0;
   float mouseX_=-100,mouseY_=-100;
   int dragBag_=-1,dragGear_=-1;
