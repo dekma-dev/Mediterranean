@@ -400,10 +400,13 @@ int Engine::Run() {
 
     if (!running_) break;
 
-    input_.Update(window_->GetHandle());
+    if (window_->ConsumeMouseLookCancellation()) game_->CancelUiGesture();
+    const auto mouse=window_->ConsumeMouseMotion();
+    input_.Update(window_->GetHandle(),window_->MouseLook(),mouse.x,mouse.y);
     if (IsIconic(window_->GetHandle()) || GetForegroundWindow() != window_->GetHandle()) {
       if(audio_) audio_->Suspend(true);
       game_->SuspendInput();
+      window_->SetMouseLook(false);
       window_->ConsumeWheel();
       WaitMessage();
       QueryPerformanceCounter(&last);
@@ -419,6 +422,7 @@ int Engine::Run() {
     Tick(std::min(deltaSeconds, 0.05));
   }
 
+  window_->SetMouseLook(false);
   return exitCode_;
 }
 
@@ -429,6 +433,7 @@ void Engine::Tick(double deltaSeconds) {
   GetClientRect(window_->GetHandle(), &client);
   if (renderer_->Width()!=client.right || renderer_->Height()!=client.bottom) game_->CancelUiGesture();
   if (!renderer_->Resize(client.right, client.bottom)) {
+    window_->SetMouseLook(false);
     MessageBoxW(window_->GetHandle(), renderer_->Error().c_str(), L"Renderer error", MB_OK | MB_ICONERROR);
     exitCode_ = 1;
     running_ = false;
@@ -449,11 +454,13 @@ void Engine::Tick(double deltaSeconds) {
     if (!renderer_->Resize(client.right,client.bottom)) { error_=renderer_->Error(); exitCode_=1; running_=false; return; }
   }
   game_->SetFullscreenState(window_->Fullscreen());
-  if (game_->QuitRequested()) { running_=false; return; }
+  if (game_->QuitRequested()) { window_->SetMouseLook(false); running_=false; return; }
+  if (!window_->SetMouseLook(game_->WantsMouseLook())) game_->CancelUiGesture();
 
   renderer_->BeginFrame();
   game_->Render(*renderer_);
   if (!renderer_->EndFrame()) {
+    window_->SetMouseLook(false);
     MessageBoxW(window_->GetHandle(), renderer_->Error().c_str(), L"Renderer error", MB_OK | MB_ICONERROR);
     exitCode_ = 1;
     running_ = false;

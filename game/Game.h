@@ -18,6 +18,7 @@ public:
   std::wstring WindowTitle() const;
   bool TakeFullscreenRequest() { const bool value=fullscreenRequest_; fullscreenRequest_=false; return value; }
   bool QuitRequested() const { return quitRequested_; }
+  bool WantsMouseLook() const { return orbiting_; }
   void SetFullscreenState(bool enabled) { interface_.fullscreen=enabled; }
   void OpenPanel(ui::Panel panel) { interface_.SetOnly(panel); }
   void ShowPanel(ui::Panel panel) { interface_.Show(panel); }

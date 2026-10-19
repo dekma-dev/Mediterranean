@@ -7,6 +7,7 @@
 #include <cmath>
 #include <sstream>
 #include <iomanip>
+#include <utility>
 
 namespace ui {
 namespace {
@@ -235,23 +236,43 @@ void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoin
   const auto p=c.P(a.x,a.y);
   c.r.DrawRoundMapArtwork(p.x,p.y,a.w*c.layout.scale/c.r.Width(),a.h*c.layout.scale/c.r.Height());
  } else {
- c.RectFill(a,{.16f,.26f,.30f,1});
+ c.RectFill(a,{.88f,.80f,.63f,1});
  const float width=a.h*42/46;
  const auto top=c.P(a.x+(a.w-width)*.5f,a.y);
  c.r.DrawMapArtwork(top.x,top.y,width*c.layout.scale/c.r.Width(),a.h*c.layout.scale/c.r.Height());
  }
- static const auto terrain=visual::BuildMesh(visual::Mesh::Terrain);
- if (!compact) for (float scale : {.98f,1.f}) for (std::size_t i=1;i<terrain.vertices.size();++i) {
-  const auto p=terrain.vertices[i].position,q=terrain.vertices[i+1<terrain.vertices.size()?i+1:1].position;
-  const auto p2=MapPoint(a,{p.x*scale,p.z*scale}),q2=MapPoint(a,{q.x*scale,q.z*scale});
-  c.Line(p2.x,p2.y,q2.x,q2.y,scale==1?1.7f:1.f,{.74f,.67f,.44f,scale==1?.85f:.23f});
- }
+ const Color mapInk{.29f,.25f,.17f,1};
+ const auto lettering=[&](float x,float y,const std::string& text,float size) {
+  const auto p=c.P(x,y);
+  c.r.DrawText(p.x,p.y,text,mapInk,size*c.layout.scale/12);
+ };
  if (!compact) {
-  const Color label{.95f,.89f,.69f,1};
-  c.Text(a.x+a.w*.12f,a.y+a.h*.54f,"Astral dock",14,label);
-  c.Text(a.x+a.w*.71f,a.y+a.h*.49f,"Training grounds",14,label);
-  c.Center(a.x,a.y+a.h*.12f,a.w,"BROKEN WATCH",16,label);
-  c.Center(a.x,a.y+a.h*.87f,a.w,"DAWNWATCH VILLAGE",16,label);
+  // A paper sheet with ink rules and marginal annotations; world projection is unchanged.
+  for (float inset : {4.f,7.f}) {
+   const Color rule{.40f,.32f,.20f,inset==4?.65f:.30f};
+   c.Line(a.x+inset,a.y+inset,a.x+a.w-inset,a.y+inset,.7f,rule);
+   c.Line(a.x+inset,a.y+a.h-inset,a.x+a.w-inset,a.y+a.h-inset,.7f,rule);
+   c.Line(a.x+inset,a.y+inset,a.x+inset,a.y+a.h-inset,.7f,rule);
+   c.Line(a.x+a.w-inset,a.y+inset,a.x+a.w-inset,a.y+a.h-inset,.7f,rule);
+  }
+  lettering(a.x+15,a.y+a.h*.54f,"Astral dock",14);
+  const auto dock=MapPoint(a,{(rpg::WorldMap::dockMin.x+rpg::WorldMap::dockMax.x)*.5f,
+    (rpg::WorldMap::dockMin.z+rpg::WorldMap::dockMax.z)*.5f});
+  c.Line(a.x+92,a.y+a.h*.54f+12,dock.x-9,dock.y+8,.65f,{.40f,.32f,.20f,.65f});
+  lettering(a.x+a.w-94,a.y+a.h*.48f,"Training\ngrounds",14);
+  const auto post=MapPoint(a,rpg::WorldMap::trainingPost);
+  c.Line(post.x+12,post.y,a.x+a.w-103,a.y+a.h*.48f+17,.65f,{.40f,.32f,.20f,.65f});
+  const std::pair<const char*,float> labels[]={{"BROKEN WATCH",.065f},{"DAWNWATCH VILLAGE",.865f}};
+  for (const auto& label : labels) {
+   const float width=c.Width(label.first,16),x=a.x+(a.w-width)*.5f,y=a.y+a.h*label.second;
+   c.RectFill({x-7,y-2,width+14,23},{.90f,.83f,.66f,.92f});
+   lettering(x,y,label.first,16);
+   c.Line(x,y+20,x+width,y+20,.65f,{.40f,.32f,.20f,.45f});
+  }
+  const float x=a.x+20,y=a.y+a.h-34,span=5*a.h/46;
+  c.Line(x,y,x+span,y,1,mapInk);
+  for (float t : {0.f,.5f,1.f}) c.Line(x+span*t,y-3,x+span*t,y+3,.8f,mapInk);
+  lettering(x,y+5,"0",10); lettering(x+span-14,y+5,"5 m",10);
  }
  const auto marker=[&](rpg::Vec2 position,Color tint,float radius) {
   const auto p=MapPoint(a,position); c.Oval(p.x,p.y,radius+1,radius+1,{.08f,.12f,.13f,1}); c.Oval(p.x,p.y,radius,radius,tint);
@@ -263,7 +284,9 @@ void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoin
  marker(rpg::WorldMap::trainingPost,{.35f,.72f,.76f,1},compact?3.f:5.f);
  marker(rpg::WorldMap::quartermaster,{.95f,.57f,.22f,1},compact?3.f:5.f);
  if (sim.AnchorState()!=rpg::AnchorQuest::Complete) {
-  const auto p=MapPoint(a,sim.ObjectivePosition()); c.Ring(p.x,p.y,compact?5.f:10.f,{.98f,.85f,.40f,1},compact?1.f:2.f);
+  const auto p=MapPoint(a,sim.ObjectivePosition());
+  c.Ring(p.x,p.y,compact?5.f:10.f,mapInk,compact?2.5f:3.5f);
+  c.Ring(p.x,p.y,compact?5.f:10.f,{.98f,.85f,.40f,1},compact?1.f:2.f);
  }
  if (waypoint) {
   const auto p=MapPoint(a,pin); c.Line(p.x,p.y,p.x,p.y-12,2,{.15f,.30f,.49f,1});
@@ -274,9 +297,20 @@ void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoin
  c.Oval(p.x,p.y,size+2,size+2,{.07f,.13f,.18f,.85f});
  c.Triangle(arrow(0,-size),arrow(-size*.65f,size*.7f),arrow(size*.65f,size*.7f),{.68f,.87f,1,1});
  if (!compact) {
-  const float x=a.x+a.w-27,y=a.y+28;
-  c.Line(x,y-13,x,y+13,1,{.29f,.32f,.25f,1}); c.Line(x-13,y,x+13,y,1,{.29f,.32f,.25f,1});
-  c.Triangle({x,y-17},{x-4,y+5},{x+4,y+5},{.26f,.29f,.21f,1}); c.Text(x-5,y-39,"N",15,{.21f,.26f,.21f,1});
+  const float x=a.x+a.w-52,y=a.y+66;
+  c.Ring(x,y,19,{.40f,.32f,.20f,.65f},.65f);
+  for (int i=0;i<8;++i) {
+   const float angle=i*3.14159265f/4,radius=i%2?15.f:29.f;
+   const Point tip{x+std::sin(angle)*radius,y-std::cos(angle)*radius};
+   const Point left{x+std::sin(angle-.35f)*6,y-std::cos(angle-.35f)*6};
+   const Point right{x+std::sin(angle+.35f)*6,y-std::cos(angle+.35f)*6};
+   c.Triangle({x,y},left,tip,{.35f,.28f,.17f,.9f});
+   c.Triangle({x,y},tip,right,{.71f,.59f,.38f,1});
+   c.Line(left.x,left.y,tip.x,tip.y,.65f,mapInk);
+   c.Line(right.x,right.y,tip.x,tip.y,.65f,mapInk);
+  }
+  lettering(x-5,y-49,"N",15); lettering(x+34,y-8,"E",11);
+  lettering(x-4,y+31,"S",11); lettering(x-43,y-8,"W",11);
  }
 }
 }
@@ -571,7 +605,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   if (map) {
    const Rect mapRect{155,126,645,480}; c.Frame({151,122,653,488}); Atlas(c,s,mapRect,false,hasWaypoint,waypoint);
    regions_.push_back({mapRect,{Action::PlaceWaypoint},true});
-   c.Text(833,134,"DAWNWATCH ISLAND",18,gold); c.Text(833,166,"North-up local survey",14,muted);
+   c.Text(833,134,"DAWNWATCH ISLAND",18,gold); c.Text(833,166,"Hand-drawn island survey",14,muted);
    c.Wrap(833,207,286,s.Objective(),17,ink,4);
    const std::pair<Color,const char*> legend[]={{{.68f,.87f,1,1},"Your position and facing"},{gold,"Keeper / quest objective"},{{.72f,.20f,.15f,1},"Living raider"},{{.59f,.38f,.84f,1},"Astral anchor"},{{.35f,.72f,.76f,1},"Sparring post"},{{.95f,.57f,.22f,1},"Quartermaster"}};
    for (int i=0;i<6;++i) { c.Oval(842,320+i*27.f,4,4,legend[i].first); c.Text(858,309+i*27.f,legend[i].second,15,muted); }

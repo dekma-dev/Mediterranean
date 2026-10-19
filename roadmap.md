@@ -1,5 +1,9 @@
 # Mediterranean Roadmap
 
+The atlas and minimap now have a hand-drawn parchment treatment in source, with ink coast hatching, illustrated landmarks, muted washes and atlas marginalia. The existing world/waypoint mapping and texture allocation are retained. Build and inspect the new scaled atlas diagnostics, then perform manual check 120 once the native toolchain is available; artistic acceptance remains pending.
+
+RMB camera cursor capture is implemented in source: hide and pin at the press position, rotate using foreground raw motion, restore on release, and cancel safely across focus/menu/display/lifecycle changes. Inventory right-click behavior remains available. Next acceptance is to build Debug/Release, run the expanded InterfaceTests and the existing regression suites, then perform manual check 119. Validation is currently blocked by the unavailable Visual Studio compiler/locator and Windows SDK headers; prior passing results do not validate this source change.
+
 Motion continuity pass: spring-based body lean/travel/jump-phase channels, eased landing compression and an event-driven Mend casting gesture are implemented. Manual check 118 covers subjective feel and combined actions; this remains procedural animation, with authored locomotion/cast clips still a future art task.
 
 Village facade geometry now includes stone courses, corner masonry, window and door hardware and chimney detail. Further environment work should address composition/terrain and instance submission cost; current measurements are in docs/graphics.md.

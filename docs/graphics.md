@@ -1,5 +1,15 @@
 # Procedural graphics and performance budget
 
+## Hand-drawn map artwork - 2026-10-19
+
+The 512 x 512 RGBA map generator now uses parchment grain, light washes, antialiased sepia strokes, shoreline hachures and illustrated trees/buildings. It draws into the existing 1,048,576-byte CPU pixel result with small temporary coastline/symbol vectors. Renderer upload size and mip chain remain 1,398,100 bytes; combined map/font storage remains 1,529,172 bytes by the unchanged allocation formula. World geometry, collision and terrain surfaces are not modified by this presentation pass.
+
+The atlas reuses its existing map rectangle/projection and adds ink lettering without drop shadows, marginal annotations, a compass rose and a five-metre scale. The minimap samples the same illustration. Objective rings have a dark under-stroke so gold stays visible on paper. The old extra gold coastline overlay is removed.
+
+Reference direction: the user requested a drawn map; Blizzard's [classic manual](https://us.media.blizzard.com/manuals/wow/wow-classic-manual-enUS.pdf) describes an illustrated zone-map presentation. The art here is generated locally from this project's island data. No external images or assets were downloaded.
+
+Native compilation, generated atlas captures and startup/per-frame cost measurements are pending because MSVC and Windows SDK headers are unavailable. No performance improvement or visual acceptance is claimed. Existing scaled interface checks request atlas-drawn captures; manual check 120 covers the map sheet, minimap, marker contrast and waypoint accuracy.
+
 ## Village facade detail - 2026-10-19
 
 Buildings now use individual foundation stones, alternating corner masonry, projecting sills/lintels, narrow glazing bars, shutter hinges, individual door planks, iron straps/rivets and chimney courses with a dark inset flue. Details reuse existing meshes/materials and remain within existing camera bounds. The established coarse building collision footprints are unchanged; this does not add enterable interiors.

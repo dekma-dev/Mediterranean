@@ -91,7 +91,7 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   const bool pointerCaptured=uiVisible && interface_.PointerOverUi();
   // Pointer actions above can open or close a modal panel in this very frame.
   command.haltMovement=interface_.CapturesMovement() || !input.Focused();
-  if (interface_.CapturesMovement() || interface_.Dragging()) CancelOrbit();
+  if (!input.Focused() || interface_.CapturesMovement() || interface_.Dragging() || (orbiting_ && pointerCaptured)) CancelOrbit();
   else if (!input.Held(VK_RBUTTON)) orbiting_=false;
   if (input.Pressed(VK_RBUTTON))
     orbiting_=!pointerCaptured && !interface_.CapturesMovement() && !interface_.Dragging();
@@ -128,7 +128,7 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   if (wasAlive && simulation_.Health()<=0) {
     CancelUiGesture(); interface_.Close(interface_.panel);
   }
-  if (simulation_.TradeRequested()) { interface_.merchantNotice.clear(); interface_.Show(ui::Panel::Merchant); }
+  if (simulation_.TradeRequested()) { CancelOrbit(); interface_.merchantNotice.clear(); interface_.Show(ui::Panel::Merchant); }
   if (command.purchase!=-1 || command.trade.action!=rpg::TradeAction::None) interface_.merchantNotice=simulation_.Message();
   if (interface_.panel==ui::Panel::Merchant && !simulation_.CanTrade()) interface_.Close(ui::Panel::Merchant);
   if (command.inventory.action!=rpg::InventoryAction::None) {

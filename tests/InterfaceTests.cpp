@@ -15,7 +15,79 @@ std::string Fixture(const char* name) {
   std::ifstream input(std::string(RPG_TEST_FIXTURES)+"/"+name); std::ostringstream data; data<<input.rdbuf();
   Require(bool(input),"Missing test fixture."); return data.str();
 }
+void RelativeMouseRegressions() {
+  MouseMotion motion; RAWMOUSE packet{};
+  packet.lLastX=3; packet.lLastY=-2;
+  for (int i=0;i<1000;++i) motion.Add(packet,nullptr,1920,1080);
+  const auto summed=motion.Consume();
+  Require(summed.x==3000 && summed.y==-2000,"All raw packets must contribute while the cursor is fixed");
+  const auto empty=motion.Consume();
+  Require(empty.x==0 && empty.y==0,"Raw movement must be consumed once per frame");
+  packet.usFlags=MOUSE_MOVE_ABSOLUTE; packet.lLastX=32768; packet.lLastY=32768;
+  motion.Add(packet,nullptr,1920,1080);
+  Require(motion.Consume().x==0,"First absolute packet must establish a baseline without jumping");
+  packet.lLastX+=1000; packet.lLastY-=1000; motion.Add(packet,nullptr,1920,1080);
+  const auto absolute=motion.Consume();
+  Require(std::abs(absolute.x-1000.f*1920/65535)<.001f && std::abs(absolute.y+1000.f*1080/65535)<.001f,
+    "Absolute motion must convert to signed desktop distances");
+  packet.usFlags|=MOUSE_VIRTUAL_DESKTOP; motion.Add(packet,nullptr,3840,1080);
+  Require(motion.Consume().x==0,"Monitor mapping changes must reset the absolute baseline");
+  motion.Add(packet,reinterpret_cast<HANDLE>(1),3840,1080);
+  Require(motion.Consume().x==0,"Switching absolute devices must not jump the camera");
+  packet.lLastX+=1000; motion.Add(packet,reinterpret_cast<HANDLE>(1),3840,1080);
+  motion.Reset(); const auto reset=motion.Consume();
+  Require(reset.x==0 && reset.y==0,"Cancellation must discard queued raw movement");
+  motion.Add(packet,nullptr,1920,1080);
+  Require(motion.Consume().x==0,"New captures must not reuse an old absolute baseline");
+
+  Input input; Input::Frame frame; frame.focused=true; frame.screen={-500,350}; frame.client={600,300};
+  input.Update(frame); frame.down[VK_RBUTTON]=true; frame.relativeMouse=true; frame.mouseX=900; input.Update(frame);
+  Require(input.Pressed(VK_RBUTTON) && input.MouseX()==0,"Capture start must ignore motion from before the press");
+  frame.mouseX=41; frame.mouseY=-7; input.Update(frame);
+  Require(input.MouseX()==41 && input.MouseY()==-7,"Relative movement must work with a fixed cursor on a secondary monitor");
+  frame.screen={700,800}; frame.mouseX=0; frame.mouseY=0; input.Update(frame);
+  Require(input.MouseX()==0 && input.MouseY()==0,"Desktop cursor changes must not be added to raw camera motion");
+  frame.relativeMouse=false; frame.screen.x+=300; input.Update(frame);
+  Require(input.MouseX()==0,"Leaving capture between samples must not turn a cursor jump into camera motion");
+  frame.relativeMouse=true;
+  frame.down[VK_RBUTTON]=false; frame.mouseX=900; input.Update(frame);
+  Require(input.Released(VK_RBUTTON) && input.MouseX()==0,"Button release must discard remaining camera movement");
+  frame.down[VK_RBUTTON]=true; frame.focused=false; input.Update(frame);
+  Require(input.MouseX()==0,"Unfocused raw input must not move the camera");
+  frame.focused=true; input.Update(frame);
+  Require(!input.Pressed(VK_RBUTTON) && input.MouseX()==0,"Focus return with RMB held must not start a capture");
+
+  Game game; game.Initialize(); input=Input{}; frame=Input::Frame{};
+  frame.focused=true; frame.client={600,300}; frame.screen=frame.client; frame.relativeMouse=true;
+  const auto step=[&]() { input.Update(frame); game.Update(.05,input,0); };
+  step(); frame.down[VK_RBUTTON]=true; step();
+  Require(game.WantsMouseLook(),"A fresh world RMB press must request the native cursor lock");
+  frame.mouseX=50; step();
+  Require(game.CameraYaw()>.1f,"Raw motion must rotate the camera without moving the cursor");
+  frame.down[VK_RBUTTON]=false; step();
+  Require(!game.WantsMouseLook(),"RMB release must relinquish the cursor lock");
+  frame.down[VK_RBUTTON]=true; step(); frame.down[VK_ESCAPE]=true; step();
+  Require(!game.WantsMouseLook(),"Opening a menu must release the cursor lock");
+  frame.down[VK_ESCAPE]=false; step(); frame.down[VK_ESCAPE]=true; step();
+  Require(!game.WantsMouseLook(),"Closing a menu with RMB held must not reacquire the lock");
+  frame.down[VK_ESCAPE]=false; frame.down[VK_RBUTTON]=false; step();
+  frame.down[VK_RBUTTON]=true; step(); frame.focused=false; step();
+  Require(!game.WantsMouseLook(),"Focus loss must cancel camera capture");
+  frame.focused=true; step();
+  Require(!game.WantsMouseLook(),"Returning with RMB held must require a new gesture");
+  frame.down[VK_RBUTTON]=false; step(); frame.down[VK_RBUTTON]=true; step();
+  Require(game.WantsMouseLook(),"A new press after focus cancellation must work");
+  Require(game.RestoreSnapshot(game.State().Save()) && !game.WantsMouseLook(),"Loading must release camera capture");
+  step(); Require(!game.WantsMouseLook(),"Holding RMB through a load must not relock the cursor");
+  frame.down[VK_RBUTTON]=false; step(); frame.down[VK_RBUTTON]=true; step();
+  frame.down[VK_F11]=true; step();
+  Require(!game.WantsMouseLook(),"Display changes must cancel the cursor lock");
+  frame.down[VK_F11]=false; step();
+  Require(!game.WantsMouseLook(),"Holding RMB through a display change must not relock the cursor");
+}
+
 int main() {
+  RelativeMouseRegressions();
   for (UINT dpi : {96u,144u,192u,384u}) {
     const auto cursor=CreateGameCursor(dpi);
     Require(cursor!=nullptr,"Native game cursor creation failed");
@@ -114,6 +186,7 @@ int main() {
   // A hidden real renderer validates hit regions at multiple scales against the
   // same layout that draws the screen. No desktop input is synthesized.
   Win32Window window; Require(window.Create(GetModuleHandle(nullptr),1280,720,L"screen checks",false),"Hidden test window failed.");
+  Require(!window.SetMouseLook(true) && !window.MouseLook(),"Hidden windows must never capture the desktop cursor");
   Renderer renderer;
   const bool initialized=renderer.Initialize(window.GetHandle(),1280,720);
   if (!initialized) std::wcerr<<renderer.Error()<<L'\n';
@@ -207,6 +280,7 @@ int main() {
       renderer.BeginFrame(); game.Render(renderer); Require(renderer.EndFrame(false),"Input integration render failed.");
     };
     step(); frame.down[VK_RBUTTON]=true; step();
+    Require(!game.WantsMouseLook(),"Bag right-click actions must keep the cursor visible and free");
     frame.client={680,380}; frame.screen.x+=100; step();
     frame.down[VK_RBUTTON]=false; frame.down['W']=true; step();
     Require(std::abs(game.State().Player().x)<.0001f,
@@ -325,7 +399,9 @@ int main() {
     Require(click(640,220).action==ui::Action::Close,"Return button must close the menu.");
     Require(click(1000,680).action==ui::Action::None,"Menu must prevent clicks reaching the underlying HUD.");
     screen.SetOnly(ui::Panel::Map);
-    renderer.BeginFrame(); screen.Render(renderer,simulation,0,false); Require(renderer.EndFrame(false),"Atlas render failed.");
+    renderer.BeginFrame(); screen.Render(renderer,simulation,0,false);
+    const auto atlasCapture=L"atlas-drawn-"+std::to_wstring(size.first)+L"x"+std::to_wstring(size.second)+L".png";
+    Require(renderer.Capture(atlasCapture) && renderer.EndFrame(false),"Atlas render/capture failed.");
     Require(click(477.5f,366).action==ui::Action::PlaceWaypoint,"Atlas must accept a map click.");
     Require(std::abs(screen.pendingWaypoint.x)<.001f && std::abs(screen.pendingWaypoint.z)<.001f,"Waypoint coordinates must match the world map.");
     screen.hasWaypoint=true; screen.waypoint={0,0}; click(160,366);
