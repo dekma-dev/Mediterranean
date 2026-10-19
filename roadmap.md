@@ -1,5 +1,11 @@
 # Mediterranean Roadmap
 
+Motion continuity pass: spring-based body lean/travel/jump-phase channels, eased landing compression and an event-driven Mend casting gesture are implemented. Manual check 118 covers subjective feel and combined actions; this remains procedural animation, with authored locomotion/cast clips still a future art task.
+
+Village facade geometry now includes stone courses, corner masonry, window and door hardware and chimney detail. Further environment work should address composition/terrain and instance submission cost; current measurements are in docs/graphics.md.
+
+Character detail: denser shared meshes, face contour rings, layered armor/fasteners, knee guards and hand detail are implemented; frame corners and banner trim gain additional relief drawing. Geometry/storage and measured rendering cost are tracked in docs/graphics.md. Natural anatomy, authored surfaces and richer world silhouettes remain the next art priorities.
+
 Character and inventory usability pass: live vitality/XP meters, aligned combat stats, equipment count, free bag capacity and a dedicated item inspection card are implemented. Manual check 114 covers readability and item workflows.
 
 The interface refinement reduces Escape's footprint and improves contrast, material separation and item detail. See `docs/visual-target.md` for the screenshot comparison and remaining gaps: authored icon/frame artwork, character anatomy/equipment, denser character/bag layout and richer world composition. This pass does not claim Allods-quality art.

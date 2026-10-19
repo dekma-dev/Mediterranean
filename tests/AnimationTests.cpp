@@ -60,7 +60,7 @@ void TransitionRegressions() {
   check(!game.State().DamagedThisUpdate() && !game.State().Enemies()[0].damagedThisUpdate,
     "Defeat updates must clear old impact events.");
 
-  const float expected=animation::Pulse(.8f-.6f,.075f);
+  const float expected=animation::Gesture(.8f-.6f,.09f,.42f);
   for (int hz : {30,60,144,0}) {
     game.Initialize(); rpg::Command jump; jump.jump=true;
     double elapsed=0; int steps=0,contacts=0;
@@ -89,6 +89,28 @@ void TransitionRegressions() {
 }
 int main() {
   TransitionRegressions();
+  for(int hz : {30,60,144}) {
+    Game caster;
+    Require(caster.RestoreSnapshot("MEDITERRANEAN 3\n3 -10 50 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
+      "100 -4 7 80 0 0 0 0 0\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n"),"Cast fixture must load");
+    rpg::Command mend; mend.ability=3; caster.ExecuteCommand(mend,.01f);
+    Require(caster.State().Health()==85,"Spell pose must not delay authoritative healing");
+    float elapsed=0;
+    while(elapsed<.36f-1e-6f) {
+      const float dt=std::min(1.f/hz,.36f-elapsed); caster.ExecuteCommand(mend,dt); elapsed+=dt;
+    }
+    Require(std::abs(caster.PlayerAnimation().cast-animation::Gesture(.36f,.18f,.72f))<.0001f,
+      "Cast recovery must agree across frame rates; rejected cooldown input must not restart it");
+    const auto pose=BuildCharacterPose(0,0,false,caster.PlayerAnimation());
+    Require(pose.arms[0].end.y>1.2f,"Accepted Mend must raise the casting hand");
+    const auto save=caster.State().Save();
+    Require(caster.RestoreSnapshot(save) && caster.PlayerAnimation().cast==0,"Loading must clear the casting gesture");
+    for(int i=0;i<hz;++i) caster.ExecuteCommand({},1.f/hz);
+    Require(caster.PlayerAnimation().cast==0,"An inactive spell must not replay its gesture");
+  }
+  Require(animation::Gesture(.0001f,.09f,.42f)/.0001f<.04f &&
+    animation::Gesture(.4199f,.09f,.42f)/.0001f<.01f,
+    "Landing compression must start and end without an abrupt pose velocity");
   const auto neutral=BuildCharacterPose(0,0,false),tinyStep=BuildCharacterPose(0,.0001f,false);
   Require((tinyStep.legs[1].end.y-neutral.legs[1].end.y)/.0001f<.001f,
     "Foot lift must begin with zero slope at the grounded half of the stride.");
@@ -102,8 +124,8 @@ int main() {
   for (float air : {0.f,.5f,1.f}) for (float rise : {-1.f,0.f,1.f})
     for (float landing : {0.f,1.f}) for (float hit : {0.f,1.f}) for (float breath : {-1.f,1.f})
     for (float gait : {-1.f,0.f,1.f}) for (float swing : {0.f,.5f,1.f}) for (bool shield : {false,true})
-    for (float lean : {-1.f,0.f,1.f}) {
-    animation::Sample sample{breath,breath,air,rise,landing,hit,1}; sample.lean=lean;
+    for (float lean : {-1.f,0.f,1.f}) for(float cast : {0.f,1.f}) {
+    animation::Sample sample{breath,breath,air,rise,landing,hit,1}; sample.lean=lean; sample.cast=cast;
     const auto pose=BuildCharacterPose(swing,gait,shield,sample);
     for (int side=0;side<2;++side) {
       const auto& arm=pose.arms[side]; const auto& leg=pose.legs[side];
@@ -196,6 +218,7 @@ int main() {
   Require(hit.pose.hit==0 && hit.pose.breath==0 && hit.pose.landing==0,"Defeat must clear reactions and breathing.");
   animation::State repeatJump;
   repeatJump.Update(.01f,0,0,0,true,false,0,7.2f); repeatJump.Update(.05f,0,0,0,true,false,0);
+  repeatJump.Update(.04f,0,0,0,true,false,0);
   Require(repeatJump.pose.landing>.8f,"Landing fixture must compress.");
   repeatJump.Update(.01f,0,7.2f,0,true,0,0);
   Require(repeatJump.pose.landing==0,"A takeoff exactly at floor contact must clear the previous landing.");

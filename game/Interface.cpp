@@ -139,6 +139,15 @@ struct Canvas {
   RectFill({a.x+18,a.y+21,a.w-36,a.h-42},{.015f,.022f,.012f,.24f});
   for (float side : {0.f,1.f}) for (float bottom : {0.f,1.f}) {
    const float x=a.x+side*a.w,y=a.y+bottom*a.h;
+   const float dx=side?-1.f:1.f,dy=bottom?-1.f:1.f;
+   // Cast-metal corner brackets: overlapping leaves, incised veins and studs.
+   for(int leaf=0;leaf<3;++leaf) {
+    const float length=25.f-leaf*5,offset=leaf*5.f;
+    Triangle({x+dx*3,y+dy*3},{x+dx*(length+8),y+dy*(offset+4)},
+      {x+dx*(offset+5),y+dy*(length+7)},{.24f,.29f,.19f,1});
+    Line(x+dx*5,y+dy*5,x+dx*(length+5),y+dy*(offset+4),1,{.66f,.58f,.32f,1});
+    Line(x+dx*7,y+dy*7,x+dx*(offset+5),y+dy*(length+3),1,{.08f,.12f,.08f,1});
+   }
    Oval(x,y,6,6,{.11f,.14f,.10f,1}); Oval(x,y,4,4,gold); Oval(x-1,y-1,1.5f,1.5f,{1,.88f,.52f,1});
   }
  }
@@ -147,6 +156,10 @@ struct Canvas {
   Diamond(a.x+11,cy,18,a.h*.5f,{.16f,.19f,.065f,1}); Diamond(a.x+a.w-11,cy,18,a.h*.5f,{.16f,.19f,.065f,1});
   Frame({a.x+10,a.y,a.w-20,a.h},{.22f,.16f,.055f,1},gold);
   Gradient({a.x+13,a.y+3,a.w-26,a.h-6},{.51f,.34f,.13f,1},{.15f,.115f,.055f,1});
+  for(float x=a.x+19;x<a.x+a.w-19;x+=6) {
+   Line(x,a.y+5,x+2,a.y+7,.6f,{.90f,.72f,.39f,.45f});
+   Line(x,a.y+a.h-6,x+2,a.y+a.h-4,.6f,{.08f,.06f,.025f,.6f});
+  }
   Line(a.x+15,a.y+4,a.x+a.w-15,a.y+4,1,{1,.81f,.40f,.75f});
   for (float x : {a.x+8,a.x+a.w-8}) { Diamond(x,cy,7,11,gold); Diamond(x,cy,4,7,{.23f,.29f,.08f,1}); }
   Center(a.x,a.y+(a.h-size)*.5f-2,a.w,label,size,{1,.9f,.51f,1});

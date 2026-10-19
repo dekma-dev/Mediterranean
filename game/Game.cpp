@@ -150,12 +150,15 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   playerPose_.Update(simulation_.Facing(),simulation_.GroundMovementDistance(),simulation_.Grounded() && !simulation_.Dashing(),
     simulation_.Health()>0,simulation_.AttackFlash()*5,dt);
   const auto velocity=simulation_.MovementVelocity();
+  bool castStarted=false;
+  for(std::size_t i=0;i<simulation_.VisualEventCount();++i)
+    castStarted|=simulation_.VisualEvents()[i].kind==rpg::CombatVisualKind::Mend;
   const float forwardAcceleration=command.haltMovement?0:
     ((velocity.x-previousVelocity.x)*std::sin(playerPose_.facing)+
      (velocity.z-previousVelocity.z)*std::cos(playerPose_.facing))/dt;
   playerAnimation_.Update(dt,simulation_.Height(),simulation_.VerticalSpeed(),simulation_.MovementDistance(),
     simulation_.Health()>0,simulation_.DamagedThisUpdate(),playerPose_.attack,
-    simulation_.LandingSpeed(),simulation_.LandingElapsed(),forwardAcceleration);
+    simulation_.LandingSpeed(),simulation_.LandingElapsed(),forwardAcceleration,castStarted);
   playerAnimation_.pose.dash=simulation_.Dashing()?std::sin(simulation_.DashPhase()*3.14159265f):0;
   playerAnimation_.pose.lean*=1-playerAnimation_.pose.dash;
   playerFeet_.Update(dt,simulation_.Player(),playerPose_.facing,simulation_.Grounded() && !simulation_.Dashing(),

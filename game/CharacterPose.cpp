@@ -39,11 +39,13 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   const float breath=animation::Signed(dynamics.breath),sway=animation::Signed(dynamics.sway);
   const float travel=animation::Unit(dynamics.travel);
   const float dash=animation::Unit(dynamics.dash);
+  const float cast=animation::Unit(dynamics.cast)*(1-swing)*(1-hit);
   CharacterPose pose;
   pose.bodyLift=gait*gait*.015f*(1-air)+breath*.006f*(1-air)-landing*.14f;
   pose.bodyLift-=dash*.07f;
   pose.upperPitch=travel*.09f+animation::Signed(dynamics.lean)*.10f+landing*.12f+air*std::max(0.f,rise)*.06f-hit*.12f+sway*.015f*(1-air);
   pose.upperPitch+=dash*.24f;
+  pose.upperPitch-=cast*.08f;
   std::array<XMFLOAT3,2> contacts{};
   if (dynamics.feetActive) for (int i=0;i<2;++i) {
     const auto& foot=dynamics.feet[i];
@@ -73,6 +75,9 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     XMFLOAT3 hand{side*(.40f+air*.035f),1.02f+attack*.52f+air*.12f+landing*.08f+hit*.08f,
       .10f-armStride*.13f+attack*.21f+sway*side*.014f-dash*.12f};
     if (i==0 && shield) hand={-.39f,1.13f+air*.08f+landing*.08f,.23f-armStride*.04f};
+    // The free hand opens forward while the weapon arm lifts clear of the cast.
+    const XMFLOAT3 spellHand{i==0?-.29f:.43f,i==0?1.39f:1.19f,i==0?.40f:.23f};
+    hand.x+=(spellHand.x-hand.x)*cast; hand.y+=(spellHand.y-hand.y)*cast; hand.z+=(spellHand.z-hand.z)*cast;
     pose.arms[i]=Solve(pose.UpperPoint({side*.305f,1.43f,0}),pose.UpperPoint(hand),
       pose.UpperDirection({side*.8f,-.2f,-1}),CharacterPose::upperArm,CharacterPose::forearm);
   }

@@ -1,5 +1,19 @@
 # Procedural graphics and performance budget
 
+## Village facade detail - 2026-10-19
+
+Buildings now use individual foundation stones, alternating corner masonry, projecting sills/lintels, narrow glazing bars, shutter hinges, individual door planks, iron straps/rivets and chimney courses with a dark inset flue. Details reuse existing meshes/materials and remain within existing camera bounds. The established coarse building collision footprints are unchanged; this does not add enterable interiors.
+
+Release village capture inspected. One hidden benchmark pair (village-detail-before.txt / village-detail-after.txt) reports GPU median/p95 ms: spawn 0.418/0.430 to 0.433/0.456; walking 0.338/0.368 to 0.345/0.379; combat 0.349/0.370 to 0.360/0.381; merchant 0.645/0.664 to 0.667/1.011. CPU medians increase from 0.405/0.386/0.436/0.978 to 0.559/0.522/0.561/1.219 ms respectively. The merchant tail increases materially in this short sample; this is not a sustained FPS claim. Combat peak submissions/triangles rise from 57/537840 to 58/588056. Shared mesh and texture allocations remain unchanged; additional instances increase scene work. Manual check 117 covers camera clearance, readability and live cost.
+
+## Character geometry and frame detail - 2026-10-19
+
+Head/hair use 32 radial segments, torso/boots/spheres 24, and limbs 20, with additional face, torso and limb profile rings. Eye sockets are recessed. Armor adds overlapping abdominal and shoulder plates, rivets and knee guards; hands add thumbs and curled finger ridges. Interface corners use layered metal leaves and engraved banner trim. Existing equipment and animation transforms remain authoritative; no downloaded assets or new texture allocations.
+
+Reusable geometry totals 278,112 bytes and 5,766 triangles (previous storage 224,320 bytes). The geometry budget is now 320 KiB; the 10,000 shared-triangle ceiling is unchanged. Whole-scene peak submitted triangles include instances and shadow passes: combat increases from 311,768 to 537,840. Draw submissions remain 57 in that workload. Material/shadow storage remains 9,699,312 bytes and interface storage 1,529,172 bytes.
+
+One hidden 1280x720 workload pair reports GPU median/p95 ms: spawn 0.373/0.389 to 0.418/0.430, walking 0.319/0.341 to 0.338/0.368, combat 0.330/0.347 to 0.349/0.370, merchant 0.589/0.605 to 0.645/0.664. Reports: detail-before.txt and detail-after.txt in build-ninja-release. These short measurements are not sustained fullscreen FPS. Close-up character and combined character/bag captures were inspected. Anatomy, authored materials and world density still need substantial improvement. Manual check 116 covers motion and distance acceptance.
+
 ## Worn surfaces - 2026-10-19
 
 Paving now uses rounded, irregular edges, chipped bevel relief, cooler/warmer stone variation and moss-toned joints. Recessed joints attenuate ambient light only; this is a material cavity approximation, not scene ambient occlusion. Rock surfaces add periodic mineral strata and small pits. Cloth gains restrained folds beneath its weave; metal gains fine directional texture and roughness variation. Texture dimensions, meshes, draw counts and fixed allocations are unchanged. Ground pixels add one noise evaluation and rounded-edge arithmetic; other material changes are generated at startup.

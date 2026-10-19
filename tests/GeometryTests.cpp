@@ -65,7 +65,7 @@ int main() {
       }
     }
   }
-  Check(bytes<=256*1024 && triangles<=10000,"Reusable mesh library exceeded its startup geometry budget.");
+  Check(bytes<=320*1024 && triangles<=10000,"Reusable mesh library exceeded its startup geometry budget.");
   const rpg::Obstacle stall{{3,-13.3f},1.1f,.4f,.85f,rpg::PropKind::Counter};
   for (const auto& vertex : visual::BuildMesh(visual::Mesh::Canopy).vertices) {
     const auto p=vertex.position;

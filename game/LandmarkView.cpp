@@ -33,6 +33,21 @@ void DrawBuilding(Renderer& r,const rpg::Obstacle& o) {
   const bool store=o.role==rpg::BuildingRole::Storehouse;
   Box(r,{x,.22f,z},{o.halfX*2+.2f,.44f,o.halfZ*2+.2f},stone,S::Stone);
   Box(r,{x,o.height*.5f,z},{o.halfX*2,o.height,o.halfZ*2},style.plaster,S::Plaster);
+  // Separate stone courses break up the continuous plinth and catch sunlight.
+  for(float face : {-1.f,1.f}) {
+    const int blocks=int(std::ceil(o.halfX*2/.65f));
+    const float width=o.halfX*2/blocks;
+    for(int block=0;block<blocks;++block) {
+      const float shade=.88f+.035f*((block+int(face)+3)%5);
+      r.DrawMesh(M::Masonry,{x-o.halfX+(block+.5f)*width,.23f,z+face*o.halfZ},
+        {width-.025f,.38f,.24f},{stone.x*shade,stone.y*shade,stone.z*shade,1},S::Stone);
+    }
+    for(float side : {-1.f,1.f}) for(int course=0;course<6;++course) {
+      const float height=.53f+course*.29f;
+      r.DrawMesh(M::Masonry,{x+side*(o.halfX-.11f),height,z+face*(o.halfZ+.025f)},
+        {course%2?.28f:.40f,.25f,.18f},stone,S::Stone);
+    }
+  }
   for (float side : {-1.f,1.f}) {
     Box(r,{x+side*o.halfX,o.height-.12f,z},{.18f,.2f,o.halfZ*2},wood,S::Wood);
     const float wall=x+side*(o.halfX+.055f);
@@ -43,6 +58,8 @@ void DrawBuilding(Renderer& r,const rpg::Obstacle& o) {
       Box(r,{wall+side*.09f,2.0f,wz},{.04f,.69f,.46f},{.27f,.35f,.39f,1},S::Metal);
       Box(r,{wall+side*.12f,2.0f,wz},{.05f,.69f,.055f},wood,S::Wood);
       Box(r,{wall+side*.12f,2.0f,wz},{.05f,.055f,.46f},wood,S::Wood);
+      Box(r,{wall,1.50f,wz},{.28f,.10f,.86f},stone,S::Stone);
+      Box(r,{wall,2.50f,wz},{.23f,.12f,.80f},style.trim,S::Wood);
       r.DrawSegment({wall,.52f,z+bay*.15f},{wall,1.3f,z+bay*(o.halfZ-.15f)},.10f,.12f,style.trim,S::Wood);
     }
     for (float face : {-1.f,1.f}) {
@@ -53,10 +70,17 @@ void DrawBuilding(Renderer& r,const rpg::Obstacle& o) {
         Box(r,{wx,2,front+face*.09f},{.47f,.74f,.04f},{.27f,.35f,.39f,1},S::Metal);
         Box(r,{wx,2,front+face*.12f},{.055f,.74f,.05f},wood,S::Wood);
         Box(r,{wx,2,front+face*.12f},{.47f,.055f,.05f},wood,S::Wood);
+        Box(r,{wx,1.48f,front+face*.035f},{.93f,.12f,.29f},stone,S::Stone);
+        Box(r,{wx,2.53f,front},{.91f,.12f,.24f},style.trim,S::Wood);
+        // Narrow iron glazing bars and shutter hinge straps remain close to the wall.
+        for(float bar : {-1.f,1.f})
+          Box(r,{wx+bar*.15f,2,front+face*.14f},{.018f,.70f,.025f},{.16f,.19f,.18f,1},S::Metal);
         for (float shutter : {-1.f,1.f}) {
           Box(r,{wx+shutter*.42f,2,front+.03f*face},{.19f,.86f,.10f},style.trim,S::Wood);
           for (int slat=0;slat<3;++slat)
             Box(r,{wx+shutter*.42f,1.73f+slat*.26f,front+.09f*face},{.20f,.035f,.035f},wood,S::Wood);
+          for(float hinge : {-1.f,1.f})
+            Box(r,{wx+shutter*.42f,2+hinge*.26f,front+face*.105f},{.21f,.035f,.025f},{.18f,.20f,.19f,1},S::Metal);
         }
       } else {
         for (int plank=0;plank<5;++plank)
@@ -68,6 +92,17 @@ void DrawBuilding(Renderer& r,const rpg::Obstacle& o) {
     const float front=z+face*(o.halfZ+.09f);
     const float doorWidth=store?1.25f:.85f;
     Box(r,{x,.91f,front},{doorWidth,1.8f,.12f},wood,S::Wood);
+    for(int plank=0;plank<6;++plank) {
+      const float px=x-doorWidth*.5f+(plank+.5f)*doorWidth/6;
+      const float shade=.88f+.04f*(plank%4);
+      Box(r,{px,.91f,front+face*.07f},{doorWidth/6-.012f,1.72f,.025f},
+        {wood.x*shade,wood.y*shade,wood.z*shade,1},S::Wood);
+    }
+    for(float hinge : { .43f,1.43f }) {
+      Box(r,{x-doorWidth*.19f,hinge,front+face*.10f},{doorWidth*.58f,.055f,.035f},{.16f,.18f,.17f,1},S::Metal);
+      for(float pin : {-.39f,.05f})
+        r.DrawMesh(M::Sphere,{x+pin*doorWidth,hinge,front+face*.125f},{.025f,.025f,.018f},brass,S::Metal);
+    }
     for (float edge : {-1.f,1.f}) Box(r,{x+edge*(doorWidth*.5f+.06f),.95f,front},{.10f,1.9f,.20f},style.trim,S::Wood);
     Box(r,{x,1.94f,front},{doorWidth+.23f,.15f,.20f},style.trim,S::Wood);
     Box(r,{x+.26f,1,front+face*.08f},{.07f,.09f,.06f},brass,S::Metal);
@@ -103,6 +138,13 @@ void DrawBuilding(Renderer& r,const rpg::Obstacle& o) {
   Box(r,{x,o.height+roofHeight-.03f,z},{.16f,.16f,o.halfZ*2+.7f},wood,S::Wood);
   Box(r,{x+o.halfX*.55f,o.height+roofHeight*.65f,z+.4f},{.55f,1.45f,.6f},stone,S::Stone);
   Box(r,{x+o.halfX*.55f,o.height+roofHeight*.65f+.75f,z+.4f},{.7f,.16f,.75f},stone,S::Stone);
+  // Chimney brick courses and a dark inset flue replace the featureless block.
+  for(int course=0;course<5;++course) {
+    const float y=o.height+roofHeight*.65f-.55f+course*.27f;
+    for(float face : {-1.f,1.f})
+      Box(r,{x+o.halfX*.55f,y,z+.4f+face*.306f},{.55f,.025f,.015f},{.25f,.24f,.22f,1},S::Stone);
+  }
+  Box(r,{x+o.halfX*.55f,o.height+roofHeight*.65f+.835f,z+.4f},{.43f,.015f,.47f},{.045f,.04f,.035f,1},S::Plain);
 }
 
 void DrawSupplyStall(Renderer& r,const rpg::Obstacle& o) {

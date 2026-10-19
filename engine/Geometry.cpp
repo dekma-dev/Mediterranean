@@ -220,13 +220,14 @@ Geometry BuildMesh(Mesh mesh) {
     Normals(g); return g;
   }
   if (mesh==Mesh::Hair) {
-    auto g=Lathe({{.17f,.46f,.45f},{.24f,.45f,.44f},{.39f,.39f,.38f},{.51f,.19f,.19f}},20);
+    auto g=Lathe({{.17f,.46f,.45f},{.24f,.45f,.44f},{.32f,.43f,.42f},{.39f,.39f,.38f},{.46f,.30f,.30f},{.51f,.19f,.19f}},32);
     for (auto& v : g.vertices) if (v.position.z>0) v.position.z=std::min(v.position.z,.36f);
     Normals(g); return g;
   }
   if (mesh==Mesh::Head) {
-    auto g=Lathe({{-.5f,.20f,.26f},{-.38f,.34f,.35f},{-.19f,.43f,.40f},{.02f,.46f,.44f},
-      {.21f,.45f,.44f},{.38f,.38f,.37f},{.49f,.19f,.19f}},20);
+    auto g=Lathe({{-.5f,.20f,.26f},{-.44f,.27f,.31f},{-.38f,.34f,.35f},{-.28f,.39f,.38f},
+      {-.19f,.43f,.40f},{-.09f,.46f,.42f},{.02f,.46f,.44f},{.11f,.44f,.43f},
+      {.21f,.45f,.44f},{.30f,.43f,.41f},{.38f,.38f,.37f},{.44f,.30f,.29f},{.49f,.19f,.19f}},32);
     // A narrower jaw, flatter face, cheekbones and brow replace the spherical head.
     for (auto& v : g.vertices) {
       auto& p=v.position;
@@ -235,24 +236,27 @@ Geometry BuildMesh(Mesh mesh) {
         const float brow=(p.y-.05f)*8,cheekHeight=p.y*7,cheekWidth=(std::abs(p.x)-.28f)*10;
         p.z+=.045f*std::exp(-brow*brow);
         p.z+=.035f*std::exp(-cheekHeight*cheekHeight)*std::exp(-cheekWidth*cheekWidth);
+        const float socketY=(p.y-.09f)*20,socketX=(std::abs(p.x)-.20f)*14;
+        p.z-=.035f*std::exp(-socketY*socketY-socketX*socketX);
       }
     }
     Normals(g); return g;
   }
   if (mesh==Mesh::Boot) {
     auto g=Lathe({{-.5f,.37f,.44f},{-.38f,.44f,.49f},{-.18f,.43f,.47f},{.02f,.36f,.37f},
-      {.19f,.28f,.24f},{.5f,.27f,.24f}},16);
+      {.19f,.28f,.24f},{.5f,.27f,.24f}},24);
     // Flat sole and extended toe; the upper rows form an ankle instead of a ball.
     for (auto& v : g.vertices) v.position.z+=.12f*(.5f-v.position.y);
     Normals(g); return g;
   }
-  if (mesh==Mesh::Sphere) return Lathe(SphereProfile(),16);
+  if (mesh==Mesh::Sphere) return Lathe(SphereProfile(),24);
   if (mesh==Mesh::Rock) return Lathe(SphereProfile(),12,.24f,.05f);
   if (mesh==Mesh::Trunk) return Lathe({{-.5f,.5f,.5f},{-.4f,.38f,.39f},{0,.25f,.28f},{.4f,.19f,.22f},{.5f,.12f,.14f}},10,.12f,.14f);
-  if (mesh==Mesh::Torso) return Lathe({{-.5f,.39f,.4f},{-.26f,.35f,.36f},{-.05f,.37f,.4f},
-    {.22f,.5f,.46f},{.34f,.47f,.4f},{.5f,.22f,.25f}},14);
-  if (mesh==Mesh::Limb) return Lathe({{-.5f,.24f,.24f},{-.40f,.36f,.36f},{-.1f,.4f,.4f},
-    {.25f,.46f,.46f},{.42f,.42f,.42f},{.5f,.25f,.25f}},12);
+  if (mesh==Mesh::Torso) return Lathe({{-.5f,.39f,.4f},{-.38f,.37f,.38f},{-.26f,.35f,.36f},
+    {-.13f,.36f,.38f},{-.05f,.37f,.4f},{.08f,.45f,.44f},{.22f,.5f,.46f},
+    {.34f,.47f,.4f},{.43f,.35f,.32f},{.5f,.22f,.25f}},24);
+  if (mesh==Mesh::Limb) return Lathe({{-.5f,.24f,.24f},{-.40f,.36f,.36f},{-.25f,.38f,.39f},{-.1f,.4f,.4f},
+    {.08f,.44f,.45f},{.25f,.46f,.46f},{.42f,.42f,.42f},{.5f,.25f,.25f}},20);
   if (mesh==Mesh::Blade) return Lathe({{-.5f,.28f,.16f},{-.35f,.42f,.20f},{.28f,.35f,.15f},{.5f,.02f,.02f}},4);
   if (mesh==Mesh::Crystal) return Lathe({{-.5f,.07f,.06f},{-.25f,.4f,.35f},{.28f,.3f,.29f},{.5f,.04f,.03f}},6,.12f);
   Geometry g;

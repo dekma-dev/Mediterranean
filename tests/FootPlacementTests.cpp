@@ -169,6 +169,18 @@ int main() {
   for(int i=0;i<4;++i) game.ExecuteCommand({},.05f);
   Require(!game.State().Dashing() && game.PlayerAnimation().feetActive,"Finished dash must restore ground contacts");
   liveCapture(L"dash-finish.png");
+  Require(game.RestoreSnapshot("MEDITERRANEAN 3\n3 -10 50 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
+    "100 -4 7 80 0 0 0 0 0\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n"),"Casting capture fixture");
+  game.SetCameraOrbit(2.8f,.20f,3.2f);
+  rpg::Command mend; mend.ability=3; game.ExecuteCommand(mend,.01f);
+  for(int i=0;i<3;++i) game.ExecuteCommand({},.02f);
+  liveCapture(L"cast-rise.png");
+  for(int i=0;i<6;++i) game.ExecuteCommand({},.02f);
+  Require(game.PlayerAnimation().cast>.99f,"Casting capture must reach the gesture peak");
+  liveCapture(L"cast-peak.png");
+  for(int i=0;i<30;++i) game.ExecuteCommand({},.02f);
+  Require(game.PlayerAnimation().cast==0,"Casting recovery must settle completely");
+  liveCapture(L"cast-recovered.png");
   std::cout<<"PASS: planted support, fixed joints, turning, stop/jump/landing/reset, authoritative-state isolation and twelve foot-placement captures. Controller bytes: "<<sizeof(animation::FootPlacement)<<'\n';
   CoUninitialize();
 }

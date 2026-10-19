@@ -34,6 +34,13 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       part(M::Torso,0,1.51f,0,{.25f,.065f,.24f},leather,S::Cloth);
     }
     if (outfit.armor) {
+      // Overlapping abdominal lames and fasteners give the cuirass real relief.
+      for(int plate=0;plate<3;++plate) {
+        const float h=1.04f+plate*.065f;
+        part(M::Torso,0,h,.125f,{.43f+plate*.035f,.11f,.095f},steel,S::Metal);
+        for(float side : {-1.f,1.f})
+          part(M::Sphere,side*(.15f+plate*.014f),h+.018f,.17f,{.018f,.018f,.012f},blade,S::Metal);
+      }
       part(M::Torso,0,1.29f,.18f,{.17f,.22f,.035f},{.68f,.53f,.26f,1},S::Metal);
       part(M::Torso,0,1.29f,.20f,{.09f,.14f,.02f},{.21f,.37f,.43f,1},S::Metal);
     }
@@ -72,6 +79,16 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       renderer.DrawMesh(M::Sphere,elbow,{.15f,.15f,.15f},skin,S::Skin,yaw);
       renderer.DrawSegment(elbow,hand,.19f,.21f,outfit.armor?steel:skin,outfit.armor?S::Metal:S::Skin);
       renderer.DrawMesh(M::Sphere,hand,{.14f,.17f,.14f},skin,S::Skin,yaw);
+      // A palm, curled finger ridges and thumb replace the featureless mitten.
+      renderer.DrawMesh(M::Sphere,{hand.x+side*.052f*std::cos(yaw),hand.y+.015f,hand.z-side*.052f*std::sin(yaw)},
+        {.052f,.085f,.055f},skin,S::Skin,yaw);
+      for(int finger=0;finger<3;++finger)
+        renderer.DrawMesh(M::Limb,{hand.x+std::sin(yaw)*.054f,hand.y-.045f+finger*.027f,hand.z+std::cos(yaw)*.054f},
+          {.10f,.021f,.032f},{.60f,.40f,.28f,1},S::Skin,yaw);
+      if(outfit.armor) {
+        renderer.DrawMesh(M::Torso,{knee.x+std::sin(yaw)*.105f,knee.y,knee.z+std::cos(yaw)*.105f},
+          {.22f,.24f,.075f},steel,S::Metal,yaw);
+      }
       if (side>0 && outfit.weapon) {
         const auto along=[&](float distance) { return world(pose.WeaponPoint(distance)); };
         const auto forward=pose.UpperDirection({0,0,1});
@@ -99,6 +116,12 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       for (float side : {-1.f,1.f}) {
         part(M::Torso,side*.31f,1.46f,0,{.26f,.18f,.31f},steel,S::Metal);
         part(M::Torso,side*.31f,1.41f,0,{.27f,.03f,.32f},{.66f,.50f,.23f,1},S::Metal);
+        for(int layer=0;layer<3;++layer) {
+          part(M::Torso,side*(.32f+layer*.018f),1.43f-layer*.045f,0,
+            {.27f,.07f,.32f-layer*.015f},layer==2?blade:steel,S::Metal);
+          part(M::Sphere,side*(.32f+layer*.018f),1.44f-layer*.045f,.13f,
+            {.024f,.024f,.018f},blade,S::Metal);
+        }
       }
     }
 }

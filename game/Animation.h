@@ -14,6 +14,7 @@ struct Sample {
   bool feetActive=false;
   float lean=0;
   float dash=0;
+  float cast=0;
 };
 inline Sample Idle(float time,float offset=0) {
   const float seconds=std::isfinite(time)?std::remainder(time,motion::tau*2/1.8f):0;
@@ -26,16 +27,24 @@ inline float Pulse(float age,float peak) {
   const float t=age/peak;
   return t*std::exp(1-t);
 }
+// Zero endpoint velocity at anticipation, peak and recovery.
+inline float Gesture(float age,float peak,float duration) {
+  if (!std::isfinite(age) || age<0 || age>=duration) return 0;
+  return age<peak?SmoothStep(age/peak):1-SmoothStep((age-peak)/(duration-peak));
+}
 struct State {
   Sample pose;
   float phase=0,airBlend=0,riseBlend=0,travelBlend=0;
   float landingAge=2,landingStrength=0,hitAge=2,hitCarry=0;
+  float castAge=2,leanVelocity=0,riseVelocity=0,travelVelocity=0;
   void Reset(float offset=0) { *this=State{}; phase=std::isfinite(offset)?std::remainder(offset,motion::tau):0; }
   void Update(float dt,float height,float velocity,float travel,bool alive,bool damaged,float strike,
-              float landingSpeed=0,float landingElapsed=0,float forwardAcceleration=0) {
+              float landingSpeed=0,float landingElapsed=0,float forwardAcceleration=0,bool castStarted=false) {
     if (!std::isfinite(dt) || dt<=0) return;
     dt=std::min(dt,.05f);
     if (!alive) { Reset(); return; }
+    castAge=castStarted?0:std::min(2.f,castAge+dt);
+    pose.cast=Gesture(castAge,.18f,.72f);
     height=std::isfinite(height)?std::max(0.f,height):0;
     velocity=std::isfinite(velocity)?std::clamp(velocity,-20.f,20.f):0;
     travel=std::isfinite(travel)?std::max(0.f,travel):0;
@@ -52,12 +61,12 @@ struct State {
     if (!onGround) { landingAge=2; landingStrength=0; }
     phase=std::remainder(phase+dt*1.8f,motion::tau*2);
     airBlend=motion::Ease(airBlend,onGround?0.f:1.f,18.f,dt);
-    riseBlend=motion::Ease(riseBlend,Signed(velocity/motion::jumpSpeed),16.f,dt);
-    travelBlend=motion::Ease(travelBlend,onGround?Unit(travel/dt/7.f):0.f,12.f,dt);
+    motion::Spring(riseBlend,riseVelocity,Signed(velocity/motion::jumpSpeed),24.f,dt);
+    motion::Spring(travelBlend,travelVelocity,onGround?Unit(travel/dt/7.f):0.f,20.f,dt);
     const float leanTarget=onGround?Signed(forwardAcceleration/60.f):0;
-    pose.lean=motion::Ease(pose.lean,leanTarget,16.f,dt);
+    motion::Spring(pose.lean,leanVelocity,leanTarget,24.f,dt);
     pose.hit=hitAge>1?0:std::max(hitCarry*std::exp(-24*hitAge),Pulse(hitAge,.055f));
-    pose.landing=landingStrength*Pulse(landingAge,.075f);
+    pose.landing=landingStrength*Gesture(landingAge,.09f,.42f);
     // Extend the legs before touching down, regardless of filtered air state.
     pose.air=airBlend*SmoothStep(height/.25f); pose.rise=riseBlend; pose.travel=travelBlend;
     const float rest=(1-travelBlend)*(1-Unit(strike))*(1-pose.hit)*(1-pose.air);
