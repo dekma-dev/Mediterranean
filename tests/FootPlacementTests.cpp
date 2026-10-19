@@ -1,4 +1,5 @@
 #include "game/Game.h"
+#include "tests/DashFixture.h"
 #include "game/CharacterPose.h"
 #include "game/CharacterView.h"
 #include "engine/Renderer.h"
@@ -160,8 +161,8 @@ int main() {
   for (int i=0;i<7;++i) game.ExecuteCommand({},.02f);
   Require(game.Effects().TrailCount()>0,"Combat stance capture must contain an accepted strike");
   liveCapture(L"feet-live-combat.png");
-  game.Initialize(); game.SetCameraOrbit(2.2f,.28f,4.8f);
-  rpg::Command dash; dash.ability=2; game.ExecuteCommand(dash,.04f);
+  game.Initialize(); Require(game.RestoreSnapshot(test::dashFixture),"Target dash feet fixture"); game.SetCameraOrbit(2.2f,.28f,4.8f);
+  rpg::Command dash; dash.ability=2; dash.nextTarget=true; game.ExecuteCommand(dash,.04f);
   liveCapture(L"dash-start.png");
   game.ExecuteCommand({},.035f);
   Require(game.PlayerAnimation().dash>.99f && !game.PlayerAnimation().feetActive,"Dash peak must use its own pose, not planted walking feet");

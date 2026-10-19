@@ -1,4 +1,5 @@
 #include "game/Game.h"
+#include "tests/DashFixture.h"
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -62,10 +63,12 @@ void RmbBodySteering() {
   Require(simulation.Facing()==facing,"Nonfinite steering must not corrupt facing or saves.");
   command.facingYaw=-1; command.haltMovement=true; simulation.Update(.01f,command);
   Require(simulation.Facing()==facing,"Modal capture must suppress steering.");
-  command.haltMovement=false; command.facingYaw=.9f; command.ability=2; simulation.Update(.01f,command);
+  Require(simulation.Load(test::dashFixture),"Target dash steering fixture must load.");
+  command.haltMovement=false; command.facingYaw=.9f; command.ability=2; command.nextTarget=true; simulation.Update(.01f,command);
+  const float dashFacing=simulation.Facing(); command.nextTarget=false;
   Require(simulation.Dashing(),"Prepare a committed dash.");
   command.ability=-1; command.facingYaw=-1; simulation.Update(.01f,command);
-  Require(simulation.Facing()==facing,"Active dashes retain their committed heading despite RMB turns.");
+  Require(simulation.Facing()==dashFacing && dashFacing==0,"Active dashes face their target despite RMB turns.");
   rpg::Simulation combat;
   std::string closeTarget=pursuit; const auto at=closeTarget.find("-4 3 100"); closeTarget.replace(at,8,"-4 5 100");
   Require(combat.Load(closeTarget),"Close melee steering fixture must load.");
@@ -436,18 +439,20 @@ int main() {
     std::abs(game.PlayerPose().gait)>0,"Braking must retain a short physical step and a moving pose");
   for (int i=0;i<42;++i) game.ExecuteCommand({},1.f/60);
   Require(std::abs(game.PlayerPose().gait)<.0001f,"Idle pose must settle without walking in place");
+  Require(game.RestoreSnapshot(test::dashFixture),"Target dash fixture must load.");
   const float phase=game.PlayerPose().phase;
-  rpg::Command dash; dash.ability=2; game.ExecuteCommand(dash);
+  rpg::Command dash; dash.ability=2; dash.nextTarget=true; game.ExecuteCommand(dash);
   Require(game.State().MovementDistance()==0 && game.PlayerPose().phase==phase,
     "Dash must not count burst distance as several walking steps");
   for(int hz : {22,30,60,144}) {
-    Game burst; burst.Initialize(); const auto start=burst.State().Player();
+    Game burst; burst.Initialize(); Require(burst.RestoreSnapshot(test::dashFixture),"Target dash fixture"); const auto start=burst.State().Player();
     float elapsed=0; bool animated=false;
     while(elapsed<.35f-1e-6f) {
       const float dt=std::min(1.f/hz,.35f-elapsed); rpg::Command input;
-      if(elapsed==0) input.ability=2;
+      if(elapsed==0) input=dash;
       const auto before=burst.State().Player(); burst.ExecuteCommand(input,dt);
       Require(Distance(before,burst.State().Player())<1.f,"Dash must move continuously rather than teleport");
+      Require(burst.PlayerPose().facing==burst.State().Facing(),"The body must face the target during the burst.");
       animated=animated || burst.PlayerAnimation().dash>.5f;
       Require(burst.State().GroundMovementDistance()==0,"Dash must not generate walking steps");
       elapsed+=dt;
@@ -455,27 +460,31 @@ int main() {
     Require(std::abs(Distance(start,burst.State().Player())-3.5f)<.0001f && !burst.State().Dashing(),
       "Timed dash must cover 3.5 m and finish independently of update rate");
     Require(animated && burst.PlayerAnimation().dash==0,"Dash must animate through its lifetime then settle");
-    burst.Initialize(); burst.ExecuteCommand(dash,.05f); const auto stopped=burst.State().Player();
+    burst.Initialize(); Require(burst.RestoreSnapshot(test::dashFixture),"Target dash reset fixture"); burst.ExecuteCommand(dash,.05f); const auto stopped=burst.State().Player();
     burst.SuspendInput(); burst.ExecuteCommand({},.05f);
     Require(Distance(stopped,burst.State().Player())==0 && !burst.State().Dashing(),"Suspension must cancel a timed dash");
-    burst.Initialize(); burst.ExecuteCommand(dash,.05f); const auto dashSave=burst.State().Save();
+    burst.Initialize(); Require(burst.RestoreSnapshot(test::dashFixture),"Target dash reset fixture"); burst.ExecuteCommand(dash,.05f); const auto dashSave=burst.State().Save();
     Require(burst.RestoreSnapshot(dashSave) && !burst.State().Dashing(),"Loading must discard unfinished dash movement");
   }
   // Check equal-time displacement and phase at several real update rates.
   std::array<float,4> referenceDash{};
+  float referenceSettle=0;
   for (int hz : {22,30,60,144,1000}) {
-    Game burst; burst.Initialize(); const auto origin=burst.State().Player();
+    Game burst; burst.Initialize(); Require(burst.RestoreSnapshot(test::dashFixture),"Equal-time target fixture"); const auto origin=burst.State().Player();
     const float checkpoints[]={.075f,.17f,.30f,.35f};
     float elapsed=0; int starts=0,stops=0;
     for (int point=0;point<4;++point) {
       while (elapsed<checkpoints[point]-1e-7f) {
         const float dt=std::min(1.f/hz,checkpoints[point]-elapsed);
-        rpg::Command input; if (elapsed==0) input.ability=2;
+        rpg::Command input; if (elapsed==0) input=dash;
         burst.ExecuteCommand(input,dt); elapsed+=dt;
         for (std::size_t i=0;i<burst.State().VisualEventCount();++i) {
           const auto kind=burst.State().VisualEvents()[i].kind;
           starts+=kind==rpg::CombatVisualKind::DashStart;
           stops+=kind==rpg::CombatVisualKind::DashStop;
+          if (kind==rpg::CombatVisualKind::DashStop) Require(
+            std::abs(elapsed-burst.State().VisualEvents()[i].elapsed-motion::dashDuration)<.0001f,
+            "Normal dash finish must retain its time inside the final update");
           Require(kind!=rpg::CombatVisualKind::DashImpact,"Open ground must not invent an impact");
         }
       }
@@ -489,14 +498,25 @@ int main() {
       if (point==2) Require(burst.PlayerAnimation().dash<.1f,"Final travel must slow into the stop");
     }
     Require(starts==1 && stops==1,"A completed dash must emit exactly one launch and one stop");
+    Require(burst.PlayerAnimation().dashBrake>.3f,"Normal finish must retain a short bracing recovery");
+    while (elapsed<.42f-1e-7f) {
+      const float dt=std::min(1.f/hz,.42f-elapsed); burst.ExecuteCommand({},dt); elapsed+=dt;
+    }
+    if (hz==22) referenceSettle=burst.PlayerAnimation().dashBrake;
+    else Require(std::abs(burst.PlayerAnimation().dashBrake-referenceSettle)<.0001f,
+      "Equal-time settling must agree across update rates");
+    while (elapsed<.52f-1e-7f) {
+      const float dt=std::min(1.f/hz,.52f-elapsed); burst.ExecuteCommand({},dt); elapsed+=dt;
+    }
+    Require(burst.PlayerAnimation().dashBrake==0 && burst.PlayerAnimation().dashLoad==0,
+      "Dash recovery must finish completely without drift");
   }
   const auto save=game.State().Save();
   {
     rpg::Simulation blocked;
-    Require(blocked.Load("MEDITERRANEAN 3\n3 -8 100 1.5707963 0 0\n2 0 0 0\n0\n0 0 0 0\n"
-      "100 -4 7 80 0 0 0 0 0\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n"),"Dash wall fixture must load");
+    Require(blocked.Load(test::dashWallFixture),"Dash wall fixture must load");
     for(int frame=0;frame<20;++frame) blocked.Update(.05f,frame==0?dash:rpg::Command{});
-    Require(blocked.CanStand(blocked.Player()) && blocked.Player().x<=4.801f && !blocked.Dashing(),
+    Require(blocked.CanStand(blocked.Player()) && blocked.Player().z<3.5f && !blocked.Dashing(),
       "Timed dash must stop at a wall without tunnelling or persistent force");
   }
   game.ExecuteCommand(move,.05f);

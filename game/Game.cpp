@@ -23,6 +23,7 @@ float EnemyStrike(const rpg::Enemy& enemy,bool active) {
 
 void Game::Initialize() {
   simulation_=rpg::Simulation{}; time_=0; atmosphereTime_=0;
+  interface_.SetOnly(ui::Panel::None); orbiting_=false;
   yaw_=0; pitch_=.45f; distance_=10;
   ResetMotion();
 }
@@ -52,6 +53,8 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   if (input.Pressed('J')) interface_.Toggle(ui::Panel::Journal);
   if (input.Pressed('M')) interface_.Toggle(ui::Panel::Map);
   if (input.Pressed('N')) interface_.Toggle(ui::Panel::Build);
+  const bool closingQuest=interface_.panel==ui::Panel::Quest && input.Pressed('E');
+  if (closingQuest) interface_.Close(ui::Panel::Quest);
   const bool closingMerchant=interface_.panel==ui::Panel::Merchant && input.Pressed('E');
   if (closingMerchant) interface_.Close(ui::Panel::Merchant);
   ui::Event event;
@@ -72,6 +75,9 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   case ui::Action::Build: interface_.Toggle(ui::Panel::Build); break;
   case ui::Action::SelectTalent: interface_.selectedTalent=event.value; break;
   case ui::Action::LearnTalent: command.learnTalent=event.value; break;
+  case ui::Action::QuestConfirm: command.questAction=static_cast<rpg::QuestAction>(event.value); break;
+  case ui::Action::QuestPage:
+    interface_.questPage=std::max(0,interface_.questPage+event.value); interface_.InvalidateHitRegions(); break;
   case ui::Action::Save: SaveProgress(); interface_.menuNotice=simulation_.Message(); break;
   case ui::Action::Load: LoadProgress(); interface_.menuNotice=simulation_.Message(); break;
   case ui::Action::Fullscreen: fullscreenRequest_=true; break;
@@ -114,7 +120,7 @@ void Game::Update(double seconds,const Input& input,float wheel) {
     command.movement={std::sin(movementYaw)*forward+std::cos(movementYaw)*right,
       std::cos(movementYaw)*forward-std::sin(movementYaw)*right};
     command.sprint=input.Held(VK_SHIFT); command.jump=input.Pressed(VK_SPACE);
-    command.nextTarget=input.Pressed(VK_TAB); command.interact=input.Pressed('E') && !closingMerchant;
+    command.nextTarget=input.Pressed(VK_TAB); command.interact=input.Pressed('E') && !closingMerchant && !closingQuest;
     command.restart=input.Pressed('R');
     command.usePotion=command.usePotion || input.Pressed('Q'); command.equipWeapon=command.equipWeapon || input.Pressed('G');
     for (int i=0;i<4;++i) if (input.Pressed('1'+i)) { command.ability=i; break; }
@@ -127,6 +133,8 @@ void Game::Update(double seconds,const Input& input,float wheel) {
     interface_.previewYaw=0;
     if (command.restart) interface_.hasWaypoint=false;
   }
+  if (simulation_.QuestDialogue()!=rpg::QuestId::None &&
+    (interface_.panel!=ui::Panel::Quest || !input.Focused())) command.questAction=rpg::QuestAction::Close;
   const bool wasAlive=simulation_.Health()>0;
   // Menus capture local commands, but never stop simulation time.
   ExecuteCommand(command,dt);
@@ -144,25 +152,37 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   const float dt=std::isfinite(seconds)?std::clamp(seconds,0.f,.05f):0.f;
   const bool wasDead=simulation_.Health()<=0,wasSparring=simulation_.Sparring();
   const auto previousVelocity=simulation_.MovementVelocity();
+  const auto priorDialogue=simulation_.QuestDialogue(); const auto priorStage=simulation_.DialogueStage();
   simulation_.Update(dt,command);
   if (dt<=0) return;
+  if (simulation_.QuestDialogue()!=rpg::QuestId::None) {
+    if (interface_.panel!=ui::Panel::Quest) { CancelUiGesture(); interface_.SetOnly(ui::Panel::Quest); }
+    if (priorDialogue!=simulation_.QuestDialogue() || priorStage!=simulation_.DialogueStage()) {
+      interface_.questPage=0; interface_.InvalidateHitRegions();
+    }
+  } else if (interface_.panel==ui::Panel::Quest) interface_.Close(ui::Panel::Quest);
   time_+=dt;
   atmosphereTime_=std::fmod(atmosphereTime_+dt,1800.0);
   if (command.restart || (wasDead && simulation_.Health()>0)) { ResetMotion(); return; }
   effects_.Advance(dt);
   for (std::size_t i=0;i<simulation_.VisualEventCount();++i) effects_.Emit(simulation_.VisualEvents()[i]);
   const auto dashPosition=simulation_.Player();
-  effects_.TrackDash({dashPosition.x,simulation_.Height(),dashPosition.z},simulation_.Dashing());
+  effects_.TrackDash({dashPosition.x,simulation_.Height(),dashPosition.z},simulation_.Dashing(),dt,
+    simulation_.Dashing()?motion::DashSpeed(simulation_.DashPhase()):0);
   if (command.haltMovement || simulation_.Health()<=0) effects_.CancelDash();
   if (simulation_.Health()<=0) effects_.CancelTrails();
   if (wasSparring && !simulation_.Sparring()) effects_.CancelTrail(simulation_.SparringOpponent().id);
   playerPose_.Update(simulation_.Facing(),simulation_.GroundMovementDistance(),simulation_.Grounded() && !simulation_.Dashing(),
-    simulation_.Health()>0,simulation_.AttackFlash()*5,dt);
+    simulation_.Health()>0,simulation_.AttackFlash()*5,dt,simulation_.Dashing() || simulation_.DashedThisUpdate());
   const auto velocity=simulation_.MovementVelocity();
-  bool castStarted=false,dashImpact=false;
+  bool castStarted=false,dashImpact=false,dashFinished=false;
+  float dashEndElapsed=0;
   for(std::size_t i=0;i<simulation_.VisualEventCount();++i) {
     castStarted|=simulation_.VisualEvents()[i].kind==rpg::CombatVisualKind::Mend;
-    dashImpact|=simulation_.VisualEvents()[i].kind==rpg::CombatVisualKind::DashImpact;
+    const auto& event=simulation_.VisualEvents()[i];
+    if (event.kind==rpg::CombatVisualKind::DashImpact || event.kind==rpg::CombatVisualKind::DashStop) {
+      dashImpact=event.kind==rpg::CombatVisualKind::DashImpact; dashFinished=true; dashEndElapsed=event.elapsed;
+    }
   }
   const float forwardAcceleration=command.haltMovement?0:
     ((velocity.x-previousVelocity.x)*std::sin(playerPose_.facing)+
@@ -170,7 +190,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   playerAnimation_.Update(dt,simulation_.Height(),simulation_.VerticalSpeed(),simulation_.MovementDistance(),
     simulation_.Health()>0,simulation_.DamagedThisUpdate(),playerPose_.attack,
     simulation_.LandingSpeed(),simulation_.LandingElapsed(),forwardAcceleration,castStarted);
-  playerAnimation_.UpdateDash(dt,simulation_.Dashing(),simulation_.DashPhase(),dashImpact,simulation_.Health()>0);
+  playerAnimation_.UpdateDash(dt,simulation_.Dashing(),simulation_.DashPhase(),dashImpact,simulation_.Health()>0,dashFinished,dashEndElapsed);
   if (command.haltMovement) playerAnimation_.CancelDash();
   playerAnimation_.pose.lean*=1-playerAnimation_.pose.dash;
   playerFeet_.Update(dt,simulation_.Player(),playerPose_.facing,simulation_.Grounded() && !simulation_.Dashing(),

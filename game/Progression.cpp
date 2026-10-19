@@ -52,9 +52,9 @@ void Simulation::Emit(FeedbackKind kind,Vec2 position,int amount) {
   feedback_.push_back({position,kind,amount,0});
 }
 
-void Simulation::EmitVisual(CombatVisualKind kind,Vec2 position,float height,float facing,EntityId actor) {
+void Simulation::EmitVisual(CombatVisualKind kind,Vec2 position,float height,float facing,EntityId actor,float elapsed) {
   if (visualEventCount_<visualEvents_.size())
-    visualEvents_[visualEventCount_++]={kind,position,height,facing,actor};
+    visualEvents_[visualEventCount_++]={kind,position,height,facing,actor,elapsed};
 }
 
 void Simulation::RestoreForLevel(int previousLevel) {
@@ -138,9 +138,9 @@ std::string Simulation::InteractionPrompt() const {
   if (sparring_) return "E END SPARRING ROUND";
   if (Channeling()) return "STABILIZING - STAND STILL";
   if (Distance(player_,questGiver)<=3) {
-    if (quest_==Quest::Available) return "E ACCEPT FRONTIER PATROL";
-    if (quest_==Quest::Return || anchorQuest_==AnchorQuest::Return) return "E CLAIM QUEST REWARD";
-    if (anchorQuest_==AnchorQuest::Available) return "E ACCEPT ASTRAL ANCHOR QUEST";
+    if (quest_==Quest::Available) return "E READ FRONTIER PATROL";
+    if (quest_==Quest::Return || anchorQuest_==AnchorQuest::Return) return "E DISCUSS QUEST REWARD";
+    if (anchorQuest_==AnchorQuest::Available) return "E READ ASTRAL ANCHOR QUEST";
     return "E SPEAK TO BEACON KEEPER";
   }
   if (anchorQuest_==AnchorQuest::Active && DefeatedCount()==3 &&

@@ -59,9 +59,14 @@ void DashPulse(Renderer& renderer,const rpg::CombatVisualEvent& event,float age)
   const float sx=std::sin(event.facing),cx=std::cos(event.facing);
   XMFLOAT4 color=impact?XMFLOAT4{1,.64f,.28f,1}:XMFLOAT4{.24f,.78f,1,1};
   const float radius=.32f+phase*(start?.85f:.55f);
+  const bool groundStop=!start && !impact && event.height<.08f;
   const auto ringPoint=[&](float a,float width) -> XMFLOAT3 {
     const float r=radius+width,side=std::cos(a)*r;
     const float back=(start?-.35f:.10f)*phase;
+    if (groundStop) {
+      const float forward=std::sin(a)*r*.65f;
+      return {event.position.x+cx*side+sx*forward,.055f,event.position.z-sx*side+cx*forward};
+    }
     return {event.position.x+cx*side+sx*back,
       event.height+.85f+std::sin(a)*r*.85f,event.position.z-sx*side+cx*back};
   };
@@ -80,7 +85,7 @@ void DashPulse(Renderer& renderer,const rpg::CombatVisualEvent& event,float age)
     const auto at=[&](float t) -> XMFLOAT3 {
       const float travel=-std::expm1(-5*t)/5;
       return {event.position.x+(cx*side+sx*forward)*travel,
-        event.height+(grit?.07f:.4f+float(i%4)*.3f)+(grit?1.2f:.5f)*t-(grit?4.f:1.f)*t*t,
+        std::max(.035f,event.height+(grit?.07f:.4f+float(i%4)*.3f)+(grit?1.2f:.5f)*t-(grit?4.f:1.f)*t*t),
         event.position.z+(-sx*side+cx*forward)*travel};
     };
     auto mote=grit?XMFLOAT4{.62f,.49f,.29f,fade*.22f}:color;
@@ -148,10 +153,12 @@ void CombatEffects::Advance(float dt) {
   }
 }
 void CombatEffects::Emit(const rpg::CombatVisualEvent& event) {
+  const float elapsed=std::isfinite(event.elapsed)?std::clamp(event.elapsed,0.f,.05f):0;
   if (event.kind==K::DashStart) {
     CancelTrail(0);
     wake_={}; wake_.facing=event.facing; wake_.active=true;
-    wake_.samples[wake_.count++]={{event.position.x,event.height,event.position.z},0};
+    wake_.previous={event.position.x,event.height,event.position.z};
+    wake_.samples[wake_.count++]={wake_.previous,elapsed,0};
   }
   if (event.kind==K::Strike || event.kind==K::HeavyStrike || event.kind==K::EnemySwing) {
     auto slot=std::find_if(trails_.begin(),trails_.end(),[&](const Trail& trail) { return trail.actor==event.actor && trail.age<.4f; });
@@ -163,7 +170,7 @@ void CombatEffects::Emit(const rpg::CombatVisualEvent& event) {
   auto slot=std::max_element(bursts_.begin(),bursts_.end(),[](const Burst& a,const Burst& b) {
     return a.age/BurstLife(a.event.kind)<b.age/BurstLife(b.event.kind);
   });
-  *slot={event,0,++serial_};
+  *slot={event,elapsed,++serial_};
 }
 bool CombatEffects::Tracking(rpg::EntityId actor) const {
   for (const auto& trail : trails_) if (trail.actor==actor && trail.age<.24f) return true;
@@ -190,22 +197,35 @@ void CombatEffects::TrackWeapon(rpg::EntityId actor,XMFLOAT3 root,XMFLOAT3 tip) 
     return;
   }
 }
-void CombatEffects::TrackDash(XMFLOAT3 position,bool active) {
-  if (!wake_.active) return;
-  if (wake_.count) {
-    const auto delta=XMLoadFloat3(&position)-XMLoadFloat3(&wake_.samples[wake_.count-1].position);
-    if (XMVectorGetX(XMVector3LengthSq(delta))>4) { wake_={}; return; }
-  }
-  // A live endpoint plus time-spaced history retains the same wake at high Hz.
-  if (wake_.count>=2 && wake_.samples[wake_.count-2].age<1.f/120)
-    wake_.samples[wake_.count-1]={position,0};
-  else {
+void CombatEffects::TrackDash(XMFLOAT3 position,bool active,float dt,float strength) {
+  if (!wake_.active || !std::isfinite(dt) || dt<=0) return;
+  if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z)) { wake_={}; return; }
+  dt=std::min(dt,.05f); strength=std::isfinite(strength)?Unit(strength):0;
+  const auto delta=XMLoadFloat3(&position)-XMLoadFloat3(&wake_.previous);
+  if (XMVectorGetX(XMVector3LengthSq(delta))>4) { wake_={}; return; }
+  const float dx=position.x-wake_.previous.x,dz=position.z-wake_.previous.z;
+  if (dx*dx+dz*dz>1e-10f) wake_.facing=std::atan2(dx,dz);
+  // Keep committed samples on a 120 Hz clock, interpolating the actual swept
+  // segment. A separate live endpoint must not become a frame-dependent sample.
+  if (wake_.liveEndpoint && wake_.count) --wake_.count;
+  const auto append=[&](WakeSample sample) {
     if (wake_.count==wake_.samples.size()) {
       std::move(wake_.samples.begin()+1,wake_.samples.end(),wake_.samples.begin()); --wake_.count;
     }
-    wake_.samples[wake_.count++]={position,0};
+    wake_.samples[wake_.count++]=sample;
+  };
+  constexpr float interval=1.f/120;
+  float offset=interval-wake_.pending,last=-1;
+  for (;offset<=dt+1e-6f;offset+=interval) {
+    const float t=Unit(offset/dt);
+    XMFLOAT3 sample;
+    XMStoreFloat3(&sample,XMLoadFloat3(&wake_.previous)+delta*t);
+    append({sample,std::max(0.f,dt-offset),wake_.strength+(strength-wake_.strength)*t}); last=offset;
   }
-  wake_.active=active;
+  wake_.pending=std::clamp(interval-(offset-dt),0.f,interval);
+  wake_.liveEndpoint=last<dt-1e-6f;
+  if (wake_.liveEndpoint) append({position,0,strength});
+  wake_.previous=position; wake_.strength=strength; wake_.active=active;
 }
 void CombatEffects::CancelDash() {
   wake_={};
@@ -225,15 +245,39 @@ void CombatEffects::Render(Renderer& renderer) const {
   const float sx=std::sin(wake_.facing),cx=std::cos(wake_.facing);
   for (std::size_t i=1;i<wake_.count;++i) {
     const auto& a=wake_.samples[i-1]; const auto& b=wake_.samples[i];
-    for (int band=0;band<3;++band) {
-      const float side=band==0?-.33f:band==1?.33f:0,up=band==2?.38f:1.22f;
-      const float width=band==2?.045f:.065f;
-      const auto edge=[&](XMFLOAT3 p,float w) -> XMFLOAT3 {
-        return {p.x+cx*(side+w),p.y+up,p.z-sx*(side+w)};
+    const float dx=b.position.x-a.position.x,dz=b.position.z-a.position.z,length=std::hypot(dx,dz);
+    const float pathX=length>.00001f?dx/length:sx,pathZ=length>.00001f?dz/length:cx;
+    for (int band=0;band<3;++band) for (int layer=0;layer<2;++layer) {
+      const float side=band==0?-.31f:band==1?.31f:0,up=band==2?.38f:1.22f;
+      const auto edge=[&](const WakeSample& sample,float sign) -> XMFLOAT3 {
+        const float taper=Unit(1-sample.age/.20f)*std::sqrt(Unit(sample.strength));
+        const float width=(layer==0?.09f:.018f)*(.12f+.88f*taper)*sign;
+        const float drift=side*sample.age*1.3f;
+        // Raised side strips remain readable from a low side camera; the lower
+        // horizontal strip anchors the speed cue to the feet.
+        const float lateral=side+drift+width*(band==2?1.f:.38f);
+        return {sample.position.x+pathZ*lateral,sample.position.y+up+width*(band==2?0.f:.92f),
+          sample.position.z-pathX*lateral};
       };
-      renderer.DrawEffectRibbon(edge(a.position,-width),edge(a.position,width),
-        edge(b.position,width),edge(b.position,-width),{.23f,.73f,1,.46f},
-        std::pow(Unit(1-a.age/.20f),2.f),std::pow(Unit(1-b.age/.20f),2.f));
+      const auto opacity=[](const WakeSample& sample) {
+        return std::pow(Unit(1-sample.age/.20f),2.f)*std::sqrt(Unit(sample.strength));
+      };
+      renderer.DrawEffectRibbon(edge(a,-1),edge(a,1),edge(b,1),edge(b,-1),
+        layer==0?XMFLOAT4{.12f,.48f,1,.38f}:XMFLOAT4{.66f,.95f,1,.75f},opacity(a),opacity(b));
+    }
+  }
+  // A pair of open pressure arcs travels with the chest, leaving the body clear.
+  if (wake_.active && wake_.strength>.05f) for (int side : {-1,1}) {
+    const auto point=[&](float u,float width) -> XMFLOAT3 {
+      const float a=-1.05f+u*2.1f,lateral=side*(.39f+std::cos(a)*(.10f+width));
+      const float forward=.25f+std::cos(a)*.20f;
+      return {wake_.previous.x+cx*lateral+sx*forward,wake_.previous.y+1+std::sin(a)*.43f,
+        wake_.previous.z-sx*lateral+cx*forward};
+    };
+    for (int i=0;i<14;++i) {
+      const float a=float(i)/14,b=float(i+1)/14;
+      renderer.DrawEffectRibbon(point(a,-.018f),point(a,.018f),point(b,.018f),point(b,-.018f),
+        {.42f,.85f,1,wake_.strength*.42f},std::sin(a*3.14159265f),std::sin(b*3.14159265f));
     }
   }
   for (const auto& trail : trails_) {

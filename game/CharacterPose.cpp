@@ -46,7 +46,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   const float cast=animation::Unit(dynamics.cast)*(1-swing)*(1-hit)*(1-burst);
   CharacterPose pose;
   pose.bodyLift=gait*gait*.015f*(1-air)+breath*.006f*(1-air)-landing*.14f;
-  pose.bodyLift-=dash*.09f+brake*.055f+dashImpact*.04f;
+  pose.bodyLift-=dash*.09f+brake*.055f+dashImpact*.04f+animation::Unit(dynamics.dashLoad)*.035f;
   pose.upperPitch=travel*.09f+animation::Signed(dynamics.lean)*.10f+landing*.12f+air*std::max(0.f,rise)*.06f-hit*.12f+sway*.015f*(1-air);
   pose.upperPitch+=dash*.42f-brake*.16f-dashImpact*.14f;
   pose.upperPitch-=cast*.08f;
@@ -65,8 +65,10 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     constexpr float reach=CharacterPose::thigh+CharacterPose::shin-.002f;
     pose.bodyLift=std::min(pose.bodyLift,y+std::sqrt(reach*reach-x*x-z*z)-.93f);
   }
+  // The push leg sweeps back, then the opposite leg reaches into the catch.
+  const float drive=1-2*animation::SmoothStep((animation::Unit(dynamics.dashPhase)-.20f)/.50f);
   for (int i=0;i<2;++i) {
-    const float side=i==0?-1.f:1.f,stride=side*(gait*(1-std::max(dash,brake))+dash*.95f+brake*.60f)*(1-air);
+    const float side=i==0?-1.f:1.f,stride=side*(gait*(1-burst)+dash*.95f*drive-brake*.65f)*(1-air);
     const float positiveRise=std::max(0.f,rise),step=std::max(0.f,stride);
     const float lift=air*(.17f+positiveRise*positiveRise*.15f+(i==0?.045f:0));
     pose.legs[i]=Solve({side*.17f,.93f+pose.bodyLift,0},{side*(.18f+air*.015f),.17f+step*step*.055f+lift,

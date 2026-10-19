@@ -23,7 +23,8 @@ public:
   void OpenPanel(ui::Panel panel) { interface_.SetOnly(panel); }
   void ShowPanel(ui::Panel panel) { interface_.Show(panel); }
   void CancelUiGesture() { interface_.CancelDrag(); CancelOrbit(); }
-  void SuspendInput() { CancelUiGesture(); simulation_.StopMovement(); effects_.CancelDash(); playerAnimation_.CancelDash(); }
+  void SuspendInput() { CancelUiGesture(); simulation_.StopMovement(); effects_.CancelDash(); playerAnimation_.CancelDash();
+    simulation_.CloseQuestDialogue(); if (interface_.panel==ui::Panel::Quest) interface_.Close(ui::Panel::Quest); }
   void ExecuteCommand(const rpg::Command& command,float seconds=.01f);
   const rpg::Simulation& State() const { return simulation_; }
   const motion::Actor& PlayerPose() const { return playerPose_; }

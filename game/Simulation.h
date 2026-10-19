@@ -6,6 +6,7 @@
 #include "game/Inventory.h"
 #include "game/Trade.h"
 #include "game/Talents.h"
+#include "game/Quests.h"
 #include "game/Motion.h"
 
 namespace rpg {
@@ -38,6 +39,7 @@ struct Command {
   bool sprint = false, jump = false, nextTarget = false, interact = false, restart = false;
   int ability = -1;
   int learnTalent = -1;
+  QuestAction questAction=QuestAction::None;
   bool usePotion = false, equipWeapon = false;
   int potionSource=-1;
   bool respawn = false;
@@ -65,6 +67,7 @@ struct CombatVisualEvent {
   Vec2 position;
   float height = 0, facing = 0;
   EntityId actor = 0; // zero is the player; enemies retain their stable IDs
+  float elapsed = 0; // time from emission to the end of this update
 };
 
 class Simulation {
@@ -91,7 +94,7 @@ public:
   float MovementDistance() const { return movementDistance_; } // excludes dash/respawn
   Vec2 MovementVelocity() const { return movementVelocity_; }
   float GroundMovementDistance() const { return groundMovementDistance_; }
-  void StopMovement() { movementVelocity_={}; movementDistance_=groundMovementDistance_=0; jumpBuffer_=0; dashRemaining_=0; }
+  void StopMovement() { movementVelocity_={}; movementDistance_=groundMovementDistance_=0; jumpBuffer_=0; dashRemaining_=dashTravelLeft_=0; dashTarget_=0; }
   float Health() const { return health_; }
   int Experience() const;
   int Level() const;
@@ -140,6 +143,11 @@ public:
   float HeavyDamage() const { return DescribeItem(inventory_.Worn(GearSlot::Weapon)).heavy+HeavyBonus(); }
   float PotionCooldown() const { return potionCooldown_; }
   const char* AbilityStatus(int index) const;
+  QuestId QuestDialogue() const { return questDialogue_; }
+  QuestStage DialogueStage() const;
+  QuestAction QuestPrimaryAction() const;
+  const char* QuestConfirmStatus() const;
+  void CloseQuestDialogue() { questDialogue_=QuestId::None; }
   Quest QuestState() const { return quest_; }
   AnchorQuest AnchorState() const { return anchorQuest_; }
   float ChannelProgress() const { return channelRemaining_>0?1-channelRemaining_/channelDuration:0; }
@@ -158,9 +166,14 @@ public:
 private:
   void Move(Vec2& position, Vec2 displacement, float radius);
   void SelectTarget();
-  void UseAbility(int index);
+  enum class DashCheck { Ready, NoTarget, Returning, TooClose, TooFar, Blocked };
+  DashCheck CheckDashTarget() const;
+  const Enemy* DashTargetActor() const;
+  void UseAbility(int index,float visualElapsed=0);
   void LearnTalent(int index);
   void Interact();
+  bool CanTalkToKeeper() const;
+  void ConfirmQuest(QuestAction action);
   bool HasLineOfSight(Vec2 from, Vec2 to) const;
   void UpdateEnemy(Enemy& enemy, float dt);
   void SeparateEnemies(float dt);
@@ -168,7 +181,7 @@ private:
   void RestoreForLevel(int previousLevel);
   void Respawn();
   void DamagePlayer(float damage,float incomingFacing);
-  void EmitVisual(CombatVisualKind kind,Vec2 position,float height,float facing,EntityId actor=0);
+  void EmitVisual(CombatVisualKind kind,Vec2 position,float height,float facing,EntityId actor=0,float elapsed=0);
   void StartSparring();
   void EndSparring(const char* result);
   void Buy(int offer);
@@ -182,8 +195,8 @@ private:
   Vec2 movementVelocity_{};
   float airSpeedLimit_=4;
   float jumpBuffer_=0;
-  float dashRemaining_=0;
-  Vec2 dashDirection_{};
+  float dashRemaining_=0,dashTravelLeft_=0;
+  EntityId dashTarget_=0; // accepted target identity; selection may change during travel
   float movementDistance_ = 0;
   float groundMovementDistance_ = 0;
   float landingSpeed_ = 0, landingElapsed_ = 0;
@@ -202,6 +215,7 @@ private:
   int sparringDealt_=0,sparringTaken_=0;
   std::string sparringResult_;
   float potionCooldown_ = 0;
+  QuestId questDialogue_=QuestId::None; // reading state is transient and never saved
   Quest quest_ = Quest::Available;
   AnchorQuest anchorQuest_ = AnchorQuest::Locked;
   float channelRemaining_ = 0, hurtFlash_ = 0;
