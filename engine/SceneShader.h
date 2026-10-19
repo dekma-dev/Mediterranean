@@ -238,7 +238,9 @@ float Shadow(float4 widePosition,float4 detailPosition,float sunFacing) {
  // inside a divergent selection can introduce stripes at the blend boundary.
  float2 wideGradient=ShadowGradient(wide),detailGradient=ShadowGradient(detail);
  float margin=min(min(detail.x,1-detail.x),min(detail.y,1-detail.y));
- float weight=smoothstep(.03,.15,margin);
+ // Fade over 5.4 m of the 20 m detail map, retaining full detail in its central
+ // 8 m. The old 2.4 m band made thin shadows visibly pop under bright daylight.
+ float weight=smoothstep(.03,.30,margin);
  if (detail.z<0 || detail.z>1) weight=0;
  float nearValue=1,farValue=1;
  [branch] if (weight>0) nearValue=ShadowFilter(detail,detailGradient,sunFacing,1);

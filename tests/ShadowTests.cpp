@@ -170,24 +170,27 @@ int main() {
   }
   std::cout<<"Thin post shadow min/mean contrast: "<<minimumThin<<" / "<<totalThin/8<<'\n';
   Check(minimumThin>35 && totalThin/8>50,"Cubic filtering must retain thin-post contrast through sub-texel movement.");
-  const auto focusView=[&](float focus,const wchar_t* path) {
-    floor(); renderer.SetShadowFocus({focus,0,0});
+  const auto focusView=[&](XMFLOAT3 focus,const wchar_t* path) {
+    floor(); renderer.SetShadowFocus(focus);
     renderer.DrawMesh(M::Box,{0,1,0},{.035f,2,.035f},white,S::Plain);
     return Capture(renderer,path);
   };
-  auto previousFocus=focusView(0,L"shadow-focus-origin.png");
+  auto previousFocus=focusView({0,0,0},L"shadow-focus-origin.png");
   float gridChange=0;
   for (int i=1;i<=12;++i) {
-    auto current=focusView(i*.02f,L"shadow-focus-step.png");
+    auto current=focusView({i*.02f,0,0},L"shadow-focus-step.png");
     gridChange=std::max(gridChange,MaximumDifference(previousFocus,current)); previousFocus=std::move(current);
   }
   std::cout<<"Snapped-focus pixel change: "<<gridChange<<'\n';
   Check(gridChange<=2,"Moving the focused light grid must not make stationary shadow edges swim.");
-  previousFocus=focusView(4,L"shadow-blend-start.png");
   float blendChange=0;
-  for (int i=1;i<=32;++i) {
-    auto current=focusView(4+i*.5f,L"shadow-blend-step.png");
-    blendChange=std::max(blendChange,MaximumDifference(previousFocus,current)); previousFocus=std::move(current);
+  for (XMFLOAT3 direction : {XMFLOAT3{1,0,0},XMFLOAT3{-1,0,0},XMFLOAT3{0,0,1},XMFLOAT3{0,0,-1}}) {
+    previousFocus=focusView({direction.x*4,0,direction.z*4},L"shadow-blend-start.png");
+    for (int i=1;i<=32;++i) {
+      const float distance=4+i*.5f;
+      auto current=focusView({direction.x*distance,0,direction.z*distance},L"shadow-blend-step.png");
+      blendChange=std::max(blendChange,MaximumDifference(previousFocus,current)); previousFocus=std::move(current);
+    }
   }
   std::cout<<"Detail/far blend max pixel step: "<<blendChange<<'\n';
   Check(blendChange<25,"Detail/far transitions must blend instead of popping between resolutions.");

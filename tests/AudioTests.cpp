@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 
 void Require(bool condition,const char* message) { if(!condition) { std::cerr<<message<<'\n'; std::exit(1); } }
 bool Has(const sound::Events& events,sound::Cue cue) {
@@ -146,11 +147,16 @@ int main() {
       simulation.Update(1.f/rate,{}); events.Update(simulation);
     }
     Require(simulation.Cooldown(2)>0,"Dash fixture must reach the last cooldown frame");
-    // Restore casting distance while preserving the live cooldown remainder.
+    // The actor moves during the five-second cooldown. Restore a valid distance
+    // from its current position, not its spawn (which can now be out of range).
+    const auto targetPosition=simulation.Enemies()[0].position;
     auto expiry=simulation.Save(); const auto begin=expiry.find('\n')+1,end=expiry.find('\n',begin);
-    expiry.replace(begin,end-begin,"-4 2 100 3.14159 0 0");
+    std::ostringstream playerLine;
+    playerLine<<targetPosition.x<<' '<<targetPosition.z-4.f<<" 100 3.14159 0 0";
+    expiry.replace(begin,end-begin,playerLine.str());
     Require(simulation.Load(expiry),"Repositioned cooldown fixture must load");
     simulation.Update(1.f/rate,command); events.Update(simulation);
+    Require(simulation.DashedThisUpdate(),"Expiry fixture must accept a valid targeted dash before testing its sound");
     Require(Has(events,sound::Cue::Dash),"Dash accepted on the cooldown expiry frame must sound");
     events.Reset(); events.Update(simulation);
     Require(Has(events,sound::Cue::Dash),"Resetting audio on an accepted dash frame must retain the cue");

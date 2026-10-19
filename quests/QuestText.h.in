@@ -4,15 +4,15 @@ namespace rpg::quest_text {
 inline const QuestDefinition patrol{
   "Patrol the frontier","Beacon Keeper",
   "Defeat one raider north of Dawnwatch. Return to the keeper.",
-  R"quest(@PATROL_OFFER@)",R"quest(@PATROL_PROGRESS@)",
-  R"quest(@PATROL_TURN_IN@)",R"quest(@PATROL_COMPLETE@)",
+  R"quest(@PATROL_OFFER@)quest",R"quest(@PATROL_PROGRESS@)quest",
+  R"quest(@PATROL_TURN_IN@)quest",R"quest(@PATROL_COMPLETE@)quest",
   25,60,Item::Watchguard,false
 };
 inline const QuestDefinition anchor{
   "Secure the astral anchor","Beacon Keeper",
   "Defeat all three raiders. Stabilize the northern crystal for 3 seconds. Return to the keeper.",
-  R"quest(@ANCHOR_OFFER@)",R"quest(@ANCHOR_PROGRESS@)",
-  R"quest(@ANCHOR_TURN_IN@)",R"quest(@ANCHOR_COMPLETE@)",
+  R"quest(@ANCHOR_OFFER@)quest",R"quest(@ANCHOR_PROGRESS@)quest",
+  R"quest(@ANCHOR_TURN_IN@)quest",R"quest(@ANCHOR_COMPLETE@)quest",
   50,120,Item::Ward,true
 };
 }
