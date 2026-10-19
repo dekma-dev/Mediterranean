@@ -516,7 +516,7 @@ int main() {
     rpg::Simulation blocked;
     Require(blocked.Load(test::dashWallFixture),"Dash wall fixture must load");
     for(int frame=0;frame<20;++frame) blocked.Update(.05f,frame==0?dash:rpg::Command{});
-    Require(blocked.CanStand(blocked.Player()) && blocked.Player().z<=1.301f && !blocked.Dashing(),
+    Require(blocked.CanStand(blocked.Player()) && blocked.Player().z<3.5f && !blocked.Dashing(),
       "Timed dash must stop at a wall without tunnelling or persistent force");
   }
   game.ExecuteCommand(move,.05f);

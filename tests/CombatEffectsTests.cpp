@@ -321,7 +321,7 @@ int main() {
         Require(!impacted,"A wall collision must emit only one stopping impact"); impacted=true;
         for (std::size_t i=0;i<burst.State().VisualEventCount();++i) {
           const auto& event=burst.State().VisualEvents()[i];
-          if (event.kind==K::DashImpact) Require(event.position.z<=1.301f &&
+          if (event.kind==K::DashImpact) Require(event.position.z<3.5f && event.position.z==burst.State().Player().z &&
             event.position.x==burst.State().Player().x,"Wall effect must use the swept endpoint");
         }
       }

@@ -6,6 +6,7 @@
 #include "game/Inventory.h"
 #include "game/Trade.h"
 #include "game/Talents.h"
+#include "game/Quests.h"
 #include "game/Motion.h"
 
 namespace rpg {
@@ -38,6 +39,7 @@ struct Command {
   bool sprint = false, jump = false, nextTarget = false, interact = false, restart = false;
   int ability = -1;
   int learnTalent = -1;
+  QuestAction questAction=QuestAction::None;
   bool usePotion = false, equipWeapon = false;
   int potionSource=-1;
   bool respawn = false;
@@ -141,6 +143,11 @@ public:
   float HeavyDamage() const { return DescribeItem(inventory_.Worn(GearSlot::Weapon)).heavy+HeavyBonus(); }
   float PotionCooldown() const { return potionCooldown_; }
   const char* AbilityStatus(int index) const;
+  QuestId QuestDialogue() const { return questDialogue_; }
+  QuestStage DialogueStage() const;
+  QuestAction QuestPrimaryAction() const;
+  const char* QuestConfirmStatus() const;
+  void CloseQuestDialogue() { questDialogue_=QuestId::None; }
   Quest QuestState() const { return quest_; }
   AnchorQuest AnchorState() const { return anchorQuest_; }
   float ChannelProgress() const { return channelRemaining_>0?1-channelRemaining_/channelDuration:0; }
@@ -165,6 +172,8 @@ private:
   void UseAbility(int index,float visualElapsed=0);
   void LearnTalent(int index);
   void Interact();
+  bool CanTalkToKeeper() const;
+  void ConfirmQuest(QuestAction action);
   bool HasLineOfSight(Vec2 from, Vec2 to) const;
   void UpdateEnemy(Enemy& enemy, float dt);
   void SeparateEnemies(float dt);
@@ -206,6 +215,7 @@ private:
   int sparringDealt_=0,sparringTaken_=0;
   std::string sparringResult_;
   float potionCooldown_ = 0;
+  QuestId questDialogue_=QuestId::None; // reading state is transient and never saved
   Quest quest_ = Quest::Available;
   AnchorQuest anchorQuest_ = AnchorQuest::Locked;
   float channelRemaining_ = 0, hurtFlash_ = 0;

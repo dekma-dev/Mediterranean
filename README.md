@@ -46,7 +46,7 @@ Player and enemy feet now hold their ground contact while supporting the body, t
 
 Strike combines a gold crescent with a blade-following trail; Heavy Strike adds a larger cyan crescent and delayed violet counter-sweep. Bright contact cores, expanding impact rings, tapered sparks and rising motes give attacks a more expressive fantasy-MMO appearance. Enemy effects use restrained orange. Confirmed combat events drive the effects, which remain behind scenery and under the interface and expire within half a second. Damage, range and cooldowns are unchanged. Press Tab near a raider, then 1/2; after the campaign, use the eastern sparring guard. See manual checks 74–80.
 
-Spell 3 uses a 0.34-second forward burst with launch compression, body lean, alternating push/catch legs, a short settling brace and collision recoil. Tapered cyan/pale motion ribbons follow the actual path; moving pressure arcs, endpoint rings and motes make the travel visible. Range is 3.5 m with a five-second cooldown. This source change still awaits native compilation and visual acceptance (manual checks 128–132).
+Spell 3 rushes toward the selected living enemy in a 0.34-second burst with launch compression, body lean, alternating push/catch legs, a short settling brace and collision recoil. Tapered cyan/pale motion ribbons follow the actual path; moving pressure arcs, endpoint rings and motes make the travel visible. Select an enemy within 5 m; the champion travels at most 3.5 m and stops 1.5 m away, with a five-second cooldown. Invalid targets consume no cooldown. This source change still awaits native compilation and visual acceptance (manual checks 128–133).
 
 Successful Mend (4) now produces green ascending ribbons and motes; a potion (Q) creates a smaller gold pulse. Recovery residue stays at the activation position and fades within 0.8 seconds. Full-health and cooldown rejections produce no effect. This uses the existing bounded effect pool and batch without new textures or GPU buffers. See manual checks 84–85.
 
@@ -65,7 +65,7 @@ The environment connects the village plaza, dock, training ground and anchor wit
 | Hold right mouse and drag / wheel | Orbit / zoom |
 | Tab | Cycle nearby living targets |
 | 1 / 2 | Strike / heavy strike (also interrupts enemy windups) |
-| 3 / 4 | Forward dash / heal |
+| 3 / 4 | Dash to selected enemy / heal |
 | E | Talk, loot, stabilize the anchor, browse/close the shop, or start/stop sparring |
 | Q / G | Use a healing potion / switch owned swords |
 | F2 | Hide / restore the HUD for visual inspection |
@@ -90,7 +90,7 @@ Select a bag item and click **Sell one** while trading; worn gear must be remove
 
 After both quests, visit the eastern training post (cyan map marker) and press E for a repeatable 30-second sparring round. Test attacks, dodges, interrupts and armor against a 180-HP guard. E stops; leaving the area or reaching 1 HP ends the round. The report shows damage dealt/taken. There is no XP, loot or resource refund; potions are consumed normally.
 
-Enemy swings lock their facing during the orange ground telegraph. Step outside the cone, dash away, or interrupt with heavy strike. Enter after death retains progress and restores living enemies at home; R explicitly resets the expedition.
+Enemy swings lock their facing during the orange ground telegraph. Step outside the cone or interrupt with heavy strike. Enter after death retains progress and restores living enemies at home; R explicitly resets the expedition.
 
 Simulation pauses when unfocused or minimized. All panels and the Escape menu keep the world active. C and I open independent character/bag windows together, leaving the world visible and keyboard movement/combat available; pointer input over a window is captured. The central menu, champion build, atlas, journal and shop capture movement/combat keys. The UI uses green/gold carved frames, a circular minimap and compact slots. Normal gameplay starts fullscreen; F11 restores windowed mode. Version 8 saves preserve both quests, derived progression, learned talents, exact split bag stacks, ten worn slots, purchased stock, buyback items, gold and committed campaign enemy windups. Valid versions 1–7 migrate; earned talent points start unspent. Jump, camera, target, panels, unfinished anchor channels and sparring sessions reset. Invalid saves leave current progress unchanged. Saves remain in the ignored `saves/` directory.
 
