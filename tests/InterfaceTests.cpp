@@ -151,7 +151,7 @@ int main() {
   screen.Close(ui::Panel::Inventory); Require(screen.IsOpen(ui::Panel::Character) && !screen.IsOpen(ui::Panel::Inventory),"Closing the bag must preserve the character window.");
   screen.Escape(); screen.Toggle(ui::Panel::Character);
   Require(screen.panel==ui::Panel::None && screen.characterOpen,"Menu Character must reveal an already open character window.");
-  for (auto panel : {ui::Panel::Menu,ui::Panel::Inventory,ui::Panel::Character,ui::Panel::Map,ui::Panel::Journal}) {
+  for (auto panel : {ui::Panel::Menu,ui::Panel::Inventory,ui::Panel::Character,ui::Panel::Map,ui::Panel::Journal,ui::Panel::Build}) {
     Game game; game.Initialize(); Require(game.RestoreSnapshot(Fixture("combat-preview.save")),"Combat fixture must load.");
     game.OpenPanel(panel); const float before=game.State().Health(); const Input idle;
     for (int frame=0;frame<20;++frame) game.Update(.05,idle,0);
@@ -241,7 +241,7 @@ int main() {
     Require(game.State().Items().Worn(rpg::GearSlot::Weapon)==rpg::Item::Starter,
       "A fresh drag after display cancellation must still equip normally.");
   }
-  for (auto panel : {ui::Panel::Menu,ui::Panel::Map,ui::Panel::Journal}) {
+  for (auto panel : {ui::Panel::Menu,ui::Panel::Map,ui::Panel::Journal,ui::Panel::Build}) {
     auto lowHealth=Fixture("combat-preview.save");
     const auto health=lowHealth.find("5.2 100"); Require(health!=std::string::npos,"Expected combat health field.");
     lowHealth.replace(health,7,"5.2 1");
@@ -363,6 +363,36 @@ int main() {
     frame.down['E']=true; step(); frame.down['E']=false; frame.down['W']=true; step();
     Require(game.State().Player().z>before.z,"E must close trade without immediately reopening it.");
   }
+  {
+    Require(renderer.Resize(1280,720),"Build input test resolution");
+    Game game; Require(game.RestoreSnapshot(Fixture("veteran-preview.save")),"Build input fixture");
+    Input input; Input::Frame frame; frame.focused=true; frame.client={680,380}; frame.screen=frame.client;
+    const auto step=[&]() {
+      input.Update(frame); game.Update(.01,input,0);
+      renderer.BeginFrame(); game.Render(renderer); Require(renderer.EndFrame(false),"Champion build input render");
+    };
+    step(); frame.down[VK_RBUTTON]=true; step();
+    Require(game.WantsMouseLook(),"Build input test must begin with an active orbit");
+    const auto position=game.State().Player();
+    frame.down['N']=true; frame.down['W']=true; frame.down['3']=true; step();
+    Require(!game.WantsMouseLook() && game.State().Player().z==position.z && game.State().Cooldown(2)==0,
+      "N must cancel orbit and block movement/abilities on the opening frame");
+    for (int i=0;i<3;++i) step();
+    Require(game.State().Player().z==position.z,"Holding N must not repeatedly toggle the build menu");
+    frame.down['N']=frame.down['W']=frame.down['3']=frame.down[VK_RBUTTON]=false; step();
+    const auto clickAt=[&](LONG x,LONG y) {
+      frame.client={x,y}; frame.screen=frame.client; frame.down[VK_LBUTTON]=true; step();
+      frame.down[VK_LBUTTON]=false; step();
+    };
+    clickAt(1000,563);
+    Require(game.State().HasTalent(rpg::Talent::WeaponTraining) && game.State().TalentPoints()==1,
+      "Build Learn button must reach the simulation command");
+    clickAt(248,487); clickAt(1000,563);
+    Require(game.State().HasTalent(rpg::Talent::WeaponMastery) && game.State().TalentPoints()==0,
+      "Selecting a connected rank must learn that rank rather than the previous selection");
+    frame.down['N']=frame.down['W']=true; step();
+    Require(game.State().Player().z>position.z,"A fresh N press must close the menu and restore movement");
+  }
   for (const auto size : {std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
     Require(simulation.Load(Fixture("veteran-preview.save")),"Reset pointer fixture.");
     Require(renderer.Resize(size.first,size.second),"screen resize failed.");
@@ -409,6 +439,49 @@ int main() {
     Require(!simulation.CanStand(screen.pendingWaypoint) && screen.waypoint.x==0 && screen.waypoint.z==0,"Invalid map candidate must preserve the existing waypoint.");
     screen.Pointer(layout.x+477.5f*layout.scale,layout.y+366*layout.scale,float(size.first),float(size.second),false,true);
     Require(!screen.hasWaypoint,"Right-clicking the atlas must clear a waypoint.");
+
+    {
+      rpg::Simulation buildState; Require(buildState.Load(Fixture("veteran-preview.save")),"Scaled build fixture");
+      screen.SetOnly(ui::Panel::None);
+      renderer.BeginFrame(); screen.Render(renderer,buildState,0,false); Require(renderer.EndFrame(false),"Build HUD render");
+      Require(click(1045,685).action==ui::Action::Build,"N shortcut must be clickable at every UI scale");
+      screen.SetOnly(ui::Panel::Build); screen.selectedTalent=0;
+      Require(click(1000,563).action==ui::Action::None,"Opening N must invalidate the previous layout");
+      const auto drawBuild=[&]() {
+        renderer.BeginFrame(); screen.Render(renderer,buildState,0,false); Require(renderer.EndFrame(false),"Scaled build render");
+      };
+      drawBuild();
+      Require(screen.CapturesMovement() && click(550,681).action==ui::Action::None,
+        "Build menu must capture movement and block the underlying action bar");
+      for (int i=0;i<int(rpg::Talent::Count);++i) {
+        const auto node=click(248+(i%3)*232.f,320+(i/3)*171.f);
+        Require(node.action==ui::Action::SelectTalent && node.value==i,"Every connected talent node must accept scaled inspection");
+      }
+      screen.selectedTalent=4; drawBuild();
+      Require(click(1000,563).action==ui::Action::None,"A rank with a missing prerequisite must disable Learn");
+      screen.selectedTalent=1; drawBuild();
+      const auto learn=click(1000,563);
+      Require(learn.action==ui::Action::LearnTalent && learn.value==1,"Learn must target the selected talent");
+      rpg::Command learnCommand; learnCommand.learnTalent=learn.value; buildState.Update(.01f,learnCommand); drawBuild();
+      Require(buildState.MaxHealth()==160 && buildState.TalentPoints()==1 && click(1000,563).action==ui::Action::None,
+        "Learning must update stats/points and disable duplicate allocation");
+      screen.selectedTalent=4; drawBuild();
+      Require(click(1000,563).action==ui::Action::LearnTalent,"Learning the parent must unlock its connected rank");
+      learnCommand.learnTalent=4; buildState.Update(.01f,learnCommand);
+      renderer.BeginFrame(); screen.Render(renderer,buildState,0,false);
+      const auto capture=L"champion-build-"+std::to_wstring(size.first)+L"x"+std::to_wstring(size.second)+L".png";
+      Require(renderer.Capture(capture) && renderer.EndFrame(false),"Learned build capture");
+      Require(buildState.TalentPoints()==0 && click(1000,563).action==ui::Action::None,"Spent points must not allow another purchase");
+      Require(screen.Pointer(layout.x+1000*layout.scale,layout.y+563*layout.scale,float(size.first),float(size.second),false,true).action==ui::Action::None,
+        "Right-click must not learn a talent");
+      Require(click(1159,73).action==ui::Action::Close && click(1159,73).value==int(ui::Panel::Build),
+        "Build close button must identify its modal panel");
+      buildState=rpg::Simulation{}; screen.selectedTalent=0; drawBuild();
+      Require(click(1000,563).action==ui::Action::None && click(248,320).action==ui::Action::SelectTalent,
+        "Level one can inspect future talents but cannot learn them");
+      screen.Close(ui::Panel::Build);
+      Require(click(1000,563).action==ui::Action::None,"Closing N must discard stale learning regions");
+    }
 
     screen.SetOnly(ui::Panel::Character); screen.Show(ui::Panel::Inventory);
     const auto render=[&]() { renderer.BeginFrame(); screen.Render(renderer,simulation,0,false); Require(renderer.EndFrame(false),"Drag layout render failed."); };
@@ -529,6 +602,36 @@ int main() {
     Require(simulation.Health()==130 && simulation.Items().Bag()[second].item==rpg::Item::None && simulation.Items().Bag()[0].count==4,
       "Right-click must drink from the second stack after a buyback merged into the first.");
   }
+  {
+    Require(renderer.Resize(1280,720),"Build input test resolution");
+    Game game; Require(game.RestoreSnapshot(Fixture("veteran-preview.save")),"Build input fixture");
+    Input input; Input::Frame frame; frame.focused=true; frame.client={680,380}; frame.screen=frame.client;
+    const auto step=[&]() {
+      input.Update(frame); game.Update(.01,input,0);
+      renderer.BeginFrame(); game.Render(renderer); Require(renderer.EndFrame(false),"Champion build input render");
+    };
+    step(); frame.down[VK_RBUTTON]=true; step();
+    Require(game.WantsMouseLook(),"Build input test must begin with an active orbit");
+    const auto position=game.State().Player();
+    frame.down['N']=true; frame.down['W']=true; frame.down['3']=true; step();
+    Require(!game.WantsMouseLook() && game.State().Player().z==position.z && game.State().Cooldown(2)==0,
+      "N must cancel orbit and block movement/abilities on the opening frame");
+    for (int i=0;i<3;++i) step();
+    Require(game.State().Player().z==position.z,"Holding N must not repeatedly toggle the build menu");
+    frame.down['N']=frame.down['W']=frame.down['3']=frame.down[VK_RBUTTON]=false; step();
+    const auto clickAt=[&](LONG x,LONG y) {
+      frame.client={x,y}; frame.screen=frame.client; frame.down[VK_LBUTTON]=true; step();
+      frame.down[VK_LBUTTON]=false; step();
+    };
+    clickAt(1000,563);
+    Require(game.State().HasTalent(rpg::Talent::WeaponTraining) && game.State().TalentPoints()==1,
+      "Build Learn button must reach the simulation command");
+    clickAt(248,487); clickAt(1000,563);
+    Require(game.State().HasTalent(rpg::Talent::WeaponMastery) && game.State().TalentPoints()==0,
+      "Selecting a connected rank must learn that rank rather than the previous selection");
+    frame.down['N']=frame.down['W']=true; step();
+    Require(game.State().Player().z>position.z,"A fresh N press must close the menu and restore movement");
+  }
   for (const auto size : {std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
     Require(renderer.Resize(size.first,size.second),"Tooltip resize failed");
     ui::Interface tips; rpg::Simulation state; tips.Show(ui::Panel::Inventory);
@@ -546,6 +649,36 @@ int main() {
     }
   }
   Require(renderer.ValidateDebugMessages(),"DirectX reported an screen validation issue.");
+  {
+    Require(renderer.Resize(1280,720),"Build input test resolution");
+    Game game; Require(game.RestoreSnapshot(Fixture("veteran-preview.save")),"Build input fixture");
+    Input input; Input::Frame frame; frame.focused=true; frame.client={680,380}; frame.screen=frame.client;
+    const auto step=[&]() {
+      input.Update(frame); game.Update(.01,input,0);
+      renderer.BeginFrame(); game.Render(renderer); Require(renderer.EndFrame(false),"Champion build input render");
+    };
+    step(); frame.down[VK_RBUTTON]=true; step();
+    Require(game.WantsMouseLook(),"Build input test must begin with an active orbit");
+    const auto position=game.State().Player();
+    frame.down['N']=true; frame.down['W']=true; frame.down['3']=true; step();
+    Require(!game.WantsMouseLook() && game.State().Player().z==position.z && game.State().Cooldown(2)==0,
+      "N must cancel orbit and block movement/abilities on the opening frame");
+    for (int i=0;i<3;++i) step();
+    Require(game.State().Player().z==position.z,"Holding N must not repeatedly toggle the build menu");
+    frame.down['N']=frame.down['W']=frame.down['3']=frame.down[VK_RBUTTON]=false; step();
+    const auto clickAt=[&](LONG x,LONG y) {
+      frame.client={x,y}; frame.screen=frame.client; frame.down[VK_LBUTTON]=true; step();
+      frame.down[VK_LBUTTON]=false; step();
+    };
+    clickAt(1000,563);
+    Require(game.State().HasTalent(rpg::Talent::WeaponTraining) && game.State().TalentPoints()==1,
+      "Build Learn button must reach the simulation command");
+    clickAt(248,487); clickAt(1000,563);
+    Require(game.State().HasTalent(rpg::Talent::WeaponMastery) && game.State().TalentPoints()==0,
+      "Selecting a connected rank must learn that rank rather than the previous selection");
+    frame.down['N']=frame.down['W']=true; step();
+    Require(game.State().Player().z>position.z,"A fresh N press must close the menu and restore movement");
+  }
   for (const auto size : {std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
     Require(renderer.Resize(size.first,size.second),"Combat HUD resize failed");
     rpg::Simulation state; Require(state.Load(Fixture("combat-preview.save")),"Combat HUD fixture failed");

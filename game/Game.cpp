@@ -51,6 +51,7 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   if (input.Pressed('I') || input.Pressed('B')) interface_.Toggle(ui::Panel::Inventory);
   if (input.Pressed('J')) interface_.Toggle(ui::Panel::Journal);
   if (input.Pressed('M')) interface_.Toggle(ui::Panel::Map);
+  if (input.Pressed('N')) interface_.Toggle(ui::Panel::Build);
   const bool closingMerchant=interface_.panel==ui::Panel::Merchant && input.Pressed('E');
   if (closingMerchant) interface_.Close(ui::Panel::Merchant);
   ui::Event event;
@@ -68,6 +69,9 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   case ui::Action::Inventory: interface_.Toggle(ui::Panel::Inventory); break;
   case ui::Action::Map: interface_.Toggle(ui::Panel::Map); break;
   case ui::Action::Journal: interface_.Toggle(ui::Panel::Journal); break;
+  case ui::Action::Build: interface_.Toggle(ui::Panel::Build); break;
+  case ui::Action::SelectTalent: interface_.selectedTalent=event.value; break;
+  case ui::Action::LearnTalent: command.learnTalent=event.value; break;
   case ui::Action::Save: SaveProgress(); interface_.menuNotice=simulation_.Message(); break;
   case ui::Action::Load: LoadProgress(); interface_.menuNotice=simulation_.Message(); break;
   case ui::Action::Fullscreen: fullscreenRequest_=true; break;
@@ -319,7 +323,7 @@ void Game::Render(Renderer& renderer,bool showInterface) {
     case rpg::FeedbackKind::Hurt: text="-"+std::to_string(feedback.amount); color={1,.35f,.3f,1}; break;
     case rpg::FeedbackKind::Heal: text="HEAL "+std::to_string(feedback.amount); color={.4f,1,.6f,1}; break;
     case rpg::FeedbackKind::Experience: text="XP "+std::to_string(feedback.amount); color={.65f,.7f,1,1}; break;
-    case rpg::FeedbackKind::LevelUp: text="LEVEL "+std::to_string(feedback.amount); break;
+    case rpg::FeedbackKind::LevelUp: text="LEVEL "+std::to_string(feedback.amount)+" / N: BUILD"; break;
     case rpg::FeedbackKind::Miss: text="MISSED"; color={.8f,.8f,.8f,1}; break;
     case rpg::FeedbackKind::Interrupt: text="INTERRUPTED"; color={.4f,.85f,1,1}; break;
     }

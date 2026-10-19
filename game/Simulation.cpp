@@ -22,7 +22,7 @@ Simulation::Simulation() {
   }
 }
 float Simulation::DamageReduction() const {
-  float value=0;
+  float value=TalentBonus(build_,&TalentInfo::armor);
   for (int i=0;i<Inventory::gearCount;++i) value+=DescribeItem(inventory_.Worn(GearSlot(i))).armor;
   return value;
 }
@@ -96,7 +96,7 @@ void Simulation::UseAbility(int index) {
   if (cooldowns_[index]>0) { message_="That ability is cooling down."; return; }
   if (index==3) {
     if (health_>=MaxHealth()) { message_="Health is already full."; return; }
-    const float healed=std::min(35.f,MaxHealth()-health_);
+    const float healed=std::min(MendHealing(),MaxHealth()-health_);
     health_+=healed; Emit(FeedbackKind::Heal,player_,static_cast<int>(healed));
     EmitVisual(CombatVisualKind::Mend,player_,height_,facing_);
     message_="Mend restored health.";
@@ -134,14 +134,14 @@ void Simulation::UseAbility(int index) {
     }
     if (enemy.health<=0) {
       target_=-1; enemy.state=EnemyState::Dead; enemy.path.clear(); enemy.windup=0;
-      if (trainingTarget) { EndSparring("Victory"); cooldowns_[index]=abilityCooldowns[index]; return; }
+      if (trainingTarget) { EndSparring("Victory"); cooldowns_[index]=AbilityCooldown(index); return; }
       Emit(FeedbackKind::Experience,enemy.position,40);
       message_="Raider defeated. Press E nearby to loot.";
       if (quest_==Quest::Active) { quest_=Quest::Return; message_="Patrol complete. Return to the gold beacon and press E."; }
       RestoreForLevel(previousLevel);
     }
   }
-  cooldowns_[index]=abilityCooldowns[index];
+  cooldowns_[index]=AbilityCooldown(index);
 }
 
 const char* Simulation::AbilityStatus(int index) const {
@@ -254,6 +254,7 @@ void Simulation::Update(float seconds,const Command& command) {
   }
   for (auto& cooldown : cooldowns_) cooldown=std::max(0.f,cooldown-dt);
   potionCooldown_=std::max(0.f,potionCooldown_-dt);
+  if (command.learnTalent!=-1) LearnTalent(command.learnTalent);
   attackFlash_=std::max(0.f,attackFlash_-dt);
   const bool steering=command.steerFacing && std::isfinite(command.facingYaw) && !command.haltMovement;
   // Camera steering owns the body heading, including at rest and while strafing.
@@ -519,7 +520,7 @@ void Simulation::UpdateEnemy(Enemy& enemy,float dt) {
 
 std::string Simulation::Save() const {
   std::ostringstream out;
-  out << std::setprecision(9) << "MEDITERRANEAN 7\n" << player_.x << ' ' << player_.z << ' '
+  out << std::setprecision(9) << "MEDITERRANEAN 8\n" << player_.x << ' ' << player_.z << ' '
     << health_ << ' ' << facing_ << ' ' << static_cast<int>(quest_) << ' ' << gold_ << '\n';
   out << Potions() << ' ' << HasRewardWeapon() << ' ' << RewardWeaponEquipped() << ' ' << potionCooldown_ << '\n';
   out << static_cast<int>(anchorQuest_) << '\n';
@@ -532,6 +533,7 @@ std::string Simulation::Save() const {
   out<<"SHOP"; for (auto count : purchases_) out<<' '<<count; out<<'\n';
   out<<"BUYBACK"; for (auto count : buyback_) out<<' '<<count; out<<'\n';
   inventory_.Write(out);
+  out<<"BUILD "<<build_<<'\n';
   return out.str();
 }
 
@@ -540,7 +542,7 @@ bool Simulation::Load(const std::string& data) {
   std::istringstream input(data);
   std::string magic; int version=0, quest=0,potions=2,owned=0,equipped=0;
   Simulation candidate;
-  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>7) return false;
+  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>8) return false;
   // The shop counter occupies formerly walkable ground. Preserve old saves by
   // moving only actors overlapping that new prop to its nearest free edge.
   const auto migrateCounter=[&](Vec2& position,float radius) {
@@ -565,7 +567,8 @@ bool Simulation::Load(const std::string& data) {
   migrateCounter(candidate.player_,.4f);
   auto valid=[](float value,float min,float max) { return std::isfinite(value) && value>=min && value<=max; };
   if (!valid(candidate.player_.x,-17,17) || !valid(candidate.player_.z,-19,19) ||
-    !candidate.CanStand(candidate.player_) || !valid(candidate.health_,0,version<3?100.f:140.f) ||
+    !candidate.CanStand(candidate.player_) || !std::isfinite(candidate.health_) || candidate.health_<0 ||
+    (version<3 && candidate.health_>100) ||
     !valid(candidate.facing_,-3.142f,3.142f) || quest<0 || quest>3 || candidate.gold_<0 || (version<6 && candidate.gold_>90)) return false;
   candidate.quest_=static_cast<Quest>(quest);
   if (version>=2) {
@@ -621,7 +624,7 @@ bool Simulation::Load(const std::string& data) {
   }
   if ((quest==int(Quest::Active) && defeated>0) || (quest>=2 && defeated==0) ||
     candidate.gold_!=(quest==3?25:0)+5*looted+(candidate.HasWardArmor()?50:0)-candidate.GoldSpent()+candidate.BuybackValue() ||
-    potions+candidate.BuybackCount(Item::Potion)>2+looted+candidate.purchases_[0] || candidate.health_>candidate.MaxHealth() ||
+    potions+candidate.BuybackCount(Item::Potion)>2+looted+candidate.purchases_[0] ||
     (candidate.anchorQuest_>=AnchorQuest::Return && defeated!=3)) return false;
   if (version>=4) {
     if (!candidate.inventory_.Read(input,version>=7?Inventory::gearCount:version==4?4:6) ||
@@ -629,6 +632,13 @@ bool Simulation::Load(const std::string& data) {
       candidate.HasRewardWeapon()!=(owned!=0) ||
       candidate.RewardWeaponEquipped()!=(equipped!=0)) return false;
   } else candidate.inventory_=Inventory::Migrate(potions,owned!=0,equipped!=0,candidate.HasWardArmor());
+  if (version>=8) {
+    std::string tag; int savedBuild=0;
+    if (!(input>>tag>>savedBuild) || tag!="BUILD" || savedBuild<0) return false;
+    candidate.build_=unsigned(savedBuild);
+  }
+  // Health depends on the complete earned build, including legacy empty builds.
+  if (!ValidBuild(candidate.build_,candidate.Level()) || candidate.health_>candidate.MaxHealth()) return false;
   input >> std::ws;
   if (!input.eof()) return false;
   candidate.message_="Progress loaded. Camera, jump, and unfinished anchor channel reset.";

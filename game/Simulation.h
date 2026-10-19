@@ -5,6 +5,7 @@
 #include "game/WorldMap.h"
 #include "game/Inventory.h"
 #include "game/Trade.h"
+#include "game/Talents.h"
 
 namespace rpg {
 enum class EnemyState { Idle, Pursuing, Returning, Dead };
@@ -35,6 +36,7 @@ struct Command {
   Vec2 movement;
   bool sprint = false, jump = false, nextTarget = false, interact = false, restart = false;
   int ability = -1;
+  int learnTalent = -1;
   bool usePotion = false, equipWeapon = false;
   int potionSource=-1;
   bool respawn = false;
@@ -94,7 +96,14 @@ public:
   int Level() const;
   int LevelStartExperience() const { return Level()==1?0:Level()==2?100:250; }
   int NextLevelExperience() const { return Level()==1?100:250; }
-  float MaxHealth() const { return 100.f+20.f*(Level()-1); }
+  float MaxHealth() const { return 100.f+20.f*(Level()-1)+TalentBonus(build_,&TalentInfo::health); }
+  bool HasTalent(Talent talent) const { return rpg::HasTalent(build_,talent); }
+  int TalentPoints() const;
+  const char* TalentStatus(Talent talent) const;
+  float StrikeBonus() const { return 3.f*(Level()-1)+TalentBonus(build_,&TalentInfo::strike); }
+  float HeavyBonus() const { return 5.f*(Level()-1)+TalentBonus(build_,&TalentInfo::heavy); }
+  float MendHealing() const { return 35.f+TalentBonus(build_,&TalentInfo::mend); }
+  float AbilityCooldown(int index) const { return abilityCooldowns[index]-(index==3?TalentBonus(build_,&TalentInfo::mendCooldown):0); }
   int DefeatedCount() const;
   bool HasWardArmor() const { return anchorQuest_==AnchorQuest::Complete; }
   bool WardArmorEquipped() const { return inventory_.Worn(GearSlot::Chest)==Item::Ward; }
@@ -126,8 +135,8 @@ public:
   int Potions() const { return inventory_.Count(Item::Potion); }
   bool HasRewardWeapon() const { return inventory_.Count(Item::Watchguard)>0; }
   bool RewardWeaponEquipped() const { return inventory_.Worn(GearSlot::Weapon)==Item::Watchguard; }
-  float StrikeDamage() const { return DescribeItem(inventory_.Worn(GearSlot::Weapon)).strike+3.f*(Level()-1); }
-  float HeavyDamage() const { return DescribeItem(inventory_.Worn(GearSlot::Weapon)).heavy+5.f*(Level()-1); }
+  float StrikeDamage() const { return DescribeItem(inventory_.Worn(GearSlot::Weapon)).strike+StrikeBonus(); }
+  float HeavyDamage() const { return DescribeItem(inventory_.Worn(GearSlot::Weapon)).heavy+HeavyBonus(); }
   float PotionCooldown() const { return potionCooldown_; }
   const char* AbilityStatus(int index) const;
   Quest QuestState() const { return quest_; }
@@ -149,6 +158,7 @@ private:
   void Move(Vec2& position, Vec2 displacement, float radius);
   void SelectTarget();
   void UseAbility(int index);
+  void LearnTalent(int index);
   void Interact();
   bool HasLineOfSight(Vec2 from, Vec2 to) const;
   void UpdateEnemy(Enemy& enemy, float dt);
@@ -180,6 +190,7 @@ private:
   bool jumpedThisUpdate_ = false, dashedThisUpdate_ = false;
   std::array<float,4> cooldowns_{};
   int target_ = -1, gold_ = 0;
+  unsigned build_=0;
   Inventory inventory_;
   std::array<int,shopOffers.size()> purchases_{};
   std::array<int,int(Item::Count)> buyback_{};

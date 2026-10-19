@@ -21,6 +21,32 @@ int Simulation::Level() const {
   return xp>=250?3:xp>=100?2:1;
 }
 
+int Simulation::TalentPoints() const { return Level()-1-TalentCount(build_); }
+
+const char* Simulation::TalentStatus(Talent talent) const {
+ if (!ValidTalent(talent)) return "Unknown talent";
+ if (HasTalent(talent)) return "Learned";
+ const auto& info=talents[int(talent)];
+ if (Level()<info.level) return "Requires a higher level";
+ if (info.prerequisite!=Talent::Count && !HasTalent(info.prerequisite)) return "Learn the previous talent first";
+ if (TalentPoints()==0) return "No talent points available";
+ if (health_<=0) return "Recover before learning";
+ if (!Grounded() || Dashing() || Channeling()) return "Finish your current action";
+ if (sparring_ || attackFlash_>0 || hurtFlash_>0 ||
+   std::any_of(enemies_.begin(),enemies_.end(),[](const Enemy& e) { return e.health>0 && e.state==EnemyState::Pursuing; }))
+  return "Finish combat before learning";
+ return "Ready to learn";
+}
+
+void Simulation::LearnTalent(int index) {
+ const auto talent=Talent(index);
+ const auto status=TalentStatus(talent);
+ if (std::string(status)!="Ready to learn") { message_=status; return; }
+ build_|=1u<<unsigned(talent);
+ // Point allocation changes future stats, never health or active cooldowns.
+ message_=std::string("Learned ")+talents[index].name+".";
+}
+
 void Simulation::Emit(FeedbackKind kind,Vec2 position,int amount) {
   if (feedback_.size()==24) feedback_.erase(feedback_.begin());
   feedback_.push_back({position,kind,amount,0});

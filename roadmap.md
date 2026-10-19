@@ -1,5 +1,7 @@
 # Mediterranean Roadmap
 
+Champion build progression is implemented in source: N opens a connected talent menu with Arms, Guard and Spirit branches; levels 2 and 3 each grant one point, and six upgrades change real champion stats. Save version 8 preserves choices and migrates versions 1–7 with earned points available. Next acceptance: build Debug/Release, run TalentTests and the expanded progression/trade/interface suites, inspect champion-build captures at small/fullscreen/ultrawide sizes, then perform manual checks 125–127. The native build remains blocked by the missing Visual Studio locator/toolchain. The current map supports levels 1–3; a larger level range, additional class abilities, more branches and respecialization remain future work.
+
 The sky refinement now uses a shallow ray-marched cloud volume with billows, internal shading, softer edges, a compact sun glow and a cooler horizon. Broad cloud shadows use interpolated vertex lighting; the 384-byte scene constants and GPU texture allocations are unchanged. Eight-entry compilation and isolated WARP opacity/drift/light-agreement diagnostics pass. Next acceptance is native Debug/Release suites, whole-world/portrait/combat inspection and target-resolution CPU/GPU measurements, especially sky march and vertex cost (manual checks 123–124). The native build is still blocked by the missing Visual Studio locator/toolchain. Flying through clouds, temporal reconstruction, full multiple scattering, weather/day-night systems and authored sky art remain future work.
 
 

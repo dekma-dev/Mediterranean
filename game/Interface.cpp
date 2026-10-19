@@ -260,6 +260,21 @@ void Icon(Canvas& c,Rect rect,Item item,float alpha=1) {
   }
  }
 }
+void TalentIcon(Canvas& c,Rect rect,int index,float alpha=1) {
+ if (index%3!=2) {
+  Icon(c,rect,index%3==0?(index<3?Item::Starter:Item::Watchguard):Item::Shield,alpha);
+  return;
+ }
+ const float x=rect.x+rect.w*.5f,y=rect.y+rect.h*.5f,s=std::min(rect.w,rect.h)/48;
+ c.Oval(x,y,20*s,20*s,{.10f,.25f,.20f,alpha});
+ c.Ring(x,y,18*s,{.40f,.71f,.58f,alpha},1.5f*s);
+ c.RectFill({x-3*s,y-12*s,6*s,24*s},{.73f,.93f,.59f,alpha});
+ c.RectFill({x-12*s,y-3*s,24*s,6*s},{.73f,.93f,.59f,alpha});
+ if (index>=3) {
+  c.Ring(x,y,23*s,{.88f,.76f,.45f,alpha},s);
+  c.Triangle({x+19*s,y-16*s},{x+24*s,y-10*s},{x+16*s,y-10*s},{.88f,.76f,.45f,alpha});
+ }
+}
 Point MapPoint(Rect a,rpg::Vec2 p) { const float span=46*a.w/a.h; return {a.x+(p.x+span*.5f)/span*a.w,a.y+(23-p.z)/46*a.h}; }
 void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoint,rpg::Vec2 pin) {
  if (compact) {
@@ -446,7 +461,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   const float cooldown=i<4?s.Cooldown(i):s.PotionCooldown();
   if (!ready) c.RectFill({x+3,665,33,34},{.02f,.025f,.01f,.36f});
   if (cooldown>0) {
-   const float fraction=std::clamp(cooldown/(i<4?rpg::Simulation::abilityCooldowns[i]:3.f),0.f,1.f);
+   const float fraction=std::clamp(cooldown/(i<4?s.AbilityCooldown(i):3.f),0.f,1.f);
    c.RectFill({x+3,665,33,34*fraction},{.015f,.025f,.04f,.65f});
    c.Center(x,675,39,Seconds(cooldown),cooldown<1?15.f:19.f,ink);
    c.RectFill({x+4,698,31*(1-fraction),2},blue);
@@ -455,8 +470,13 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Text(x+3,662,i<4?std::to_string(i+1):"Q",12,{1,.96f,.73f,1});
   regions_.push_back({rect,{i<4?Action::Ability:Action::UseItem,i<4?i:static_cast<int>(Item::Potion)},ready});
  }
- const std::pair<Action,const char*> shortcuts[]={{Action::Character,"C"},{Action::Inventory,"I"},{Action::Map,"M"},{Action::Journal,"J"},{Action::Menu,"Esc"}};
- for (int i=0;i<5;++i) button({1067+i*40.f,671,37,32},shortcuts[i].second,shortcuts[i].first);
+ const std::pair<Action,const char*> shortcuts[]={{Action::Build,"N"},{Action::Character,"C"},{Action::Inventory,"I"},{Action::Map,"M"},{Action::Journal,"J"},{Action::Menu,"Esc"}};
+ for (int i=0;i<6;++i) button({1027+i*40.f,671,37,32},shortcuts[i].second,shortcuts[i].first);
+ if (s.TalentPoints()>0) {
+  c.Oval(1059,670,9,9,{.35f,.20f,.06f,1}); c.Ring(1059,670,9,gold);
+  c.Center(1050,663,18,std::to_string(s.TalentPoints()),12,ink);
+  regions_.push_back({{1050,661,18,18},{Action::Build},true});
+ }
  c.Text(22,674,std::to_string(s.Gold())+" gold",16,gold);
  c.Text(22,695,"WASD  Move     RMB  Orbit     F11  Display",11,muted);
  if (!characterOpen) c.Wrap(22,578,405,s.Message(),14,ink,3);
@@ -554,7 +574,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   std::string detail=info.description;
   const auto delta=[](float value) { return (value>=0?std::string("+"):std::string())+std::to_string(int(value)); };
   if (info.slot==rpg::GearSlot::Weapon) {
-   detail="Strike "+std::to_string(int(info.strike)+3*(s.Level()-1))+"  /  Heavy "+std::to_string(int(info.heavy)+5*(s.Level()-1))+" damage.\n";
+   detail="Strike "+std::to_string(int(info.strike+s.StrikeBonus()))+"  /  Heavy "+std::to_string(int(info.heavy+s.HeavyBonus()))+" damage.\n";
    const auto& current=Describe(s.Items().Worn(info.slot));
    detail+=Equipped(s,selected)?"Equipped / remove to fight unarmed":"Vs worn: "+delta(info.strike-current.strike)+" strike / "+delta(info.heavy-current.heavy)+" heavy";
   } else if (info.slot!=rpg::GearSlot::None) {
@@ -633,6 +653,68 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    if (!menuNotice.empty()) c.Center(476,563,328,menuNotice,11,gold);
    return;
   }
+  if (panel==Panel::Build) {
+   selectedTalent=std::clamp(selectedTalent,0,int(rpg::Talent::Count)-1);
+   c.Window({96,52,1088,595}); c.Banner({123,43,1003,39},"Champion build",23);
+   close({1146,61,27,27},Panel::Build);
+   c.Text(124,104,"Level "+std::to_string(s.Level())+"  /  Dawnwatch guard",18,ink);
+   c.Frame({850,102,306,32},{.07f,.16f,.13f,1},s.TalentPoints()>0?gold:border);
+   c.Center(850,109,306,std::to_string(s.TalentPoints())+" talent point"+(s.TalentPoints()==1?"":"s")+" available",15,gold);
+   c.Frame({284,149,392,51},{.09f,.18f,.16f,1},gold);
+   c.Center(284,157,392,"LEVEL 1  /  FOUNDATIONS",15,gold);
+   c.Center(284,178,392,"Strike  /  Heavy strike  /  Dash  /  Mend",12,ink);
+   c.Line(480,200,480,223,3,border); c.Line(248,223,712,223,3,border);
+   const char* branches[]={"ARMS","GUARD","SPIRIT"};
+   const Color branchColors[]={{.83f,.54f,.31f,1},{.40f,.64f,.83f,1},{.45f,.77f,.57f,1}};
+   for (int branch=0;branch<3;++branch) {
+    const float x=248+branch*232.f;
+    c.Line(x,223,x,274,3,border);
+    c.RectFill({x-76,235,152,25},dark); c.Center(x-76,239,152,branches[branch],16,branchColors[branch]);
+    const bool connected=s.HasTalent(rpg::Talent(branch));
+    c.Line(x,377,x,445,4,{.025f,.045f,.04f,1});
+    c.Line(x,377,x,445,2,connected?branchColors[branch]:border);
+    c.Oval(x,410,16,16,dark); c.Ring(x,410,16,connected?branchColors[branch]:border);
+    c.Center(x-15,401,30,"3",14,connected?ink:muted);
+   }
+   for (int i=0;i<int(rpg::Talent::Count);++i) {
+    const auto talent=rpg::Talent(i); const auto& info=rpg::talents[i];
+    const bool learned=s.HasTalent(talent),available=std::string(s.TalentStatus(talent))=="Ready to learn";
+    const Rect rect{143+(i%3)*232.f,274+(i/3)*171.f,210,103};
+    const bool hovered=rect.Contains(mouseX_,mouseY_),selectedNode=i==selectedTalent;
+    const Color accent=learned?Color{.57f,.83f,.45f,1}:available?gold:border;
+    c.Frame(rect,selectedNode?Color{.12f,.23f,.20f,1}:Color{.035f,.085f,.075f,1},selectedNode || hovered?gold:accent);
+    c.RectFill({rect.x+4,rect.y+4,3,rect.h-8},accent);
+    TalentIcon(c,{rect.x+13,rect.y+10,34,38},i,learned || available?1.f:.45f);
+    c.Wrap(rect.x+57,rect.y+11,143,info.name,16,learned || available?ink:muted,2);
+    c.Wrap(rect.x+12,rect.y+53,186,info.effect,12,muted,2);
+    const char* state=learned?"LEARNED":available?"AVAILABLE / 1 POINT":
+      s.Level()<info.level?"LOCKED":info.prerequisite!=rpg::Talent::Count && !s.HasTalent(info.prerequisite)?"PREREQUISITE":"UNAVAILABLE";
+    c.Text(rect.x+12,rect.y+84,"LEVEL "+std::to_string(info.level)+" / "+state,10,accent);
+    regions_.push_back({rect,{Action::SelectTalent,i},true});
+   }
+   c.Frame({850,150,306,454},{.035f,.08f,.075f,1});
+   const auto talent=rpg::Talent(selectedTalent); const auto& info=rpg::talents[selectedTalent];
+   const bool learned=s.HasTalent(talent);
+   const std::string status=s.TalentStatus(talent);
+   TalentIcon(c,{874,166,48,52},selectedTalent);
+   c.Text(937,175,branches[selectedTalent%3],14,branchColors[selectedTalent%3]);
+   c.Text(937,199,"Rank "+std::to_string(selectedTalent/3+1),12,muted);
+   c.Wrap(874,232,258,info.name,20,gold,2);
+   c.Wrap(874,288,258,info.effect,15,ink,2);
+   c.Wrap(874,341,258,info.description,14,muted,4);
+   c.Line(874,423,1132,423,1,border);
+   c.Text(874,436,"Requires level "+std::to_string(info.level),13,ink);
+   c.Wrap(874,460,258,info.prerequisite==rpg::Talent::Count?"Prerequisite: Foundations":
+     std::string("Prerequisite: ")+rpg::talents[int(info.prerequisite)].name,12,muted,2);
+   c.Wrap(874,493,258,status,13,learned?Color{.57f,.83f,.45f,1}:gold,2);
+   button({874,546,258,37},learned?"Learned":"Learn / 1 point",Action::LearnTalent,selectedTalent,status=="Ready to learn");
+   c.Text(148,566,"One point at level 2 and level 3. Specialize or mix branches.",13,ink);
+   c.Frame({148,589,664,8}); c.RectFill({151,592,658*xp,2},gold);
+   c.Text(148,607,s.Level()==3?"Level cap reached  /  2 points earned":
+     std::to_string(s.Experience())+" XP  /  "+std::to_string(s.NextLevelExperience())+" for next level",12,muted);
+   c.Text(124,628,"N or X closes. Choices are saved with F5. The world remains active.",12,muted);
+   return;
+  }
   const bool map=panel==Panel::Map;
   const Rect frame=map?Rect{130,44,1020,604}:Rect{180,70,920,572};
   c.Window(frame); c.Banner({frame.x+27,frame.y-9,frame.w-85,39},map?"Atlas of Dawnwatch":"Expedition journal",23);
@@ -692,13 +774,13 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    const bool potion=it->event.action==Action::UseItem; const int ability=it->event.value;
    static const char* names[]={"Strike","Heavy strike","Dash","Mend"};
    const std::string detail=potion?"Restores up to 40 health.":ability==0?std::to_string(int(s.StrikeDamage()))+" melee damage.":
-    ability==1?std::to_string(int(s.HeavyDamage()))+" damage. Interrupts a windup.":ability==2?"Dash in your facing direction.":"Restores up to 35 health.";
+    ability==1?std::to_string(int(s.HeavyDamage()))+" damage. Interrupts a windup.":ability==2?"Dash in your facing direction.":"Restores up to "+std::to_string(int(s.MendHealing()))+" health.";
    const std::string status=potion?(s.Health()<=0?"DEFEATED":s.Potions()==0?"NO POTIONS":s.Health()>=s.MaxHealth()?"FULL HEALTH":s.PotionCooldown()>0?"COOLDOWN":"READY"):s.AbilityStatus(ability);
    const float x=std::clamp(it->rect.x-30,460.f,680.f);
    c.Window({x,470,300,149}); c.Text(x+14,480,potion?"Healing draught":names[ability],19,gold);
    c.Wrap(x+14,512,272,detail,14,ink,2);
    const float remaining=potion?s.PotionCooldown():s.Cooldown(ability);
-   c.Text(x+14,554,"Cooldown: "+Seconds(potion?3.f:rpg::Simulation::abilityCooldowns[ability])+"s"+
+   c.Text(x+14,554,"Cooldown: "+Seconds(potion?3.f:s.AbilityCooldown(ability))+"s"+
      (potion?"  /  Stock: "+std::to_string(s.Potions()):ability<2?"  /  Range: 2.5 m":""),12,muted);
    c.Line(x+14,576,x+286,576,1,border);
    c.Text(x+14,589,status+(remaining>0?"  "+Seconds(remaining)+"s":""),12,status=="READY"?Color{.57f,.84f,.40f,1}:Color{1,.64f,.40f,1});

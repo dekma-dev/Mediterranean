@@ -41,7 +41,7 @@ void Defeat(rpg::Simulation& game,int index) {
 
 int main() {
   rpg::Simulation game;
-  Require(game.Level()==1 && game.Experience()==0 && game.MaxHealth()==100,"New character must start at level one");
+  Require(game.Level()==1 && game.Experience()==0 && game.MaxHealth()==100 && game.TalentPoints()==0,"New character must start at level one");
   Interact(game);
   Defeat(game,0);
   Require(game.Experience()==40 && game.QuestState()==rpg::Quest::Return,"Kill must grant XP and patrol credit once");
@@ -49,7 +49,7 @@ int main() {
   Require(game.Gold()==5,"First corpse must remain lootable");
   Go(game,rpg::WorldMap::questGiver,1);
   Interact(game);
-  Require(game.Level()==2 && game.Experience()==100 && game.Health()==120 && game.MaxHealth()==120,
+  Require(game.Level()==2 && game.Experience()==100 && game.Health()==120 && game.MaxHealth()==120 && game.TalentPoints()==1,
     "Patrol hand-in must grant level two and restore its increased health");
   Require(game.AnchorState()==rpg::AnchorQuest::Available && game.HasRewardWeapon(),"Patrol must unlock the follow-up quest");
   rpg::Command c; c.equipWeapon=true; game.Update(.05f,c);
@@ -88,7 +88,7 @@ int main() {
   Go(game,rpg::WorldMap::questGiver,1); Interact(game);
   Require(game.AnchorState()==rpg::AnchorQuest::Complete && game.HasWardArmor() && game.DamageReduction()==2,
     "Final reward must grant ward armor");
-  Require(game.Level()==3 && game.Experience()==300 && game.Health()==140 && game.Gold()==80,
+  Require(game.Level()==3 && game.Experience()==300 && game.Health()==140 && game.Gold()==80 && game.TalentPoints()==2,
     "Final hand-in must grant level three, restored health, and 50 gold");
   const auto completed=game.Save();
   Interact(game);

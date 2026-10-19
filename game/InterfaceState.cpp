@@ -55,7 +55,7 @@ ItemSummary SummarizeItem(const rpg::Simulation& s,Item item) {
   const auto worn=s.Items().Worn(info.slot); const auto& current=Describe(worn);
   ItemSummary result;
   if (info.slot==rpg::GearSlot::Weapon) {
-    result.stats="Strike "+std::to_string(int(info.strike)+3*(s.Level()-1))+"  /  Heavy "+std::to_string(int(info.heavy)+5*(s.Level()-1));
+    result.stats="Strike "+std::to_string(int(info.strike+s.StrikeBonus()))+"  /  Heavy "+std::to_string(int(info.heavy+s.HeavyBonus()));
     result.difference=info.strike-current.strike;
     result.comparison="Strike "+signedValue(result.difference)+"  /  Heavy "+signedValue(info.heavy-current.heavy);
   } else {

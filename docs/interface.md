@@ -2,6 +2,14 @@
 
 Updated: 2026-10-19
 
+## Champion build map
+
+N opens or closes the central champion build menu; the HUD also has an N shortcut with an unspent-point badge. A foundation node lists the four starting abilities. Arms, Guard and Spirit each have connected level-2 and level-3 nodes, with distinct learned, available and locked states. Any node can be selected to inspect its description, effect, level and prerequisite, including before it can be learned.
+
+The detail pane's Learn button spends one earned point only when the simulation's requirements are met. Level 2 and level 3 each grant one point; a level-3 talent requires the first node in its branch. The panel shows remaining points and level-relative XP. Learned bonuses also appear in character stats, item damage summaries and Mend's hotbar tooltip/cooldown presentation.
+
+N or X closes the map. Escape opens the usual live menu. Existing side windows retain their open/closed state, and the build panel captures movement, combat and camera controls. Opening it cancels RMB orbit. The world remains active, so hostile pursuit, sparring, defeat or unfinished actions can disable learning. F5/F9 save and restore the champion's choices.
+
 ## Combat readability
 
 Merchant bag potion tooltips follow the same health/cooldown rules as the bag action button and right-click use. Trading captures movement and disables the action bar; it does not prohibit drinking from the bag.
@@ -18,7 +26,7 @@ Escape always opens the game menu; pressing it again returns to the game. From a
 
 Character and inventory are independent side windows. Press C then I to keep both open; each X or hotkey closes only its own window. Keyboard movement and combat remain available. Mouse orbit/zoom is captured over side windows and interactive HUD controls and remains available over the world. Camera orbit must begin with a fresh right-button press over the world: a gesture started in the bag or minimap cannot become an orbit by crossing its edge. During an accepted camera gesture, the cursor is hidden and pinned at its initial screen position. Foreground raw mouse deltas keep orbit working even at screen edges. RMB can now tilt upward to inspect the sky and sun; the camera retracts above the flat ground. RMB also turns the champion left/right with the view while standing still; strafing/backward travel retains that heading. Accepted attacks and active dashes keep their committed heading until recovery. Releasing RMB shows the cursor at that position and frees it. Focus/capture loss, resize, DPI/fullscreen changes, menus, load and shutdown cancel the lock; continuing to hold RMB cannot restart a cancelled gesture. Opening a side window over the pinned pointer also cancels orbit. Right-clicking items or the atlas keeps the pointer visible and free. Selecting worn gear opens its item in the bag without closing the character window.
 
-Menu, atlas, journal and the quartermaster capture movement/camera/combat commands. Escape opens the menu over the side windows; closing it restores them. Trading itself closes on Escape. Enemies, committed attacks, cooldowns and other simulation time continue in every layout. Focus loss/minimization retains the existing single-player suspension behavior; it is independent of Escape.
+Menu, champion build, atlas, journal and the quartermaster capture movement/camera/combat commands. Escape opens the menu over the side windows; closing it restores them. Trading itself closes on Escape. Enemies, committed attacks, cooldowns and other simulation time continue in every layout. Focus loss/minimization retains the existing single-player suspension behavior; it is independent of Escape.
 
 The window owns transient cursor capture and raw mouse registration. It uses a one-pixel [ClipCursor](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-clipcursor) rectangle and `SetCursor(nullptr)`, releases capture before relinquishing focus, and preserves ordinary button messages for UI actions. [WM_INPUT](https://learn.microsoft.com/en-us/windows/win32/inputdev/wm-input) supplies camera deltas; absolute devices establish a baseline before producing movement. No desktop cursor settings are changed. Added regressions are pending execution because the native build toolchain is unavailable in the current environment; see progress.md and manual check 119.
 
@@ -32,6 +40,7 @@ The window owns transient cursor capture and raw mouse registration. It uses a o
 | I or B | Inventory |
 | M | Atlas |
 | J | Journal |
+| N | Champion build / learn talents |
 | Left click | Buttons, item slots, action-bar abilities and map waypoint |
 | Drag item | Swap bag cells, equip into a compatible slot, or remove into the bag |
 | Right-click item | Equip, unequip or drink |
@@ -57,7 +66,7 @@ Drag between bag cells to move or swap; matching consumables merge up to 20 per 
 
 The selected bag cell is tracked separately from its item type. Split half moves the floor of half its potion count into the first empty cell; at least two potions and an empty cell are required. Drinking or selling uses that exact selected stack. Q still uses the first available stack. Dragging matching stacks together or Sort merges them. Stale source cells reject without consuming another stack or granting healing.
 
-Ward armor automatically equips on reward, placing the tunic in the bag; both remain freely interchangeable afterward. Removing gear updates combat attributes immediately. Version 7 saves preserve exact cells, split stacks, ten worn slots, purchases and thirteen item types in buyback; versions 1–6 migrate without losing existing rewards. Older saves receive the four new starting travel pieces once. The catalog adds shoulder guards, gloves, a belt with pouches and a cloak to the existing swords, potion and clothing/armor. Permanent disposal and movable windows remain future work.
+Ward armor automatically equips on reward, placing the tunic in the bag; both remain freely interchangeable afterward. Removing gear updates combat attributes immediately. Version 8 saves preserve exact cells, split stacks, ten worn slots, purchases, thirteen item types in buyback and learned talents; versions 1–7 migrate without losing existing rewards. Versions 1–6 receive the four new starting travel pieces once. The catalog adds shoulder guards, gloves, a belt with pouches and a cloak to the existing swords, potion and clothing/armor. Permanent disposal and movable windows remain future work.
 
 ### Character
 
@@ -114,7 +123,7 @@ The user's supplied Allods character/bag screenshot subsequently clarified the d
 
 Trading coverage also drives sell/buyback and odd-stack splitting through sampled Game input. Scaled pointer tests select the second potion stack, split, sell one, reclaim into the first stack and drink from the second, checking each exact cell. Worn sales and empty shelf clicks are disabled. Domain tests validate all catalog sale/reclaim cycles, transactional denial, balanced gold, saved buyback and v4–v6 migration. These checks exercise the production input/layout/command code without synthesizing real desktop input.
 
-`-SmokeTest` validates hidden fullscreen size/restoration and renders spawn, raider, captain and veteran scenes. Each scenario captures the world at three sizes, two inspection views, and Menu/Inventory/Equipment/Atlas/Journal plus the combined Equipment+Bag layout at 960x600, 1280x720 and 1600x900. The veteran adds base/travel outfits, sparring with/without side windows, shop, purchased equipment and buyback at three sizes, a dressed world close-up, fully equipped sparring, eight close-up poses, seven environment views, six animation layers and four live jump stages: 132 smoke captures per configuration. Suffixes include `-quartermaster`, `-purchased-equipment`, `-buyback`, `-watchman-character`, `-equipped-sparring` and `-pose-*`. InterfaceTests separately writes `inventory-drag.png`. Representative captures were visually inspected. Debug and Release pass all twelve CTest suites.
+`-SmokeTest` validates hidden fullscreen size/restoration and renders spawn, raider, captain and veteran scenes. Each scenario captures the world at three sizes, two inspection views, and Menu/Inventory/Equipment/Atlas/Journal/Champion build plus the combined Equipment+Bag layout at 960x600, 1280x720 and 1600x900. The veteran adds base/travel outfits, sparring with/without side windows, shop, purchased equipment and buyback at three sizes, a dressed world close-up, fully equipped sparring, eight close-up poses, seven environment views, six animation layers and four live jump stages. The earlier validated smoke set contained 132 captures per configuration; the champion-build extension has not run. Suffixes include `-quartermaster`, `-purchased-equipment`, `-buyback`, `-watchman-character`, `-equipped-sparring` and `-pose-*`. InterfaceTests separately writes `inventory-drag.png`. Representative earlier captures were visually inspected. The current sixteen-suite build, including TalentTests and the new build-menu paths in InterfaceTests, is blocked by the unavailable native toolchain. InterfaceTests is configured to capture the learned Guard branch at 960x600, 1280x720 and 2560x1080; these images have not yet been generated.
 
 Merchant integration checks route sampled E/click inputs through Game, buy actual gear, block walking while shopping and allow it after E closes trade. Scaled pointer checks buy/equip both new items with all three windows open, reject sold-out buttons and underlying attacks, and route portrait rotation. TradeTests verifies persistent charges/stock, unavailable purchases, armor in real combat and save migration.
 

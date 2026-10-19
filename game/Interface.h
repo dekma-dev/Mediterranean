@@ -3,8 +3,8 @@
 #include <vector>
 class Renderer;
 namespace ui {
-enum class Panel { None,Menu,Character,Inventory,Map,Journal,Merchant };
-enum class Action { None,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview,MusicVolume,EffectsVolume };
+enum class Panel { None,Menu,Character,Inventory,Map,Journal,Merchant,Build };
+enum class Action { None,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview,MusicVolume,EffectsVolume,Build,SelectTalent,LearnTalent };
 using Item=rpg::Item;
 struct Rect { float x,y,w,h; bool Contains(float px,float py) const { return px>=x && py>=y && px<x+w && py<y+h; } };
 struct Layout {
@@ -44,6 +44,7 @@ public:
   // Central overlays are modal; character and bag are independent side windows.
   Panel panel=Panel::None;
   bool characterOpen=false,inventoryOpen=false;
+  int selectedTalent=0;
   Item selected=Item::Starter;
   int selectedBag=-1;
   bool fullscreen=true,hasWaypoint=false;

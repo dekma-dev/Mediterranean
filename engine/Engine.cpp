@@ -92,7 +92,7 @@ bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapsh
     if (!renderer_->Resize(dimensions.first,dimensions.second)) { error_=renderer_->Error(); return false; }
     const std::pair<ui::Panel,const wchar_t*> panels[]={
       {ui::Panel::Menu,L"menu"},{ui::Panel::Inventory,L"inventory"},{ui::Panel::Character,L"equipment"},
-      {ui::Panel::Map,L"atlas"},{ui::Panel::Journal,L"journal"},{ui::Panel::Character,L"equipment-bag"}};
+      {ui::Panel::Map,L"atlas"},{ui::Panel::Journal,L"journal"},{ui::Panel::Build,L"champion-build"},{ui::Panel::Character,L"equipment-bag"}};
     for (const auto& panel : panels) {
       game_->OpenPanel(panel.first);
       if (std::wstring(panel.second)==L"equipment-bag") game_->ShowPanel(ui::Panel::Inventory);

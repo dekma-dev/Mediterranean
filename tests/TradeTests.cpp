@@ -83,13 +83,13 @@ int main() {
   bad=soldOut; at=bad.find("SHOP 6 0 0"); bad.replace(at,10,"SHOP 7 0 0");
   Require(!copy.Load(bad) && copy.Save()==stable,"Stock purchases above the initial limit must reject transactionally.");
   // Actual v6 has nine buyback counts and six worn slots; migration adds travel gear once.
-  auto version6=armored; version6.replace(14,1,"6"); TrimRecord(version6,"GEAR ",6); TrimRecord(version6,"BUYBACK ",9);
+  auto version6=armored; version6.replace(14,1,"6"); RemoveRecord(version6,"BUILD "); TrimRecord(version6,"GEAR ",6); TrimRecord(version6,"BUYBACK ",9);
   Require(copy.Load(version6) && copy.Save()==armored,"Version-6 migration must preserve old gear/ledger and add starting travel pieces once.");
   // Actual v5 has purchases and six gear slots but no buyback record.
-  auto version5=armored; version5.replace(14,1,"5"); RemoveRecord(version5,"BUYBACK "); TrimRecord(version5,"GEAR ",6);
+  auto version5=armored; version5.replace(14,1,"5"); RemoveRecord(version5,"BUILD "); RemoveRecord(version5,"BUYBACK "); TrimRecord(version5,"GEAR ",6);
   Require(copy.Load(version5) && copy.Save()==armored,"Version-5 migration must preserve purchases/worn six-slot gear and start with empty buyback.");
   // Actual old v4 layout has four gear slots and no SHOP/BUYBACK record.
-  Require(game.Load(Veteran()),"Prepare version-4 migration."); auto old=game.Save(); old.replace(14,1,"4");
+  Require(game.Load(Veteran()),"Prepare version-4 migration."); auto old=game.Save(); old.replace(14,1,"4"); RemoveRecord(old,"BUILD ");
   at=old.find("SHOP "); old.erase(at,old.find('\n',at)-at+1);
   RemoveRecord(old,"BUYBACK ");
   TrimRecord(old,"GEAR ",4);
@@ -136,9 +136,9 @@ int main() {
   c={}; c.equipWeapon=true; game.Update(.01f,c);
   Require(game.Experience()==300 && game.Level()==3 && !game.HasRewardWeapon() && game.StrikeDamage()==12 && game.DamageReduction()==0,
     "Selling quest gear must retain earned XP; G cannot equip a sold sword.");
-  Require(copy.Load(game.Save()) && copy.Save()==game.Save(),"Sold rewards and starting gear must survive a version-7 save.");
+  Require(copy.Load(game.Save()) && copy.Save()==game.Save(),"Sold rewards and starting gear must survive a current-version save.");
   const auto soldGear=game.Save();
-  auto soldV6=soldGear; soldV6.replace(14,1,"6"); TrimRecord(soldV6,"GEAR ",6); TrimRecord(soldV6,"BUYBACK ",9);
+  auto soldV6=soldGear; soldV6.replace(14,1,"6"); RemoveRecord(soldV6,"BUILD "); TrimRecord(soldV6,"GEAR ",6); TrimRecord(soldV6,"BUYBACK ",9);
   Require(copy.Load(soldV6) && copy.Save()==soldGear,
     "Version-6 migration must preserve merchant-held rewards and sale credits alongside new travel gear.");
   for (int i=0;i<5;++i) Trade(game,TradeAction::Sell,Item::Potion,game.Items().Find(Item::Potion));
