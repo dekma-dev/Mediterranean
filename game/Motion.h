@@ -8,6 +8,24 @@ namespace motion {
 constexpr float tau=6.283185307f;
 // A deliberate RPG jump: 1.08 m apex, 0.60 s total flight on level ground.
 constexpr float jumpSpeed=7.2f,gravity=24.f;
+// A fast push-off followed by longer braking, integrated analytically.
+// Peak speed is 2 * distance / duration; no frame can skip collision sweeps.
+constexpr float dashDuration=.34f,dashDistance=3.5f,dashPeak=.22f;
+inline float DashSpeed(float phase) {
+  const float t=std::clamp(phase,0.f,1.f);
+  const float u=t<dashPeak?t/dashPeak:(t-dashPeak)/(1-dashPeak);
+  const float smooth=u*u*(3-2*u);
+  return t<dashPeak?smooth:1-smooth;
+}
+inline float DashTravel(float phase) {
+  const float t=std::clamp(phase,0.f,1.f);
+  if (t<dashPeak) {
+    const float u=t/dashPeak;
+    return dashPeak*u*u*u*(2-u);
+  }
+  const float u=(t-dashPeak)/(1-dashPeak);
+  return dashPeak+2*(1-dashPeak)*(u-u*u*u+.5f*u*u*u*u);
+}
 // Signed velocity response with its exact displacement integral. Unlike Travel,
 // direction changes preserve momentum and a zero target provides braking.
 inline float IntegrateVelocity(float& velocity,float target,float response,float dt) {

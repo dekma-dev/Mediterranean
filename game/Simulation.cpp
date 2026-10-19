@@ -94,6 +94,7 @@ bool Simulation::HasLineOfSight(Vec2 from,Vec2 to) const {
 void Simulation::UseAbility(int index) {
   if (index<0 || index>=4 || health_<=0) return;
   if (cooldowns_[index]>0) { message_="That ability is cooling down."; return; }
+  if (Dashing()) { message_="Finish the dash before using another ability."; return; }
   if (index==3) {
     if (health_>=MaxHealth()) { message_="Health is already full."; return; }
     const float healed=std::min(MendHealing(),MaxHealth()-health_);
@@ -102,9 +103,10 @@ void Simulation::UseAbility(int index) {
     message_="Mend restored health.";
   } else if (index==2) {
     dashDirection_={std::sin(facing_),std::cos(facing_)};
-    dashRemaining_=.28f; movementVelocity_={}; jumpBuffer_=0;
+    dashRemaining_=motion::dashDuration; movementVelocity_={}; jumpBuffer_=0;
     dashedThisUpdate_=true;
-    message_="Dash.";
+    EmitVisual(CombatVisualKind::DashStart,player_,height_,facing_);
+    message_="Dash: forward burst.";
   } else {
     if (!TargetActor() || TargetActor()->health<=0) { message_="Press Tab to select an enemy."; return; }
     const bool trainingTarget=sparring_ && target_==int(enemies_.size());
@@ -147,6 +149,7 @@ void Simulation::UseAbility(int index) {
 const char* Simulation::AbilityStatus(int index) const {
   if (index<0 || index>=4 || health_<=0) return "DISABLED";
   if (cooldowns_[index]>0) return "COOLDOWN";
+  if (Dashing()) return "DASHING";
   if (index==3) return health_>=MaxHealth()?"FULL HEALTH":"READY";
   if (index==2) return "READY";
   const auto* target=TargetActor();
@@ -375,14 +378,16 @@ void Simulation::Update(float seconds,const Command& command) {
   }
   if(command.ability!=2) UseAbility(command.ability);
   if(Dashing()) {
-    const float from=1-dashRemaining_/.28f;
+    const float from=DashPhase();
     dashRemaining_=std::max(0.f,dashRemaining_-dt);
-    const float to=1-dashRemaining_/.28f;
-    const auto curve=[](float t) { return t*t*(3-2*t); };
-    const float distance=3.5f*(curve(to)-curve(from));
+    const float to=1-dashRemaining_/motion::dashDuration;
+    const float distance=std::max(0.f,motion::dashDistance*(motion::DashTravel(to)-motion::DashTravel(from)));
     const auto before=player_;
     Move(player_,{dashDirection_.x*distance,dashDirection_.z*distance},.4f);
-    if(Length(Difference(player_,before))<distance*.95f) dashRemaining_=0;
+    const bool blocked=Length(Difference(player_,before))+.00001f<distance*.95f;
+    if (blocked) dashRemaining_=0;
+    if (!Dashing()) EmitVisual(blocked?CombatVisualKind::DashImpact:CombatVisualKind::DashStop,
+      player_,height_,std::atan2(dashDirection_.x,dashDirection_.z));
   }
   for (auto& enemy : enemies_) UpdateEnemy(enemy,dt);
   if (sparring_) {

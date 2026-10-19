@@ -144,6 +144,8 @@ void Events::Update(const rpg::Simulation& state) {
     case K::HeavyHit:add(Cue::HeavyHit);break; case K::Hurt:add(Cue::Hurt);break;
     case K::Interrupt:add(Cue::Interrupt);break; case K::Mend:add(Cue::Mend);break;
     case K::Potion:add(Cue::Potion);break;
+    // Dash activation already has its authoritative one-shot cue below.
+    case K::DashStart: case K::DashStop: case K::DashImpact: break;
     }
   }
   if(state.Health()>0) {

@@ -1,5 +1,13 @@
 # Procedural graphics and performance budget
 
+## Dash motion effects - 2026-10-19
+
+Spell 3 emits launch, finish and obstruction pulses from authoritative movement, while a 32-sample path history draws three fading cyan ribbons. Samples follow the swept player position and height, retain at most 0.20 seconds and are spaced by time at high update rates. The final endpoint freezes when the burst finishes. A position discontinuity discards the wake. Launch cancels an old player blade trail; suspension/modal capture/defeat discard dash residue and load/restart/respawn reset all effect history.
+
+Each 0.42-second pulse uses a 24-segment directional air ring, a small glow and ten ballistic motes; four motes become restrained grit only near the floor. Normal stops use cyan, obstruction uses amber. All geometry uses existing depth-tested additive effect primitives and the shared 6,144-vertex upload cap. The wake adds fixed CPU history and more vertex submissions; no new shader, texture, render target or GPU buffer is introduced. Runtime cost has not been measured.
+
+CombatEffectsTests adds six integrated dash captures: launch, drive, braking, normal stop, wall collision and air dash. Motion/animation/foot-placement tests cover the new curve and pose. None has run for this revision: native building stops at `Visual Studio locator was not found.` Manual checks 128–130 cover motion, clipping, visibility and performance.
+
 ## Atmospheric daylight, cloud depth and sun - 2026-10-19
 
 The sky uses a ground-level scattering approximation: wavelength-dependent Rayleigh extinction, broad and narrow forward Mie lobes, bounded horizon paths, and a solar disc with a 0.00465 radian angular radius. Pixel derivatives filter its edge. The sun vector is shared with both directional shadow projections. A compact analytic optical glow surrounds the disc; cloud transmission attenuates both. Reduced radiance near the horizon and a cooler lower hemisphere avoid the former pale, nearly uniform backdrop below the floating island.

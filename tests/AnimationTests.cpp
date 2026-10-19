@@ -146,6 +146,22 @@ int main() {
     const auto pose=BuildCharacterPose(invalid,invalid,true,{invalid,invalid,invalid,invalid,invalid,invalid,invalid});
     Require(Finite(pose.arms[0].end) && Finite(pose.legs[1].end) && Finite(pose.UpperPoint({0,1.76f,0})),"Invalid animation channels must sanitize safely.");
   }
+  // Full dash and braking poses retain fixed limbs and a clear weapon tip.
+  for (float phase : {0.f,.1f,.22f,.45f,.68f,.9f,1.f}) for (bool shield : {false,true})
+    for (float air : {0.f,1.f}) for (float impact : {0.f,1.f}) for (float swing : {0.f,1.f}) {
+    animation::Sample sample; sample.dash=motion::DashSpeed(phase);
+    sample.dashBrake=animation::Gesture(phase,.68f,1); sample.dashImpact=impact; sample.air=air; sample.cast=1;
+    const auto pose=BuildCharacterPose(swing,0,shield,sample);
+    for (int side=0;side<2;++side) {
+      const auto& leg=pose.legs[side]; const auto& arm=pose.arms[side];
+      Require(Finite(leg.end) && Finite(arm.end) && leg.end.y>=.1699f,"Burst poses must remain finite and above the floor");
+      Require(std::abs(Distance(leg.root,leg.joint)-CharacterPose::thigh)<.0001f &&
+        std::abs(Distance(leg.joint,leg.end)-CharacterPose::shin)<.0001f &&
+        std::abs(Distance(arm.root,arm.joint)-CharacterPose::upperArm)<.0001f &&
+        std::abs(Distance(arm.joint,arm.end)-CharacterPose::forearm)<.0001f,"Dash poses must not stretch limbs");
+    }
+    Require(pose.WeaponPoint(.96f).y>.08f,"The forward lean must keep the blade out of the floor");
+  }
   // Breathing and the half-frequency sway must not snap at a phase wrap.
   for (float time : {motion::tau/1.8f,motion::tau*2/1.8f,100.f}) {
     const auto before=animation::Idle(time-.0001f,1.7f),after=animation::Idle(time+.0001f,1.7f);

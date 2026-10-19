@@ -51,6 +51,53 @@ double MeanDifference(const Image& a,const Image& b) {
 int main() {
   // Safe outpost fixture keeps enemy damage out of recovery acceptance checks.
   rpg::Simulation fresh;
+  {
+    Game burst; burst.Initialize(); rpg::Simulation plain; rpg::Command dash; dash.ability=2;
+    const auto origin=burst.State().Player();
+    burst.ExecuteCommand(dash,.03f); plain.Update(.03f,dash);
+    Require(Has(burst.State(),K::DashStart) && burst.Effects().DashSampleCount()==2 &&
+      burst.Effects().BurstCount()==1,"Accepted dash must seed a wake and one launch pulse");
+    const auto& launch=burst.State().VisualEvents()[0];
+    Require(launch.position.x==origin.x && launch.position.z==origin.z,"Launch effect must stay at the true starting position");
+    Require(burst.State().Save()==plain.Save(),"Dash cosmetics must not affect simulation or durable state");
+    burst.ExecuteCommand(dash,.01f); plain.Update(.01f,dash);
+    Require(!Has(burst.State(),K::DashStart) && burst.Effects().BurstCount()==1,"Cooldown rejection must not restart the wake");
+    for (int i=0;i<40;++i) { burst.ExecuteCommand({},.02f); plain.Update(.02f,{}); }
+    Require(burst.State().Save()==plain.Save() && burst.Effects().DashSampleCount()==0 && burst.Effects().BurstCount()==0,
+      "Dash residue must expire and preserve renderer-free movement results");
+    burst.Initialize(); burst.ExecuteCommand(dash,.05f); burst.SuspendInput();
+    Require(burst.Effects().DashSampleCount()==0 && burst.Effects().BurstCount()==0 && burst.PlayerAnimation().dash==0,
+      "Focus suspension must immediately discard dash motion and cosmetics");
+    burst.ExecuteCommand({},.05f);
+    Require(!burst.State().Dashing() && !Has(burst.State(),K::DashStop),"Cancelled dash must not invent a finishing burst");
+    burst.Initialize(); burst.ExecuteCommand(dash,.05f);
+    rpg::Command capture; capture.haltMovement=true; burst.ExecuteCommand(capture,.01f);
+    Require(burst.Effects().DashSampleCount()==0 && burst.Effects().BurstCount()==0,"Modal capture must clear dash effects");
+    burst.Initialize(); burst.ExecuteCommand(dash,.05f);
+    Require(burst.RestoreSnapshot(burst.State().Save()) && burst.Effects().DashSampleCount()==0 &&
+      burst.Effects().BurstCount()==0 && !burst.State().Dashing(),"Loading must not replay an unfinished dash");
+    // Injured champion: another spell cannot override the physical burst.
+    auto hurt=fresh.Save(); hurt.replace(hurt.find(" 100 "),5," 40 ");
+    Require(burst.RestoreSnapshot(hurt),"Dash casting fixture");
+    burst.ExecuteCommand(dash,.05f); rpg::Command mend; mend.ability=3; burst.ExecuteCommand(mend,.01f);
+    Require(burst.State().Health()==40 && burst.State().Cooldown(3)==0 && !Has(burst.State(),K::Mend),
+      "An active dash must reject another spell without consuming its cooldown");
+    for (int i=0;i<7;++i) burst.ExecuteCommand({},.05f);
+    burst.ExecuteCommand(mend,.01f);
+    Require(burst.State().Health()==75 && Has(burst.State(),K::Mend),"Normal casting must resume after the stop");
+  }
+  for (int rate : {30,60,144,1000}) {
+    CombatEffects wake; wake.Emit({K::DashStart,{0,0},0,0});
+    float elapsed=0;
+    while (elapsed<.3f-1e-7f) {
+      const float dt=std::min(1.f/rate,.3f-elapsed); elapsed+=dt; wake.Advance(dt);
+      wake.TrackDash({0,0,elapsed*5},true);
+      Require(wake.DashSampleCount()<=CombatEffects::trailSamples,"Wake history must remain bounded at high update rates");
+    }
+    Require(wake.DashSampleCount()>4,"Wake history must retain a visible tail");
+    wake.TrackDash({0,0,8},true);
+    Require(wake.DashSampleCount()==0,"A discontinuity must never stretch the wake across the map");
+  }
   auto injured=fresh.Save();
   const auto healthPosition=injured.find(" 100 ");
   Require(healthPosition!=std::string::npos,"Recovery fixture health field missing");
@@ -256,6 +303,42 @@ int main() {
     Require(game.RestoreSnapshot(saved) && game.Effects().BurstCount()==0,"Reload must clear recovery residue");
   }
 
+  // Real dash phases, including air motion and a swept collision.
+  for (int pose=0;pose<6;++pose) {
+    Game burst; burst.Initialize(); rpg::Command dash; dash.ability=2;
+    if (pose==4) Require(burst.RestoreSnapshot(
+      "MEDITERRANEAN 3\n3 -8 100 1.5707963 0 0\n2 0 0 0\n0\n0 0 0 0\n"
+      "100 -4 7 80 0 0 0 0 0\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n"),"Dash collision capture fixture");
+    if (pose==5) { rpg::Command jump; jump.jump=true; burst.ExecuteCommand(jump,.05f); }
+    const float times[]={.03f,.11f,.27f,.36f,.2f,.11f};
+    float elapsed=0; bool impacted=false;
+    while (elapsed<times[pose]-1e-7f) {
+      const float dt=std::min(.01f,times[pose]-elapsed);
+      burst.ExecuteCommand(elapsed==0?dash:rpg::Command{},dt); elapsed+=dt;
+      if (Has(burst.State(),K::DashImpact)) {
+        Require(!impacted,"A wall collision must emit only one stopping impact"); impacted=true;
+        for (std::size_t i=0;i<burst.State().VisualEventCount();++i) {
+          const auto& event=burst.State().VisualEvents()[i];
+          if (event.kind==K::DashImpact) Require(event.position.x<=4.801f &&
+            event.position.x==burst.State().Player().x,"Wall effect must use the swept endpoint");
+        }
+      }
+    }
+    if (pose==4) Require(impacted && !burst.State().Dashing() && burst.State().CanStand(burst.State().Player()),
+      "Wall capture must stop with a valid endpoint and a recoil effect");
+    if (pose==5) Require(!burst.State().Grounded() && burst.State().Height()>0,"Air dash must keep ballistic height");
+    burst.SetCameraOrbit(1.15f,.28f,4.8f);
+    const wchar_t* names[]={L"effects-dash-launch.png",L"effects-dash-drive.png",L"effects-dash-brake.png",
+      L"effects-dash-stop.png",L"effects-dash-wall.png",L"effects-dash-air.png"};
+    const auto saved=burst.State().Save(); const auto samples=burst.Effects().DashSampleCount();
+    renderer.BeginFrame(); burst.Render(renderer,false); Capture(renderer,names[pose]);
+    const auto vertices=renderer.EffectVertices();
+    Require(vertices>0 && vertices<=Renderer::maxEffectVertices,"Dash must submit visible bounded effect geometry");
+    renderer.BeginFrame(); burst.Render(renderer,false); Require(renderer.EndFrame(false),"Repeat dash render");
+    Require(burst.State().Save()==saved && burst.Effects().DashSampleCount()==samples && renderer.EffectVertices()==vertices,
+      "Rendering must not change dash movement, history or particle age");
+  }
+
   // Real gameplay captures exercise event -> blade samples -> render, including
   // repeat rendering without advancing state and the live Escape menu.
   for (int ability=0;ability<2;++ability) {
@@ -303,6 +386,6 @@ int main() {
   Require(game.State().Health()<100 && game.Effects().BurstCount()>0,"The Escape menu must not freeze real enemy impact effects");
   renderer.BeginFrame(); game.Render(renderer); Capture(renderer,L"effects-live-menu.png");
   Require(renderer.ValidateDebugMessages(),"Combat effect checks emitted DirectX warnings");
-  std::cout<<"PASS: confirmed combat and recovery events, miss/interrupt/death/load lifetimes, bounded pools/uploads, depth/blend/HUD/portrait isolation and 39 diagnostic captures. Fixed effect state bytes: "<<sizeof(CombatEffects)<<'\n';
+  std::cout<<"PASS: confirmed combat and recovery events, miss/interrupt/death/load lifetimes, bounded pools/uploads, depth/blend/HUD/portrait isolation and 45 diagnostic captures. Fixed effect state bytes: "<<sizeof(CombatEffects)<<'\n';
   CoUninitialize();
 }

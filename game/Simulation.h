@@ -6,6 +6,7 @@
 #include "game/Inventory.h"
 #include "game/Trade.h"
 #include "game/Talents.h"
+#include "game/Motion.h"
 
 namespace rpg {
 enum class EnemyState { Idle, Pursuing, Returning, Dead };
@@ -58,7 +59,7 @@ struct CombatFeedback {
 };
 
 // One-update presentation events. Never serialized or used to resolve combat.
-enum class CombatVisualKind { Strike, HeavyStrike, EnemySwing, Hit, HeavyHit, Hurt, Interrupt, Mend, Potion };
+enum class CombatVisualKind { Strike, HeavyStrike, EnemySwing, Hit, HeavyHit, Hurt, Interrupt, Mend, Potion, DashStart, DashStop, DashImpact };
 struct CombatVisualEvent {
   CombatVisualKind kind = CombatVisualKind::Hit;
   Vec2 position;
@@ -85,7 +86,7 @@ public:
   bool JumpedThisUpdate() const { return jumpedThisUpdate_; }
   bool DashedThisUpdate() const { return dashedThisUpdate_; }
   bool Dashing() const { return dashRemaining_>0; }
-  float DashPhase() const { return Dashing()?1-dashRemaining_/.28f:0; }
+  float DashPhase() const { return Dashing()?1-dashRemaining_/motion::dashDuration:0; }
   float Facing() const { return facing_; }
   float MovementDistance() const { return movementDistance_; } // excludes dash/respawn
   Vec2 MovementVelocity() const { return movementVelocity_; }

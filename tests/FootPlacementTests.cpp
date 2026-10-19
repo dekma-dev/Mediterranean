@@ -163,10 +163,10 @@ int main() {
   game.Initialize(); game.SetCameraOrbit(2.2f,.28f,4.8f);
   rpg::Command dash; dash.ability=2; game.ExecuteCommand(dash,.04f);
   liveCapture(L"dash-start.png");
-  for(int i=0;i<2;++i) game.ExecuteCommand({},.05f);
-  Require(game.PlayerAnimation().dash>.9f && !game.PlayerAnimation().feetActive,"Dash peak must use its own pose, not planted walking feet");
+  game.ExecuteCommand({},.035f);
+  Require(game.PlayerAnimation().dash>.99f && !game.PlayerAnimation().feetActive,"Dash peak must use its own pose, not planted walking feet");
   liveCapture(L"dash-peak.png");
-  for(int i=0;i<4;++i) game.ExecuteCommand({},.05f);
+  for(int i=0;i<6;++i) game.ExecuteCommand({},.05f);
   Require(!game.State().Dashing() && game.PlayerAnimation().feetActive,"Finished dash must restore ground contacts");
   liveCapture(L"dash-finish.png");
   Require(game.RestoreSnapshot("MEDITERRANEAN 3\n3 -10 50 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"

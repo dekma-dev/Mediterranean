@@ -8,7 +8,8 @@ using K=rpg::CombatVisualKind;
 using namespace DirectX;
 constexpr float trailLife=.16f,burstLife=.48f,sweepLife=.32f;
 bool Healing(K kind) { return kind==K::Mend || kind==K::Potion; }
-float BurstLife(K kind) { return Healing(kind)?.8f:burstLife; }
+bool Dashing(K kind) { return kind==K::DashStart || kind==K::DashStop || kind==K::DashImpact; }
+float BurstLife(K kind) { return Healing(kind)?.8f:Dashing(kind)?.42f:burstLife; }
 float Unit(float x) { return std::clamp(x,0.f,1.f); }
 XMFLOAT4 Tint(K kind) {
   if (kind==K::Interrupt) return {.67f,.30f,1,1};
@@ -48,6 +49,45 @@ void HealingPulse(Renderer& renderer,const rpg::CombatVisualEvent& event,float a
     const XMFLOAT3 mote{event.position.x+std::cos(angle)*radius,event.height+.2f+rise*1.7f,event.position.z+std::sin(angle)*radius};
     color.w=envelope*std::sin(rise*3.14159265f)*.7f;
     renderer.DrawEffectGlow(mote,.04f,color);
+  }
+}
+// Directional air rings and ballistic motes stay at the actual launch/contact
+// position. Ground grit is suppressed in flight; it is never a teleport beam.
+void DashPulse(Renderer& renderer,const rpg::CombatVisualEvent& event,float age) {
+  const bool start=event.kind==K::DashStart,impact=event.kind==K::DashImpact;
+  const float phase=Unit(age/.42f),fade=(1-phase)*(1-phase);
+  const float sx=std::sin(event.facing),cx=std::cos(event.facing);
+  XMFLOAT4 color=impact?XMFLOAT4{1,.64f,.28f,1}:XMFLOAT4{.24f,.78f,1,1};
+  const float radius=.32f+phase*(start?.85f:.55f);
+  const auto ringPoint=[&](float a,float width) -> XMFLOAT3 {
+    const float r=radius+width,side=std::cos(a)*r;
+    const float back=(start?-.35f:.10f)*phase;
+    return {event.position.x+cx*side+sx*back,
+      event.height+.85f+std::sin(a)*r*.85f,event.position.z-sx*side+cx*back};
+  };
+  color.w=fade*(start?.45f:.30f);
+  for (int i=0;i<24;++i) {
+    const float a=i*motion::tau/24,b=(i+1)*motion::tau/24;
+    renderer.DrawEffectRibbon(ringPoint(a,-.022f),ringPoint(a,.022f),
+      ringPoint(b,.022f),ringPoint(b,-.022f),color,1,1);
+  }
+  color.w=fade*.13f;
+  renderer.DrawEffectGlow({event.position.x,event.height+.85f,event.position.z},.6f+phase*.3f,color);
+  for (int i=0;i<10;++i) {
+    const float angle=i*2.3999632f,spread=.6f+Noise(i*37+5)*1.4f;
+    const float side=std::cos(angle)*spread,forward=(start?-2.6f:impact?-1.5f:.8f);
+    const bool grit=event.height<.08f && i<4;
+    const auto at=[&](float t) -> XMFLOAT3 {
+      const float travel=-std::expm1(-5*t)/5;
+      return {event.position.x+(cx*side+sx*forward)*travel,
+        event.height+(grit?.07f:.4f+float(i%4)*.3f)+(grit?1.2f:.5f)*t-(grit?4.f:1.f)*t*t,
+        event.position.z+(-sx*side+cx*forward)*travel};
+    };
+    auto mote=grit?XMFLOAT4{.62f,.49f,.29f,fade*.22f}:color;
+    if (!grit) mote.w=fade*.65f;
+    const auto head=at(age),tail=at(std::max(0.f,age-.045f));
+    renderer.DrawEffectStreak(tail,head,grit?.035f:.018f,mote);
+    renderer.DrawEffectGlow(head,grit?.055f:.026f,mote);
   }
 }
 // A tapered, curved slash envelope. Its two ribbons share the normal effect
@@ -90,10 +130,14 @@ void Crescent(Renderer& renderer,XMFLOAT3 origin,float facing,float age,bool hea
   }
 }
 }
-void CombatEffects::Reset() { bursts_={}; trails_={}; serial_=0; }
+void CombatEffects::Reset() { bursts_={}; trails_={}; wake_={}; serial_=0; }
 void CombatEffects::Advance(float dt) {
   if (!std::isfinite(dt) || dt<=0) return;
   dt=std::min(dt,.05f);
+  for (std::size_t i=0;i<wake_.count;++i) wake_.samples[i].age+=dt;
+  const auto wakeEnd=std::remove_if(wake_.samples.begin(),wake_.samples.begin()+wake_.count,
+    [](const WakeSample& sample) { return sample.age>=.20f; });
+  wake_.count=std::size_t(wakeEnd-wake_.samples.begin());
   for (auto& burst : bursts_) burst.age=std::min(1.f,burst.age+dt);
   for (auto& trail : trails_) {
     trail.age=std::min(1.f,trail.age+dt);
@@ -104,6 +148,11 @@ void CombatEffects::Advance(float dt) {
   }
 }
 void CombatEffects::Emit(const rpg::CombatVisualEvent& event) {
+  if (event.kind==K::DashStart) {
+    CancelTrail(0);
+    wake_={}; wake_.facing=event.facing; wake_.active=true;
+    wake_.samples[wake_.count++]={{event.position.x,event.height,event.position.z},0};
+  }
   if (event.kind==K::Strike || event.kind==K::HeavyStrike || event.kind==K::EnemySwing) {
     auto slot=std::find_if(trails_.begin(),trails_.end(),[&](const Trail& trail) { return trail.actor==event.actor && trail.age<.4f; });
     if (slot==trails_.end()) slot=std::max_element(trails_.begin(),trails_.end(),[](const Trail& a,const Trail& b) { return a.age<b.age; });
@@ -141,6 +190,27 @@ void CombatEffects::TrackWeapon(rpg::EntityId actor,XMFLOAT3 root,XMFLOAT3 tip) 
     return;
   }
 }
+void CombatEffects::TrackDash(XMFLOAT3 position,bool active) {
+  if (!wake_.active) return;
+  if (wake_.count) {
+    const auto delta=XMLoadFloat3(&position)-XMLoadFloat3(&wake_.samples[wake_.count-1].position);
+    if (XMVectorGetX(XMVector3LengthSq(delta))>4) { wake_={}; return; }
+  }
+  // A live endpoint plus time-spaced history retains the same wake at high Hz.
+  if (wake_.count>=2 && wake_.samples[wake_.count-2].age<1.f/120)
+    wake_.samples[wake_.count-1]={position,0};
+  else {
+    if (wake_.count==wake_.samples.size()) {
+      std::move(wake_.samples.begin()+1,wake_.samples.end(),wake_.samples.begin()); --wake_.count;
+    }
+    wake_.samples[wake_.count++]={position,0};
+  }
+  wake_.active=active;
+}
+void CombatEffects::CancelDash() {
+  wake_={};
+  for (auto& burst : bursts_) if (Dashing(burst.event.kind)) burst=Burst{};
+}
 void CombatEffects::CancelTrail(rpg::EntityId actor) {
   for (auto& trail : trails_) if (trail.actor==actor) trail=Trail{};
 }
@@ -152,6 +222,20 @@ std::size_t CombatEffects::TrailCount() const {
   return std::count_if(trails_.begin(),trails_.end(),[](const Trail& trail) { return trail.age<sweepLife || trail.count>1; });
 }
 void CombatEffects::Render(Renderer& renderer) const {
+  const float sx=std::sin(wake_.facing),cx=std::cos(wake_.facing);
+  for (std::size_t i=1;i<wake_.count;++i) {
+    const auto& a=wake_.samples[i-1]; const auto& b=wake_.samples[i];
+    for (int band=0;band<3;++band) {
+      const float side=band==0?-.33f:band==1?.33f:0,up=band==2?.38f:1.22f;
+      const float width=band==2?.045f:.065f;
+      const auto edge=[&](XMFLOAT3 p,float w) -> XMFLOAT3 {
+        return {p.x+cx*(side+w),p.y+up,p.z-sx*(side+w)};
+      };
+      renderer.DrawEffectRibbon(edge(a.position,-width),edge(a.position,width),
+        edge(b.position,width),edge(b.position,-width),{.23f,.73f,1,.46f},
+        std::pow(Unit(1-a.age/.20f),2.f),std::pow(Unit(1-b.age/.20f),2.f));
+    }
+  }
   for (const auto& trail : trails_) {
     if (trail.age<sweepLife) {
       Crescent(renderer,trail.origin,trail.facing,trail.age,trail.kind==K::HeavyStrike,trail.kind==K::EnemySwing,false);
@@ -168,6 +252,7 @@ void CombatEffects::Render(Renderer& renderer) const {
     if (burst.age>=BurstLife(burst.event.kind)) continue;
     const auto& e=burst.event;
     if (Healing(e.kind)) { HealingPulse(renderer,e,burst.age); continue; }
+    if (Dashing(e.kind)) { DashPulse(renderer,e,burst.age); continue; }
     const bool heavy=e.kind==K::HeavyHit,interrupt=e.kind==K::Interrupt,hurt=e.kind==K::Hurt;
     const float t=burst.age,fade=std::pow(Unit(1-t/burstLife),2.f);
     // Move the impact onto the struck surface, facing the attacker.

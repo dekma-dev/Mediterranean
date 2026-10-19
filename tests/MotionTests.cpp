@@ -461,6 +461,35 @@ int main() {
     burst.Initialize(); burst.ExecuteCommand(dash,.05f); const auto dashSave=burst.State().Save();
     Require(burst.RestoreSnapshot(dashSave) && !burst.State().Dashing(),"Loading must discard unfinished dash movement");
   }
+  // Check equal-time displacement and phase at several real update rates.
+  std::array<float,4> referenceDash{};
+  for (int hz : {22,30,60,144,1000}) {
+    Game burst; burst.Initialize(); const auto origin=burst.State().Player();
+    const float checkpoints[]={.075f,.17f,.30f,.35f};
+    float elapsed=0; int starts=0,stops=0;
+    for (int point=0;point<4;++point) {
+      while (elapsed<checkpoints[point]-1e-7f) {
+        const float dt=std::min(1.f/hz,checkpoints[point]-elapsed);
+        rpg::Command input; if (elapsed==0) input.ability=2;
+        burst.ExecuteCommand(input,dt); elapsed+=dt;
+        for (std::size_t i=0;i<burst.State().VisualEventCount();++i) {
+          const auto kind=burst.State().VisualEvents()[i].kind;
+          starts+=kind==rpg::CombatVisualKind::DashStart;
+          stops+=kind==rpg::CombatVisualKind::DashStop;
+          Require(kind!=rpg::CombatVisualKind::DashImpact,"Open ground must not invent an impact");
+        }
+      }
+      const float travel=Distance(origin,burst.State().Player());
+      if (hz==22) referenceDash[point]=travel;
+      else Require(std::abs(travel-referenceDash[point])<.0001f,"Dash distance at equal times must not depend on update rate");
+      if (point==0) Require(travel>.7f && travel<.9f && burst.PlayerAnimation().dash>.99f,
+        "The push-off must reach peak speed early without covering the whole dash");
+      if (point==1) Require(travel>2.4f && travel<2.7f && burst.PlayerAnimation().dashBrake>.7f,
+        "The second half must visibly brake after the initial burst");
+      if (point==2) Require(burst.PlayerAnimation().dash<.1f,"Final travel must slow into the stop");
+    }
+    Require(starts==1 && stops==1,"A completed dash must emit exactly one launch and one stop");
+  }
   const auto save=game.State().Save();
   {
     rpg::Simulation blocked;

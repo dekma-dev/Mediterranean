@@ -46,6 +46,8 @@ Player and enemy feet now hold their ground contact while supporting the body, t
 
 Strike combines a gold crescent with a blade-following trail; Heavy Strike adds a larger cyan crescent and delayed violet counter-sweep. Bright contact cores, expanding impact rings, tapered sparks and rising motes give attacks a more expressive fantasy-MMO appearance. Enemy effects use restrained orange. Confirmed combat events drive the effects, which remain behind scenery and under the interface and expire within half a second. Damage, range and cooldowns are unchanged. Press Tab near a raider, then 1/2; after the campaign, use the eastern sparring guard. See manual checks 74–80.
 
+Spell 3 now uses a 0.34-second forward burst with a strong push-off, body lean, braking stance and collision recoil. Cyan motion ribbons follow the actual path; launch/stop wind rings, motes and ground grit make the travel visible. Range is 3.5 m with a five-second cooldown. This source change still awaits native compilation and visual acceptance (manual checks 128–130).
+
 Successful Mend (4) now produces green ascending ribbons and motes; a potion (Q) creates a smaller gold pulse. Recovery residue stays at the activation position and fades within 0.8 seconds. Full-health and cooldown rejections produce no effect. This uses the existing bounded effect pool and batch without new textures or GPU buffers. See manual checks 84–85.
 
 The latest graphics pass adds stone/wood/tile relief, woven cloth, roughness-dependent highlights, warmer sunlight with cool ambient fill, irregular beveled paving and layered clouds. Material detail follows moving characters and blends across curved surfaces. It reuses the same eleven 128-square texture layers and existing geometry; no external assets are needed. This improves the prototype's surfaces and lighting, while authored character models and richer scenery remain future work. See the latest measurements in [graphics.md](docs/graphics.md) and manual checks 70–72.
@@ -63,7 +65,7 @@ The environment connects the village plaza, dock, training ground and anchor wit
 | Hold right mouse and drag / wheel | Orbit / zoom |
 | Tab | Cycle nearby living targets |
 | 1 / 2 | Strike / heavy strike (also interrupts enemy windups) |
-| 3 / 4 | Dash / heal |
+| 3 / 4 | Forward dash / heal |
 | E | Talk, loot, stabilize the anchor, browse/close the shop, or start/stop sparring |
 | Q / G | Use a healing potion / switch owned swords |
 | F2 | Hide / restore the HUD for visual inspection |
