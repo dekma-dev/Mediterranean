@@ -1,4 +1,5 @@
 #include "game/Game.h"
+#include "tests/DashFixture.h"
 #include "game/Interface.h"
 #include "game/CharacterView.h"
 #include "game/TerrainSurface.h"
@@ -419,7 +420,13 @@ int main() {
     Require(closeBag.action==ui::Action::Close && closeBag.value==int(ui::Panel::Inventory),"Bag close must identify only the bag.");
     Require(click(1040,580).action==ui::Action::None && screen.PointerOverWindow(),"Blank bag surface must capture its pointer.");
     Require(click(680,380).action==ui::Action::None && !screen.PointerOverWindow(),"World gap must remain available for camera orbit.");
+    Require(click(550,681).action==ui::Action::None,"Dash requires an available target with side windows open.");
+    const auto beforeDash=simulation.Save();
+    Require(simulation.Load(test::dashFixture),"Interface target dash fixture");
+    rpg::Command selectDash; selectDash.nextTarget=true; simulation.Update(.001f,selectDash);
+    renderer.BeginFrame(); screen.Render(renderer,simulation,0,false); Require(renderer.EndFrame(false),"Target dash render");
     Require(click(550,681).action==ui::Action::Ability,"Available Dash must remain usable with both side windows open.");
+    Require(simulation.Load(beforeDash),"Restore interface state after target dash check");
     screen.panel=ui::Panel::Menu;
     renderer.BeginFrame(); screen.Render(renderer,simulation,0,false); Require(renderer.EndFrame(false),"Menu render failed.");
     Require(click(640,343).action==ui::Action::Fullscreen,"Fullscreen button must issue the display command.");

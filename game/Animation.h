@@ -13,7 +13,7 @@ struct Sample {
   std::array<Foot,2> feet{};
   bool feetActive=false;
   float lean=0;
-  float dash=0,dashBrake=0,dashImpact=0;
+  float dash=0,dashBrake=0,dashImpact=0,dashPhase=0,dashLoad=0;
   float cast=0;
 };
 inline Sample Idle(float time,float offset=0) {
@@ -32,24 +32,37 @@ inline float Gesture(float age,float peak,float duration) {
   if (!std::isfinite(age) || age<0 || age>=duration) return 0;
   return age<peak?SmoothStep(age/peak):1-SmoothStep((age-peak)/(duration-peak));
 }
+inline float DashBrake(float phase) {
+  return SmoothStep((phase-.18f)/.48f)*(1-.65f*SmoothStep((phase-.65f)/.35f));
+}
 struct State {
   Sample pose;
   float phase=0,airBlend=0,riseBlend=0,travelBlend=0;
   float landingAge=2,landingStrength=0,hitAge=2,hitCarry=0;
   float castAge=2,leanVelocity=0,riseVelocity=0,travelVelocity=0;
-  float dashImpactAge=2,dashCarry=0;
+  float dashImpactAge=2,dashCarry=0,brakeCarry=0;
+  bool dashCollision=false;
   void Reset(float offset=0) { *this=State{}; phase=std::isfinite(offset)?std::remainder(offset,motion::tau):0; }
-  void CancelDash() { pose.dash=pose.dashBrake=pose.dashImpact=0; dashImpactAge=2; dashCarry=0; }
-  void UpdateDash(float dt,bool active,float dashPhase,bool impact,bool alive) {
+  void CancelDash() {
+    pose.dash=pose.dashBrake=pose.dashImpact=pose.dashPhase=pose.dashLoad=0;
+    dashImpactAge=2; dashCarry=brakeCarry=0; dashCollision=false;
+  }
+  void UpdateDash(float dt,bool active,float dashPhase,bool impact,bool alive,bool finished=false,float endElapsed=0) {
     if (!std::isfinite(dt) || dt<=0) return;
     dt=std::min(dt,.05f);
     if (!alive) { CancelDash(); return; }
-    if (impact) { dashImpactAge=0; dashCarry=pose.dash; }
-    else dashImpactAge=std::min(2.f,dashImpactAge+dt);
-    // Retain the forward load at collision, then recoil instead of snapping upright.
-    pose.dash=active?motion::DashSpeed(dashPhase):dashCarry*(1-SmoothStep(dashImpactAge/.18f));
-    pose.dashBrake=active?Gesture(dashPhase,.68f,1):0;
-    pose.dashImpact=Gesture(dashImpactAge,.045f,.23f);
+    if (active) { dashImpactAge=2; dashCarry=brakeCarry=0; dashCollision=false; }
+    else if (impact || finished) {
+      dashImpactAge=std::isfinite(endElapsed)?std::clamp(endElapsed,0.f,dt):0;
+      dashCarry=impact?pose.dash:0; brakeCarry=impact?pose.dashBrake:.35f; dashCollision=impact;
+    } else dashImpactAge=std::min(2.f,dashImpactAge+dt);
+    // A normal stop settles out of its catch step; collision retains the prior
+    // forward load and adds recoil. Neither recovery delays gameplay commands.
+    pose.dashPhase=active?Unit(dashPhase):1;
+    pose.dash=active?motion::DashSpeed(pose.dashPhase):dashCarry*(1-SmoothStep(dashImpactAge/.18f));
+    pose.dashBrake=active?DashBrake(pose.dashPhase):brakeCarry*(1-SmoothStep(dashImpactAge/.16f));
+    pose.dashImpact=dashCollision?Gesture(dashImpactAge,.045f,.23f):0;
+    pose.dashLoad=active?Gesture(pose.dashPhase,.10f,.32f):0;
   }
   void Update(float dt,float height,float velocity,float travel,bool alive,bool damaged,float strike,
               float landingSpeed=0,float landingElapsed=0,float forwardAcceleration=0,bool castStarted=false) {

@@ -20,8 +20,10 @@ int main() {
   {
     Simulation dash; Require(dash.Load(Veteran()),"Dash training fixture must load");
     Command input; input.ability=2; input.interact=true; dash.Update(.01f,input);
-    Require(dash.Dashing() && !dash.Sparring(),
-      "Dash activation must reject simultaneous training entry");
+    Require(!dash.Dashing() && dash.Cooldown(2)==0 && dash.Sparring(),
+      "A dash with no target must not consume cooldown or prevent starting training");
+    input={}; input.ability=2; dash.Update(.01f,input);
+    Require(dash.Dashing(),"The selected sparring opponent must accept a targeted dash");
   }
   {
     Simulation rebound; Require(rebound.Load(Veteran()),"Rebound training fixture must load");

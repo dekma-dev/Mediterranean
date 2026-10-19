@@ -152,17 +152,22 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   effects_.Advance(dt);
   for (std::size_t i=0;i<simulation_.VisualEventCount();++i) effects_.Emit(simulation_.VisualEvents()[i]);
   const auto dashPosition=simulation_.Player();
-  effects_.TrackDash({dashPosition.x,simulation_.Height(),dashPosition.z},simulation_.Dashing());
+  effects_.TrackDash({dashPosition.x,simulation_.Height(),dashPosition.z},simulation_.Dashing(),dt,
+    simulation_.Dashing()?motion::DashSpeed(simulation_.DashPhase()):0);
   if (command.haltMovement || simulation_.Health()<=0) effects_.CancelDash();
   if (simulation_.Health()<=0) effects_.CancelTrails();
   if (wasSparring && !simulation_.Sparring()) effects_.CancelTrail(simulation_.SparringOpponent().id);
   playerPose_.Update(simulation_.Facing(),simulation_.GroundMovementDistance(),simulation_.Grounded() && !simulation_.Dashing(),
-    simulation_.Health()>0,simulation_.AttackFlash()*5,dt);
+    simulation_.Health()>0,simulation_.AttackFlash()*5,dt,simulation_.Dashing() || simulation_.DashedThisUpdate());
   const auto velocity=simulation_.MovementVelocity();
-  bool castStarted=false,dashImpact=false;
+  bool castStarted=false,dashImpact=false,dashFinished=false;
+  float dashEndElapsed=0;
   for(std::size_t i=0;i<simulation_.VisualEventCount();++i) {
     castStarted|=simulation_.VisualEvents()[i].kind==rpg::CombatVisualKind::Mend;
-    dashImpact|=simulation_.VisualEvents()[i].kind==rpg::CombatVisualKind::DashImpact;
+    const auto& event=simulation_.VisualEvents()[i];
+    if (event.kind==rpg::CombatVisualKind::DashImpact || event.kind==rpg::CombatVisualKind::DashStop) {
+      dashImpact=event.kind==rpg::CombatVisualKind::DashImpact; dashFinished=true; dashEndElapsed=event.elapsed;
+    }
   }
   const float forwardAcceleration=command.haltMovement?0:
     ((velocity.x-previousVelocity.x)*std::sin(playerPose_.facing)+
@@ -170,7 +175,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   playerAnimation_.Update(dt,simulation_.Height(),simulation_.VerticalSpeed(),simulation_.MovementDistance(),
     simulation_.Health()>0,simulation_.DamagedThisUpdate(),playerPose_.attack,
     simulation_.LandingSpeed(),simulation_.LandingElapsed(),forwardAcceleration,castStarted);
-  playerAnimation_.UpdateDash(dt,simulation_.Dashing(),simulation_.DashPhase(),dashImpact,simulation_.Health()>0);
+  playerAnimation_.UpdateDash(dt,simulation_.Dashing(),simulation_.DashPhase(),dashImpact,simulation_.Health()>0,dashFinished,dashEndElapsed);
   if (command.haltMovement) playerAnimation_.CancelDash();
   playerAnimation_.pose.lean*=1-playerAnimation_.pose.dash;
   playerFeet_.Update(dt,simulation_.Player(),playerPose_.facing,simulation_.Grounded() && !simulation_.Dashing(),

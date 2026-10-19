@@ -74,9 +74,9 @@ int main() {
   Wait(restored,15);
   Require(restored.Health()==92,"Loading must retain the pending attack rather than skip it");
 
-  rpg::Command command; command.ability=2;
-  game.Update(.05f,command); Wait(game,15);
-  Require(game.Health()==100 && HasFeedback(game,rpg::FeedbackKind::Miss),"Dash out of range must avoid a committed swing");
+  rpg::Command command; command.movement={0,-1};
+  for (int i=0;i<16;++i) game.Update(.05f,command);
+  Require(game.Health()==100 && HasFeedback(game,rpg::FeedbackKind::Miss),"Retreating out of range must avoid a committed swing");
 
   Require(game.Load(duel),"Reload interrupt scenario");
   BeginSwing(game);

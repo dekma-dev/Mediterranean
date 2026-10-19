@@ -52,9 +52,9 @@ void Simulation::Emit(FeedbackKind kind,Vec2 position,int amount) {
   feedback_.push_back({position,kind,amount,0});
 }
 
-void Simulation::EmitVisual(CombatVisualKind kind,Vec2 position,float height,float facing,EntityId actor) {
+void Simulation::EmitVisual(CombatVisualKind kind,Vec2 position,float height,float facing,EntityId actor,float elapsed) {
   if (visualEventCount_<visualEvents_.size())
-    visualEvents_[visualEventCount_++]={kind,position,height,facing,actor};
+    visualEvents_[visualEventCount_++]={kind,position,height,facing,actor,elapsed};
 }
 
 void Simulation::RestoreForLevel(int previousLevel) {

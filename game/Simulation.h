@@ -65,6 +65,7 @@ struct CombatVisualEvent {
   Vec2 position;
   float height = 0, facing = 0;
   EntityId actor = 0; // zero is the player; enemies retain their stable IDs
+  float elapsed = 0; // time from emission to the end of this update
 };
 
 class Simulation {
@@ -91,7 +92,7 @@ public:
   float MovementDistance() const { return movementDistance_; } // excludes dash/respawn
   Vec2 MovementVelocity() const { return movementVelocity_; }
   float GroundMovementDistance() const { return groundMovementDistance_; }
-  void StopMovement() { movementVelocity_={}; movementDistance_=groundMovementDistance_=0; jumpBuffer_=0; dashRemaining_=0; }
+  void StopMovement() { movementVelocity_={}; movementDistance_=groundMovementDistance_=0; jumpBuffer_=0; dashRemaining_=dashTravelLeft_=0; dashTarget_=0; }
   float Health() const { return health_; }
   int Experience() const;
   int Level() const;
@@ -158,7 +159,10 @@ public:
 private:
   void Move(Vec2& position, Vec2 displacement, float radius);
   void SelectTarget();
-  void UseAbility(int index);
+  enum class DashCheck { Ready, NoTarget, Returning, TooClose, TooFar, Blocked };
+  DashCheck CheckDashTarget() const;
+  const Enemy* DashTargetActor() const;
+  void UseAbility(int index,float visualElapsed=0);
   void LearnTalent(int index);
   void Interact();
   bool HasLineOfSight(Vec2 from, Vec2 to) const;
@@ -168,7 +172,7 @@ private:
   void RestoreForLevel(int previousLevel);
   void Respawn();
   void DamagePlayer(float damage,float incomingFacing);
-  void EmitVisual(CombatVisualKind kind,Vec2 position,float height,float facing,EntityId actor=0);
+  void EmitVisual(CombatVisualKind kind,Vec2 position,float height,float facing,EntityId actor=0,float elapsed=0);
   void StartSparring();
   void EndSparring(const char* result);
   void Buy(int offer);
@@ -182,8 +186,8 @@ private:
   Vec2 movementVelocity_{};
   float airSpeedLimit_=4;
   float jumpBuffer_=0;
-  float dashRemaining_=0;
-  Vec2 dashDirection_{};
+  float dashRemaining_=0,dashTravelLeft_=0;
+  EntityId dashTarget_=0; // accepted target identity; selection may change during travel
   float movementDistance_ = 0;
   float groundMovementDistance_ = 0;
   float landingSpeed_ = 0, landingElapsed_ = 0;

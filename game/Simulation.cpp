@@ -91,7 +91,23 @@ bool Simulation::HasLineOfSight(Vec2 from,Vec2 to) const {
   return map_.CanTravel(from,to,.05f);
 }
 
-void Simulation::UseAbility(int index) {
+Simulation::DashCheck Simulation::CheckDashTarget() const {
+  const auto* target=TargetActor();
+  if (!target || target->health<=0) return DashCheck::NoTarget;
+  if (target->state==EnemyState::Returning) return DashCheck::Returning;
+  const float distance=Length(Difference(target->position,player_));
+  if (distance<=motion::dashStandOff+.01f) return DashCheck::TooClose;
+  if (distance>motion::dashRange) return DashCheck::TooFar;
+  return HasLineOfSight(player_,target->position)?DashCheck::Ready:DashCheck::Blocked;
+}
+
+const Enemy* Simulation::DashTargetActor() const {
+  if (sparring_ && trainer_.id==dashTarget_) return &trainer_;
+  for (const auto& enemy : enemies_) if (enemy.id==dashTarget_) return &enemy;
+  return nullptr;
+}
+
+void Simulation::UseAbility(int index,float visualElapsed) {
   if (index<0 || index>=4 || health_<=0) return;
   if (cooldowns_[index]>0) { message_="That ability is cooling down."; return; }
   if (Dashing()) { message_="Finish the dash before using another ability."; return; }
@@ -102,11 +118,22 @@ void Simulation::UseAbility(int index) {
     EmitVisual(CombatVisualKind::Mend,player_,height_,facing_);
     message_="Mend restored health.";
   } else if (index==2) {
-    dashDirection_={std::sin(facing_),std::cos(facing_)};
+    switch (CheckDashTarget()) {
+    case DashCheck::NoTarget: message_="Press Tab to select a living enemy."; return;
+    case DashCheck::Returning: message_="That enemy is returning home."; return;
+    case DashCheck::TooClose: message_="Already beside the target."; return;
+    case DashCheck::TooFar: message_="Target is out of dash range (5 m)."; return;
+    case DashCheck::Blocked: message_="The target is behind an obstacle."; return;
+    case DashCheck::Ready: break;
+    }
+    const auto* target=TargetActor();
+    dashTarget_=target->id; dashTravelLeft_=motion::dashDistance;
+    const auto direction=Difference(target->position,player_);
+    facing_=std::atan2(direction.x,direction.z);
     dashRemaining_=motion::dashDuration; movementVelocity_={}; jumpBuffer_=0;
     dashedThisUpdate_=true;
-    EmitVisual(CombatVisualKind::DashStart,player_,height_,facing_);
-    message_="Dash: forward burst.";
+    EmitVisual(CombatVisualKind::DashStart,player_,height_,facing_,0,visualElapsed);
+    message_="Dash to target.";
   } else {
     if (!TargetActor() || TargetActor()->health<=0) { message_="Press Tab to select an enemy."; return; }
     const bool trainingTarget=sparring_ && target_==int(enemies_.size());
@@ -151,7 +178,16 @@ const char* Simulation::AbilityStatus(int index) const {
   if (cooldowns_[index]>0) return "COOLDOWN";
   if (Dashing()) return "DASHING";
   if (index==3) return health_>=MaxHealth()?"FULL HEALTH":"READY";
-  if (index==2) return "READY";
+  if (index==2) {
+    switch (CheckDashTarget()) {
+    case DashCheck::NoTarget: return "NO TARGET";
+    case DashCheck::Returning: return "RETURNING";
+    case DashCheck::TooClose: return "TOO CLOSE";
+    case DashCheck::TooFar: return "OUT OF RANGE";
+    case DashCheck::Blocked: return "BLOCKED";
+    case DashCheck::Ready: return "READY";
+    }
+  }
   const auto* target=TargetActor();
   if (!target || target->health<=0) return "NO TARGET";
   if (target->state==EnemyState::Returning) return "RETURNING";
@@ -272,7 +308,7 @@ void Simulation::Update(float seconds,const Command& command) {
   }
   // Apply takeoff before horizontal integration, and switch traction at the
   // actual landing instant rather than at the following frame boundary.
-  if (command.haltMovement) { jumpBuffer_=0; dashRemaining_=0; }
+  if (command.haltMovement) StopMovement();
   else if (command.jump && !Dashing()) jumpBuffer_=.12f;
   const auto launch=[&]() {
     jumpBuffer_=0;
@@ -325,7 +361,10 @@ void Simulation::Update(float seconds,const Command& command) {
     }
     if (!airborne && !moving && Length(movementVelocity_)<.01f) movementVelocity_={};
   };
-  const bool dashMotion=Dashing() || (command.ability==2 && cooldowns_[2]==0 && !command.haltMovement);
+  // Selection is resolved before availability and activation, including Tab+3.
+  if (command.nextTarget) SelectTarget();
+  const bool dashMotion=Dashing() || (command.ability==2 && cooldowns_[2]==0 &&
+    !command.haltMovement && CheckDashTarget()==DashCheck::Ready);
   if (command.haltMovement || dashMotion) movementVelocity_={};
   else if (inFlight) integrateHorizontal(std::min(dt,contact),true);
   else integrateHorizontal(dt,false);
@@ -350,8 +389,7 @@ void Simulation::Update(float seconds,const Command& command) {
   jumpBuffer_=std::max(0.f,jumpBuffer_-dt);
   // Establish the movement state before ground-only interactions. Otherwise a
   // purchase or training request on the activation frame sees an idle actor.
-  if (command.ability==2 && !command.haltMovement) UseAbility(2);
-  if (command.nextTarget) SelectTarget();
+  if (command.ability==2 && !command.haltMovement) UseAbility(2,dt);
   if (command.interact) Interact();
   if (command.equipWeapon) {
     const auto next=HasRewardWeapon() && !RewardWeaponEquipped()?Item::Watchguard:Item::Starter;
@@ -378,16 +416,37 @@ void Simulation::Update(float seconds,const Command& command) {
   }
   if(command.ability!=2) UseAbility(command.ability);
   if(Dashing()) {
-    const float from=DashPhase();
+    const float from=DashPhase(),step=std::min(dt,dashRemaining_);
     dashRemaining_=std::max(0.f,dashRemaining_-dt);
     const float to=1-dashRemaining_/motion::dashDuration;
-    const float distance=std::max(0.f,motion::dashDistance*(motion::DashTravel(to)-motion::DashTravel(from)));
-    const auto before=player_;
-    Move(player_,{dashDirection_.x*distance,dashDirection_.z*distance},.4f);
-    const bool blocked=Length(Difference(player_,before))+.00001f<distance*.95f;
-    if (blocked) dashRemaining_=0;
-    if (!Dashing()) EmitVisual(blocked?CombatVisualKind::DashImpact:CombatVisualKind::DashStop,
-      player_,height_,std::atan2(dashDirection_.x,dashDirection_.z));
+    const auto* target=DashTargetActor();
+    bool blocked=false,endedEarly=false;
+    if (!target || target->health<=0 || target->state==EnemyState::Returning) {
+      dashRemaining_=0; endedEarly=true;
+    } else {
+      const auto offset=Difference(target->position,player_);
+      const float range=Length(offset),gap=std::max(0.f,range-motion::dashStandOff);
+      if (range>.00001f) facing_=std::atan2(offset.x,offset.z);
+      // Spend the remaining eased fraction toward the original actor's current
+      // position. A nearer target shortens travel; the total budget stays bounded.
+      const float fraction=to>=1?1:std::clamp((motion::DashTravel(to)-motion::DashTravel(from))/
+        std::max(.000001f,1-motion::DashTravel(from)),0.f,1.f);
+      const float distance=std::min(dashTravelLeft_,gap*fraction);
+      const Vec2 travel=range>.00001f?Vec2{offset.x/range*distance,offset.z/range*distance}:Vec2{};
+      const auto before=player_;
+      Move(player_,travel,.4f);
+      const auto actual=Difference(player_,before);
+      blocked=Length(Difference(actual,travel))>.0001f;
+      dashTravelLeft_=std::max(0.f,dashTravelLeft_-Length(actual));
+      if (blocked || (gap>.01f && dashTravelLeft_<=.00001f)) {
+        endedEarly=dashRemaining_>0; dashRemaining_=0;
+      }
+    }
+    if (!Dashing()) {
+      EmitVisual(blocked?CombatVisualKind::DashImpact:CombatVisualKind::DashStop,
+        player_,height_,facing_,0,endedEarly?0:dt-step);
+      dashTarget_=0; dashTravelLeft_=0;
+    }
   }
   for (auto& enemy : enemies_) UpdateEnemy(enemy,dt);
   if (sparring_) {
@@ -448,7 +507,7 @@ void Simulation::UpdateEnemy(Enemy& enemy,float dt) {
   }
   if (enemy.state==EnemyState::Idle) { enemy.movementSpeed=0; return; }
   // Commit facing and position during a windup. Players can step outside its cone,
-  // dash away, or interrupt it with heavy strike before the impact is resolved.
+  // move away, or interrupt it with heavy strike before the impact is resolved.
   if (enemy.windup>0) {
     enemy.movementSpeed=0;
     enemy.windup=std::max(0.f,enemy.windup-dt);

@@ -11,6 +11,7 @@ constexpr float jumpSpeed=7.2f,gravity=24.f;
 // A fast push-off followed by longer braking, integrated analytically.
 // Peak speed is 2 * distance / duration; no frame can skip collision sweeps.
 constexpr float dashDuration=.34f,dashDistance=3.5f,dashPeak=.22f;
+constexpr float dashStandOff=1.5f,dashRange=dashDistance+dashStandOff;
 inline float DashSpeed(float phase) {
   const float t=std::clamp(phase,0.f,1.f);
   const float u=t<dashPeak?t/dashPeak:(t-dashPeak)/(1-dashPeak);

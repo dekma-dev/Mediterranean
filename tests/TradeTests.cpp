@@ -28,9 +28,8 @@ int main() {
   {
     Simulation dash; Require(dash.Load(Veteran()),"Dash shop fixture must load");
     Command input; input.ability=2; input.purchase=1; dash.Update(.01f,input);
-    Require(dash.Dashing() && dash.Gold()==90 && dash.ShopStock(1)==1 &&
-      dash.Items().Count(Item::Helm)==0,
-      "Dash activation must reject a simultaneous purchase before changing gold or stock");
+    Require(!dash.Dashing() && dash.Cooldown(2)==0 && dash.Items().Count(Item::Helm)==1,
+      "A dash with no target must not consume cooldown or prevent a valid purchase");
   }
   {
     Simulation rebound; Require(rebound.Load(Veteran()),"Rebound shop fixture must load");

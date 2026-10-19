@@ -150,7 +150,8 @@ int main() {
   for (float phase : {0.f,.1f,.22f,.45f,.68f,.9f,1.f}) for (bool shield : {false,true})
     for (float air : {0.f,1.f}) for (float impact : {0.f,1.f}) for (float swing : {0.f,1.f}) {
     animation::Sample sample; sample.dash=motion::DashSpeed(phase);
-    sample.dashBrake=animation::Gesture(phase,.68f,1); sample.dashImpact=impact; sample.air=air; sample.cast=1;
+    sample.dashBrake=animation::DashBrake(phase); sample.dashPhase=phase;
+    sample.dashLoad=animation::Gesture(phase,.10f,.32f); sample.dashImpact=impact; sample.air=air; sample.cast=1;
     const auto pose=BuildCharacterPose(swing,0,shield,sample);
     for (int side=0;side<2;++side) {
       const auto& leg=pose.legs[side]; const auto& arm=pose.arms[side];

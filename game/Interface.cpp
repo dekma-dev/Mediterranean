@@ -774,14 +774,14 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    const bool potion=it->event.action==Action::UseItem; const int ability=it->event.value;
    static const char* names[]={"Strike","Heavy strike","Dash","Mend"};
    const std::string detail=potion?"Restores up to 40 health.":ability==0?std::to_string(int(s.StrikeDamage()))+" melee damage.":
-    ability==1?std::to_string(int(s.HeavyDamage()))+" damage. Interrupts a windup.":ability==2?"Burst forward up to 3.5 m with push-off and braking. Stops at obstacles.":"Restores up to "+std::to_string(int(s.MendHealing()))+" health.";
+    ability==1?std::to_string(int(s.HeavyDamage()))+" damage. Interrupts a windup.":ability==2?"Rush to your selected enemy within 5 m. Stops at melee distance or obstacles.":"Restores up to "+std::to_string(int(s.MendHealing()))+" health.";
    const std::string status=potion?(s.Health()<=0?"DEFEATED":s.Potions()==0?"NO POTIONS":s.Health()>=s.MaxHealth()?"FULL HEALTH":s.PotionCooldown()>0?"COOLDOWN":"READY"):s.AbilityStatus(ability);
    const float x=std::clamp(it->rect.x-30,460.f,680.f);
    c.Window({x,470,300,149}); c.Text(x+14,480,potion?"Healing draught":names[ability],19,gold);
    c.Wrap(x+14,512,272,detail,14,ink,2);
    const float remaining=potion?s.PotionCooldown():s.Cooldown(ability);
    c.Text(x+14,554,"Cooldown: "+Seconds(potion?3.f:s.AbilityCooldown(ability))+"s"+
-     (potion?"  /  Stock: "+std::to_string(s.Potions()):ability<2?"  /  Range: 2.5 m":""),12,muted);
+     (potion?"  /  Stock: "+std::to_string(s.Potions()):ability<2?"  /  Range: 2.5 m":ability==2?"  /  Range: 5 m":""),12,muted);
    c.Line(x+14,576,x+286,576,1,border);
    c.Text(x+14,589,status+(remaining>0?"  "+Seconds(remaining)+"s":""),12,status=="READY"?Color{.57f,.84f,.40f,1}:Color{1,.64f,.40f,1});
   }

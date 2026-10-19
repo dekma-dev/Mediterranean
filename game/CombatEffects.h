@@ -15,9 +15,10 @@ public:
   void TrackWeapon(rpg::EntityId actor,DirectX::XMFLOAT3 root,DirectX::XMFLOAT3 tip);
   void CancelTrail(rpg::EntityId actor);
   void CancelTrails();
-  void TrackDash(DirectX::XMFLOAT3 position,bool active);
+  void TrackDash(DirectX::XMFLOAT3 position,bool active,float dt,float strength);
   void CancelDash();
   std::size_t DashSampleCount() const { return wake_.count; }
+  float DashHistorySeconds() const { return wake_.count?wake_.samples[0].age:0; }
   bool Tracking(rpg::EntityId actor) const;
   std::size_t BurstCount() const;
   std::size_t TrailCount() const;
@@ -34,12 +35,13 @@ private:
     std::array<Sample,trailSamples> samples{};
     std::size_t count=0;
   };
-  struct WakeSample { DirectX::XMFLOAT3 position; float age=0; };
+  struct WakeSample { DirectX::XMFLOAT3 position; float age=0,strength=0; };
   struct Wake {
     std::array<WakeSample,trailSamples> samples{};
     std::size_t count=0;
-    float facing=0;
-    bool active=false;
+    float facing=0,pending=0,strength=0;
+    DirectX::XMFLOAT3 previous{};
+    bool active=false,liveEndpoint=false;
   } wake_;
   std::array<Burst,maxBursts> bursts_{};
   std::array<Trail,maxTrails> trails_{};

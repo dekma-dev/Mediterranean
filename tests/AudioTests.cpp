@@ -1,4 +1,5 @@
 #include "engine/Audio.h"
+#include "tests/DashFixture.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -134,16 +135,21 @@ int main() {
   int landings=0;
   for(int i=0;i<70;++i) { simulation.Update(1.f/60,{}); events.Update(simulation); landings+=Has(events,sound::Cue::Land); }
   Require(landings==1,"A jump must produce exactly one landing cue");
-  command={}; command.ability=2; simulation.Update(.01f,command); events.Update(simulation);
+  Require(simulation.Load(test::dashFixture),"Target dash audio fixture"); events.Reset();
+  command={}; command.ability=2; command.nextTarget=true; simulation.Update(.01f,command); events.Update(simulation);
   Require(Has(events,sound::Cue::Dash) && !Has(events,sound::Cue::Step),"Dash must sound once without false footsteps");
-  simulation.Update(.01f,command); events.Update(simulation); Require(events.count==0,"Rejected dash must not repeat");
+  command.nextTarget=false; simulation.Update(.01f,command); events.Update(simulation); Require(events.count==0,"Rejected dash must not repeat");
   for(int rate : {30,60,144}) {
-    simulation=rpg::Simulation{}; events.Reset(); command={}; command.ability=2;
+    Require(simulation.Load(test::dashFixture),"Dash expiry fixture"); events.Reset(); command={}; command.ability=2; command.nextTarget=true;
     simulation.Update(1.f/rate,command); events.Update(simulation);
     while(simulation.Cooldown(2)>1.f/rate) {
       simulation.Update(1.f/rate,{}); events.Update(simulation);
     }
     Require(simulation.Cooldown(2)>0,"Dash fixture must reach the last cooldown frame");
+    // Restore casting distance while preserving the live cooldown remainder.
+    auto expiry=simulation.Save(); const auto begin=expiry.find('\n')+1,end=expiry.find('\n',begin);
+    expiry.replace(begin,end-begin,"-4 2 100 3.14159 0 0");
+    Require(simulation.Load(expiry),"Repositioned cooldown fixture must load");
     simulation.Update(1.f/rate,command); events.Update(simulation);
     Require(Has(events,sound::Cue::Dash),"Dash accepted on the cooldown expiry frame must sound");
     events.Reset(); events.Update(simulation);
