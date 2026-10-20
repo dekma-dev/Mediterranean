@@ -14,9 +14,11 @@ public:
       feet_[i]={}; feet_[i].point=Neutral(position,yaw,i); feet_[i].point.yaw=yaw;
     }
     next_=0;
+    support_=supportVelocity_=0;
   }
   void Update(float dt,rpg::Vec2 position,float yaw,bool grounded,bool alive,Sample& sample) {
     sample.feetActive=false;
+    sample.support=0;
     if (!std::isfinite(dt) || dt<=0 || !std::isfinite(position.x) || !std::isfinite(position.z) || !std::isfinite(yaw)) return;
     dt=std::min(dt,.05f);
     if (!ready_ || !grounded || !alive || std::hypot(position.x-previous_.x,position.z-previous_.z)>.85f) {
@@ -37,6 +39,7 @@ public:
     pending_=std::max(0.f,pending_+dt-steps*interval);
     previous_=position; heading_=yaw;
     sample.feetActive=true;
+    sample.support=support_;
     const float c=std::cos(yaw),s=std::sin(yaw);
     for (int i=0;i<2;++i) {
       const auto& p=feet_[i].point;
@@ -54,6 +57,7 @@ private:
   std::array<Step,2> feet_{};
   rpg::Vec2 previous_{};
   float heading_=0,pending_=0;
+  float support_=0,supportVelocity_=0;
   int next_=0;
   bool ready_=false;
   static Foot Neutral(rpg::Vec2 position,float yaw,int side) {
@@ -98,6 +102,10 @@ private:
         foot.from.yaw+motion::AngleDelta(foot.from.yaw,foot.goal.yaw)*u};
       if (foot.age>=foot.duration) { foot.point=foot.goal; foot.point.y=.17f; foot.stepping=false; }
     }
+    // Shift weight toward the planted leg, using actual swing height rather
+    // than an unrelated sine cycle. The spring avoids a snap at foot exchange.
+    const float support=std::clamp((feet_[0].point.y-feet_[1].point.y)/.10f,-1.f,1.f);
+    motion::Spring(support_,supportVelocity_,support,20.f,dt);
   }
 };
 }

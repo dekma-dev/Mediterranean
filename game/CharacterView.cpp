@@ -23,7 +23,7 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
     const auto world=[&](XMFLOAT3 local) { return point(local.x,local.y,local.z); };
     const auto upper=[&](XMFLOAT3 local) { return world(pose.UpperPoint(local)); };
     const auto part=[&](M mesh,float x,float h,float z,XMFLOAT3 scale,XMFLOAT4 tint,S material) {
-      renderer.DrawMesh(mesh,upper({x,h,z}),scale,tint,material,yaw+pose.upperYaw,pose.upperPitch);
+      renderer.DrawMesh(mesh,upper({x,h,z}),scale,tint,material,yaw+pose.upperYaw,pose.upperPitch,visual::ShadowMode::Cast,pose.upperRoll);
     };
     part(M::Torso,0,1.23f,0,{.61f,.64f,.36f},outfit.armor?steel:cloth,outfit.armor?S::Metal:S::Cloth);
     if (outfit.belt) {
@@ -36,16 +36,8 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       }
     }
     if (outfit.cloak) {
-      // Overlapping cloth panels follow the torso; the hem swings with the gait.
-      const float cloakSway=std::isfinite(gait)?std::clamp(gait,-1.f,1.f):0;
-      for (int panel=0;panel<5;++panel) {
-        const float x=cloakSway*.035f*panel,z=-.215f-panel*.039f-std::abs(cloakSway)*panel*.025f;
-        const float width=.46f+panel*.065f,h=1.43f-panel*.16f;
-        part(M::Torso,x,h,z,{width,.205f,.045f},{.12f,.24f,.36f,1},S::Cloth);
-        for (float side : {-1.f,1.f})
-          part(M::Box,x+side*width*.43f,h,z-.024f,{.014f,.195f,.008f},{.54f,.43f,.23f,1},S::Cloth);
-        if (panel==4) part(M::Box,x,h-.085f,z-.025f,{width*.86f,.025f,.012f},{.54f,.43f,.23f,1},S::Cloth);
-      }
+      renderer.DrawCloak(upper({0,1.49f,-.19f}),yaw+pose.upperYaw,pose.upperPitch,pose.upperRoll,
+        dynamics.clothSide,dynamics.clothBack);
       for (float side : {-1.f,1.f})
         part(M::Torso,side*.13f,1.49f,.015f,{.12f,.09f,.39f},{.12f,.24f,.36f,1},S::Cloth);
       part(M::Sphere,0,1.48f,.195f,{.09f,.065f,.03f},{.72f,.54f,.24f,1},S::Metal);
@@ -123,7 +115,8 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       if (side>0 && outfit.weapon) {
         const auto along=[&](float distance) { return world(pose.WeaponPoint(distance)); };
         const auto forward=pose.UpperDirection({0,0,1});
-        const XMFLOAT3 facing{std::sin(yaw)*forward.z,forward.y,std::cos(yaw)*forward.z};
+        const XMFLOAT3 facing{std::cos(yaw)*forward.x+std::sin(yaw)*forward.z,forward.y,
+          -std::sin(yaw)*forward.x+std::cos(yaw)*forward.z};
         renderer.DrawMeshBetween(M::Blade,along(.10f),along(.96f),.12f,.07f,blade,S::Metal,facing);
         renderer.DrawMeshBetween(M::Limb,along(-.09f),along(.10f),.065f,.065f,leather,S::Cloth,facing);
         auto guard=along(.10f);
@@ -136,11 +129,11 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
           const auto offset=pose.UpperDirection(local);
           return point(arm.end.x+offset.x,arm.end.y+offset.y,arm.end.z+offset.z);
         };
-        renderer.DrawMesh(M::Torso,shieldPoint({-.035f,-.04f,.12f}),{.54f,.75f,.15f},{.66f,.49f,.22f,1},S::Metal,yaw,pose.upperPitch);
+        renderer.DrawMesh(M::Torso,shieldPoint({-.035f,-.04f,.12f}),{.54f,.75f,.15f},{.66f,.49f,.22f,1},S::Metal,yaw+pose.upperYaw,pose.upperPitch,visual::ShadowMode::Cast,pose.upperRoll);
         renderer.DrawMesh(M::Torso,shieldPoint({-.035f,-.04f,.205f}),
-          {.45f,.64f,.045f},{.18f,.31f,.43f,1},S::Cloth,yaw,pose.upperPitch);
+          {.45f,.64f,.045f},{.18f,.31f,.43f,1},S::Cloth,yaw+pose.upperYaw,pose.upperPitch,visual::ShadowMode::Cast,pose.upperRoll);
         renderer.DrawMesh(M::Sphere,shieldPoint({-.035f,0,.25f}),
-          {.16f,.16f,.09f},steel,S::Metal,yaw,pose.upperPitch);
+          {.16f,.16f,.09f},steel,S::Metal,yaw+pose.upperYaw,pose.upperPitch,visual::ShadowMode::Cast,pose.upperRoll);
       }
     }
     if (outfit.armor || outfit.shoulders) {

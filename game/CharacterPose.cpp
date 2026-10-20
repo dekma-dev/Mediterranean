@@ -23,10 +23,12 @@ LimbPose Solve(XMFLOAT3 root,XMFLOAT3 target,XMFLOAT3 bend,float upper,float low
 DirectX::XMFLOAT3 CharacterPose::UpperDirection(DirectX::XMFLOAT3 p) const {
   const float y=p.y*std::cos(upperPitch)-p.z*std::sin(upperPitch);
   const float z=p.y*std::sin(upperPitch)+p.z*std::cos(upperPitch);
-  return {p.x*std::cos(upperYaw)+z*std::sin(upperYaw),y,-p.x*std::sin(upperYaw)+z*std::cos(upperYaw)};
+  const float x=p.x*std::cos(upperRoll)-y*std::sin(upperRoll);
+  return {x*std::cos(upperYaw)+z*std::sin(upperYaw),p.x*std::sin(upperRoll)+y*std::cos(upperRoll),
+    -x*std::sin(upperYaw)+z*std::cos(upperYaw)};
 }
 DirectX::XMFLOAT3 CharacterPose::UpperPoint(DirectX::XMFLOAT3 p) const {
-  p.y-=.95f; p=UpperDirection(p); p.y+=.95f+bodyLift; return p;
+  p.y-=.95f; p=UpperDirection(p); p.y+=.95f+bodyLift; p.x+=bodyShift; return p;
 }
 DirectX::XMFLOAT3 CharacterPose::WeaponPoint(float distance) const {
   const auto hand=arms[1].end;
@@ -56,39 +58,65 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   pose.upperPitch+=dash*.42f-brake*.16f-dashImpact*.14f;
   pose.upperPitch-=cast*.08f;
   pose.upperYaw=animation::Signed(dynamics.bank)*.08f;
+  const float departure=animation::Unit(dynamics.departure);
+  const float contactWeight=dynamics.feetActive?1.f:departure;
+  const auto& sourceFeet=dynamics.feetActive?dynamics.feet:dynamics.departureFeet;
+  const float support=(animation::Signed(dynamics.support)*(1-departure)+
+    animation::Signed(dynamics.departureSupport)*departure)*(1-air)*(1-burst);
+  const float bank=animation::Signed(dynamics.bank)*(1-air)*(1-burst);
+  pose.bodyShift=support*.032f+bank*.018f;
+  pose.upperRoll=-support*.035f-bank*.08f;
+  // The shoulders counter the planted-leg transfer; descending opens the
+  // chest and lowers the hips before the existing impact compression.
+  pose.upperYaw+=animation::Signed((sourceFeet[0].z-sourceFeet[1].z)/.6f)*.072f*(1-swing)*contactWeight;
+  pose.upperPitch-=air*animation::SmoothStep(-rise)*.08f;
+  pose.bodyLift-=air*animation::SmoothStep(-rise)*.025f;
   if (timed) {
     pose.upperYaw+=stroke.weight*((dynamics.heavyAttack?-.46f:-.36f)+stroke.cut*.82f)*(1-burst);
     pose.upperPitch+=stroke.weight*(-.10f+stroke.cut*.22f)*(1-burst);
     pose.bodyLift-=stroke.coil*(dynamics.heavyAttack?.065f:.035f)*(1-air);
   }
   std::array<XMFLOAT3,2> contacts{};
-  if (dynamics.feetActive) for (int i=0;i<2;++i) {
-    const auto& foot=dynamics.feet[i];
-    const float hip=i==0?-.17f:.17f;
-    // Bound malformed/extreme targets before solving. Lower the pelvis to keep
-    // normal planted ankles exact rather than stretching a leg or lifting a boot.
+  if (contactWeight>0) for (int i=0;i<2;++i) {
+    const auto& foot=sourceFeet[i];
+    const float hip=(i==0?-.17f:.17f)+pose.bodyShift;
+    // Use the same bounded contact for standing and departure, including its
+    // heading. Losing the heading at release visibly twists a turning boot.
     float x=std::isfinite(foot.x)?foot.x-hip:0,z=std::isfinite(foot.z)?foot.z:0;
     const float distance=std::hypot(x,z),scale=distance>.46f?.46f/distance:1.f;
     x*=scale; z*=scale;
     const float y=std::isfinite(foot.y)?std::clamp(foot.y,.17f,.32f):.17f;
     contacts[i]={hip+x,y,z};
-    pose.footYaw[i]=std::isfinite(foot.yaw)?std::remainder(foot.yaw,motion::tau):0;
-    constexpr float reach=CharacterPose::thigh+CharacterPose::shin-.002f;
-    pose.bodyLift=std::min(pose.bodyLift,y+std::sqrt(reach*reach-x*x-z*z)-.93f);
+    pose.footYaw[i]=std::isfinite(foot.yaw)?std::remainder(foot.yaw,motion::tau)*contactWeight:0;
   }
   // The push leg sweeps back, then the opposite leg reaches into the catch.
   const float drive=1-2*animation::SmoothStep((animation::Unit(dynamics.dashPhase)-.20f)/.50f);
+  std::array<XMFLOAT3,2> targets{};
+  std::array<float,2> strides{};
   for (int i=0;i<2;++i) {
     const float side=i==0?-1.f:1.f,stride=side*(gait*(1-burst)+dash*.95f*drive-brake*.65f)*(1-air);
+    strides[i]=stride;
     const float positiveRise=std::max(0.f,rise),step=std::max(0.f,stride);
     const float lift=air*(.17f+positiveRise*positiveRise*.15f+(i==0?.045f:0))*
       (1-animation::Unit(dynamics.takeoff)*(i==0?.45f:.9f));
-    pose.legs[i]=Solve({side*.17f,.93f+pose.bodyLift,0},{side*(.18f+air*.015f),.17f+step*step*.055f+lift,
-      stride*.22f+air*(i==0?.13f:-.10f)},
-      {0,0,1},CharacterPose::thigh,CharacterPose::shin);
-    if (dynamics.feetActive)
-      pose.legs[i]=Solve({side*.17f,.93f+pose.bodyLift,0},contacts[i],{0,0,1},CharacterPose::thigh,CharacterPose::shin);
-    const float armStride=dynamics.feetActive?std::clamp(contacts[i].z/.30f,-1.f,1.f):stride;
+    auto& target=targets[i];
+    target={side*(.18f+air*.015f),.17f+step*step*.055f+lift,stride*.22f+air*(i==0?.13f:-.10f)};
+    if (contactWeight>0) {
+      target={target.x+(contacts[i].x-target.x)*contactWeight,
+        target.y+(contacts[i].y-target.y)*contactWeight,target.z+(contacts[i].z-target.z)*contactWeight};
+      // Compute both blended targets before solving either leg. Keep the
+      // pelvis compensation while releasing a long stride; otherwise the
+      // hips jump upward and IK retracts the still-departing ankle.
+      const float x=target.x-(side*.17f+pose.bodyShift);
+      constexpr float reach=CharacterPose::thigh+CharacterPose::shin-.002f;
+      pose.bodyLift=std::min(pose.bodyLift,
+        target.y+std::sqrt(std::max(0.f,reach*reach-x*x-target.z*target.z))-.93f);
+    }
+  }
+  for (int i=0;i<2;++i) {
+    const float side=i==0?-1.f:1.f;
+    pose.legs[i]=Solve({side*.17f+pose.bodyShift,.93f+pose.bodyLift,0},targets[i],{0,0,1},CharacterPose::thigh,CharacterPose::shin);
+    const float armStride=strides[i]+(std::clamp(contacts[i].z/.30f,-1.f,1.f)-strides[i])*contactWeight;
     const float attack=i==1?swing:0;
     XMFLOAT3 hand{side*(.40f+air*.035f),1.02f+attack*.52f+air*.12f+landing*.08f+hit*.08f+dash*.12f+brake*.07f,
       .10f-armStride*.13f+attack*.21f+sway*side*.014f-dash*.20f+brake*.12f};

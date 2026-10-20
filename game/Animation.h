@@ -19,11 +19,16 @@ struct Sample {
   float attackSeconds=-1;
   bool heavyAttack=false;
   float takeoff=0,bank=0;
+  float support=0,clothSide=0,clothBack=0;
+  std::array<Foot,2> departureFeet{};
+  float departure=0,departureSupport=0;
 };
 inline Sample Idle(float time,float offset=0) {
   const float seconds=std::isfinite(time)?std::remainder(time,motion::tau*2/1.8f):0;
   const float phase=seconds*1.8f+(std::isfinite(offset)?std::remainder(offset,motion::tau*2):0);
   Sample result; result.breath=std::sin(phase); result.sway=std::sin(phase*.5f);
+  // Half-integer harmonics stay continuous across the shared 4-pi clock wrap.
+  result.clothSide=std::sin(phase*.5f)*.008f; result.clothBack=.025f;
   return result;
 }
 inline float Pulse(float age,float peak) {
@@ -45,6 +50,9 @@ struct State {
   float landingAge=2,landingStrength=0,hitAge=2,hitCarry=0;
   float castAge=2,leanVelocity=0,riseVelocity=0,travelVelocity=0;
   float bankVelocity=0;
+  float clothSideVelocity=0,clothBackVelocity=0;
+  float flightAge=1;
+  bool wasAirborne=false,hasDeparture=false;
   float dashImpactAge=2,dashCarry=0,brakeCarry=0;
   bool dashCollision=false;
   void Reset(float offset=0) { *this=State{}; phase=std::isfinite(offset)?std::remainder(offset,motion::tau):0; }
@@ -80,6 +88,16 @@ struct State {
     velocity=std::isfinite(velocity)?std::clamp(velocity,-20.f,20.f):0;
     travel=std::isfinite(travel)?std::max(0.f,travel):0;
     const bool onGround=height<=0 && velocity<=0;
+    if (!onGround && !wasAirborne) {
+      flightAge=0; hasDeparture=pose.feetActive;
+      pose.departureFeet=pose.feet; pose.departureSupport=pose.support;
+    }
+    flightAge=std::min(1.f,flightAge+dt);
+    wasAirborne=!onGround;
+    if (onGround) hasDeparture=false;
+    // Carry the departing foot arrangement briefly into flight. Both contacts
+    // are released immediately; this only blends the airborne joint targets.
+    pose.departure=hasDeparture?1-SmoothStep(flightAge/.12f):0;
     landingAge=std::min(2.f,landingAge+dt); hitAge=std::min(2.f,hitAge+dt);
     if (onGround && std::isfinite(landingSpeed) && landingSpeed>0) {
       landingAge=std::isfinite(landingElapsed)?std::clamp(landingElapsed,0.f,dt):0;
@@ -103,6 +121,13 @@ struct State {
     // Keep the push leg extended during the first part of ascent, then tuck.
     // This follows actual flight velocity; it cannot retrigger while falling.
     pose.takeoff=onGround?0:SmoothStep((velocity/motion::jumpSpeed-.55f)/.45f);
+    // A bounded, damped cloth response to locomotion and flight. The shoulder
+    // seam stays pinned; only the lower sheet responds, with no solver allocations.
+    const float flow=Unit(travel/dt/7.f);
+    motion::Spring(pose.clothBack,clothBackVelocity,
+      std::clamp(.025f+flow*.24f+Signed(velocity/motion::jumpSpeed)*.05f,.005f,.32f),14.f,dt);
+    motion::Spring(pose.clothSide,clothSideVelocity,
+      -Signed(pose.bank)*.12f+std::sin(phase*3)*flow*.025f+std::sin(phase*.5f)*.008f,12.f,dt);
     const float rest=(1-travelBlend)*(1-Unit(strike))*(1-pose.hit)*(1-pose.air);
     pose.breath=std::sin(phase)*rest; pose.sway=std::sin(phase*.5f)*rest;
   }

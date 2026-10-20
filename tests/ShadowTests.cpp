@@ -125,6 +125,35 @@ int main() {
   const auto screen=[&](XMFLOAT3 p) {
     XMFLOAT2 result; Require(renderer.Project(p,result),"Shadow probe projection failed."); return result;
   };
+  {
+    const auto clothScene=[&](bool cloth,float side,float back,const wchar_t* path) {
+      floor(); renderer.SetCamera({-3,4,-5},{0,.4f,0});
+      if (cloth) renderer.DrawCloak({0,1.5f,0},0,0,0,side,back);
+      return Capture(renderer,path);
+    };
+    const auto empty=clothScene(false,0,0,L"cloth-shadow-empty.png");
+    const auto rest=clothScene(true,0,0,L"cloth-shadow-rest.png");
+    const auto moving=clothScene(true,.20f,.35f,L"cloth-shadow-moving.png");
+    const auto centroid=[&](const Image& image) {
+      float weight=0,x=0,z=0;
+      for(int row=0;row<28;++row) for(int column=0;column<36;++column) {
+        const XMFLOAT3 p{.05f+column*.035f,0,-.18f+row*.035f};
+        const auto probe=screen(p);
+        const float shade=std::max(0.f,empty.At(probe,0)-image.At(probe,0)-8);
+        weight+=shade; x+=p.x*shade; z+=p.z*shade;
+      }
+      Check(weight>500,"The folded cloth must cast a visible, opaque ground shadow");
+      return XMFLOAT2{x/std::max(1.f,weight),z/std::max(1.f,weight)};
+    };
+    const auto a=centroid(rest),b=centroid(moving);
+    std::cout<<"Cloth shadow centroid shift: "<<b.x-a.x<<", "<<b.y-a.y<<'\n';
+    Check(b.x>a.x+.015f && b.y<a.y-.03f,
+      "Cloth shadows must follow the moving free hem rather than the undeformed sheet");
+    const auto returned=clothScene(true,0,0,L"cloth-shadow-returned.png");
+    Check(MaximumDifference(rest,returned)==0,"Cloth deformation must not leak between frames or mutate shared geometry");
+    const auto removed=clothScene(false,0,0,L"cloth-shadow-removed.png");
+    Check(MaximumDifference(empty,removed)==0,"Unequipping cloth must clear its geometry and shadow");
+  }
   floor();
   const auto postProbe=screen({.95f,0,.76f}),stepProbe=screen({.55f,0,.54f});
   const auto lit=Capture(renderer,L"shadow-lit.png");

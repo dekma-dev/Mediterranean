@@ -6,7 +6,7 @@
 // Local visual joints, independent of combat resolution. No skinning buffers.
 struct LimbPose { DirectX::XMFLOAT3 root,joint,end; };
 struct CharacterPose {
-  float bodyLift=0,upperPitch=0,upperYaw=0;
+  float bodyLift=0,upperPitch=0,upperYaw=0,upperRoll=0,bodyShift=0;
   std::array<LimbPose,2> arms,legs; // Left, right in character space.
   std::array<float,2> footYaw{};
   DirectX::XMFLOAT3 weaponDirection;

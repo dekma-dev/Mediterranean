@@ -66,6 +66,12 @@ int main() {
     }
   }
   Check(bytes<=320*1024 && triangles<=10000,"Reusable mesh library exceeded its startup geometry budget.");
+  const auto cloak=visual::BuildMesh(visual::Mesh::Cloak);
+  for (const auto& vertex : cloak.vertices) {
+    const auto p=vertex.position;
+    Check(std::abs(p.x)<=.361f && p.y>=-.821f && p.y<=0 && p.z<0,
+      "Resting cloth must stay behind the shoulder seam and above the knees.");
+  }
   const rpg::Obstacle stall{{3,-13.3f},1.1f,.4f,.85f,rpg::PropKind::Counter};
   for (const auto& vertex : visual::BuildMesh(visual::Mesh::Canopy).vertices) {
     const auto p=vertex.position;

@@ -109,6 +109,29 @@ float Hash(int x,int y) {
 }
 
 Geometry BuildMesh(Mesh mesh) {
+  if (mesh==Mesh::Cloak) {
+    Geometry g;
+    // One continuous flared sheet, shared smooth normals and a separate back
+    // surface. Coordinates are metres from the pinned shoulder seam.
+    constexpr unsigned columns=16,rows=16,stride=columns+1,sideVertices=stride*(rows+1);
+    for (unsigned side=0;side<2;++side) {
+      for (unsigned row=0;row<=rows;++row) for (unsigned column=0;column<=columns;++column) {
+        const float t=float(row)/rows,u=2.f*column/columns-1;
+        const float fold=std::cos(u*4*3.14159265f)*(.009f+t*.022f)*std::sin(t*1.5707963f);
+        const float edge=std::abs(u);
+        const XMFLOAT3 p{u*(.22f+t*.14f),-.82f*t,-.025f-.115f*t-fold-.035f*u*u};
+        const bool trim=column==0 || column==columns || row==rows;
+        const float shade=1-.18f*t-.12f*edge;
+        g.vertices.push_back({p,{},trim?XMFLOAT4{.66f,.48f,.22f,1}:XMFLOAT4{.13f*shade,.28f*shade,.39f*shade,1}});
+      }
+      for (unsigned row=0;row<rows;++row) for (unsigned column=0;column<columns;++column) {
+        const unsigned a=side*sideVertices+row*stride+column,b=a+1,c=b+stride,d=a+stride;
+        if (side==0) { Triangle(g,a,b,c); Triangle(g,a,c,d); }
+        else { Triangle(g,a,c,b); Triangle(g,a,d,c); }
+      }
+    }
+    Normals(g); return g;
+  }
   if (mesh==Mesh::Masonry) {
     Geometry g;
     const auto face=[&](std::vector<XMFLOAT3> points) {

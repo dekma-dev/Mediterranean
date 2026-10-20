@@ -12,6 +12,53 @@ bool Finite(DirectX::XMFLOAT3 p) { return std::isfinite(p.x) && std::isfinite(p.
 float Distance(DirectX::XMFLOAT3 a,DirectX::XMFLOAT3 b) {
   return std::sqrt((a.x-b.x)*(a.x-b.x)+(a.y-b.y)*(a.y-b.y)+(a.z-b.z)*(a.z-b.z));
 }
+void LocomotionContinuityRegressions() {
+  float ankleStep=0,handStep=0,hipStep=0,bootTurn=0,shoulderTurn=0;
+  // Exercise many points in the real contact cycle, including sprinting and
+  // camera-facing side/back steps. A single favourable stride misses the pop.
+  for (int hz : {30,60,144}) for (bool sprint : {false,true}) for (int direction=0;direction<4;++direction)
+    for (int frames=1;frames<=hz*3/2;++frames) {
+      Game game; game.Initialize();
+      rpg::Command command; command.sprint=sprint; command.steerFacing=true;
+      const rpg::Vec2 directions[]={{0,1},{1,0},{0,-1},{0,0}};
+      command.movement=directions[direction];
+      for (int i=0;i<frames;++i) {
+        command.facingYaw=direction==3?i*1.5f/hz:0;
+        game.ExecuteCommand(command,1.f/hz);
+      }
+      Require(game.PlayerAnimation().feetActive,"Takeoff fixture must begin with ground contacts");
+      const auto before=BuildCharacterPose(0,game.PlayerPose().gait,false,game.PlayerAnimation());
+      command.jump=true; game.ExecuteCommand(command,.001f);
+      Require(!game.State().Grounded(),"Takeoff fixture must actually leave the ground");
+      const auto after=BuildCharacterPose(0,game.PlayerPose().gait,false,game.PlayerAnimation());
+      hipStep=std::max(hipStep,Distance(before.legs[0].root,after.legs[0].root));
+      shoulderTurn=std::max(shoulderTurn,std::abs(motion::AngleDelta(before.upperYaw,after.upperYaw)));
+      for(int side=0;side<2;++side) {
+        ankleStep=std::max(ankleStep,Distance(before.legs[side].end,after.legs[side].end));
+        handStep=std::max(handStep,Distance(before.arms[side].end,after.arms[side].end));
+        bootTurn=std::max(bootTurn,std::abs(motion::AngleDelta(before.footYaw[side],after.footYaw[side])));
+      }
+    }
+  float idleStep=0,clothAcceleration=0;
+  animation::State cloth;
+  auto previousIdle=animation::Idle(0);
+  for(int i=1;i<=10000;++i) {
+    const auto idle=animation::Idle(i*.001f);
+    idleStep=std::max(idleStep,std::abs(idle.clothSide-previousIdle.clothSide));
+    previousIdle=idle;
+    const float velocity=cloth.clothSideVelocity;
+    cloth.Update(.001f,0,0,0,true,false,0);
+    clothAcceleration=std::max(clothAcceleration,std::abs(cloth.clothSideVelocity-velocity)/.001f);
+  }
+  std::cout<<"Takeoff max 1 ms change: ankle "<<ankleStep<<", hand "<<handStep<<", hip "<<hipStep
+    <<", boot yaw "<<bootTurn<<", shoulder yaw "<<shoulderTurn
+    <<"; idle cloth step "<<idleStep<<", live cloth acceleration "<<clothAcceleration<<'\n';
+  Require(ankleStep<.005f && handStep<.005f && hipStep<.005f &&
+    bootTurn<.02f && shoulderTurn<.02f,
+    "Takeoff must preserve reach, arm counter-swing and boot heading at every departing stride");
+  Require(idleStep<.0001f && clothAcceleration<.12f,
+    "Wrapping the idle clock must not teleport the preview cloak or kick the live cloak");
+}
 void TransitionRegressions() {
   bool passed=true;
   const auto check=[&](bool value,const char* message) {
@@ -93,6 +140,56 @@ void TransitionRegressions() {
 }
 int main() {
   TransitionRegressions();
+  LocomotionContinuityRegressions();
+  {
+    Game jumper; jumper.Initialize(); rpg::Command walk; walk.movement={0,1};
+    for(int i=0;i<19;++i) jumper.ExecuteCommand(walk,1.f/60);
+    const auto grounded=BuildCharacterPose(0,jumper.PlayerPose().gait,false,jumper.PlayerAnimation());
+    walk.jump=true; jumper.ExecuteCommand(walk,.001f);
+    const auto airborne=BuildCharacterPose(0,jumper.PlayerPose().gait,false,jumper.PlayerAnimation());
+    Require(!jumper.PlayerAnimation().feetActive && jumper.PlayerAnimation().departure>.99f,
+      "Takeoff must immediately release contacts but retain the departing stride");
+    for(int i=0;i<2;++i) Require(Distance(grounded.legs[i].end,airborne.legs[i].end)<.025f,
+      "A running jump must not snap the feet into a generic airborne pose");
+    walk.jump=false;
+    for(int i=0;i<10;++i) jumper.ExecuteCommand(walk,.02f);
+    Require(jumper.PlayerAnimation().departure==0,"The takeoff blend must finish while still in flight");
+    jumper.RestoreSnapshot(jumper.State().Save());
+    Require(jumper.PlayerAnimation().departure==0 && !jumper.PlayerAnimation().feetActive,
+      "Loading cannot retain a previous jump's departing foot arrangement");
+  }
+  // Cloth follows motion with inertia and settles independently of rendering.
+  // Compare a complete accelerate / air / stop timeline at equal wall time.
+  animation::Sample clothReference;
+  for (int hz : {30,60,144}) {
+    animation::State state;
+    for (int i=0;i<hz;++i) state.Update(1.f/hz,0,0,7.f/hz,true,false,0);
+    Require(state.pose.clothBack>.25f && state.pose.clothBack<.28f,"Running must lift the free cloak hem");
+    const float before=state.pose.clothBack;
+    state.Update(.001f,.5f,5,0,true,false,0);
+    Require(std::abs(before-state.pose.clothBack)<.001f,"A takeoff cannot snap the cloth to its new flow target");
+    for (int i=0;i<hz;++i) state.Update(1.f/hz,0,0,0,true,false,0);
+    Require(std::abs(state.pose.clothBack-.025f)<.0001f,"Stopped cloth must return to its hanging rest shape");
+    if (hz==30) clothReference=state.pose;
+    else Require(std::abs(state.pose.clothSide-clothReference.clothSide)<.001f &&
+      std::abs(state.pose.clothBack-clothReference.clothBack)<.0001f,"Cloth must agree across update rates");
+    state.Reset();
+    Require(state.pose.clothSide==0 && state.pose.clothBack==0 && state.clothSideVelocity==0 && state.clothBackVelocity==0,
+      "Reload/reset must discard cloth momentum");
+  }
+  for (float support : {-1.f,0.f,1.f}) for(float bank : {-1.f,0.f,1.f}) {
+    animation::Sample sample; sample.feetActive=true; sample.support=support; sample.bank=bank;
+    sample.feet[0]={-.18f,.17f,0,0}; sample.feet[1]={.18f,.17f,0,0};
+    const auto pose=BuildCharacterPose(0,0,true,sample);
+    for(int side=0;side<2;++side) {
+      Require(Distance(pose.legs[side].end,{side==0?-.18f:.18f,.17f,0})<.0001f,
+        "Banking and weight transfer must preserve both planted contacts");
+      Require(Distance(pose.arms[side].root,pose.UpperPoint({side==0?-.305f:.305f,1.43f,0}))<.0001f,
+        "Torso roll must keep the shoulders attached");
+    }
+    const auto x=pose.UpperDirection({1,0,0}),y=pose.UpperDirection({0,1,0});
+    Require(std::abs(x.x*y.x+x.y*y.y+x.z*y.z)<.0001f,"Torso rotation must remain orthogonal");
+  }
   for(int hz : {30,60,144}) {
     Game caster;
     Require(caster.RestoreSnapshot("MEDITERRANEAN 3\n3 -10 50 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"

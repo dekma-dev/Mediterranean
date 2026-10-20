@@ -1,5 +1,11 @@
 # Dawnwatch gameplay rules
 
+## Weight transfer and takeoff presentation (2026-10-20)
+
+Ground steps now shift the pelvis toward the supporting leg and counter-rotate the shoulders. Banking is damped, and both ankle contacts stay fixed while planted. A running jump retains its departing stride for a 120 ms blend into the air pose; contacts release immediately and the underlying flight remains ballistic. Descent opens the torso before landing compression. Reset/load discards support, takeoff and cloth momentum.
+
+The cloak is one continuous folded surface with a pinned shoulder seam. Its free hem has a bounded spring response to speed, turning and flight; the shadow uses the identical shape. This is presentation-only cloth, without self-collision or forces applied to gameplay.
+
 ## Timed movement and attacks (2026-10-20)
 
 Strike (1) commits at activation, contacts at 0.18 s and finishes recovery at 0.52 s. Heavy (2) contacts at 0.30 s and finishes at 0.76 s; interruption happens at contact. The original target and damage are captured at activation. Moving out of reach, losing line of sight, target death/return or player death can prevent the hit. Tab changes selection without transferring the strike. Other abilities cannot replace an unfinished attack; movement and potions remain available. Cooldowns start on acceptance and are not refunded for a missed or cancelled stroke. Pending attacks are transient: load, input suspension and captured menu controls cancel them.

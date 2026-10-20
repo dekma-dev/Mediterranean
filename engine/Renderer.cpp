@@ -276,10 +276,18 @@ void Renderer::Queue(visual::Mesh mesh,const XMMATRIX& transform,const XMFLOAT4&
  world_[static_cast<unsigned>(mesh)].push_back(item);
 }
 void Renderer::DrawMesh(visual::Mesh mesh,const XMFLOAT3& p,const XMFLOAT3& s,const XMFLOAT4& color,
- visual::Material material,float yaw,float pitch,visual::ShadowMode shadow) {
+ visual::Material material,float yaw,float pitch,visual::ShadowMode shadow,float roll) {
  if (s.x<=0 || s.y<=0 || s.z<=0) return;
- Queue(mesh,XMMatrixScaling(s.x,s.y,s.z)*XMMatrixRotationX(pitch)*XMMatrixRotationY(yaw)*
+ Queue(mesh,XMMatrixScaling(s.x,s.y,s.z)*XMMatrixRotationX(pitch)*XMMatrixRotationZ(roll)*XMMatrixRotationY(yaw)*
   XMMatrixTranslation(p.x,p.y,p.z),color,material,shadow);
+}
+void Renderer::DrawCloak(const XMFLOAT3& shoulder,float yaw,float pitch,float roll,float side,float back) {
+ DrawMesh(visual::Mesh::Cloak,shoulder,{1,1,1},{1,1,1,1},visual::Material::Cloth,yaw,pitch,visual::ShadowMode::Cast,roll);
+ auto& item=world_[static_cast<unsigned>(visual::Mesh::Cloak)].back();
+ item.instance.surface.z=std::isfinite(side)?std::clamp(side,-.20f,.20f):0;
+ // Positive w identifies cloth. Both shadow and color use the same deformation.
+ item.instance.surface.w=.001f+(std::isfinite(back)?std::clamp(back,0.f,.35f):0);
+ item.radius+=.41f;
 }
 void Renderer::DrawSegment(const XMFLOAT3& from,const XMFLOAT3& to,float width,float depth,
  const XMFLOAT4& color,visual::Material material) {

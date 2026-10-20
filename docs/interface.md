@@ -1,5 +1,11 @@
 # Fullscreen and interface
 
+## Equipment presentation follow-up (2026-10-20)
+
+C opens the live outfit preview in a stone-and-curtain alcove, surrounded by the ten functional equipment slots. Armor, Strike and Heavy have separate illustrated tiles using the actual combat values; health and XP remain live. The preview uses the same continuous cloak and torso transforms as the world character. I opens the 24-slot bag with recessed leather cells, detailed wearable illustrations and a framed inspection header. Hover comparisons, right-click use/removal, drag/drop, split, sort and merchant transactions keep their existing bindings and hit regions.
+
+These surfaces use the existing batched interface drawing path and font atlas. No bitmap pack or additional UI texture is required. The panels are an original procedural interpretation of the recorded layout; painted item illustrations and sculpted frame assets remain future work.
+
 ## Recorded-reference HUD pass (2026-10-20)
 
 During unobstructed play, the player frame sits left of the combat area and the selected target frame to the right. Opening panels moves both to the top. Frames show actual health, player level, target distance and incoming strike timing; the enemy medallion uses a threat mark rather than inventing an enemy level. Ground selection is an open gold ring; incoming attack cones use thin connected outlines. Floating block health bars have been removed in favor of the target frame. The face art is a guard emblem; the character window retains the actual equipment preview.

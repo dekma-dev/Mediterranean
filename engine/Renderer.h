@@ -27,7 +27,8 @@ public:
     const DirectX::XMFLOAT4& color, float yaw = 0);
   void DrawMesh(visual::Mesh mesh,const DirectX::XMFLOAT3& position,const DirectX::XMFLOAT3& scale,
     const DirectX::XMFLOAT4& color,visual::Material material,float yaw = 0,float pitch = 0,
-    visual::ShadowMode shadow = visual::ShadowMode::Cast);
+    visual::ShadowMode shadow = visual::ShadowMode::Cast,float roll = 0);
+  void DrawCloak(const DirectX::XMFLOAT3& shoulder,float yaw,float pitch,float roll,float side,float back);
   void DrawSegment(const DirectX::XMFLOAT3& from,const DirectX::XMFLOAT3& to,float width,float depth,
     const DirectX::XMFLOAT4& color,visual::Material material);
   void DrawMeshBetween(visual::Mesh mesh,const DirectX::XMFLOAT3& from,const DirectX::XMFLOAT3& to,float width,float depth,

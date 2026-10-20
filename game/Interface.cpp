@@ -137,6 +137,18 @@ struct Canvas {
  void Window(Rect a) {
   Frame(a,dark,{.37f,.39f,.17f,1});
   Gradient({a.x+5,a.y+5,a.w-10,a.h-10},{.13f,.23f,.19f,1},{.035f,.065f,.059f,1});
+  // Recessed cast-bronze header and footer with a continuous woven relief.
+  for (float y : {a.y+4,a.y+a.h-9}) {
+   Gradient({a.x+10,y,a.w-20,5},{.19f,.32f,.27f,1},{.06f,.13f,.12f,1});
+   for (float x=a.x+15;x<a.x+a.w-30;x+=24) {
+    for (int step=0;step<8;++step) {
+     const float u=step/8.f,v=(step+1)/8.f;
+     const float yy=y+2+std::sin(u*6.2831853f)*1.7f,ty=y+2+std::sin(v*6.2831853f)*1.7f;
+     Line(x+u*24,yy+1,x+v*24,ty+1,1.6f,{.025f,.07f,.06f,1});
+     Line(x+u*24,yy,x+v*24,ty,.7f,{.43f,.53f,.35f,.65f});
+    }
+   }
+  }
   // Fine horizontal tool marks keep large panels from reading as flat plastic.
   for(float y=a.y+15;y<a.y+a.h-15;y+=7) {
    const float shade=.025f+.015f*std::sin(y*1.7f);
@@ -188,13 +200,44 @@ struct Canvas {
   Center(a.x,a.y+(a.h-size)*.5f-2,a.w,label,size,{1,.9f,.51f,1});
  }
  void EmptySlot(Rect a) {
-  Frame(a,{.085f,.09f,.04f,1},{.26f,.26f,.12f,1});
-  Gradient({a.x+4,a.y+4,a.w-8,a.h-8},{.105f,.105f,.075f,1},{.047f,.055f,.043f,1});
-  for(float side : {-1.f,1.f}) {
-   const float x=a.x+a.w*.5f+side*a.w*.20f;
-   Scroll(x,a.y+a.h*.27f,-side,a.w/90);
-   Scroll(x,a.y+a.h*.62f,side,a.w/90);
+  Frame(a,{.10f,.083f,.052f,1},{.31f,.28f,.16f,1});
+  Gradient({a.x+4,a.y+4,a.w-8,a.h-8},{.15f,.13f,.08f,1},{.065f,.062f,.043f,1});
+  // Quiet tooled leather, instead of four bright repeated glyphs per cell.
+  for (float yy=a.y+7;yy<a.y+a.h-6;yy+=4)
+   Line(a.x+6,yy,a.x+a.w-6,yy,1,{.28f,.23f,.14f,.12f});
+  const float cx=a.x+a.w*.5f,cy=a.y+a.h*.5f;
+  for (float side : {-1.f,1.f}) {
+   Scroll(cx+side*a.w*.17f,cy,-side,a.w/110);
+   for (float yy : {a.y+5,a.y+a.h-5})
+    Line(cx+side*(a.w*.5f-5),yy,cx+side*(a.w*.5f-9),yy,.7f,{.52f,.42f,.24f,.6f});
   }
+ }
+ void Alcove(Rect a) {
+  Frame(a,{.020f,.032f,.030f,1},{.32f,.38f,.27f,1});
+  for (int i=0;i<44;++i) {
+   const float x=a.x+4+i*(a.w-8)/44,fold=.5f+.5f*std::sin(i*.83f);
+   Gradient({x,a.y+4,(a.w-8)/44+.1f,a.h-8},
+    {.10f+fold*.11f,.026f+fold*.018f,.022f+fold*.012f,1},{.024f,.041f,.035f,1});
+  }
+  // Stone arch, recessed keystone and dressed side piers frame the live model.
+  const float cx=a.x+a.w*.5f,cy=a.y+48,rx=a.w*.5f-12;
+  for (int i=0;i<18;++i) {
+   const float t=3.14159265f+i*3.14159265f/18,u=t+3.14159265f/18-.018f;
+   const Point p{cx+std::cos(t)*rx,cy+std::sin(t)*36},q{cx+std::cos(u)*rx,cy+std::sin(u)*36};
+   const Point inner{cx+std::cos(u)*(rx-8),cy+std::sin(u)*28},s{cx+std::cos(t)*(rx-8),cy+std::sin(t)*28};
+   const Color stone{.25f+(i%3)*.025f,.31f+(i%3)*.025f,.25f,1};
+   Triangle(p,q,inner,stone); Triangle(p,inner,s,stone);
+   Line(p.x,p.y,q.x,q.y,.8f,{.56f,.55f,.38f,1});
+  }
+  for (float x : {a.x+7,a.x+a.w-15}) {
+   Gradient({x,cy,8,a.h-67},{.31f,.36f,.27f,1},{.10f,.16f,.13f,1});
+   for (float y=cy+21;y<a.y+a.h-22;y+=25) Line(x,y,x+8,y,1,{.035f,.06f,.045f,1});
+  }
+  for (int row=0;row<5;++row) for (int column=0;column<6;++column) {
+   const float x=a.x+12+column*(a.w-24)/6,y=a.y+a.h-44+row*7.f;
+   Gradient({x+1,y,(a.w-24)/6-2,6},{.22f+row*.015f,.26f+row*.014f,.21f,1},{.10f,.15f,.12f,1});
+  }
+  Oval(cx,a.y+a.h-29,a.w*.32f,10,{.005f,.014f,.01f,.7f});
  }
  void Parchment(Rect a) {
   Frame(a,{.66f,.52f,.32f,1},{.30f,.21f,.11f,1});
@@ -314,7 +357,12 @@ void Icon(Canvas& c,Rect rect,Item item,float alpha=1) {
    c.Line(x+side*17*s-6*s,y+4*s,x+side*17*s+6*s,y+4*s,3*s,gold);
   }
  } else if (item==Item::Cloak) {
-  c.Triangle({x,y-24*s},{x+24*s,y+22*s},{x-24*s,y+22*s},cloth);
+  for (int fold=0;fold<12;++fold) {
+   const float u=-1+fold/6.f,v=u+1/6.f,tone=.60f+.40f*std::sin(fold*1.8f);
+   const Color shade{cloth.x*tone,cloth.y*tone,cloth.z*tone,alpha};
+   c.Triangle({x+u*7*s,y-20*s},{x+v*7*s,y-20*s},{x+v*24*s,y+22*s},shade);
+   c.Triangle({x+u*7*s,y-20*s},{x+v*24*s,y+22*s},{x+u*24*s,y+22*s},shade);
+  }
   for (float side : {-1.f,1.f})
    c.Line(x+side*3*s,y-17*s,x+side*21*s,y+21*s,2*s,gold);
   c.Line(x-21*s,y+21*s,x+21*s,y+21*s,2*s,gold);
@@ -323,11 +371,22 @@ void Icon(Canvas& c,Rect rect,Item item,float alpha=1) {
   c.RectFill({x-15*s,y-20*s,30*s,15*s},leather);
   c.Line(x-8*s,y-6*s,x-10*s,y+21*s,12*s,{.39f,.43f,.40f,alpha});
   c.Line(x+8*s,y-6*s,x+10*s,y+21*s,12*s,{.39f,.43f,.40f,alpha});
+  for(float side : {-1.f,1.f}) {
+   c.Line(x+side*5*s,y-5*s,x+side*7*s,y+20*s,2*s,{.59f,.59f,.44f,alpha});
+   for(int crease=0;crease<4;++crease)
+    c.Line(x+side*5*s,y+(crease*6-3)*s,x+side*13*s,y+(crease*6)*s,1.1f*s,{.19f,.23f,.22f,alpha});
+  }
  } else {
   for (float side : {-1.f,1.f}) {
    c.RectFill({x+side*10*s-5*s,y-19*s,11*s,31*s},leather);
    c.Oval(x+side*10*s+3*s,y+17*s,11*s,6*s,leather);
    c.RectFill({x+side*10*s-6*s,y-10*s,13*s,3*s},gold);
+   c.Line(x+side*10*s-3*s,y-17*s,x+side*10*s-3*s,y+10*s,2*s,{.71f,.48f,.25f,alpha});
+   c.Line(x+side*10*s-7*s,y+21*s,x+side*10*s+12*s,y+21*s,3*s,{.13f,.11f,.07f,alpha});
+   for(int lace=0;lace<4;++lace) {
+    const float yy=y+(-4+lace*5)*s;
+    c.Line(x+side*10*s-3*s,yy,x+side*10*s+4*s,yy+3*s,s,{.84f,.65f,.36f,alpha});
+   }
   }
  }
 }
@@ -489,6 +548,10 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Gradient({rect.x+4,rect.y+4,rect.w-8,rect.h-8},rare?Color{.14f,.31f,.20f,1}:Color{.14f,.22f,.25f,1},{.025f,.045f,.06f,1});
   for (int i=0;i<5;++i) c.Line(rect.x+rect.w*.5f,rect.y+rect.h*.5f,rect.x+5+i*(rect.w-10)/4,rect.y+5,1,{.52f,.60f,.39f,.15f});
   Icon(c,{rect.x+3,rect.y+3,rect.w-6,rect.h-6},item,dragging_ && item==dragItem_?.35f:1.f);
+  for(float dx : {4.f,rect.w-5}) {
+   c.Oval(rect.x+dx,rect.y+4,1.4f,1.4f,gold);
+   c.Line(rect.x+dx,rect.y+rect.h-8,rect.x+dx,rect.y+rect.h-4,.8f,border);
+  }
   if (Equipped(s,item)) c.Diamond(rect.x+rect.w-5,rect.y+5,3,3,{.66f,.92f,.39f,1});
   if (item==Item::Potion) c.Text(rect.x+rect.w-15,rect.y+rect.h-16,std::to_string(bag>=0?s.Items().Bag()[bag].count:s.Potions()),12,{1,.94f,.57f,1});
   regions_.push_back({rect,{Action::SelectItem,static_cast<int>(item)},true,bag,gear});
@@ -608,15 +671,9 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  if (characterOpen) {
   blockWindow({12,116,438,500});
   c.Banner({30,106,265,31},"Frontier guard",19); close({420,121,24,24},Panel::Character);
-  c.Center(30,148,265,"Level "+std::to_string(s.Level())+"  /  Dawnwatch guard",13);
-  c.Frame({65,176,188,329},{.025f,.045f,.025f,1});
-  for (int i=0;i<16;++i) {
-   const float x=69+i*11.f;
-   c.Gradient({x,180,11,280},{.12f+.045f*std::sin(i*1.7f),.028f,.022f,1},{.024f,.043f,.023f,1});
-  }
-  for (int row=0;row<4;++row) for (int column=0;column<5;++column)
-   c.Frame({69+column*35.f,462+row*9.f,34,8},{.13f,.18f,.105f,1},{.17f,.22f,.12f,1});
-  c.Oval(159,474,63,12,{.01f,.02f,.01f,.7f});
+  c.Frame({65,146,188,23},{.16f,.29f,.26f,1},{.42f,.47f,.32f,1});
+  c.Center(65,151,188,"Level "+std::to_string(s.Level())+"  /  Dawnwatch guard",12);
+  c.Alcove({65,176,188,329});
   const auto p=c.P(70,181);
   if (renderer.BeginPortrait(p.x,p.y,178*c.layout.scale/renderer.Width(),316*c.layout.scale/renderer.Height())) {
    DrawCharacter(renderer,{0,0},0,previewYaw+std::sin(time*.35f)*.05f,{.22f,.37f,.54f,1},0,0,CharacterOutfit::From(s.Items()),animation::Idle(time));
@@ -640,27 +697,29 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   button({64,579,63,27},"Front",Action::RotatePreview,0);
   button({131,579,34,27},">",Action::RotatePreview,1);
   button({174,579,117,27},inventoryOpen?"Close bag [I]":"Open bag [I]",Action::Inventory);
-  c.Frame({304,152,132,449},{.035f,.075f,.07f,1});
+  c.Frame({304,152,132,449},{.07f,.12f,.10f,1});
+  c.Gradient({309,157,122,75},{.27f,.30f,.17f,1},{.10f,.16f,.11f,1});
   c.Center(304,163,132,"VITALITY",12,gold);
   c.Center(310,186,120,std::to_string(int(s.Health()))+" / "+std::to_string(int(s.MaxHealth())),16);
   c.Frame({314,211,112,12});
   c.Gradient({317,214,106*std::clamp(s.Health()/s.MaxHealth(),0.f,1.f),6},{.56f,.27f,.20f,1},{.28f,.08f,.07f,1});
   c.Center(304,239,132,"COMBAT",12,gold);
-  const char* names[]={"Armor","Strike","Heavy strike"};
-  const int values[]={int(s.DamageReduction()),int(s.StrikeDamage()),int(s.HeavyDamage())};
-  for (int i=0;i<3;++i) {
-   const float y=261+i*34.f;
-   c.Gradient({312,y,116,30},{.12f,.19f,.16f,1},{.055f,.10f,.09f,1});
-   c.Text(318,y+8,names[i],11,muted);
-   const auto value=std::to_string(values[i]); c.Text(420-c.Width(value,15),y+6,value,15,ink);
+  c.Frame({312,260,116,49},{.13f,.20f,.14f,1});
+  Icon(c,{316,265,32,36},Item::Shield);
+  c.Text(354,266,"Armor",12,muted); c.Text(354,282,std::to_string(int(s.DamageReduction())),20,ink);
+  for (int i=0;i<2;++i) {
+   const float x=312+i*60.f;
+   c.Frame({x,314,56,80},{.14f,.20f,.14f,1},{.36f,.39f,.24f,1});
+   c.Center(x,319,56,i?"Heavy":"Strike",11,gold);
+   Icon(c,{x+13,334,30,30},i?Item::Watchguard:Item::Starter);
+   c.Center(x,368,56,std::to_string(int(i?s.HeavyDamage():s.StrikeDamage())),21,ink);
   }
-  c.Line(314,374,426,374,1,border);
-  c.Center(304,387,132,"PROGRESSION",12,gold);
-  c.Center(310,409,120,"Level "+std::to_string(s.Level()),19);
+  c.Center(304,407,132,"PROGRESSION",11,gold);
   const float characterXp=s.Level()==3?1.f:std::clamp(float(s.Experience()-s.LevelStartExperience())/
     float(s.NextLevelExperience()-s.LevelStartExperience()),0.f,1.f);
-  c.Frame({314,438,112,10}); c.Gradient({317,441,106*characterXp,4},blue,{.13f,.25f,.42f,1});
-  c.Center(310,457,120,s.Level()==3?"Level cap reached":std::to_string(s.NextLevelExperience()-s.Experience())+" XP to next level",10,muted);
+  c.Center(310,426,120,"Level "+std::to_string(s.Level()),19);
+  c.Frame({314,453,112,10}); c.Gradient({317,456,106*characterXp,4},blue,{.13f,.25f,.42f,1});
+  c.Center(310,469,120,s.Level()==3?"Level cap reached":std::to_string(s.NextLevelExperience()-s.Experience())+" XP to next level",10,muted);
   c.Line(314,484,426,484,1,border);
   c.Text(316,501,"Gold",12,muted);
   const auto wealth=std::to_string(s.Gold()); c.Text(422-c.Width(wealth,14),500,wealth,14,gold);
@@ -685,10 +744,12 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Frame({1008,430,248,27},{.035f,.065f,.06f,1}); c.Text(1017,436,std::to_string(24-s.Items().UsedSlots())+" free slots",12,muted);
   c.Oval(1189,443,5,5,gold); c.Text(1200,434,std::to_string(s.Gold()),14,gold);
   const auto& info=Describe(selected);
-  c.Frame({1008,464,248,104},{.025f,.055f,.05f,1});
+  c.Frame({1008,464,248,104},{.065f,.105f,.09f,1});
+  c.Gradient({1012,468,240,40},{.18f,.27f,.20f,1},{.09f,.15f,.13f,1});
   if(selected!=Item::None) Icon(c,{1017,473,30,30},selected);
   c.Text(1056,475,selected==Item::None?"Select an item":info.name,13,selected==Item::Watchguard || selected==Item::Ward?Color{.63f,.85f,.43f,1}:ink);
   c.Text(1056,494,selected==Item::None?"Inspect your belongings":info.type,10,muted);
+  c.Line(1017,510,1247,510,1,{.37f,.40f,.24f,1});
   std::string detail=info.description;
   const auto delta=[](float value) { return (value>=0?std::string("+"):std::string())+std::to_string(int(value)); };
   if (info.slot==rpg::GearSlot::Weapon) {

@@ -2,6 +2,8 @@
 
 This guide covers the native C++17 / DirectX 11 game on Windows.
 
+Motion/equipment follow-up (2026-10-20): rebuild, then test a running Space jump from several points in the stride, RMB side steps, reversals and landings. Look for continuous feet, weight transfer and the folded cloak settling after movement. Open C/I to inspect the alcove, combat-stat tiles, leather bag cells and item cards. Run manual checks 143–145. Build/test logs for this pass are `build-ninja-debug/motion-interface-pass.log`, `build-ninja-release/motion-interface-pass.log` and `build-local/motion-interface-build.log`.
+
 Startup crash recovery (2026-10-19): the access violation in `std::exchange` at `0x43340008` came from incompatible old/new game libraries after a shader compile failure. The shader now builds, and `build-local/Debug/RPGNative.exe` has been rebuilt and passed a hidden startup/render check. Stop the previous debug session and press F5 with RPGNative selected. If any future build fails, cancel launching the older executable; fix the first compiler error, then use **Build > Rebuild Solution** before debugging. Do not edit MSVC's standard-library headers or disable access-violation reporting.
 
 Post-merge quest build errors (C3516/C1903 and unresolved quest functions) are fixed in `quests/QuestText.h.in`; CMake regenerates the header automatically. The actual Visual Studio Debug executable has been rebuilt. Stop any older debug session and press F5 with RPGNative selected. Do not edit `QuestText.generated.h` directly.

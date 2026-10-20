@@ -28,12 +28,13 @@ animation::Sample Walk(int hz,float speed,bool curved=false) {
   animation::FootPlacement feet; feet.Reset({0,0},0); animation::Sample sample;
   std::array<XMFLOAT3,2> previous{};
   bool planted[2]={false,false}; float previousYaw[2]={};
-  float worstSlip=0; int contacts=0,lifts=0;
+  float worstSlip=0,minShift=0,maxShift=0; int contacts=0,lifts=0;
   for (int frame=1;frame<=hz*2;++frame) {
     const float t=float(frame)/hz,yaw=curved?t*.8f:0;
     const rpg::Vec2 root=curved?rpg::Vec2{speed/.8f*(1-std::cos(yaw)),speed/.8f*std::sin(yaw)}:rpg::Vec2{0,t*speed};
     feet.Update(1.f/hz,root,yaw,true,true,sample);
     const auto pose=BuildCharacterPose(0,0,false,sample); Geometry(pose);
+    minShift=std::min(minShift,pose.bodyShift); maxShift=std::max(maxShift,pose.bodyShift);
     for (int i=0;i<2;++i) {
       const auto actual=World(pose.legs[i].end,root,yaw);
       if (planted[i] && feet.Planted(i)) {
@@ -47,6 +48,7 @@ animation::Sample Walk(int hz,float speed,bool curved=false) {
   std::cout<<"Support slip / "<<hz<<" Hz / speed "<<speed<<" / curved "<<curved<<": "<<worstSlip<<"; contacts "<<contacts<<"; lifts "<<lifts<<'\n';
   Require(contacts>hz/3 && lifts>hz/3,"Walking needs both grounded support and lifted recovery phases");
   Require(worstSlip<.002f,"World-space support feet must remain planted, including solved geometry");
+  Require(minShift<-.003f && maxShift>.003f,"Walking must transfer body weight onto alternating support legs");
   return sample;
 }
 }
@@ -70,6 +72,7 @@ int main() {
   for (int i=0;i<120;++i) feet.Update(1.f/60,{0,8.8f},0,true,true,sample);
   for (int i=0;i<2;++i) Require(feet.Planted(i) && std::abs(sample.feet[i].z)<.066f,"Stopping must settle into a quiet stance without ongoing steps");
   const auto still=sample;
+  Require(std::abs(sample.support)<.001f,"Standing after a stop must settle its weight transfer");
   for (int i=0;i<120;++i) feet.Update(1.f/60,{0,8.8f},0,true,true,sample);
   for (int i=0;i<2;++i) Require(sample.feet[i].x==still.feet[i].x && sample.feet[i].z==still.feet[i].z &&
     sample.feet[i].y==still.feet[i].y,"Idle must not keep shuffling after settling");
@@ -77,7 +80,7 @@ int main() {
     feet.Update(1.f/60,{0,8.8f},float(i)*motion::tau/120,true,true,sample);
     Geometry(BuildCharacterPose(0,0,false,sample));
   }
-  feet.Update(.02f,{0,8.8f},0,false,true,sample); Require(!sample.feetActive,"Jumping must release world contacts");
+  feet.Update(.02f,{0,8.8f},0,false,true,sample); Require(!sample.feetActive && sample.support==0,"Jumping must release world contacts and support lean");
   feet.Update(.02f,{0,8.8f},0,true,true,sample);
   Require(sample.feetActive && feet.Planted(0) && feet.Planted(1) && std::abs(sample.feet[0].z)<.001f,"Landing must establish fresh local contacts");
   feet.Update(.02f,{10,-20},1,true,true,sample);
@@ -128,6 +131,7 @@ int main() {
     renderer.BeginFrame(); renderer.SetCamera({root.x+2.6f,1.4f,root.z+3.3f},{root.x,.9f,root.z});
     renderer.DrawMesh(visual::Mesh::Box,{root.x,-.07f,root.z},{8,.14f,8},{.40f,.43f,.39f,1},visual::Material::Stone);
     CharacterOutfit outfit; outfit.armor=outfit.helm=outfit.shield=view==7;
+    outfit.cloak=true; sample.clothBack=view<4?.2f:.025f; sample.clothSide=view==5?.13f:0;
     DrawCharacter(renderer,root,0,yaw,{.22f,.37f,.54f,1},0,0,outfit,sample);
     const auto path=L"feet-"+std::wstring(names[view])+L".png";
     Require(renderer.Capture(path) && renderer.EndFrame(false) && renderer.ValidateDebugMessages(),"Foot-placement inspection capture");

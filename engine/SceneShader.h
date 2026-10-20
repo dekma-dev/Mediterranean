@@ -34,14 +34,25 @@ VOut VSMain(VIn i) {
  VOut o; o.p=mul(float4(i.p,1),wvp); o.wp=i.n; o.n=i.n;
  o.tint=i.tint; o.shadow=o.detailShadow=0; o.material=0; o.tp=o.tn=0; o.cloudLight=1; return o;
 }
+void DeformCloth(inout float3 p,inout float3 n,float4 surface) {
+ [branch] if (surface.w>0) {
+  float t=saturate(-p.y/.82),side=surface.z,back=surface.w-.001;
+  p.x+=side*t*t; p.z-=back*t*t;
+  // Inverse transpose of the quadratic bend; no extra vertex buffers.
+  n.y+=2*t/.82*(side*n.x-back*n.z);
+ }
+}
 float4 VSShadow(InstanceIn i) : SV_POSITION {
  float4x4 object=float4x4(i.w0,i.w1,i.w2,i.w3);
+ DeformCloth(i.p,i.n,i.surface);
  return mul(mul(float4(i.p,1),object),wvp);
 }
 VOut VSWorld(InstanceIn i) {
  VOut o;
  float4x4 object=float4x4(i.w0,i.w1,i.w2,i.w3);
  float4x4 normals=float4x4(i.n0,i.n1,i.n2,i.n3);
+ float3 undeformed=i.p,undeformedNormal=i.n;
+ DeformCloth(i.p,i.n,i.surface);
  float4 position=mul(float4(i.p,1),object);
  o.wp=position.xyz; o.p=mul(position,wvp);
  o.n=normalize(mul(float4(i.n,0),normals).xyz);
@@ -50,7 +61,7 @@ VOut VSWorld(InstanceIn i) {
  // Metric object coordinates follow animated parts instead of sliding through
  // a world-space texture. Projection weights account for nonuniform scaling.
  float3 size=float3(length(i.w0.xyz),length(i.w1.xyz),length(i.w2.xyz));
- o.tp=i.p*size; o.tn=normalize(i.n/max(size,.00001));
+ o.tp=undeformed*size; o.tn=normalize(undeformedNormal/max(size,.00001));
  // The cloud footprint spans hundreds of metres. Interpolating this slow field
  // avoids a volume integration in every opaque pixel, including overdraw.
  o.cloudLight=1;
