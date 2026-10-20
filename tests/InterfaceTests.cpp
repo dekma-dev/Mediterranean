@@ -89,8 +89,78 @@ void RelativeMouseRegressions() {
   Require(!game.WantsMouseLook(),"Holding RMB through a display change must not relock the cursor");
 }
 
+void InterruptedInputRegressions(Win32Window& window,Renderer& renderer) {
+  // The real message-pump order: latch native interruptions, cancel gestures,
+  // sample input, update, render. No system focus or desktop input is changed.
+  Game game; Input input; Input::Frame frame;
+  frame.focused=true; frame.client={1000,563}; frame.screen=frame.client;
+  const auto step=[&]() {
+    if (window.ConsumeInputCancellation()) { game.CancelUiGesture(); input.CancelGestures(); }
+    input.Update(frame); game.Update(.01,input,0);
+    renderer.BeginFrame(); game.Render(renderer); Require(renderer.EndFrame(false),"Interrupted input render");
+  };
+  const auto click=[&](LONG x,LONG y) {
+    frame.client={x,y}; frame.screen=frame.client; frame.down[VK_LBUTTON]=true; step();
+    frame.down[VK_LBUTTON]=false; step();
+  };
+  const auto interrupt=[&](UINT message) {
+    SendMessage(window.GetHandle(),message,0,0);
+    if (message==WM_KILLFOCUS) SendMessage(window.GetHandle(),WM_SETFOCUS,0,0);
+  };
+  for (UINT message : {WM_KILLFOCUS,WM_CANCELMODE,WM_ENTERSIZEMOVE,WM_ENTERMENULOOP,WM_MOVE,WM_SIZE}) {
+    Require(game.RestoreSnapshot(Fixture("veteran-preview.save")),"Interrupted build fixture");
+    game.OpenPanel(ui::Panel::Build); step();
+    interrupt(message);
+    // This press started during the interruption, not on the game's Learn button.
+    frame.client={1000,563}; frame.screen=frame.client; frame.down[VK_LBUTTON]=true; step();
+    Require(game.State().BuildMask()==0,"A press across a native interruption must not learn a talent");
+    step(); Require(game.State().BuildMask()==0,"Holding an interrupted press must not activate a control after redraw");
+    frame.down[VK_LBUTTON]=false; step(); click(1000,563);
+    Require(game.State().BuildMask()==1,"A fresh click after release must still learn normally");
+    click(700,118); click(980,568); // Store allocation, pending confirmation.
+    Require(game.State().Loadout(0)==-1,"Storage still requires confirmation");
+    interrupt(message); step();
+    click(660,568);
+    Require(game.State().Loadout(0)==-1,"An interrupted store confirmation must not survive a native focus/move/menu event");
+    click(980,568); click(660,568);
+    Require(game.State().Loadout(0)==1,"Storage must work after a new explicit request and confirmation");
+  }
+  for (bool native : {true,false}) {
+    game.Initialize(); game.OpenPanel(ui::Panel::Inventory); frame.down.fill(false); step();
+    frame.client={1028,274}; frame.screen=frame.client; frame.down[VK_LBUTTON]=true; step();
+    frame.client={1068,274}; frame.screen=frame.client; step();
+    if (native) interrupt(WM_CANCELMODE); else frame.focused=false;
+    step(); frame.focused=true; step(); frame.down[VK_LBUTTON]=false; step();
+    Require(game.State().Items().Bag()[0].item==rpg::Item::Potion && game.State().Items().Bag()[1].item==rpg::Item::None,
+      "Focus/cancel-mode interruption must discard an in-flight bag drag without moving or consuming the item");
+    frame.client={1028,274}; frame.screen=frame.client; frame.down[VK_LBUTTON]=true; step();
+    frame.client={1068,274}; frame.screen=frame.client; step();
+    frame.down[VK_LBUTTON]=false; step();
+    Require(game.State().Items().Bag()[0].item==rpg::Item::None && game.State().Items().Bag()[1].item==rpg::Item::Potion,
+      "A fresh inventory drag must work after cancellation");
+  }
+}
+
 int main() {
   RelativeMouseRegressions();
+  {
+    Input input; Input::Frame frame; frame.focused=true; frame.relativeMouse=true; input.Update(frame);
+    frame.down[VK_RBUTTON]=true; input.Update(frame);
+    frame.mouseX=40; input.Update(frame);
+    Require(input.MouseX()==40,"Cancellation fixture must have live raw motion");
+    input.CancelGestures();
+    Require(!input.Pressed(VK_RBUTTON) && !input.Released(VK_RBUTTON) && !input.Held(VK_RBUTTON) && input.MouseX()==0,
+      "Cancellation must discard sampled transitions and raw motion immediately");
+    for (int key : std::array<int,6>{VK_LBUTTON,VK_RBUTTON,VK_F5,VK_F9,'N','4'}) frame.down[key]=true;
+    input.Update(frame);
+    for (int key : std::array<int,6>{VK_LBUTTON,VK_RBUTTON,VK_F5,VK_F9,'N','4'})
+      Require(!input.Pressed(key) && input.Held(key),"Resynchronization must retain held state without fabricating a press");
+    Require(input.MouseX()==0,"The first sample after cancellation must ignore queued camera motion");
+    input.Update(frame);
+    Require(!input.Pressed(VK_LBUTTON) && !input.Pressed(VK_F9),"Held interrupted inputs cannot replay on the next frame");
+    frame.down.fill(false); input.Update(frame); frame.down[VK_LBUTTON]=true; frame.down[VK_F9]=true; input.Update(frame);
+    Require(input.Pressed(VK_LBUTTON) && input.Pressed(VK_F9),"Fresh presses after release must resume normally");
+  }
   for (UINT dpi : {96u,144u,192u,384u}) {
     const auto cursor=CreateGameCursor(dpi);
     Require(cursor!=nullptr,"Native game cursor creation failed");
@@ -190,10 +260,32 @@ int main() {
   // same layout that draws the screen. No desktop input is synthesized.
   Win32Window window; Require(window.Create(GetModuleHandle(nullptr),1280,720,L"screen checks",false),"Hidden test window failed.");
   Require(!window.SetMouseLook(true) && !window.MouseLook(),"Hidden windows must never capture the desktop cursor");
+  // Native interruptions must reach UI gestures even without an RMB capture.
+  // Focus can leave and return between two engine samples.
+  window.ConsumeInputCancellation();
+  SendMessage(window.GetHandle(),WM_KILLFOCUS,0,0);
+  SendMessage(window.GetHandle(),WM_SETFOCUS,0,0);
+  Require(window.ConsumeInputCancellation(),"A complete focus round trip between frames must cancel pending UI actions without RMB");
+  Require(!window.ConsumeInputCancellation(),"Native cancellation must be consumed once");
+  for (UINT message : {WM_CANCELMODE,WM_ENTERSIZEMOVE,WM_ENTERMENULOOP,WM_MOVE,WM_SIZE,WM_ACTIVATEAPP}) {
+    SendMessage(window.GetHandle(),message,0,0);
+    Require(window.ConsumeInputCancellation(),"Window move, size, menu and deactivation must cancel UI gestures without RMB");
+  }
+  window.SetMouseLook(false);
+  Require(!window.ConsumeInputCancellation(),"Ordinary inactive mouse-look polling must not cancel UI actions");
+  SendMessage(window.GetHandle(),WM_CAPTURECHANGED,0,0);
+  Require(!window.ConsumeInputCancellation(),"A release notification with no active capture must not create another cancellation");
+  SendMessage(window.GetHandle(),WM_MOUSEWHEEL,MAKEWPARAM(0,WHEEL_DELTA),0);
+  window.SetMouseLook(false);
+  Require(window.ConsumeWheel()==1,"Ordinary inactive mouse-look polling must retain legitimate camera scroll");
+  SendMessage(window.GetHandle(),WM_MOUSEWHEEL,MAKEWPARAM(0,WHEEL_DELTA),0);
+  SendMessage(window.GetHandle(),WM_KILLFOCUS,0,0); SendMessage(window.GetHandle(),WM_SETFOCUS,0,0);
+  Require(window.ConsumeWheel()==0 && window.ConsumeInputCancellation(),"Focus interruptions must discard queued wheel motion");
   Renderer renderer;
   const bool initialized=renderer.Initialize(window.GetHandle(),1280,720);
   if (!initialized) std::wcerr<<renderer.Error()<<L'\n';
   Require(initialized,"screen renderer initialization failed.");
+  InterruptedInputRegressions(window,renderer);
   // Quest conversations keep rewards/objectives visible and paginate all prose.
   for (const auto size : {std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
     Require(renderer.Resize(size.first,size.second),"Quest dialogue resize");
@@ -463,9 +555,56 @@ int main() {
     clickAt(1000,563);
     Require(game.State().HasTalent(rpg::Talent::WeaponTraining) && game.State().TalentPoints()==1,
       "Build Learn button must reach the simulation command");
-    clickAt(248,487); clickAt(1000,563);
+    clickAt(248,406); clickAt(1000,563);
     Require(game.State().HasTalent(rpg::Talent::WeaponMastery) && game.State().TalentPoints()==0,
       "Selecting a connected rank must learn that rank rather than the previous selection");
+    clickAt(735,183);
+    Require(game.State().HasTalent(rpg::Talent::WeaponMastery),"Inspecting a spell must preserve the build");
+    clickAt(730,604);
+    Require(game.State().TalentPoints()==0,"Requesting a reset must not reset before confirmation");
+    clickAt(1000,575);
+    Require(game.State().TalentPoints()==0,"Cancelling a reset must preserve all learned talents");
+    clickAt(730,604); clickAt(1000,540);
+    Require(game.State().TalentPoints()==2 && !game.State().HasTalent(rpg::Talent::WeaponMastery),
+      "Confirmed reset must reach the simulation and refund the spent points");
+    clickAt(248,512); clickAt(1000,563);
+    Require(!game.State().HasTalent(rpg::Talent::Executioner),"Alternate specializations still require their foundation");
+    clickAt(248,320); clickAt(1000,563); clickAt(248,512); clickAt(1000,563);
+    Require(game.State().HasTalent(rpg::Talent::Executioner) && game.State().TalentPoints()==0,
+      "Alternative spell upgrades must be learnable through real input");
+    clickAt(730,604); frame.focused=false; step(); frame.focused=true; step(); clickAt(1000,540);
+    Require(game.State().HasTalent(rpg::Talent::Executioner),"Focus loss must discard a pending reset confirmation");
+    clickAt(700,118); // Saved builds opens with a snapshot of the active build.
+    clickAt(980,568);
+    Require(game.State().Loadout(0)==-1,"Store request cannot mutate a slot before confirmation");
+    clickAt(660,568);
+    Require(game.State().Loadout(0)==65 && game.State().BuildMask()==65,"Confirmed storage saves the active mixed choice without applying anything");
+    clickAt(280,290); clickAt(376,550); // Slot II, Pursuit preset.
+    Require(game.State().Loadout(1)==-1 && game.State().BuildMask()==65,"Selecting an empty slot and previewing a preset is read-only");
+    clickAt(660,568); clickAt(980,568);
+    Require(game.State().BuildMask()==65,"Cancelling apply preserves current talents");
+    clickAt(660,568); clickAt(660,568);
+    Require(game.State().BuildMask()==130 && game.State().MaxHealth()==160 && game.State().Health()==140,
+      "Confirmed preset applies actual stats without healing");
+    clickAt(980,568); clickAt(660,568);
+    Require(game.State().Loadout(1)==130 && game.State().Loadout(0)==65,"Preset storage must target the selected slot only");
+    clickAt(204,584); clickAt(660,568); // Renewal preview and request.
+    frame.focused=false; step(); frame.focused=true; step(); clickAt(660,568);
+    Require(game.State().BuildMask()==130,"Focus loss must require a new build confirmation");
+    clickAt(280,196); // Select saved slot I while confirmation is pending.
+    clickAt(660,568);
+    Require(game.State().BuildMask()==130,"Changing preview must cancel the previous request");
+    clickAt(660,568);
+    Require(game.State().BuildMask()==65,"A saved slot must be independently applicable");
+    clickAt(376,584); clickAt(980,568); // Mercy, overwrite slot I.
+    Require(game.State().Loadout(0)==65,"Overwrite requires confirmation too");
+    clickAt(980,568);
+    Require(game.State().Loadout(0)==65,"Cancel preserves an existing slot");
+    clickAt(980,568); clickAt(660,568);
+    Require(game.State().Loadout(0)==260 && game.State().BuildMask()==65,"Overwrite changes the chosen saved plan, not active talents");
+    clickAt(660,568); // Request application, then switch to the talent page.
+    clickAt(700,118); clickAt(660,568);
+    Require(game.State().BuildMask()==65,"Switching pages must discard pending confirmation and stale click regions");
     frame.down['N']=frame.down['W']=true; step();
     Require(game.State().Player().z>position.z,"A fresh N press must close the menu and restore movement");
   }
@@ -536,7 +675,7 @@ int main() {
       Require(screen.CapturesMovement() && click(550,681).action==ui::Action::None,
         "Build menu must capture movement and block the underlying action bar");
       for (int i=0;i<int(rpg::Talent::Count);++i) {
-        const auto node=click(248+(i%3)*232.f,320+(i/3)*171.f);
+        const auto node=click(248+(i%3)*232.f,320+(i/3)*106.f);
         Require(node.action==ui::Action::SelectTalent && node.value==i,"Every connected talent node must accept scaled inspection");
       }
       screen.selectedTalent=4; drawBuild();
@@ -558,6 +697,75 @@ int main() {
         "Right-click must not learn a talent");
       Require(click(1159,73).action==ui::Action::Close && click(1159,73).value==int(ui::Panel::Build),
         "Build close button must identify its modal panel");
+      for(int spell=0;spell<4;++spell) {
+        const auto inspect=click(222+spell*170.f,183);
+        Require(inspect.action==ui::Action::SelectSpell && inspect.value==spell,
+          "Each foundation spell must open inspection, not cast through the modal");
+        screen.selectedSpell=spell;
+        Require(click(1000,563).action==ui::Action::None,"Changing inspection must invalidate old Learn regions");
+        const auto saved=buildState.Save();
+        const auto book=L"spellbook-"+std::to_wstring(spell)+L"-"+std::to_wstring(size.first)+L".png";
+        renderer.BeginFrame(); screen.Render(renderer,buildState,0,false);
+        Require(renderer.Capture(book) && renderer.EndFrame(false) && buildState.Save()==saved,"Spell inspection must be read-only");
+        const auto related=click(1000,515);
+        Require(related.action==ui::Action::SelectTalent && related.value==int(rpg::spells[spell].upgrades[0]),
+          "Spellbook upgrade links must target real talents");
+      }
+      Require(click(730,604).action==ui::Action::ConfirmTalentReset,"A learned build must offer a reset confirmation");
+      screen.confirmTalentReset=true; drawBuild();
+      Require(click(1000,540).action==ui::Action::ResetTalents && click(1000,575).action==ui::Action::CancelTalentReset,
+        "Reset must require a separate confirmation with a cancel action");
+      const auto confirmation=L"build-reset-"+std::to_wstring(size.first)+L".png";
+      renderer.BeginFrame(); screen.Render(renderer,buildState,0,false);
+      Require(renderer.Capture(confirmation) && renderer.EndFrame(false),"Reset confirmation capture");
+      screen.Close(ui::Panel::Build);
+      Require(!screen.confirmTalentReset && click(1000,540).action==ui::Action::None,"Closing must discard a pending reset and its hit regions");
+      screen.SetOnly(ui::Panel::Build);
+      rpg::Command resetBuild; resetBuild.resetTalents=true; buildState.Update(.01f,resetBuild);
+      learnCommand.learnTalent=int(rpg::Talent::Vitality); buildState.Update(.01f,learnCommand);
+      learnCommand.learnTalent=int(rpg::Talent::Pursuit); buildState.Update(.01f,learnCommand);
+      screen.selectedSpell=2;
+      const auto upgraded=L"spellbook-pursuit-"+std::to_wstring(size.first)+L".png";
+      renderer.BeginFrame(); screen.Render(renderer,buildState,0,false);
+      Require(renderer.Capture(upgraded) && renderer.EndFrame(false) && buildState.AbilityCooldown(2)==3.5f,
+        "Upgraded spellbook must show the actual fractional cooldown and learned talent links");
+      screen.loadoutsPage=true; screen.previewBuild=65; screen.selectedLoadout=1;
+      rpg::Command store; store.build={rpg::BuildAction::Store,130,0}; buildState.Update(.01f,store);
+      const auto drawLoadout=[&](const wchar_t* label) {
+        const auto saved=buildState.Save();
+        renderer.BeginFrame(); screen.Render(renderer,buildState,0,false);
+        Require(renderer.Capture(std::wstring(L"loadouts-")+label+L"-"+std::to_wstring(size.first)+L".png") &&
+          renderer.EndFrame(false) && buildState.Save()==saved,"Build preview render/capture must not mutate gameplay");
+      };
+      drawLoadout(L"comparison");
+      Require(click(700,118).action==ui::Action::BuildPage,"Loadout page must retain navigation back to talents");
+      for (int slot=0;slot<3;++slot) {
+        const auto select=click(280,190+slot*94.f);
+        Require(select.action==ui::Action::SelectLoadout && select.value==slot,"Every saved slot must be selectable at every scale");
+      }
+      for (int preset=0;preset<6;++preset) {
+        const auto select=click(204+(preset%2)*172.f,516+(preset/2)*34.f);
+        Require(select.action==ui::Action::SelectBuildPreset && select.value==preset,"All specialization presets must be inspectable at every scale");
+      }
+      Require(click(660,568).action==ui::Action::RequestBuildApply && click(980,568).action==ui::Action::RequestBuildStore,
+        "Apply and store must request confirmation, never directly mutate");
+      screen.pendingBuild={rpg::BuildAction::Store,65,1};
+      Require(click(660,568).action==ui::Action::None,"Pending build changes must invalidate the previous actions");
+      drawLoadout(L"confirmation");
+      Require(click(660,568).action==ui::Action::ConfirmBuild && click(980,568).action==ui::Action::CancelBuild,
+        "Confirmation requires a separate rendered button and offers cancellation");
+      screen.CancelBuildConfirmation();
+      Require(click(660,568).action==ui::Action::None,"Cancellation discards stale confirmation regions");
+      screen.pendingBuild={rpg::BuildAction::Apply,65,1}; drawBuild();
+      screen.Escape();
+      Require(screen.pendingBuild.action==rpg::BuildAction::None && click(660,568).action==ui::Action::None,
+        "Escape discards pending build commands");
+      screen.SetOnly(ui::Panel::Build); screen.loadoutsPage=true; screen.previewBuild=260;
+      buildState=rpg::Simulation{}; drawLoadout(L"locked");
+      Require(click(660,568).action==ui::Action::None && click(980,568).action==ui::Action::None &&
+        click(376,584).action==ui::Action::SelectBuildPreset,"Level one may inspect presets but cannot apply or store unearned talents");
+      screen.SetOnly(ui::Panel::Build);
+      screen.selectedSpell=-1;
       buildState=rpg::Simulation{}; screen.selectedTalent=0; drawBuild();
       Require(click(1000,563).action==ui::Action::None && click(248,320).action==ui::Action::SelectTalent,
         "Level one can inspect future talents but cannot learn them");
@@ -708,7 +916,7 @@ int main() {
     clickAt(1000,563);
     Require(game.State().HasTalent(rpg::Talent::WeaponTraining) && game.State().TalentPoints()==1,
       "Build Learn button must reach the simulation command");
-    clickAt(248,487); clickAt(1000,563);
+    clickAt(248,406); clickAt(1000,563);
     Require(game.State().HasTalent(rpg::Talent::WeaponMastery) && game.State().TalentPoints()==0,
       "Selecting a connected rank must learn that rank rather than the previous selection");
     frame.down['N']=frame.down['W']=true; step();
@@ -755,7 +963,7 @@ int main() {
     clickAt(1000,563);
     Require(game.State().HasTalent(rpg::Talent::WeaponTraining) && game.State().TalentPoints()==1,
       "Build Learn button must reach the simulation command");
-    clickAt(248,487); clickAt(1000,563);
+    clickAt(248,406); clickAt(1000,563);
     Require(game.State().HasTalent(rpg::Talent::WeaponMastery) && game.State().TalentPoints()==0,
       "Selecting a connected rank must learn that rank rather than the previous selection");
     frame.down['N']=frame.down['W']=true; step();

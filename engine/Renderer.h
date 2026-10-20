@@ -7,7 +7,9 @@
 #include "engine/GpuTimer.h"
 #include "engine/Geometry.h"
 #include "engine/FontAtlas.h"
+#include "engine/StaticScene.h"
 #include <array>
+#include <functional>
 class Renderer {
 public:
   bool Initialize(HWND window, int width, int height);
@@ -33,6 +35,9 @@ public:
     const DirectX::XMFLOAT4& color,visual::Material material);
   void DrawMeshBetween(visual::Mesh mesh,const DirectX::XMFLOAT3& from,const DirectX::XMFLOAT3& to,float width,float depth,
     const DirectX::XMFLOAT4& color,visual::Material material,DirectX::XMFLOAT3 facing={0,0,1});
+  // Emit only immutable mesh draws here: no effects, portraits, HUD or flushes.
+  // Invalidate the scene when its authored geometry changes.
+  void DrawStaticScene(visual::StaticScene& scene,const std::function<void()>& emit);
   // Texture-free, additive world effects: depth tested, no depth writes/shadows.
   static constexpr unsigned maxEffectVertices=6144;
   void DrawEffectRibbon(DirectX::XMFLOAT3 a,DirectX::XMFLOAT3 b,DirectX::XMFLOAT3 c,DirectX::XMFLOAT3 d,
@@ -77,8 +82,8 @@ private:
     visual::ShadowMode shadow = visual::ShadowMode::Cast);
   static constexpr unsigned meshCount = static_cast<unsigned>(visual::Mesh::Count);
   static constexpr unsigned maxInstances = 4096;
-  struct Instance { DirectX::XMFLOAT4X4 world,normal; DirectX::XMFLOAT4 color,surface; };
-  struct Item { Instance instance; DirectX::XMFLOAT3 center; float radius; unsigned visibility = 0; };
+  using Instance=visual::SceneInstance;
+  using Item=visual::SceneItem;
   struct MeshRange { UINT start = 0,count = 0; float radius = 0; };
   std::array<MeshRange,meshCount> meshes_{};
   std::array<std::vector<Item>,meshCount> world_;

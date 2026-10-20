@@ -24,7 +24,7 @@ public:
   bool SetMouseLook(bool enabled);
   bool MouseLook() const { return mouseLook_; }
   MouseMotion::Delta ConsumeMouseMotion() { return mouseMotion_.Consume(); }
-  bool ConsumeMouseLookCancellation() { const bool result=mouseLookCancelled_; mouseLookCancelled_=false; return result; }
+  bool ConsumeInputCancellation() { const bool result=inputCancelled_; inputCancelled_=false; return result; }
 
 private:
   static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
@@ -36,7 +36,7 @@ private:
   float wheel_ = 0;
   bool fullscreen_ = false;
   bool visible_ = false;
-  bool mouseLook_=false,mouseLookCancelled_=false,rightPress_=false;
+  bool mouseLook_=false,inputCancelled_=false,rightPress_=false;
   POINT rightAnchor_{};
   MouseMotion mouseMotion_;
   WINDOWPLACEMENT windowed_{sizeof(WINDOWPLACEMENT)};

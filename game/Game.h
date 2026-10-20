@@ -6,6 +6,7 @@
 #include "game/Animation.h"
 #include "game/CombatEffects.h"
 #include "game/FootPlacement.h"
+#include "game/WorldView.h"
 class Renderer;
 
 class Game {
@@ -22,7 +23,9 @@ public:
   void SetFullscreenState(bool enabled) { interface_.fullscreen=enabled; }
   void OpenPanel(ui::Panel panel) { interface_.SetOnly(panel); }
   void ShowPanel(ui::Panel panel) { interface_.Show(panel); }
-  void CancelUiGesture() { interface_.CancelDrag(); CancelOrbit(); }
+  void CancelUiGesture() {
+    interface_.CancelDrag(); interface_.CancelBuildConfirmation(); interface_.InvalidateHitRegions(); CancelOrbit();
+  }
   void SuspendInput() { CancelUiGesture(); simulation_.StopMovement(); effects_.CancelDash(); playerAnimation_.CancelDash();
     effects_.CancelTrail(0); playerAnimation_.pose.attackSeconds=-1; playerPose_.attack=playerPose_.attackVelocity=0;
     simulation_.CloseQuestDialogue(); if (interface_.panel==ui::Panel::Quest) interface_.Close(ui::Panel::Quest); }
@@ -37,12 +40,15 @@ public:
   float CameraPitch() const { return cameraPitch_; }
   float CameraHeight() const { return cameraHeight_; }
   const CombatEffects& Effects() const { return effects_; }
+  std::size_t StaticSceneInstances() const { return worldView_.StaticInstances(); }
+  std::size_t StaticSceneBytes() const { return worldView_.StaticBytes(); }
   unsigned AudioGeneration() const { return audioGeneration_; }
   float MusicVolume() const { return interface_.musicVolume/100.f; }
   float EffectsVolume() const { return interface_.effectsVolume/100.f; }
   void SetAudioAvailable(bool value) { interface_.audioAvailable=value; }
 private:
   rpg::Simulation simulation_;
+  WorldView worldView_;
   unsigned audioGeneration_=0;
   float yaw_ = 0, pitch_ = .45f, distance_ = 10, time_ = 0;
   double atmosphereTime_=0;

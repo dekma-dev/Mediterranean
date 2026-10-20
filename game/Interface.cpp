@@ -32,6 +32,17 @@ std::string Seconds(float value) {
  else text<<int(std::ceil(value));
  return text.str();
 }
+std::string Number(float value) {
+ std::ostringstream text; text<<std::setprecision(4)<<value; return text.str();
+}
+std::string SpellEffect(const rpg::Simulation& s,int ability) {
+ if (ability==0) return Number(s.StrikeDamage())+" weapon damage";
+ if (ability==1) return Number(s.HeavyDamage())+" weapon damage"+
+   (s.HasTalent(rpg::Talent::Executioner)?" / "+Number(s.HeavyDamage()*1.25f)+" at half target HP":"");
+ if (ability==2) return "5 m acquisition / 1.5 m stopping distance";
+ return "Up to "+Number(s.MendHealingNow())+" healing"+
+   (s.HasTalent(rpg::Talent::Mercy)?" / "+Number(s.MendHealing()+20)+" at low HP":"");
+}
 struct Canvas {
  Renderer& r; Layout layout;
  explicit Canvas(Renderer& renderer):r(renderer),layout(float(r.Width()),float(r.Height())) {}
@@ -424,6 +435,9 @@ void AbilityArtwork(Canvas& c,Rect rect,int ability) {
  } else Icon(c,rect,Item::Potion);
 }
 void TalentIcon(Canvas& c,Rect rect,int index,float alpha=1) {
+ if (index==int(rpg::Talent::Pursuit)) {
+  AbilityArtwork(c,rect,2); return;
+ }
  if (index%3!=2) {
   Icon(c,rect,index%3==0?(index<3?Item::Starter:Item::Watchguard):Item::Shield,alpha);
   return;
@@ -891,45 +905,157 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Text(124,104,"Level "+std::to_string(s.Level())+"  /  Dawnwatch guard",18,ink);
    c.Frame({850,102,306,32},{.07f,.16f,.13f,1},s.TalentPoints()>0?gold:border);
    c.Center(850,109,306,std::to_string(s.TalentPoints())+" talent point"+(s.TalentPoints()==1?"":"s")+" available",15,gold);
-   c.Frame({284,149,392,51},{.09f,.18f,.16f,1},gold);
-   c.Center(284,157,392,"LEVEL 1  /  FOUNDATIONS",15,gold);
-   c.Center(284,178,392,"Strike  /  Heavy strike  /  Dash  /  Mend",12,ink);
-   c.Line(480,200,480,223,3,border); c.Line(248,223,712,223,3,border);
+   button({594,102,218,32},loadoutsPage?"Talents & spellbook":"Saved builds",Action::BuildPage);
+   if (loadoutsPage) {
+    const auto name=[](int mask) -> std::string {
+     if (mask<0) return "Empty slot";
+     if (!mask) return "Unspent talents";
+     for (const auto& preset : rpg::buildPresets) if (unsigned(mask)==preset.mask) return preset.name;
+     std::string result;
+     for (int i=0;i<int(rpg::Talent::Count);++i) if (rpg::HasTalent(unsigned(mask),rpg::Talent(i))) {
+      if (!result.empty()) result+=" + ";
+      result+=rpg::talents[i].name;
+     }
+     return result;
+    };
+    const char* slotNames[]={"LOADOUT I","LOADOUT II","LOADOUT III"};
+    for (int i=0;i<3;++i) {
+     const int mask=s.Loadout(i);
+     const Rect card{124,156+i*94.f,332,82};
+     c.Frame(card,selectedLoadout==i?Color{.10f,.19f,.17f,1}:dark,selectedLoadout==i?gold:border);
+     c.Text(card.x+14,card.y+10,std::string(slotNames[i])+(mask>=0 && unsigned(mask)==s.BuildMask()?" / ACTIVE":""),13,gold);
+     c.Wrap(card.x+14,card.y+33,207,name(mask),13,mask<0?muted:ink,2);
+     if (mask>=0) {
+      int shown=0;
+      for (int t=0;t<int(rpg::Talent::Count);++t) if (rpg::HasTalent(unsigned(mask),rpg::Talent(t)))
+       TalentIcon(c,{card.x+237+(shown++)*39.f,card.y+34,28,31},t);
+     }
+     regions_.push_back({card,{Action::SelectLoadout,i},true});
+    }
+    button({124,448,332,32},"Preview my active build",Action::SelectBuildPreset,-1);
+    c.Text(124,482,"SPECIALIZATION PRESETS / LEVEL 3",11,gold);
+    for (int i=0;i<int(rpg::buildPresets.size());++i)
+     button({124+(i%2)*172.f,502+(i/2)*34.f,160,29},rpg::buildPresets[i].name,Action::SelectBuildPreset,i);
+    c.Text(124,608,"Select a slot, then store the preview.",12,muted);
+    c.Frame({488,150,668,454},{.035f,.08f,.075f,1});
+    c.Text(512,166,"BUILD PREVIEW",12,gold);
+    c.Text(512,188,name(previewBuild),19,ink);
+    const unsigned mask=previewBuild<0?s.BuildMask():unsigned(previewBuild);
+    const int cost=rpg::TalentCount(mask),earned=s.Level()-1;
+    c.Text(512,220,cost>earned?"Requires "+std::to_string(cost)+" points / "+std::to_string(earned)+" earned":
+      std::to_string(cost)+" of "+std::to_string(earned)+" earned points / "+std::to_string(earned-cost)+" unspent",12,muted);
+    c.Text(796,249,"CURRENT",11,muted); c.Text(925,249,"PREVIEW",11,gold); c.Text(1060,249,"CHANGE",11,muted);
+    const auto live=s.PreviewBuild(s.BuildMask()),proposed=s.PreviewBuild(mask);
+    const char* labels[]={"Maximum health","Strike damage","Heavy damage","Damage reduction","Mend healing","Dash cooldown","Mend cooldown"};
+    const float current[]={live.health,live.strike,live.heavy,live.armor,live.mend,live.dashCooldown,live.mendCooldown};
+    const float next[]={proposed.health,proposed.strike,proposed.heavy,proposed.armor,proposed.mend,proposed.dashCooldown,proposed.mendCooldown};
+    for (int i=0;i<7;++i) {
+     const float y=273+i*24.f,delta=next[i]-current[i]; const std::string unit=i>=5?"s":"";
+     if (i%2==0) c.RectFill({505,y-3,632,24},{.075f,.125f,.11f,1});
+     c.Text(512,y,labels[i],13,ink); c.Text(810,y,Number(current[i])+unit,13,muted);
+     c.Text(940,y,Number(next[i])+unit,13,gold);
+     c.Text(1071,y,delta==0?"--":std::string(delta>0?"+":"")+Number(delta)+unit,13,
+       delta==0?muted:((i>=5?delta<0:delta>0)?Color{.57f,.83f,.45f,1}:Color{.94f,.55f,.40f,1}));
+    }
+    const std::string conditional=rpg::HasTalent(mask,rpg::Talent::Executioner)?
+      "Executioner: Heavy deals "+Number(proposed.heavy*1.25f)+" at or below half enemy health.":
+      rpg::HasTalent(mask,rpg::Talent::Mercy)?"Mercy: Mend restores up to "+Number(proposed.mend+20)+" at or below 35% health.":
+      "Base spell values shown with your current level and worn equipment.";
+    c.Wrap(512,449,620,conditional,13,ink,2);
+    const bool confirming=pendingBuild.action!=rpg::BuildAction::None;
+    if (confirming) {
+     const bool applying=pendingBuild.action==rpg::BuildAction::Apply;
+     const std::string status=s.LoadoutStatus(pendingBuild);
+     c.Text(512,487,applying?"Apply this build?":s.Loadout(pendingBuild.slot)>=0?"Replace the saved build in this slot?":"Store this build in the selected slot?",16,gold);
+     c.Wrap(512,511,620,applying?"Health cannot increase; excess health is clamped. Active cooldowns keep counting down.":
+       "Only this saved slot changes. Your active talents stay as they are. Press F5 afterward to save to disk.",12,muted,2);
+     button({512,552,300,32},applying?"Confirm apply":"Confirm store",Action::ConfirmBuild,0,
+       status==(applying?"Ready to apply":"Ready to store"));
+     button({832,552,300,32},"Cancel",Action::CancelBuild);
+     if (status!=(applying?"Ready to apply":"Ready to store")) c.Text(512,586,status,11,gold);
+    } else {
+     const std::string apply=s.LoadoutStatus({rpg::BuildAction::Apply,previewBuild,selectedLoadout});
+     const std::string store=s.LoadoutStatus({rpg::BuildAction::Store,previewBuild,selectedLoadout});
+     c.Wrap(512,500,300,apply,12,muted,2); c.Wrap(832,500,300,store,12,muted,2);
+     button({512,552,300,32},"Apply preview",Action::RequestBuildApply,0,apply=="Ready to apply");
+     button({832,552,300,32},"Store in loadout "+std::to_string(selectedLoadout+1),Action::RequestBuildStore,0,store=="Ready to store");
+    }
+    c.Wrap(488,612,668,s.Message(),11,muted,2);
+    return;
+   }
+   c.Text(148,136,"SPELLBOOK / select an ability to inspect its current power and upgrades",11,muted);
+   for(int i=0;i<4;++i) {
+    const Rect spellSlot{148+i*170.f,157,154,52};
+    c.Frame(spellSlot,selectedSpell==i?Color{.12f,.23f,.20f,1}:dark,selectedSpell==i?gold:border);
+    AbilityArtwork(c,{spellSlot.x+6,spellSlot.y+6,39,39},i);
+    c.Text(spellSlot.x+52,spellSlot.y+10,rpg::spells[i].name,14,ink);
+    c.Text(spellSlot.x+52,spellSlot.y+30,std::string("Key ")+rpg::spells[i].key+" / "+Number(s.AbilityCooldown(i))+"s",11,muted);
+    regions_.push_back({spellSlot,{Action::SelectSpell,i},true});
+   }
    const char* branches[]={"ARMS","GUARD","SPIRIT"};
    const Color branchColors[]={{.83f,.54f,.31f,1},{.40f,.64f,.83f,1},{.45f,.77f,.57f,1}};
    for (int branch=0;branch<3;++branch) {
     const float x=248+branch*232.f;
-    c.Line(x,223,x,274,3,border);
-    c.RectFill({x-76,235,152,25},dark); c.Center(x-76,239,152,branches[branch],16,branchColors[branch]);
+    c.RectFill({x-76,222,152,25},dark); c.Center(x-76,226,152,branches[branch],16,branchColors[branch]);
     const bool connected=s.HasTalent(rpg::Talent(branch));
-    c.Line(x,377,x,445,4,{.025f,.045f,.04f,1});
-    c.Line(x,377,x,445,2,connected?branchColors[branch]:border);
-    c.Oval(x,410,16,16,dark); c.Ring(x,410,16,connected?branchColors[branch]:border);
-    c.Center(x-15,401,30,"3",14,connected?ink:muted);
+    const Color wire=connected?branchColors[branch]:border;
+    // Both level-three choices connect to the foundation, not to each other.
+    c.Line(x,346,x,353,2,wire); c.Line(x,353,x-111,353,2,wire);
+    c.Line(x-111,353,x-111,512,2,wire);
+    c.Line(x-111,406,x-105,406,2,wire); c.Line(x-111,512,x-105,512,2,wire);
+    c.Center(x-18,452,36,"OR",10,muted);
    }
    for (int i=0;i<int(rpg::Talent::Count);++i) {
     const auto talent=rpg::Talent(i); const auto& info=rpg::talents[i];
     const bool learned=s.HasTalent(talent),available=std::string(s.TalentStatus(talent))=="Ready to learn";
-    const Rect rect{143+(i%3)*232.f,274+(i/3)*171.f,210,103};
-    const bool hovered=rect.Contains(mouseX_,mouseY_),selectedNode=i==selectedTalent;
+    const Rect rect{143+(i%3)*232.f,254+(i/3)*106.f,210,92};
+    const bool hovered=rect.Contains(mouseX_,mouseY_),selectedNode=selectedSpell<0 && !confirmTalentReset && i==selectedTalent;
     const Color accent=learned?Color{.57f,.83f,.45f,1}:available?gold:border;
     c.Frame(rect,selectedNode?Color{.12f,.23f,.20f,1}:Color{.035f,.085f,.075f,1},selectedNode || hovered?gold:accent);
     c.RectFill({rect.x+4,rect.y+4,3,rect.h-8},accent);
-    TalentIcon(c,{rect.x+13,rect.y+10,34,38},i,learned || available?1.f:.45f);
-    c.Wrap(rect.x+57,rect.y+11,143,info.name,16,learned || available?ink:muted,2);
-    c.Wrap(rect.x+12,rect.y+53,186,info.effect,12,muted,2);
+    TalentIcon(c,{rect.x+11,rect.y+8,30,33},i,learned || available?1.f:.45f);
+    c.Wrap(rect.x+50,rect.y+10,150,info.name,15,learned || available?ink:muted,2);
+    c.Wrap(rect.x+12,rect.y+46,186,info.effect,12,muted,2);
     const char* state=learned?"LEARNED":available?"AVAILABLE / 1 POINT":
       s.Level()<info.level?"LOCKED":info.prerequisite!=rpg::Talent::Count && !s.HasTalent(info.prerequisite)?"PREREQUISITE":"UNAVAILABLE";
-    c.Text(rect.x+12,rect.y+84,"LEVEL "+std::to_string(info.level)+" / "+state,10,accent);
+    c.Text(rect.x+12,rect.y+76,"LEVEL "+std::to_string(info.level)+" / "+state,10,accent);
     regions_.push_back({rect,{Action::SelectTalent,i},true});
    }
    c.Frame({850,150,306,454},{.035f,.08f,.075f,1});
+   if (confirmTalentReset) {
+    c.Wrap(874,173,258,"Reset your talents?",22,gold,2);
+    c.Wrap(874,245,258,"Refund all spent points for free. Your spells return to their foundation power.",15,ink,4);
+    c.Wrap(874,344,258,"Health will not be restored. Losing Vitality lowers your maximum and clamps excess health. Active cooldowns keep counting down.",14,muted,6);
+    const std::string status=s.TalentResetStatus();
+    c.Wrap(874,478,258,status,13,gold,2);
+    button({874,524,258,32},"Confirm reset",Action::ResetTalents,0,status=="Ready to reset");
+    button({874,563,258,28},"Keep current build",Action::CancelTalentReset);
+   } else if (rpg::ValidSpell(selectedSpell)) {
+    const auto& spell=rpg::spells[selectedSpell];
+    AbilityArtwork(c,{874,166,48,48},selectedSpell);
+    c.Text(937,175,"FOUNDATION SPELL",13,gold);
+    c.Text(937,198,std::string("Key ")+spell.key+" / learned at level 1",11,muted);
+    c.Text(874,231,spell.name,22,ink);
+    c.Wrap(874,264,258,SpellEffect(s,selectedSpell),14,gold,2);
+    c.Wrap(874,311,258,spell.description,13,muted,5);
+    c.Text(874,413,"Cooldown "+Number(s.AbilityCooldown(selectedSpell))+"s / "+
+      (spell.range>0?Number(spell.range)+" m":"self"),13,ink);
+    c.Text(874,435,selectedSpell<2?"Contact "+Number(spell.contact)+"s / recovery "+Number(spell.recovery)+"s":
+      selectedSpell==2?"Up to 3.5 m travel / 0.34s burst":"Instant / no mana cost",12,muted);
+    c.Text(874,457,spell.targeting,12,muted);
+    c.Text(874,483,"RELATED TALENTS",11,gold);
+    for(int i=0;i<3;++i) if (rpg::ValidTalent(spell.upgrades[i])) {
+     const auto talent=spell.upgrades[i];
+     button({874,503+i*30.f,258,26},std::string(s.HasTalent(talent)?"* ":"")+rpg::talents[int(talent)].name,
+       Action::SelectTalent,int(talent));
+    }
+   } else {
    const auto talent=rpg::Talent(selectedTalent); const auto& info=rpg::talents[selectedTalent];
    const bool learned=s.HasTalent(talent);
    const std::string status=s.TalentStatus(talent);
    TalentIcon(c,{874,166,48,52},selectedTalent);
    c.Text(937,175,branches[selectedTalent%3],14,branchColors[selectedTalent%3]);
-   c.Text(937,199,"Rank "+std::to_string(selectedTalent/3+1),12,muted);
+   c.Text(937,199,selectedTalent<3?"Foundation talent":selectedTalent<6?"Specialization / option A":"Specialization / option B",11,muted);
    c.Wrap(874,232,258,info.name,20,gold,2);
    c.Wrap(874,288,258,info.effect,15,ink,2);
    c.Wrap(874,341,258,info.description,14,muted,4);
@@ -939,8 +1065,11 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
      std::string("Prerequisite: ")+rpg::talents[int(info.prerequisite)].name,12,muted,2);
    c.Wrap(874,493,258,status,13,learned?Color{.57f,.83f,.45f,1}:gold,2);
    button({874,546,258,37},learned?"Learned":"Learn / 1 point",Action::LearnTalent,selectedTalent,status=="Ready to learn");
-   c.Text(148,566,"One point at level 2 and level 3. Specialize or mix branches.",13,ink);
-   c.Frame({148,589,664,8}); c.RectFill({151,592,658*xp,2},gold);
+   }
+   c.Text(148,568,"One point at levels 2 and 3: specialize, or mix two foundations.",12,ink);
+   c.Frame({148,589,480,8}); c.RectFill({151,592,474*xp,2},gold);
+   button({666,590,146,28},"Reset talents",Action::ConfirmTalentReset,0,
+     std::string(s.TalentResetStatus())=="Ready to reset" && !confirmTalentReset);
    c.Text(148,607,s.Level()==3?"Level cap reached  /  2 points earned":
      std::to_string(s.Experience())+" XP  /  "+std::to_string(s.NextLevelExperience())+" for next level",12,muted);
    c.Text(124,628,"N or X closes. Choices are saved with F5. The world remains active.",12,muted);
@@ -1005,15 +1134,13 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Text(x+14,390,std::string(status)=="Available"?"Click to reclaim one into your bag":status,12,muted);
   } else if (panel!=Panel::Merchant && (it->event.action==Action::Ability || it->event.action==Action::UseItem) && it->rect.y>650) {
    const bool potion=it->event.action==Action::UseItem; const int ability=it->event.value;
-   static const char* names[]={"Strike","Heavy strike","Dash","Mend"};
-   const std::string detail=potion?"Restores up to 40 health.":ability==0?std::to_string(int(s.StrikeDamage()))+" damage at weapon contact (0.18s).":
-    ability==1?std::to_string(int(s.HeavyDamage()))+" damage at 0.30s contact. Interrupts.":ability==2?"Rush to your selected enemy within 5 m. Stops at melee distance or obstacles.":"Restores up to "+std::to_string(int(s.MendHealing()))+" health.";
+   const std::string detail=potion?"Restores up to 40 health.":SpellEffect(s,ability);
    const std::string status=potion?(s.Health()<=0?"DEFEATED":s.Potions()==0?"NO POTIONS":s.Health()>=s.MaxHealth()?"FULL HEALTH":s.PotionCooldown()>0?"COOLDOWN":"READY"):s.AbilityStatus(ability);
    const float x=std::clamp(it->rect.x-30,460.f,680.f);
-   c.Window({x,470,300,149}); c.Text(x+14,480,potion?"Healing draught":names[ability],19,gold);
+   c.Window({x,470,300,149}); c.Text(x+14,480,potion?"Healing draught":rpg::spells[ability].name,19,gold);
    c.Wrap(x+14,512,272,detail,14,ink,2);
    const float remaining=potion?s.PotionCooldown():s.Cooldown(ability);
-   c.Text(x+14,554,"Cooldown: "+Seconds(potion?3.f:s.AbilityCooldown(ability))+"s"+
+   c.Text(x+14,554,"Cooldown: "+Number(potion?3.f:s.AbilityCooldown(ability))+"s"+
      (potion?"  /  Stock: "+std::to_string(s.Potions()):ability<2?"  /  Range: 2.5 m":ability==2?"  /  Range: 5 m":""),12,muted);
    c.Line(x+14,576,x+286,576,1,border);
    c.Text(x+14,589,status+(remaining>0?"  "+Seconds(remaining)+"s":""),12,status=="READY"?Color{.57f,.84f,.40f,1}:Color{1,.64f,.40f,1});

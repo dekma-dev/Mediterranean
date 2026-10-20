@@ -1,5 +1,7 @@
 #include "engine/Renderer.h"
 #include "engine/Shadow.h"
+#include "game/WorldView.h"
+#include "game/WorldMap.h"
 #include "platform/Win32Window.h"
 #include <wincodec.h>
 #include <algorithm>
@@ -343,6 +345,69 @@ int main() {
   const float portraitLeak=MaximumDifference(emptyPortrait,hiddenPortrait);
   std::cout<<"Culled portrait to world pixel difference: "<<portraitLeak<<'\n';
   Check(portraitLeak==0,"Culled portrait geometry must not return to the world or its shadows.");
+  {
+    // Cache only the newly emitted geometry; preceding/following dynamic draws
+    // must retain their positions, shadows and per-frame colors.
+    visual::StaticScene cached;
+    unsigned builds=0;
+    const auto scene=[&](bool retained,float offset,const wchar_t* path) {
+      floor();
+      renderer.DrawMesh(M::Box,{-1+offset,.5f,0},{.4f,1,.4f},{.8f,.1f,.1f,1},S::Plain);
+      const auto emit=[&] {
+        ++builds;
+        renderer.DrawMesh(M::Sphere,{0,.5f,0},{.7f,1,.7f},white,S::Metal,.4f,.2f);
+        renderer.DrawMesh(M::Box,{0,.2f,1},{1,.4f,.5f},white,S::Stone);
+      };
+      if (retained) renderer.DrawStaticScene(cached,emit); else emit();
+      renderer.DrawMesh(M::Box,{1+offset,.5f,0},{.4f,1,.4f},{.1f,.8f,.1f,1},S::Plain);
+      return Capture(renderer,path);
+    };
+    for (float offset : {0.f,.4f,-.3f}) {
+      const auto reference=scene(false,offset,L"static-reference.png");
+      const auto result=scene(true,offset,L"static-reused.png");
+      Check(MaximumDifference(reference,result)==0,"Cached geometry must match fresh geometry with adjacent dynamic draws.");
+      Check(cached.Instances()==2,"A cache must not retain geometry queued before its emitter.");
+    }
+    Check(builds==4,"Three reference frames plus one cached build must call the emitter exactly four times.");
+    const auto bytes=cached.Bytes();
+    cached.Invalidate();
+    Check(cached.Instances()==0,"Invalidation must remove the old scene.");
+    scene(true,0,L"static-rebuilt.png");
+    Check(builds==5 && cached.Bytes()==bytes,"Rebuilding unchanged geometry must reuse bounded storage.");
+  }
+  {
+    // Compare a retained village against a fresh build at each new time/view.
+    // This exercises both shadow frusta, animated crystals/NPCs, resize,
+    // portrait isolation and both directions of the training-post replacement.
+    rpg::WorldMap map;
+    WorldView retained;
+    std::size_t normalInstances=0,normalBytes=0;
+    for (int view=0;view<6;++view) {
+      const bool sparring=view==2 || view==3;
+      if (view==4) Require(renderer.Resize(800,600),"Cached-scene resize failed.");
+      const XMFLOAT3 eye=view%3==0?XMFLOAT3{0,5,-16}:view%3==1?XMFLOAT3{5,6,18}:XMFLOAT3{16,4,-6};
+      const XMFLOAT3 target=view%3==0?XMFLOAT3{0,1,-8}:view%3==1?XMFLOAT3{0,2,9}:XMFLOAT3{12,1,-2};
+      const auto render=[&](WorldView& world,const wchar_t* path) {
+        renderer.BeginFrame(); renderer.SetCamera(eye,target); renderer.SetAtmosphereTime(view*3.0);
+        world.Draw(renderer,map,view*.73f,sparring);
+        Require(renderer.BeginPortrait(.7f,.1f,.25f,.5f),"Cached-world portrait failed.");
+        renderer.DrawMesh(M::Sphere,{0,1,0},{.7f,1,.7f},white,S::Metal);
+        Require(renderer.EndPortrait(),"Cached-world portrait end failed.");
+        return Capture(renderer,path);
+      };
+      WorldView fresh;
+      const auto reference=render(fresh,L"static-village-reference.png");
+      const auto result=render(retained,L"static-village-reused.png");
+      Check(MaximumDifference(reference,result)==0,"Retained village must match a fresh build after time, camera and sparring changes.");
+      if (view==0) { normalInstances=retained.StaticInstances(); normalBytes=retained.StaticBytes(); }
+      Check(normalInstances>1000 && retained.StaticInstances()==normalInstances-(sparring?4:0),
+        "Sparring must replace exactly the four static training-dummy pieces.");
+      Check(retained.StaticBytes()==normalBytes,"Sparring and camera changes must not grow cache storage.");
+    }
+    retained.Reset();
+    Check(retained.StaticInstances()==0,"A new game must invalidate its previous static world.");
+    renderer.SetAtmosphereTime(0);
+  }
   // 1,400 scene objects fitted the previous two-pass upload budget. Adding a
   // detail shadow pass must not turn repeated draws into extra scene objects.
   floor();

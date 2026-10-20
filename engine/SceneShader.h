@@ -385,8 +385,9 @@ float4 PSEffect(EffectOut i) : SV_TARGET {
 }
 struct SkyOut { float4 p : SV_POSITION; float2 uv : TEXCOORD0; };
 SkyOut VSSky(uint id : SV_VertexID) {
- SkyOut o; o.uv=float2((id<<1)&2,id&2); o.p=float4(o.uv*float2(2,-2)+float2(-1,1),.9999,1); return o;
+ SkyOut o; o.uv=float2((id<<1)&2,id&2); o.p=float4(o.uv*float2(2,-2)+float2(-1,1),1,1); return o;
 }
+[earlydepthstencil]
 float4 PSSky(SkyOut i) : SV_TARGET {
  // The sky pass uses the existing world matrix slot for inverse view-projection.
  // Direction changes with orbit/pitch/aspect, but ignores camera translation.

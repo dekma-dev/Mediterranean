@@ -34,6 +34,7 @@ float EnemyAttackSeconds(const rpg::Enemy& enemy,bool active) {
 
 void Game::Initialize() {
   simulation_=rpg::Simulation{}; time_=0; atmosphereTime_=0;
+  worldView_.Reset();
   interface_.SetOnly(ui::Panel::None); orbiting_=false;
   yaw_=0; pitch_=.45f; distance_=10;
   ResetMotion();
@@ -69,8 +70,9 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   const bool closingMerchant=interface_.panel==ui::Panel::Merchant && input.Pressed('E');
   if (closingMerchant) interface_.Close(ui::Panel::Merchant);
   ui::Event event;
+  if (!input.Focused()) CancelUiGesture();
   const bool uiVisible=hudVisible_ || interface_.HasPanels() || simulation_.Health()<=0;
-  if (uiVisible)
+  if (uiVisible && input.Focused())
     event=interface_.Pointer(input.ClientX(),input.ClientY(),input.Width(),input.Height(),
       input.Pressed(VK_LBUTTON),input.Pressed(VK_RBUTTON),input.Held(VK_LBUTTON),input.Released(VK_LBUTTON));
   rpg::Command command;
@@ -84,8 +86,46 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   case ui::Action::Map: interface_.Toggle(ui::Panel::Map); break;
   case ui::Action::Journal: interface_.Toggle(ui::Panel::Journal); break;
   case ui::Action::Build: interface_.Toggle(ui::Panel::Build); break;
-  case ui::Action::SelectTalent: interface_.selectedTalent=event.value; break;
+  case ui::Action::SelectTalent:
+    interface_.selectedTalent=event.value; interface_.selectedSpell=-1;
+    interface_.confirmTalentReset=false; interface_.InvalidateHitRegions(); break;
   case ui::Action::LearnTalent: command.learnTalent=event.value; break;
+  case ui::Action::SelectSpell:
+    interface_.selectedSpell=event.value; interface_.confirmTalentReset=false; interface_.InvalidateHitRegions(); break;
+  case ui::Action::ConfirmTalentReset:
+    interface_.confirmTalentReset=true; interface_.InvalidateHitRegions(); break;
+  case ui::Action::CancelTalentReset:
+    interface_.confirmTalentReset=false; interface_.InvalidateHitRegions(); break;
+  case ui::Action::ResetTalents:
+    command.resetTalents=true; interface_.confirmTalentReset=false; interface_.InvalidateHitRegions(); break;
+  case ui::Action::BuildPage:
+    interface_.CancelBuildConfirmation(); interface_.loadoutsPage=!interface_.loadoutsPage;
+    interface_.previewBuild=int(simulation_.BuildMask()); interface_.selectedLoadout=0;
+    interface_.InvalidateHitRegions(); break;
+  case ui::Action::SelectLoadout:
+    if (event.value>=0 && event.value<3) {
+      interface_.CancelBuildConfirmation(); interface_.selectedLoadout=event.value;
+      if (simulation_.Loadout(event.value)>=0) interface_.previewBuild=simulation_.Loadout(event.value);
+      interface_.InvalidateHitRegions();
+    }
+    break;
+  case ui::Action::SelectBuildPreset:
+    if (event.value>=-1 && event.value<int(rpg::buildPresets.size())) {
+      interface_.CancelBuildConfirmation();
+      interface_.previewBuild=event.value<0?int(simulation_.BuildMask()):int(rpg::buildPresets[event.value].mask);
+      interface_.InvalidateHitRegions();
+    }
+    break;
+  case ui::Action::RequestBuildApply:
+  case ui::Action::RequestBuildStore:
+    interface_.pendingBuild={event.action==ui::Action::RequestBuildApply?rpg::BuildAction::Apply:rpg::BuildAction::Store,
+      interface_.previewBuild,interface_.selectedLoadout};
+    interface_.InvalidateHitRegions(); break;
+  case ui::Action::ConfirmBuild:
+    if (interface_.loadoutsPage && interface_.pendingBuild.action!=rpg::BuildAction::None)
+      command.build=interface_.pendingBuild;
+    interface_.CancelBuildConfirmation(); break;
+  case ui::Action::CancelBuild: interface_.CancelBuildConfirmation(); break;
   case ui::Action::QuestConfirm: command.questAction=static_cast<rpg::QuestAction>(event.value); break;
   case ui::Action::QuestPage:
     interface_.questPage=std::max(0,interface_.questPage+event.value); interface_.InvalidateHitRegions(); break;
@@ -306,7 +346,7 @@ void Game::Render(Renderer& renderer,bool showInterface) {
   const float cameraDistance=cameraBoom_.distance;
   renderer.SetCamera({player.x+direction.x*cameraDistance,cameraHeight_+std::sin(cameraPitch_)*cameraDistance,
     player.z+direction.z*cameraDistance},{player.x,cameraHeight_,player.z});
-  DrawWorld(renderer,simulation_.Map(),time_,simulation_.Sparring());
+  worldView_.Draw(renderer,simulation_.Map(),time_,simulation_.Sparring());
   using M=visual::Mesh;
   using S=visual::Material;
   DrawCharacter(renderer,player,y,playerPose_.facing,simulation_.HurtFlash()>0?XMFLOAT4{1,.48f,.35f,1}:

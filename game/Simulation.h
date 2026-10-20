@@ -6,6 +6,7 @@
 #include "game/Inventory.h"
 #include "game/Trade.h"
 #include "game/Talents.h"
+#include "game/Spells.h"
 #include "game/Quests.h"
 #include "game/Motion.h"
 #include "game/AttackMotion.h"
@@ -40,6 +41,8 @@ struct Command {
   bool sprint = false, jump = false, nextTarget = false, interact = false, restart = false;
   int ability = -1;
   int learnTalent = -1;
+  bool resetTalents = false;
+  BuildCommand build;
   QuestAction questAction=QuestAction::None;
   bool usePotion = false, equipWeapon = false;
   int potionSource=-1;
@@ -109,10 +112,22 @@ public:
   bool HasTalent(Talent talent) const { return rpg::HasTalent(build_,talent); }
   int TalentPoints() const;
   const char* TalentStatus(Talent talent) const;
+  const char* BuildChangeStatus() const;
+  const char* TalentResetStatus() const;
+  unsigned BuildMask() const { return build_; }
+  int Loadout(int slot) const { return slot>=0 && slot<int(loadouts_.size())?loadouts_[slot]:-1; }
+  BuildStats PreviewBuild(unsigned mask) const;
+  const char* LoadoutStatus(const BuildCommand& command) const;
   float StrikeBonus() const { return 3.f*(Level()-1)+TalentBonus(build_,&TalentInfo::strike); }
   float HeavyBonus() const { return 5.f*(Level()-1)+TalentBonus(build_,&TalentInfo::heavy); }
   float MendHealing() const { return 35.f+TalentBonus(build_,&TalentInfo::mend); }
-  float AbilityCooldown(int index) const { return abilityCooldowns[index]-(index==3?TalentBonus(build_,&TalentInfo::mendCooldown):0); }
+  float MendHealingNow() const { return MendHealing()+(HasTalent(Talent::Mercy) && health_<=MaxHealth()*.35f?20.f:0.f); }
+  float HeavyMultiplier(float health,float maximum) const {
+    return HasTalent(Talent::Executioner) && maximum>0 && health>0 && health<=maximum*.5f?1.25f:1.f;
+  }
+  float HeavyDamageAgainst(float health,float maximum) const { return HeavyDamage()*HeavyMultiplier(health,maximum); }
+  float AbilityCooldown(int index) const { return ValidSpell(index)?abilityCooldowns[index]-
+    (index==3?TalentBonus(build_,&TalentInfo::mendCooldown):index==2?TalentBonus(build_,&TalentInfo::dashCooldown):0):0; }
   int DefeatedCount() const;
   bool HasWardArmor() const { return anchorQuest_==AnchorQuest::Complete; }
   bool WardArmorEquipped() const { return inventory_.Worn(GearSlot::Chest)==Item::Ward; }
@@ -160,13 +175,13 @@ public:
   std::string Objective() const;
   std::string InteractionPrompt() const;
   Vec2 ObjectivePosition() const;
-  float Cooldown(int index) const { return cooldowns_[index]; }
+  float Cooldown(int index) const { return ValidSpell(index)?cooldowns_[index]:0; }
   const std::string& Message() const { return message_; }
   std::string Save() const;
   bool Load(const std::string& data);
   void Notify(const std::string& message) { message_ = message; }
   static constexpr Vec2 questGiver = WorldMap::questGiver;
-  static constexpr std::array<float,4> abilityCooldowns{.9f,4.f,5.f,10.f};
+  static constexpr std::array<float,4> abilityCooldowns{spells[0].cooldown,spells[1].cooldown,spells[2].cooldown,spells[3].cooldown};
   static constexpr float channelDuration = 3.f;
 private:
   void Move(Vec2& position, Vec2 displacement, float radius);
@@ -179,16 +194,18 @@ private:
   void UpdateCombat(float dt,bool advanceAttack);
   void CancelAttack() { attackAbility_=-1; attackAge_=attackDamage_=attackFlash_=0; attackTarget_=0; }
   void LearnTalent(int index);
+  void ResetTalents();
+  void ChangeBuild(const BuildCommand& command);
   void Interact();
   bool CanTalkToKeeper() const;
   void ConfirmQuest(QuestAction action);
   bool HasLineOfSight(Vec2 from, Vec2 to) const;
-  void UpdateEnemy(Enemy& enemy, float dt);
+  void UpdateEnemy(Enemy& enemy, float dt,float frameTail);
   void SeparateEnemies(float dt);
   void Emit(FeedbackKind kind,Vec2 position,int amount = 0);
   void RestoreForLevel(int previousLevel);
   void Respawn();
-  void DamagePlayer(float damage,float incomingFacing);
+  void DamagePlayer(float damage,float incomingFacing,float visualElapsed);
   void EmitVisual(CombatVisualKind kind,Vec2 position,float height,float facing,EntityId actor=0,float elapsed=0);
   void StartSparring();
   void EndSparring(const char* result);
@@ -216,6 +233,7 @@ private:
   std::array<float,4> cooldowns_{};
   int target_ = -1, gold_ = 0;
   unsigned build_=0;
+  std::array<int,3> loadouts_{{-1,-1,-1}};
   Inventory inventory_;
   std::array<int,shopOffers.size()> purchases_{};
   std::array<int,int(Item::Count)> buyback_{};

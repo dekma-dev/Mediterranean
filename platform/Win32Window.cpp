@@ -26,9 +26,12 @@ bool Win32Window::SetMouseLook(bool enabled) {
 void Win32Window::EndMouseLook(bool cancelGesture) {
   rightPress_=false;
   mouseMotion_.Reset();
+  // UI gestures also need cancellation when no camera capture is active.
+  // Keep the notification latched if focus leaves and returns in one pump.
+  inputCancelled_|=cancelGesture;
+  if (cancelGesture) wheel_=0;
   if (!mouseLook_) return;
   mouseLook_=false; // ReleaseCapture sends WM_CAPTURECHANGED synchronously.
-  mouseLookCancelled_|=cancelGesture;
   ClipCursor(nullptr);
   if (GetCapture()==hwnd_) ReleaseCapture();
   const RAWINPUTDEVICE mouse{0x01,0x02,RIDEV_REMOVE,nullptr};
@@ -78,7 +81,9 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
     if (window && !wparam) window->EndMouseLook(true);
     break;
   case WM_CAPTURECHANGED:
-    if (window && reinterpret_cast<HWND>(lparam)!=hwnd) window->EndMouseLook(true);
+    // Our normal ReleaseCapture must not synthesize an interruption after
+    // EndMouseLook has already cleared mouseLook_.
+    if (window && window->mouseLook_ && reinterpret_cast<HWND>(lparam)!=hwnd) window->EndMouseLook(true);
     break;
   case WM_KILLFOCUS:
   case WM_CANCELMODE:

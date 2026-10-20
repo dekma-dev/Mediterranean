@@ -4,7 +4,7 @@
 class Renderer;
 namespace ui {
 enum class Panel { None,Menu,Character,Inventory,Map,Journal,Merchant,Build,Quest };
-enum class Action { None,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview,MusicVolume,EffectsVolume,Build,SelectTalent,LearnTalent,QuestConfirm,QuestPage };
+enum class Action { None,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview,MusicVolume,EffectsVolume,Build,SelectTalent,LearnTalent,QuestConfirm,QuestPage,SelectSpell,ConfirmTalentReset,ResetTalents,CancelTalentReset,BuildPage,SelectLoadout,SelectBuildPreset,RequestBuildApply,RequestBuildStore,ConfirmBuild,CancelBuild };
 using Item=rpg::Item;
 struct Rect { float x,y,w,h; bool Contains(float px,float py) const { return px>=x && py>=y && px<x+w && py<y+h; } };
 struct Layout {
@@ -25,14 +25,23 @@ ItemSummary SummarizeItem(const rpg::Simulation& simulation,Item item);
 void ApplyItem(rpg::Command& command,const rpg::Simulation& simulation,Item item,int bagSlot=-1);
 class Interface {
 public:
-  void Escape() { CancelDrag(); InvalidateHitRegions(); panel=panel==Panel::Menu?Panel::None:Panel::Menu; }
+  void Escape() { CancelDrag(); InvalidateHitRegions(); CancelBuildConfirmation(); panel=panel==Panel::Menu?Panel::None:Panel::Menu; }
   void Toggle(Panel next);
   void Show(Panel next);
   void SetOnly(Panel next);
   void Close(Panel next);
   bool IsOpen(Panel next) const;
   bool HasPanels() const { return panel!=Panel::None || characterOpen || inventoryOpen; }
-  unsigned StateKey() const { return unsigned(panel)*4+unsigned(characterOpen)*2+unsigned(inventoryOpen); }
+  unsigned StateKey() const {
+    const unsigned view=(unsigned(panel)*4+unsigned(characterOpen)*2+unsigned(inventoryOpen))*16+
+      unsigned(selectedSpell+1)*2+unsigned(confirmTalentReset);
+    return (((view*2+unsigned(loadoutsPage))*3+unsigned(pendingBuild.action))*513+
+      unsigned(previewBuild+1))*4+unsigned(selectedLoadout+1);
+  }
+  void CancelBuildConfirmation() {
+    if (confirmTalentReset || pendingBuild.action!=rpg::BuildAction::None) InvalidateHitRegions();
+    confirmTalentReset=false; pendingBuild={};
+  }
   bool PointerOverWindow() const;
   bool PointerOverUi() const;
   Event Pointer(float x,float y,float width,float height,bool clicked,bool rightClicked,bool held=false,bool released=false);
@@ -45,6 +54,11 @@ public:
   Panel panel=Panel::None;
   bool characterOpen=false,inventoryOpen=false;
   int selectedTalent=0;
+  int selectedSpell=-1;
+  bool confirmTalentReset=false;
+  bool loadoutsPage=false;
+  int previewBuild=-1,selectedLoadout=0;
+  rpg::BuildCommand pendingBuild;
   int questPage=0;
   Item selected=Item::Starter;
   int selectedBag=-1;

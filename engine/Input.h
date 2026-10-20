@@ -39,6 +39,14 @@ public:
     clientX_=float(frame.client.x); clientY_=float(frame.client.y);
     width_=float(frame.width); height_=float(frame.height);
   }
+  // An OS cancellation can occur and finish between samples. Resynchronize
+  // held buttons/keys on the next sample without generating presses/releases
+  // from another window or from a native move/menu loop.
+  void CancelGestures() {
+    wasFocused_=dragging_=wasRelative_=false;
+    held_.fill(false); pressed_.fill(false); released_.fill(false);
+    dx_=dy_=0;
+  }
   bool Held(int key) const { return held_[key]; }
   bool Focused() const { return wasFocused_; }
   bool Pressed(int key) const { return pressed_[key]; }

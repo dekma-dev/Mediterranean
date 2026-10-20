@@ -215,16 +215,21 @@ void Renderer::BeginFrame() {
 }
 void Renderer::DrawSky() {
  // SetCamera can arrive after BeginFrame (including capture camera overrides).
- // Draw once at the first flush, before world geometry or a portrait changes it.
+ // Opaque geometry fills depth first, rejecting hidden sky pixels before the
+ // expensive cloud shader. Finish before effects/HUD or a portrait changes it.
  if (!skyPending_) return;
  skyPending_=false;
+ context_->OMSetRenderTargets(1,target_.GetAddressOf(),depth_.Get());
+ D3D11_VIEWPORT viewport{0,0,float(width_),float(height_),0,1};
+ context_->RSSetViewports(1,&viewport); context_->RSSetState(rasterizer_.Get());
+ context_->OMSetBlendState(nullptr,nullptr,0xffffffff);
  Constants data{}; data.atmosphere.x=atmospherePhase_;
  XMStoreFloat4x4(&data.world,XMMatrixTranspose(XMMatrixInverse(nullptr,XMLoadFloat4x4(&viewProjection_))));
  data.eyeAndHud={eye_.x,eye_.y,eye_.z,0};
  context_->UpdateSubresource(constants_.Get(),0,nullptr,&data,0,0);
  context_->IASetInputLayout(nullptr); context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
  context_->VSSetShader(skyShader_.Get(),nullptr,0); context_->PSSetShader(skyPixel_.Get(),nullptr,0);
- context_->OMSetDepthStencilState(depthOff_.Get(),0);
+ context_->OMSetDepthStencilState(effectDepth_.Get(),0);
  context_->Draw(3,0); ++drawCalls_; ++triangles_;
 }
 void Renderer::SetAtmosphereTime(double seconds) {
@@ -308,9 +313,25 @@ void Renderer::DrawMeshBetween(visual::Mesh mesh,const XMFLOAT3& from,const XMFL
  Queue(mesh,XMMatrixScaling(width,length,depth)*basis*
   XMMatrixTranslation((from.x+to.x)*.5f,(from.y+to.y)*.5f,(from.z+to.z)*.5f),color,material);
 }
+void Renderer::DrawStaticScene(visual::StaticScene& scene,const std::function<void()>& emit) {
+ if (!scene.ready_) {
+  std::array<std::size_t,meshCount> starts{};
+  for (unsigned mesh=0;mesh<meshCount;++mesh) starts[mesh]=world_[mesh].size();
+  emit();
+  for (unsigned mesh=0;mesh<meshCount;++mesh)
+   scene.batches_[mesh].assign(world_[mesh].begin()+starts[mesh],world_[mesh].end());
+  scene.ready_=true;
+  return; // The initial draws are already queued, exactly once.
+ }
+ for (unsigned mesh=0;mesh<meshCount;++mesh) {
+  const auto& batch=scene.batches_[mesh];
+  world_[mesh].insert(world_[mesh].end(),batch.begin(),batch.end());
+ }
+}
 bool Renderer::FlushWorld() {
- DrawSky();
- if (std::all_of(world_.begin(),world_.end(),[](const auto& batch) { return batch.empty(); })) return true;
+ if (std::all_of(world_.begin(),world_.end(),[](const auto& batch) { return batch.empty(); })) {
+  DrawSky(); return true;
+ }
  struct Batch { unsigned mesh; UINT first,count; };
  constexpr unsigned colorPass=visual::shadowLayers,passCount=colorPass+1;
  // This mask order gives each pass at most two contiguous ranges per mesh.
@@ -362,6 +383,7 @@ bool Renderer::FlushWorld() {
  context_->IASetVertexBuffers(0,2,buffers,strides,offsets);
  context_->IASetIndexBuffer(indices_.Get(),DXGI_FORMAT_R32_UINT,0);
  context_->IASetInputLayout(worldLayout_.Get());
+ context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
  context_->OMSetDepthStencilState(depthOn_.Get(),0);
  context_->OMSetBlendState(nullptr,nullptr,0xffffffff);
  ID3D11ShaderResourceView* nullView=nullptr; context_->PSSetShaderResources(1,1,&nullView);
@@ -399,6 +421,7 @@ bool Renderer::FlushWorld() {
  }
  // Consume even a fully culled queue before changing camera/portrait state.
  for (auto& batch : world_) batch.clear();
+ DrawSky();
  return true;
 }
 void Renderer::EffectQuad(XMFLOAT3 a,XMFLOAT3 b,XMFLOAT3 c,XMFLOAT3 d,XMFLOAT4 color,float startAlpha,float endAlpha,float radial) {

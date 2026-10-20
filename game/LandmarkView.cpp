@@ -168,7 +168,7 @@ void DrawSupplyStall(Renderer& r,const rpg::Obstacle& o) {
   Box(r,{x+.17f,o.height+.28f,z},{.43f,.03f,.045f},brass,S::Cloth);
 }
 
-void DrawWatchRuin(Renderer& r,const rpg::Obstacle& o,float time) {
+void DrawWatchRuin(Renderer& r,const rpg::Obstacle& o) {
   const float x=o.center.x,z=o.center.z;
   // The blocked gateway is visibly filled with masonry; it does not promise a passage.
   Box(r,{x,.9f,z},{o.halfX*2,1.8f,1.7f},stone,S::Stone);
@@ -192,5 +192,4 @@ void DrawWatchRuin(Renderer& r,const rpg::Obstacle& o,float time) {
   }
   for (int i=0;i<5;++i)
     r.DrawMesh(M::Rock,{x-1.35f+i*.66f,1.94f,z},{.70f,.37f+i%2*.17f,1.65f},stone,S::Stone,i*.5f);
-  r.DrawMesh(M::Crystal,{x,3.4f+std::sin(time)*.12f,z},{.7f,1.5f,.7f},{.35f,.68f,.81f,1},S::Glow,time*.3f,0,visual::ShadowMode::None);
 }

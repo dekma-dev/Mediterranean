@@ -23,6 +23,43 @@ int Simulation::Level() const {
 
 int Simulation::TalentPoints() const { return Level()-1-TalentCount(build_); }
 
+BuildStats Simulation::PreviewBuild(unsigned mask) const {
+ // Preview locked level-three presets too, using current level and equipment.
+ // Derive differences from the live accessors so equipment stays authoritative.
+ if (!ValidBuild(mask,3)) mask=build_;
+ const auto delta=[&](float TalentInfo::*stat) { return TalentBonus(mask,stat)-TalentBonus(build_,stat); };
+ return {MaxHealth()+delta(&TalentInfo::health),StrikeDamage()+delta(&TalentInfo::strike),
+  HeavyDamage()+delta(&TalentInfo::heavy),DamageReduction()+delta(&TalentInfo::armor),
+  MendHealing()+delta(&TalentInfo::mend),AbilityCooldown(2)-delta(&TalentInfo::dashCooldown),
+  AbilityCooldown(3)-delta(&TalentInfo::mendCooldown)};
+}
+
+const char* Simulation::LoadoutStatus(const BuildCommand& command) const {
+ if (command.action!=BuildAction::Apply && command.action!=BuildAction::Store) return "Unknown build action";
+ if (command.action==BuildAction::Store && (command.slot<0 || command.slot>=int(loadouts_.size()))) return "Choose a loadout slot";
+ if (command.mask<0) return "Choose a build to preview";
+ if (!ValidBuild(unsigned(command.mask),3)) return "Invalid talents or prerequisites";
+ if (!ValidBuild(unsigned(command.mask),Level())) return "Earn more levels to use this build";
+ if (health_<=0) return "Recover before managing builds";
+ if (command.action==BuildAction::Store)
+  return loadouts_[command.slot]==command.mask?"Already saved in this slot":"Ready to store";
+ if (unsigned(command.mask)==build_) return "Already your active build";
+ const auto blocked=BuildChangeStatus();
+ return *blocked?blocked:"Ready to apply";
+}
+
+void Simulation::ChangeBuild(const BuildCommand& command) {
+ const auto status=LoadoutStatus(command);
+ if (command.action==BuildAction::Store && std::string(status)=="Ready to store") {
+  loadouts_[command.slot]=command.mask;
+  message_="Build saved in loadout "+std::to_string(command.slot+1)+". Use F5 to save your expedition to disk.";
+ } else if (command.action==BuildAction::Apply && std::string(status)=="Ready to apply") {
+  build_=unsigned(command.mask);
+  health_=std::min(health_,MaxHealth());
+  message_="Build applied. Health and active cooldowns retained; unused points refunded.";
+ } else message_=status;
+}
+
 const char* Simulation::TalentStatus(Talent talent) const {
  if (!ValidTalent(talent)) return "Unknown talent";
  if (HasTalent(talent)) return "Learned";
@@ -30,12 +67,32 @@ const char* Simulation::TalentStatus(Talent talent) const {
  if (Level()<info.level) return "Requires a higher level";
  if (info.prerequisite!=Talent::Count && !HasTalent(info.prerequisite)) return "Learn the previous talent first";
  if (TalentPoints()==0) return "No talent points available";
- if (health_<=0) return "Recover before learning";
- if (!Grounded() || Dashing() || Channeling()) return "Finish your current action";
+ const auto blocked=BuildChangeStatus();
+ if (*blocked) return blocked;
+ return "Ready to learn";
+}
+
+const char* Simulation::BuildChangeStatus() const {
+ if (health_<=0) return "Recover before changing talents";
+ if (!Grounded() || Dashing() || Channeling() || Attacking()) return "Finish your current action";
  if (sparring_ || attackFlash_>0 || hurtFlash_>0 ||
    std::any_of(enemies_.begin(),enemies_.end(),[](const Enemy& e) { return e.health>0 && e.state==EnemyState::Pursuing; }))
-  return "Finish combat before learning";
- return "Ready to learn";
+  return "Finish combat before changing talents";
+ return "";
+}
+
+const char* Simulation::TalentResetStatus() const {
+ if (!build_) return "No learned talents to reset";
+ const auto blocked=BuildChangeStatus();
+ return *blocked?blocked:"Ready to reset";
+}
+
+void Simulation::ResetTalents() {
+ const auto status=TalentResetStatus();
+ if (std::string(status)!="Ready to reset") { message_=status; return; }
+ build_=0;
+ health_=std::min(health_,MaxHealth());
+ message_="Talents reset. Points refunded; health and cooldowns are not restored.";
 }
 
 void Simulation::LearnTalent(int index) {
@@ -63,13 +120,13 @@ void Simulation::RestoreForLevel(int previousLevel) {
   Emit(FeedbackKind::LevelUp,player_,Level());
 }
 
-void Simulation::DamagePlayer(float damage,float incomingFacing) {
+void Simulation::DamagePlayer(float damage,float incomingFacing,float visualElapsed) {
   if (health_<=0) return;
   const float applied=std::min(sparring_?std::max(0.f,health_-1):health_,std::max(1.f,damage-DamageReduction()));
-  health_-=applied; hurtFlash_=.25f; damagedThisUpdate_=damagedThisUpdate_ || applied>0;
+  health_-=applied; hurtFlash_=std::max(0.f,.25f-visualElapsed); damagedThisUpdate_=damagedThisUpdate_ || applied>0;
   if (sparring_) sparringTaken_+=int(applied);
   Emit(FeedbackKind::Hurt,player_,static_cast<int>(applied));
-  if (applied>0) EmitVisual(CombatVisualKind::Hurt,player_,height_+1.2f,incomingFacing);
+  if (applied>0) EmitVisual(CombatVisualKind::Hurt,player_,height_+1.2f,incomingFacing,0,visualElapsed);
   if (Channeling()) { channelRemaining_=0; message_="Damage interrupted stabilization."; }
   if (health_==0) {
     target_=-1; height_=0; velocityY_=0; attackFlash_=0; StopMovement();

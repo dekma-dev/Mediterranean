@@ -3,6 +3,8 @@
 #include <cmath>
 namespace ui {
 void Interface::Show(Panel next) {
+  CancelBuildConfirmation();
+  if (next==Panel::Build && panel!=Panel::Build) loadoutsPage=false;
   const auto before=StateKey();
   if (next==Panel::Character) { characterOpen=true; if (panel!=Panel::Merchant) panel=Panel::None; }
   else if (next==Panel::Inventory) { inventoryOpen=true; if (panel!=Panel::Merchant) panel=Panel::None; }
@@ -11,6 +13,7 @@ void Interface::Show(Panel next) {
   if (before!=StateKey()) InvalidateHitRegions();
 }
 void Interface::SetOnly(Panel next) {
+  selectedSpell=-1; CancelBuildConfirmation(); loadoutsPage=false; previewBuild=-1; selectedLoadout=0;
   CancelDrag(); InvalidateHitRegions(); characterOpen=inventoryOpen=false; panel=Panel::None; Show(next);
 }
 void Interface::Toggle(Panel next) {
@@ -18,6 +21,7 @@ void Interface::Toggle(Panel next) {
   if (IsOpen(next)) Close(next); else Show(next);
 }
 void Interface::Close(Panel next) {
+  CancelBuildConfirmation();
   CancelDrag(); InvalidateHitRegions();
   if (next==Panel::Character) characterOpen=false;
   else if (next==Panel::Inventory) inventoryOpen=false;

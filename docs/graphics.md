@@ -1,5 +1,28 @@
 # Procedural graphics and performance budget
 
+## Static scenery and sky cost (2026-10-20)
+
+The world view now retains the 1,280 immutable scenery instances instead of rebuilding building detail, tree branches, dock planks, trail stones and their transform/normal matrices every frame. The cache uses 230,400 bytes (225 KiB) of CPU instance storage. Camera and shadow visibility are recalculated on every submission, and the existing 4,096-visible-instance budget remains enforced. Animated NPCs and crystals stay outside the cache. A new expedition invalidates it; entering/leaving sparring rebuilds it to remove/restore the four pieces of the static training dummy. Save loads keep the same immutable map. Any future editable/replaced map must explicitly reset its world view.
+
+Opaque geometry now fills depth before the sky pass. The sky uses far-plane depth, a read-only `LESS_EQUAL` test and HLSL early depth testing, so covered pixels skip cloud ray marching. It still completes before additive combat effects, HUD and portrait rendering. Meshes, polygons, textures, cloud sampling and shadow resolution/filtering are unchanged.
+
+Three paired Release workload runs used the saved baseline and optimized executable in alternating AB/BA/AB order, on the same machine with no concurrent builds/tests. Both builds include the same new benchmark phase timers. Each workload uses a hidden 1280x720 window, present interval zero, fixed 1/60 s simulation steps, 90 warmup frames and 600 measured frames. Values below are medians of the three per-run statistics, **not pooled percentiles or interactive FPS**. CPU frame timing includes submission and present waits; asynchronous GPU observations are sparse (34–38 per gameplay run, 262–434 for the merchant workload).
+
+| Workload | CPU median ms, before → after | CPU p95 ms, before → after | GPU median ms, before → after | GPU p95 ms, before → after |
+| --- | --- | --- | --- | --- |
+| Spawn HUD | 0.925 → 0.869 | 0.976 → 0.908 | 0.923 → 0.864 | 0.938 → 0.884 |
+| Village walking/orbit | 0.785 → 0.722 | 2.572 → 1.947 | 0.706 → 0.704 | 2.334 → 1.923 |
+| Repeated combat/orbit | 0.791 → 0.715 | 2.509 → 2.239 | 0.766 → 0.706 | 2.499 → 2.160 |
+| Merchant, character, bag | 1.157 → 1.084 | 1.381 → 1.279 | 1.064 → 1.010 | 1.090 → 1.039 |
+
+CPU frame medians improve by 6.1–9.6%; walking/orbit p95 drops 24.3%. Median scene/HUD preparation falls from 0.308/0.306/0.342 to 0.245/0.242/0.269 ms in the first three workloads (20–21%). Merchant preparation includes world/portrait flushes and falls from 0.960 to 0.899 ms. GPU walking median is effectively unchanged; its tail improves. Phase percentiles do not sum to whole-frame percentiles.
+
+All six reports have identical per-workload draw/triangle peaks, effect counts, walking distance and combat counters. GPU asset accounting remains 313,520 mesh bytes, 9,699,312 material/shadow/terrain bytes and 1,529,172 interface bytes. Process working-set snapshots fluctuate; this pass makes no memory-reduction or long-session leak claim.
+
+Validation: 21/21 CTest suites pass in both Ninja Debug and Release. ShadowTests now compares retained and freshly emitted geometry, including adjacent dynamic draws, camera/time changes, resize, portrait isolation, cache invalidation and both training-post transitions; it verifies one initial emission and bounded cache storage. All 92 paired spawn/veteran smoke captures are pixel-identical to the pre-optimization executable. Visual Studio Debug builds without compiler warnings and passes its own hidden spawn/veteran runtime checks. Fullscreen physical input and longer sessions remain manual check 154.
+
+Local evidence (ignored build output): `build-performance-static/{baseline,optimized}-pair{1,2,3}.txt`, `paired-summary.json`, `image-comparison.txt`, and `before-*.png`/`after-*.png`; `performance-static-validation.log` in both Ninja directories; `build-local/performance-static-build.log` and `performance-static-{spawn,veteran}.png.log`. Use `.\scripts\build-native.ps1 -Backend Ninja -Configuration Release -BenchmarkSuite` to reproduce the current workload report; setup/load and first-use cache construction are excluded from steady-state timings.
+
 Shadow transition repair (2026-10-19): the 20 m detail map now fades to the whole-island map over a 5.4 m edge band, with its central 8 m at full detail. This removes the bright-daylight thin-shadow transition regression: maximum channel change falls from 38 on the old X-axis test to 22 over four tested focus directions, under the unchanged limit of 25. Contact, slope, thin-caster and portrait isolation checks pass. Two shadow textures and sixteen comparisons per sampled layer are retained; the wider band increases the area sampling both layers, so this is not a performance improvement claim. Interactive acceptance is manual check 138.
 
 ## Dash motion effects - 2026-10-19

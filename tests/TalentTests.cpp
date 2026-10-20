@@ -34,6 +34,97 @@ void Training(Simulation& game) {
  Command use; use.interact=true; game.Update(.01f,use);
  Require(game.Sparring(),"Veteran must start training");
 }
+void Advance(Simulation& game,float seconds,int hz=60) {
+ while (seconds>1e-6f) {
+  const float dt=std::min(seconds,1.f/hz); game.Update(dt,{}); seconds-=dt;
+ }
+}
+void ExpandedBuildChecks(const std::string& veteranSave) {
+ Simulation game;
+ for(int spell=0;spell<4;++spell) {
+  Require(game.AbilityCooldown(spell)==spells[spell].cooldown,"Foundation spellbook cooldowns must match simulation");
+  if (spell<2) Require(spells[spell].contact==combat::Contact(spell==1) &&
+    spells[spell].recovery==combat::Duration(spell==1),"Spellbook melee timings must match the authoritative clock");
+ }
+ for(int invalid : {-1,4,100}) Require(game.AbilityCooldown(invalid)==0 && game.Cooldown(invalid)==0,
+   "Invalid spell queries must not index cooldown storage");
+ for(int hz : {30,60,144}) {
+  Require(game.Load(veteranSave),"Executioner fixture");
+  Learn(game,Talent::WeaponTraining); Learn(game,Talent::Executioner);
+  Require(game.HeavyDamageAgainst(90,180)==game.HeavyDamage()*1.25f &&
+    game.HeavyDamageAgainst(90.01f,180)==game.HeavyDamage(),
+    "Executioner must include exactly half health and leave healthy targets unchanged");
+  Training(game);
+  for(int hit=0;hit<5 && game.SparringOpponent().health>90;++hit) {
+   Command strike; strike.ability=0; game.Update(.01f,strike); Advance(game,1,hz);
+  }
+  const float before=game.SparringOpponent().health;
+  Require(before>game.HeavyDamage() && before<=90,"Finishing fixture must distinguish empowered Heavy from ordinary Heavy");
+  const float expected=std::min(before,game.HeavyDamageAgainst(before,180));
+  Command heavy; heavy.ability=1; game.Update(.01f,heavy);
+  Advance(game,.29f,hz);
+  Require(game.SparringOpponent().health==before,"Finishing damage cannot arrive before contact");
+  Advance(game,.02f,hz);
+  Require(std::abs(before-game.SparringOpponent().health-expected)<.0001f,
+    "Executioner must affect actual Heavy contact across update rates");
+  Simulation restored; Require(restored.Load(game.Save()) && restored.HasTalent(Talent::Executioner),
+    "Executioner must persist after a real encounter");
+ }
+ for(float health : {49.f,49.01f,139.f}) {
+  Require(game.Load(Player(veteranSave,0,-10,health)),"Mercy fixture");
+  Learn(game,Talent::Restoration); Learn(game,Talent::Mercy);
+  const float expected=std::min(140.f,health+(health<=49?65.f:45.f));
+  Command mend; mend.ability=3; game.Update(.01f,mend);
+  Require(std::abs(game.Health()-expected)<.0001f && game.Cooldown(3)==10,
+    "Mercy must check pre-cast health, include its exact threshold, and cap real healing");
+  Simulation restored; Require(restored.Load(game.Save()) && restored.Save()==game.Save(),
+    "New spell talents and their cooldowns must round-trip");
+ }
+ Require(game.Load(veteranSave),"Pursuit fixture");
+ Learn(game,Talent::Vitality); Learn(game,Talent::Pursuit); Training(game);
+ Command retreat; retreat.movement={0,-1}; retreat.sprint=true;
+ for(int i=0;i<20 && std::hypot(game.Player().x-game.SparringOpponent().position.x,
+   game.Player().z-game.SparringOpponent().position.z)<3.2f;++i) game.Update(.05f,retreat);
+ Command dash; dash.ability=2; game.Update(.01f,dash);
+ Require(game.DashedThisUpdate() && game.Cooldown(2)==3.5f,"Pursuit must shorten an accepted dash, not just its tooltip");
+ Simulation loaded; Require(loaded.Load(game.Save()) && loaded.HasTalent(Talent::Pursuit) && loaded.Cooldown(2)==3.5f,
+   "Pursuit and its remaining cooldown must round-trip while transient travel resets");
+ Command reset; reset.resetTalents=true; game.Update(.01f,reset);
+ Require(game.HasTalent(Talent::Pursuit),"Resetting while dashing or sparring must be rejected");
+ loaded.Update(.01f,reset);
+ Require(loaded.Cooldown(2)>3.48f && loaded.AbilityCooldown(2)==5 && loaded.TalentPoints()==2,
+   "Removing Pursuit must preserve remaining cooldown while restoring future casts to five seconds");
+
+ Require(game.Load(Player(veteranSave,0,-10,60)),"Reset cooldown fixture");
+ Learn(game,Talent::Restoration); Learn(game,Talent::Renewal);
+ Command mend; mend.ability=3; game.Update(.01f,mend);
+ const float health=game.Health();
+ game.Update(.01f,reset);
+ Require(game.TalentPoints()==2 && game.Health()==health && game.Cooldown(3)>7.98f &&
+   game.AbilityCooldown(3)==10,"Reset must refund points without healing or replacing active cooldowns");
+ Learn(game,Talent::Vitality); Learn(game,Talent::Bulwark);
+ Require(game.Health()==health && game.MaxHealth()==160,"Relearning maximum health cannot heal");
+ auto high=Player(game.Save(),0,-10,160);
+ Require(game.Load(high),"High-health reset fixture");
+ game.Update(.01f,reset);
+ Require(game.Health()==140 && game.MaxHealth()==140 && game.TalentPoints()==2,"Reset must clamp health after losing Vitality");
+ game.Update(.01f,reset);
+ Require(game.TalentPoints()==2,"Repeated resets cannot mint points");
+ Learn(game,Talent::Vitality);
+ Command jump; jump.jump=true; game.Update(.01f,jump); game.Update(.01f,reset);
+ Require(game.HasTalent(Talent::Vitality),"Airborne reset must be rejected");
+ Require(game.Load(Player(high,0,-10,0)),"Defeated reset fixture"); game.Update(.01f,reset);
+ Require(game.HasTalent(Talent::Vitality),"Defeated reset must be rejected");
+ Require(game.Load(high),"Invalid reset time fixture");
+ game.Update(0,reset); game.Update(std::numeric_limits<float>::quiet_NaN(),reset);
+ Require(game.Save()==high,"Invalid elapsed time cannot change a build");
+ // A veteran requires all campaign enemies dead, so use a valid level-two
+ // encounter to check the combat gate without weakening save validation.
+ Simulation novice; Require(novice.Load(levelTwo),"Combat reset fixture"); Learn(novice,Talent::Vitality);
+ const auto combat=Record(novice.Save(),"101 ","101 0 -8 80 0 0 1 0.5 3.14159\n");
+ Require(game.Load(combat),"Hostile reset fixture"); game.Update(.01f,reset);
+ Require(game.HasTalent(Talent::Vitality),"Pursuing enemies must prevent talent resets");
+}
 }
 int main() {
  using namespace rpg;
@@ -55,6 +146,7 @@ int main() {
  Require(novice.Save()==learnedOnce,"Duplicate, overspent and level-three learning must be rejected");
  Simulation master; Require(master.Load(veteran) && master.TalentPoints()==2,"Level three must retain two earned points");
  const auto veteranSave=master.Save(); const float strike=master.StrikeDamage(),heavy=master.HeavyDamage();
+ ExpandedBuildChecks(veteranSave);
  Learn(master,Talent::WeaponMastery);
  Require(!master.HasTalent(Talent::WeaponMastery) && master.TalentPoints()==2,"A top-rank talent requires its own branch");
  Learn(master,Talent::WeaponTraining); Learn(master,Talent::WeaponMastery);
@@ -113,7 +205,7 @@ int main() {
  Require(!restored.HasTalent(Talent::Vitality),"Airborne learning must be rejected");
 
  // Version seven has no BUILD record. Migration derives all earned points once.
- auto old=Record(veteranSave,"BUILD ",""); old.replace(14,1,"7");
+ auto old=Record(Record(veteranSave,"BUILD ",""),"LOADOUTS ",""); old.replace(14,old.find('\n')-14,"7");
  Require(restored.Load(old) && restored.Save()==veteranSave && restored.TalentPoints()==2,"Version seven must migrate with unspent points");
  Require(restored.Load(restored.Save()) && restored.TalentPoints()==2,"Reloading must not duplicate earned points");
  const auto stable=restored.Save();
@@ -122,6 +214,7 @@ int main() {
  };
  reject(Record(veteranSave,"BUILD ",""));
  reject(Record(veteranSave,"BUILD ","BUILD 64\n"));
+ reject(Record(veteranSave,"BUILD ","BUILD 512\n")); // Unknown talent bit.
  reject(Record(veteranSave,"BUILD ","BUILD -1\n"));
  reject(Record(veteranSave,"BUILD ","BUILD -4294967295\n"));
  reject(Record(veteranSave,"BUILD ","BUILD 4294967296\n"));
@@ -132,6 +225,10 @@ int main() {
  reject(veteranSave+"BUILD 0\n");
  reject(Player(veteranSave,0,-10,160)); // Maximum health without Vitality.
  Require(restored.Load(hybrid.Save()) && restored.Save()==hybrid.Save(),"A mixed build must round-trip exactly");
+ auto version8=Record(hybrid.Save(),"LOADOUTS ",""); version8.replace(14,version8.find('\n')-14,"8");
+ Require(restored.Load(version8) && restored.Save()==hybrid.Save(),"Version-eight learned builds must migrate without losing choices");
+ auto newInOld=Record(version8,"BUILD ","BUILD 65\n");
+ Require(!restored.Load(newInOld),"Version eight must not accept talent IDs introduced in version nine");
  Command restart; restart.restart=true; restored.Update(.01f,restart);
  Require(restored.Level()==1 && restored.TalentPoints()==0 && !restored.HasTalent(Talent::Vitality),
    "An explicit new expedition must clear all build choices");

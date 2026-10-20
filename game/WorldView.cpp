@@ -5,7 +5,8 @@
 #include "engine/Renderer.h"
 #include <cmath>
 
-void DrawWorld(Renderer& r,const rpg::WorldMap& map,float time,bool sparring) {
+namespace {
+void DrawScenery(Renderer& r,const rpg::WorldMap& map,bool sparring) {
   using DirectX::XMFLOAT3;
   using DirectX::XMFLOAT4;
   using M=visual::Mesh;
@@ -49,7 +50,7 @@ void DrawWorld(Renderer& r,const rpg::WorldMap& map,float time,bool sparring) {
       }
       continue;
     }
-    if (o.kind==rpg::PropKind::Ruin) { DrawWatchRuin(r,o,time); continue; }
+    if (o.kind==rpg::PropKind::Ruin) { DrawWatchRuin(r,o); continue; }
     DrawBuilding(r,o);
   }
   // Decorative planks stay inside the playable island.
@@ -77,6 +78,18 @@ void DrawWorld(Renderer& r,const rpg::WorldMap& map,float time,bool sparring) {
     r.DrawMesh(M::Terrain,{x,y,z},{.24f,1,.26f},{1,1,1,1},S::Ground,angle);
     r.DrawMesh(M::Rock,{x,y+1,z},{3,3,3},rock,S::Stone,angle);
   }
+}
+}
+void WorldView::Draw(Renderer& r,const rpg::WorldMap& map,float time,bool sparring) {
+  // The map is immutable between Game::Initialize calls. Sparring temporarily
+  // replaces one authored dummy with an animated opponent.
+  if (sparring!=sparring_) { scenery_.Invalidate(); sparring_=sparring; }
+  r.DrawStaticScene(scenery_,[&] { DrawScenery(r,map,sparring); });
+  using M=visual::Mesh;
+  using S=visual::Material;
+  for (const auto& o : map.Obstacles()) if (o.kind==rpg::PropKind::Ruin)
+    r.DrawMesh(M::Crystal,{o.center.x,3.4f+std::sin(time)*.12f,o.center.z},{.7f,1.5f,.7f},
+      {.35f,.68f,.81f,1},S::Glow,time*.3f,0,visual::ShadowMode::None);
   const auto giver=rpg::WorldMap::questGiver;
   CharacterOutfit merchant; merchant.weapon=false; merchant.helm=true;
   DrawCharacter(r,rpg::WorldMap::quartermaster,0,0,{.28f,.39f,.22f,1},0,0,merchant,animation::Idle(time,1.7f));

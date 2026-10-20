@@ -313,12 +313,13 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath) {
     if (values.empty()) return 0.0;
     std::sort(values.begin(),values.end()); return values[std::size_t((values.size()-1)*p)];
   };
-  LARGE_INTEGER frequency{},start{},finish{}; QueryPerformanceFrequency(&frequency);
+  LARGE_INTEGER frequency{},start{},updated{},rendered{},finish{}; QueryPerformanceFrequency(&frequency);
   std::ofstream report{std::filesystem::path(reportPath)};
   report<<std::fixed<<std::setprecision(3)
     <<"Hidden 1280x720 workload suite; present interval 0; fixed simulation step 1/60 s\n"
     <<"Each workload: 90 warmup + 600 measured frames. Setup/save loads excluded.\n"
     <<"Combat replays a 3-second window; GPU observations are asynchronous (latest ready sample per frame).\n"
+    <<"CPU phases: simulation/camera; scene/HUD preparation (may flush portraits); final submission/present.\n"
     <<"Not interactive FPS, a long-session test or a GPU trace. No player saves written.\n";
   for (int scene=0;scene<4;++scene) {
     game_->Initialize(); game_->OpenPanel(ui::Panel::None); game_->SetCameraOrbit(0,.45f,10);
@@ -333,7 +334,9 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath) {
       }
       game_->OpenPanel(ui::Panel::Merchant); game_->ShowPanel(ui::Panel::Character);
     }
-    std::vector<double> cpu,gpu; double distance=0; unsigned drawPeak=0,trianglePeak=0,windups=0,hits=0,effectPeak=0,effectFrames=0;
+    std::vector<double> cpu,gpu,updateCpu,renderCpu,submitCpu;
+    for (auto* values : {&cpu,&gpu,&updateCpu,&renderCpu,&submitCpu}) values->reserve(600);
+    double distance=0; unsigned drawPeak=0,trianglePeak=0,windups=0,hits=0,effectPeak=0,effectFrames=0;
     const rpg::Vec2 route[]={{3,-10},{3,-6},{0,-6},{0,-10}}; unsigned waypoint=0;
     for (int frame=0;frame<690;++frame) {
       if (scene==2 && frame%180==0 && !game_->RestoreSnapshot(combat)) return false;
@@ -347,11 +350,16 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath) {
       QueryPerformanceCounter(&start); const auto samples=renderer_->GpuSamples();
       game_->ExecuteCommand(command,1.f/60);
       if (scene==1 || scene==2) game_->SetCameraOrbit(frame*.012f,.4f+.18f*std::sin(frame*.021f),7.5f+1.5f*std::sin(frame*.017f));
+      QueryPerformanceCounter(&updated);
       renderer_->BeginFrame(); game_->Render(*renderer_);
+      QueryPerformanceCounter(&rendered);
       if (!renderer_->EndFrame(false)) { error_=renderer_->Error(); return false; }
       QueryPerformanceCounter(&finish);
       if (frame<90) continue;
       cpu.push_back(1000.0*double(finish.QuadPart-start.QuadPart)/double(frequency.QuadPart));
+      updateCpu.push_back(1000.0*double(updated.QuadPart-start.QuadPart)/double(frequency.QuadPart));
+      renderCpu.push_back(1000.0*double(rendered.QuadPart-updated.QuadPart)/double(frequency.QuadPart));
+      submitCpu.push_back(1000.0*double(finish.QuadPart-rendered.QuadPart)/double(frequency.QuadPart));
       if (renderer_->GpuSamples()!=samples) gpu.push_back(renderer_->GpuMilliseconds());
       drawPeak=std::max(drawPeak,renderer_->DrawCalls()); trianglePeak=std::max(trianglePeak,renderer_->Triangles());
       effectPeak=std::max(effectPeak,renderer_->EffectVertices());
@@ -365,13 +373,17 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath) {
     }
     report<<"\n"<<names[scene]<<"\nCPU samples: "<<cpu.size()<<"; GPU observations: "<<gpu.size()
       <<"\nCPU median / p95 / max ms: "<<percentile(cpu,.5)<<" / "<<percentile(cpu,.95)<<" / "<<percentile(cpu,1)
+      <<"\nCPU update median / p95 ms: "<<percentile(updateCpu,.5)<<" / "<<percentile(updateCpu,.95)
+      <<"\nCPU prepare median / p95 ms: "<<percentile(renderCpu,.5)<<" / "<<percentile(renderCpu,.95)
+      <<"\nCPU submit/present median / p95 ms: "<<percentile(submitCpu,.5)<<" / "<<percentile(submitCpu,.95)
       <<"\nGPU median / p95 ms: "<<percentile(gpu,.5)<<" / "<<percentile(gpu,.95)
       <<"\nPeak submissions / triangles: "<<drawPeak<<" / "<<trianglePeak
       <<"\nCombat effect frames / peak vertices: "<<effectFrames<<" / "<<effectPeak
       <<"\nWalked distance / windup frames / received hits: "<<distance<<" / "<<windups<<" / "<<hits<<'\n';
   }
   report<<"\nImmutable mesh bytes: "<<renderer_->MeshBytes()<<"\nMaterial/shadow bytes: "<<renderer_->MaterialBytes()
-    <<"\nInterface bytes: "<<renderer_->InterfaceBytes()<<'\n';
+    <<"\nInterface bytes: "<<renderer_->InterfaceBytes()
+    <<"\nCached static instances / CPU bytes: "<<game_->StaticSceneInstances()<<" / "<<game_->StaticSceneBytes()<<'\n';
   PROCESS_MEMORY_COUNTERS_EX memory{}; memory.cb=sizeof(memory);
   if (GetProcessMemoryInfo(GetCurrentProcess(),reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&memory),sizeof(memory)))
     report<<"Working set / private MiB at end: "<<memory.WorkingSetSize/1048576.0<<" / "<<memory.PrivateUsage/1048576.0<<'\n';
@@ -400,7 +412,10 @@ int Engine::Run() {
 
     if (!running_) break;
 
-    if (window_->ConsumeMouseLookCancellation()) game_->CancelUiGesture();
+    if (window_->ConsumeInputCancellation()) {
+      game_->CancelUiGesture();
+      input_.CancelGestures();
+    }
     const auto mouse=window_->ConsumeMouseMotion();
     input_.Update(window_->GetHandle(),window_->MouseLook(),mouse.x,mouse.y);
     if (IsIconic(window_->GetHandle()) || GetForegroundWindow() != window_->GetHandle()) {

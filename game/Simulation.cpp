@@ -114,7 +114,7 @@ void Simulation::UseAbility(int index,float visualElapsed) {
   if (Attacking()) { message_="Finish the weapon recovery before using another ability."; return; }
   if (index==3) {
     if (health_>=MaxHealth()) { message_="Health is already full."; return; }
-    const float healed=std::min(MendHealing(),MaxHealth()-health_);
+    const float healed=std::min(MendHealingNow(),MaxHealth()-health_);
     health_+=healed; Emit(FeedbackKind::Heal,player_,static_cast<int>(healed));
     EmitVisual(CombatVisualKind::Mend,player_,height_,facing_);
     message_="Mend restored health.";
@@ -166,7 +166,10 @@ void Simulation::ResolveAttack(float elapsed) {
   auto& enemy=*victim;
   const int index=attackAbility_;
   const int previousLevel=Level();
-  const float damage=std::min(enemy.health,attackDamage_);
+  // Evaluate the finishing condition at actual contact, after earlier enemy
+  // actions, while preserving the weapon damage captured when the cast began.
+  const float finishing=index==1?HeavyMultiplier(enemy.health,enemy.MaxHealth()):1.f;
+  const float damage=std::min(enemy.health,attackDamage_*finishing);
   enemy.health-=damage;
   if (trainingTarget) sparringDealt_+=int(damage);
   Emit(FeedbackKind::Damage,enemy.position,static_cast<int>(damage));
@@ -192,10 +195,20 @@ void Simulation::ResolveAttack(float elapsed) {
 }
 
 void Simulation::UpdateCombat(float dt,bool advanceAttack) {
-  const auto enemies=[&](float step) {
-    if (step<=0) return;
-    for (auto& enemy : enemies_) UpdateEnemy(enemy,step);
-    if (sparring_) UpdateEnemy(trainer_,step);
+  const auto enemies=[&](float remaining,float frameTail=0.f) {
+    // Advance all actors to the next committed contact together. Processing a
+    // whole frame per actor allowed a later fatal hit to cancel an earlier one
+    // just because its actor appeared first in the vector.
+    while (remaining>0 && health_>0) {
+      float step=remaining;
+      for (const auto& enemy : enemies_)
+        if (enemy.health>0 && enemy.windup>0) step=std::min(step,enemy.windup);
+      if (sparring_ && trainer_.windup>0) step=std::min(step,trainer_.windup);
+      const float tail=std::max(0.f,remaining-step);
+      for (auto& enemy : enemies_) UpdateEnemy(enemy,step,frameTail+tail);
+      if (sparring_) UpdateEnemy(trainer_,step,frameTail+tail);
+      remaining=tail;
+    }
   };
   if (!advanceAttack || !Attacking()) { enemies(dt); return; }
   const bool heavy=HeavyAttack();
@@ -205,7 +218,7 @@ void Simulation::UpdateCombat(float dt,bool advanceAttack) {
   const bool contactReached=before<contact && after+1e-6f>=contact;
   if (contactReached) {
     const float first=std::clamp(contact-before,0.f,dt);
-    enemies(first);
+    enemies(first,dt-first);
     if (Attacking()) ResolveAttack(dt-first);
     enemies(dt-first);
   } else enemies(dt);
@@ -375,7 +388,10 @@ void Simulation::Update(float seconds,const Command& command) {
   }
   for (auto& cooldown : cooldowns_) cooldown=std::max(0.f,cooldown-dt);
   potionCooldown_=std::max(0.f,potionCooldown_-dt);
-  if (command.learnTalent!=-1) LearnTalent(command.learnTalent);
+  // A build command has one meaning, even for malformed/replayed input.
+  if (command.build.action!=BuildAction::None) ChangeBuild(command.build);
+  else if (command.resetTalents) ResetTalents();
+  else if (command.learnTalent!=-1) LearnTalent(command.learnTalent);
   if (!Attacking()) attackFlash_=std::max(0.f,attackFlash_-dt);
   const bool steering=command.steerFacing && std::isfinite(command.facingYaw) && !command.haltMovement;
   // Camera steering owns the body heading, including at rest and while strafing.
@@ -576,7 +592,7 @@ void Simulation::SeparateEnemies(float dt) {
   }
 }
 
-void Simulation::UpdateEnemy(Enemy& enemy,float dt) {
+void Simulation::UpdateEnemy(Enemy& enemy,float dt,float frameTail) {
   if (enemy.health<=0) { enemy.state=EnemyState::Dead; enemy.windup=enemy.movementSpeed=0; return; }
   if (health_<=0) return;
   enemy.attackCooldown=std::max(0.f,enemy.attackCooldown-dt);
@@ -595,15 +611,17 @@ void Simulation::UpdateEnemy(Enemy& enemy,float dt) {
   // move away, or interrupt it with heavy strike before the impact is resolved.
   if (enemy.windup>0) {
     enemy.movementSpeed=0;
+    const float afterContact=std::max(0.f,dt-enemy.windup);
     enemy.windup=std::max(0.f,enemy.windup-dt);
     if (enemy.windup==0) {
-      EmitVisual(CombatVisualKind::EnemySwing,enemy.position,0,enemy.facing,enemy.id);
+      const float elapsed=frameTail+afterContact;
+      EmitVisual(CombatVisualKind::EnemySwing,enemy.position,0,enemy.facing,enemy.id,elapsed);
       const auto delta=Difference(player_,enemy.position);
       const float dot=distance<.001f?1.f:(std::sin(enemy.facing)*delta.x+std::cos(enemy.facing)*delta.z)/distance;
       if (distance<=Enemy::attackReach && dot>=std::cos(Enemy::attackHalfAngle) && height_<1.5f &&
-        health_>0 && HasLineOfSight(enemy.position,player_)) DamagePlayer(enemy.Damage(),enemy.facing);
+        health_>0 && HasLineOfSight(enemy.position,player_)) DamagePlayer(enemy.Damage(),enemy.facing,elapsed);
       else Emit(FeedbackKind::Miss,enemy.position);
-      enemy.attackCooldown=enemy.AttackInterval();
+      enemy.attackCooldown=std::max(0.f,enemy.AttackInterval()-afterContact);
     }
     return;
   }
@@ -669,7 +687,7 @@ void Simulation::UpdateEnemy(Enemy& enemy,float dt) {
 
 std::string Simulation::Save() const {
   std::ostringstream out;
-  out << std::setprecision(9) << "MEDITERRANEAN 8\n" << player_.x << ' ' << player_.z << ' '
+  out << std::setprecision(9) << "MEDITERRANEAN 10\n" << player_.x << ' ' << player_.z << ' '
     << health_ << ' ' << facing_ << ' ' << static_cast<int>(quest_) << ' ' << gold_ << '\n';
   out << Potions() << ' ' << HasRewardWeapon() << ' ' << RewardWeaponEquipped() << ' ' << potionCooldown_ << '\n';
   out << static_cast<int>(anchorQuest_) << '\n';
@@ -683,6 +701,7 @@ std::string Simulation::Save() const {
   out<<"BUYBACK"; for (auto count : buyback_) out<<' '<<count; out<<'\n';
   inventory_.Write(out);
   out<<"BUILD "<<build_<<'\n';
+  out<<"LOADOUTS "<<loadouts_[0]<<' '<<loadouts_[1]<<' '<<loadouts_[2]<<'\n';
   return out.str();
 }
 
@@ -691,7 +710,7 @@ bool Simulation::Load(const std::string& data) {
   std::istringstream input(data);
   std::string magic; int version=0, quest=0,potions=2,owned=0,equipped=0;
   Simulation candidate;
-  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>8) return false;
+  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>10) return false;
   // The shop counter occupies formerly walkable ground. Preserve old saves by
   // moving only actors overlapping that new prop to its nearest free edge.
   const auto migrateCounter=[&](Vec2& position,float radius) {
@@ -785,9 +804,16 @@ bool Simulation::Load(const std::string& data) {
     std::string tag; int savedBuild=0;
     if (!(input>>tag>>savedBuild) || tag!="BUILD" || savedBuild<0) return false;
     candidate.build_=unsigned(savedBuild);
+    if (version==8 && (candidate.build_>>6)!=0) return false;
   }
   // Health depends on the complete earned build, including legacy empty builds.
   if (!ValidBuild(candidate.build_,candidate.Level()) || candidate.health_>candidate.MaxHealth()) return false;
+  if (version>=10) {
+    std::string tag;
+    if (!(input>>tag) || tag!="LOADOUTS") return false;
+    for (auto& mask : candidate.loadouts_)
+      if (!(input>>mask) || mask<-1 || (mask>=0 && !ValidBuild(unsigned(mask),candidate.Level()))) return false;
+  }
   input >> std::ws;
   if (!input.eof()) return false;
   candidate.message_="Progress loaded. Camera, jump, and unfinished anchor channel reset.";
