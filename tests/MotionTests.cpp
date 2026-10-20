@@ -78,7 +78,7 @@ void RmbBodySteering() {
   const float strikeFacing=combat.Facing(); command.nextTarget=false; command.ability=-1; command.facingYaw=-1;
   combat.Update(.01f,command);
   Require(combat.Facing()==strikeFacing,"RMB cannot turn an accepted strike during its committed presentation.");
-  for (int i=0;i<40;++i) combat.Update(.01f,command);
+  for (int i=0;i<60;++i) combat.Update(.01f,command);
   Require(combat.Facing()==-1,"Camera steering resumes when the committed strike finishes.");
 }
 
@@ -259,7 +259,7 @@ int main() {
   for(int hz : {22,30,60,144}) {
     rpg::Simulation flight; rpg::Command command; command.movement={0,1};
     for(int i=0;i<hz/2;++i) flight.Update(1.f/hz,command);
-    const float launchSpeed=4.f*(1-std::exp(-12.f));
+    const float launchSpeed=4.f*(1-std::exp(-8.f));
     const auto launch=flight.Player();
     float elapsed=0,groundTravel=0; int landings=0;
     while(elapsed<.7f) {
@@ -272,7 +272,7 @@ int main() {
         "Airborne travel must never count as grounded footsteps");
       elapsed+=dt;
     }
-    const float expectedGround=launchSpeed/32*(1-std::exp(-32*(.7f-.6f)));
+    const float expectedGround=launchSpeed/24*(1-std::exp(-24*(.7f-.6f)));
     Require(std::abs(groundTravel-expectedGround)<.0001f,
       "Landing must apply braking only for the grounded fraction of the step");
     Require(std::abs(flight.Player().z-launch.z-(launchSpeed*.6f+expectedGround))<.0001f,
@@ -332,7 +332,7 @@ int main() {
       chain.Update(.05f,input);
       Require(chain.GroundMovementDistance()==0,"Buffered rebound must never apply ground traction or gait travel");
     }
-    Require(std::abs(chain.Player().z-launch.z-4.f*(1-std::exp(-12.f))*.65f)<.0001f,
+    Require(std::abs(chain.Player().z-launch.z-4.f*(1-std::exp(-8.f))*.65f)<.0001f,
       "Running rebound must preserve horizontal momentum through floor contact");
   }
   {
@@ -396,19 +396,32 @@ int main() {
       "First movement sample must respond immediately below full speed");
     for (int i=1;i<hz;++i) simulation.Update(1.f/hz,move);
     const float travel=Distance(start,simulation.Player());
-    Require(travel>3.8f && travel<4,"Acceleration must preserve nearly all the first second's travel");
+    Require(travel>3.74f && travel<3.76f,"The longer acceleration ramp must cover 3.75 m in the first second");
     if (reference) Require(std::abs(reference-travel)<.001f,"Acceleration must agree at 30/60/144 Hz");
     reference=travel;
     const auto stopped=simulation.Player(); simulation.Update(1.f/hz,{});
     Require(Distance(stopped,simulation.Player())>0 && simulation.MovementDistance()<4.f/hz,
       "Releasing input must brake smoothly below running speed");
     for(int i=0;i<hz/2;++i) simulation.Update(1.f/hz,{});
-    Require(Distance(stopped,simulation.Player())<.126f && simulation.MovementDistance()==0,
+    Require(Distance(stopped,simulation.Player())>.16f && Distance(stopped,simulation.Player())<.168f && simulation.MovementDistance()==0,
       "Ground braking must settle promptly within a short stopping distance");
     move.sprint=true; simulation.Update(1.f/hz,move);
     Require(simulation.MovementDistance()<7.f/hz,"Sprint must accelerate after stopping");
   }
   rpg::Simulation straight,diagonal;
+  for(int hz : {30,60,144}) {
+    float distance[3]{};
+    for(int direction=0;direction<3;++direction) {
+      rpg::Simulation s; const auto start=s.Player();
+      rpg::Command input; input.steerFacing=true; input.facingYaw=0;
+      input.movement=direction==0?rpg::Vec2{0,1}:direction==1?rpg::Vec2{1,0}:rpg::Vec2{0,-1};
+      for(int i=0;i<hz/2;++i) s.Update(1.f/hz,input);
+      distance[direction]=Distance(start,s.Player());
+      Require(s.Facing()==0,"Strafing and backing must preserve the camera-facing heading");
+    }
+    Require(std::abs(distance[1]/distance[0]-.85f)<.001f && std::abs(distance[2]/distance[0]-.65f)<.001f,
+      "Side and backward strides must have deliberate directional speeds across frame rates");
+  }
   rpg::Command move; move.movement={0,1}; straight.Update(.05f,move);
   move.movement={1,1}; diagonal.Update(.05f,move);
   Require(std::abs(straight.MovementDistance()-diagonal.MovementDistance())<.00001f,

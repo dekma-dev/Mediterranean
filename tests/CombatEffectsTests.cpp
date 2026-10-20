@@ -125,13 +125,24 @@ int main() {
   Game game; rpg::Simulation reference; rpg::Command strike; strike.nextTarget=true; strike.ability=0;
   Require(game.RestoreSnapshot(duel) && reference.Load(duel),"Duel fixture rejected");
   game.ExecuteCommand(strike,.01f); reference.Update(.01f,strike);
-  Require(Has(game.State(),K::Strike) && Has(game.State(),K::Hit),"Accepted strike needs one swing and impact event");
-  Require(game.State().VisualEventCount()==2 && game.Effects().BurstCount()==1 && game.Effects().TrailCount()==1,"Strike effects must spawn once");
+  Require(game.State().VisualEventCount()==0,"Acceptance must not emit premature swing or impact effects");
+  bool sawSwing=false;
+  for(int i=0;i<18;++i) {
+    game.ExecuteCommand({},.01f); reference.Update(.01f,{});
+    sawSwing|=Has(game.State(),K::Strike);
+    if(i<17) Require(!Has(game.State(),K::Hit),"The blade must reach contact before an impact appears");
+  }
+  Require(sawSwing && Has(game.State(),K::Hit),"The swing must precede the contact effect");
+  Require(game.State().VisualEventCount()==1 && game.Effects().BurstCount()==1 && game.Effects().TrailCount()==1,"Strike effects must spawn once");
   Require(game.State().Save()==reference.Save(),"Effects must not change combat or saves");
   rpg::Command rejected; rejected.ability=0; game.ExecuteCommand(rejected,.01f);
   Require(game.State().VisualEventCount()==0 && game.Effects().BurstCount()==1,"Cooldown input must not duplicate impacts");
-  rpg::Command heavy; heavy.ability=1; game.ExecuteCommand(heavy,.01f);
-  Require(Has(game.State(),K::HeavyStrike) && Has(game.State(),K::HeavyHit) && Has(game.State(),K::Interrupt),"Heavy strike must distinguish impact and interrupt");
+  Require(game.RestoreSnapshot(duel),"Independent heavy interrupt fixture");
+  rpg::Command heavy; heavy.ability=1; heavy.nextTarget=true; game.ExecuteCommand(heavy,.01f);
+  sawSwing=false;
+  for(int i=0;i<30;++i) { game.ExecuteCommand({},.01f); sawSwing|=Has(game.State(),K::HeavyStrike); }
+  heavy.nextTarget=false;
+  Require(sawSwing && Has(game.State(),K::HeavyHit) && Has(game.State(),K::Interrupt),"Heavy strike must distinguish swing, impact and interrupt");
   Require(!Has(game.State(),K::EnemySwing),"An interrupted windup must not emit an enemy swing");
   for (int i=0;i<10;++i) game.ExecuteCommand({},.05f);
   Require(game.Effects().BurstCount()==0 && game.Effects().TrailCount()==0,"Expired effects must disappear completely");
@@ -144,6 +155,7 @@ int main() {
   Require(game.RestoreSnapshot(duel),"Reload unarmed fixture");
   rpg::Command unequip; unequip.inventory={rpg::InventoryAction::Unequip,int(rpg::GearSlot::Weapon),-1,rpg::Item::Starter};
   game.ExecuteCommand(unequip,.01f); game.ExecuteCommand(strike,.01f);
+  for(int i=0;i<18;++i) game.ExecuteCommand({},.01f);
   Require(game.Effects().TrailCount()==0 && game.Effects().BurstCount()==1,"Unarmed attacks must not display a sword trail");
   auto fatal=duel; fatal.replace(fatal.find("5.2 100"),7,"5.2 1"); fatal.replace(fatal.find("1 0.5 3.14159"),13,"1 0.01 3.14159");
   Require(game.RestoreSnapshot(fatal),"Fatal fixture rejected"); game.ExecuteCommand({},.05f);
@@ -354,6 +366,7 @@ int main() {
   for (int ability=0;ability<2;++ability) {
     Require(game.RestoreSnapshot(duel),"Attack capture fixture rejected");
     rpg::Command command; command.nextTarget=true; command.ability=ability; game.ExecuteCommand(command,.01f);
+    for(int i=0;i<(ability?30:18);++i) game.ExecuteCommand({},.01f);
     game.SetCameraOrbit(1.1f,.28f,4.8f);
     const wchar_t* names[2][3]={{L"effects-strike-impact.png",L"effects-strike-trail.png",L"effects-strike-fade.png"},
       {L"effects-heavy-impact.png",L"effects-heavy-trail.png",L"effects-heavy-fade.png"}};
@@ -367,12 +380,15 @@ int main() {
       renderer.BeginFrame(); game.Render(renderer,false); Require(renderer.EndFrame(false),"Repeated attack render failed");
       Require(game.State().Save()==durable && game.Effects().BurstCount()==bursts && game.Effects().TrailCount()==trails && renderer.EffectVertices()==vertices,
         "Rendering must never advance or duplicate effects");
+      if (ability==1 && phase==0) {
+        renderer.BeginFrame(); game.Render(renderer); Capture(renderer,L"effects-combat-hud.png");
+      }
     }
   }
   // Equal-time attack inspections from gameplay distance and opposite sides.
   Require(game.RestoreSnapshot(duel),"Cinematic attack fixture rejected");
   heavy.nextTarget=true; game.ExecuteCommand(heavy,.01f);
-  for (int i=0;i<7;++i) game.ExecuteCommand({},.02f);
+  for (int i=0;i<17;++i) game.ExecuteCommand({},.02f);
   const float headings[]={0,-1.1f,3.14159265f};
   const wchar_t* views[]={L"effects-heavy-gameplay.png",L"effects-heavy-opposite.png",L"effects-heavy-front.png"};
   for (int i=0;i<3;++i) {

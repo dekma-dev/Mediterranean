@@ -1,5 +1,13 @@
 # Fullscreen and interface
 
+## Recorded-reference HUD pass (2026-10-20)
+
+During unobstructed play, the player frame sits left of the combat area and the selected target frame to the right. Opening panels moves both to the top. Frames show actual health, player level, target distance and incoming strike timing; the enemy medallion uses a threat mark rather than inventing an enemy level. Ground selection is an open gold ring; incoming attack cones use thin connected outlines. Floating block health bars have been removed in favor of the target frame. The face art is a guard emblem; the character window retains the actual equipment preview.
+
+The lower dock has five illustrated action slots (1-4/Q), radial cooldown masks and current Strike/Heavy damage. Above it are the real C Gear, I Bag, N Build, M Atlas, J Journal and Esc controls, with the unspent talent badge on N. A live action meter distinguishes wind-up, swing and recovery. Existing hotkeys are unchanged. There are no placeholder spell buttons. Quest paragraphs are set on parchment using dark text without a doubled shadow; paging, objective/reward panels and confirmation rules remain unchanged.
+
+All art in this pass is batched geometry. No interface texture allocation or external asset pack was added. Authored painted icons and sculpted frame artwork remain a separate visual milestone.
+
 Updated: 2026-10-19
 
 ## Champion build map

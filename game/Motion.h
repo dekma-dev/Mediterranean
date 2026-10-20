@@ -8,6 +8,12 @@ namespace motion {
 constexpr float tau=6.283185307f;
 // A deliberate RPG jump: 1.08 m apex, 0.60 s total flight on level ground.
 constexpr float jumpSpeed=7.2f,gravity=24.f;
+constexpr float groundAcceleration=16.f,groundBraking=24.f;
+// Camera-facing movement has a planted side step and a shorter backward stride.
+inline float DirectionalPace(float forward) {
+  forward=std::clamp(forward,-1.f,1.f);
+  return forward>=0?.85f+.15f*forward:.85f+.20f*forward;
+}
 // A fast push-off followed by longer braking, integrated analytically.
 // Peak speed is 2 * distance / duration; no frame can skip collision sweeps.
 constexpr float dashDuration=.34f,dashDistance=3.5f,dashPeak=.22f;
@@ -66,11 +72,11 @@ struct Actor {
   float facing=0,phase=0,gait=0,attack=0;
   float turnVelocity=0,gaitVelocity=0,attackVelocity=0;
   void Reset(float heading) { facing=heading; phase=gait=attack=turnVelocity=gaitVelocity=attackVelocity=0; }
-  void Update(float heading,float travel,bool grounded,bool alive,float strike,float dt,bool committed=false) {
+  void Update(float heading,float travel,bool grounded,bool alive,float strike,float dt,bool committed=false,float turnResponse=22.f) {
     if (!std::isfinite(dt) || dt<=0) return;
     if (committed) { facing=heading; turnVelocity=0; }
     else {
-      Spring(facing,turnVelocity,facing+AngleDelta(facing,heading),22.f,dt);
+      Spring(facing,turnVelocity,facing+AngleDelta(facing,heading),turnResponse,dt);
       facing=std::remainder(facing,tau);
     }
     if (!alive) { gait=attack=gaitVelocity=attackVelocity=0; return; }

@@ -19,6 +19,17 @@ float EnemyStrike(const rpg::Enemy& enemy,bool active) {
   return enemy.windup>0?1-enemy.windup/enemy.WindupDuration():
     std::max(0.f,1-(enemy.AttackInterval()-enemy.attackCooldown)/.2f);
 }
+float EnemyAttackSeconds(const rpg::Enemy& enemy,bool active) {
+  if (!active || enemy.health<=0) return -1;
+  const bool heavy=enemy.kind==rpg::EnemyKind::Captain;
+  const float contact=combat::Contact(heavy),start=combat::StrokeStart(heavy);
+  if (enemy.windup>0) {
+    if (enemy.windup<=.09f) return contact-enemy.windup;
+    return start*std::clamp((enemy.WindupDuration()-enemy.windup)/(enemy.WindupDuration()-.09f),0.f,1.f);
+  }
+  const float age=contact+enemy.AttackInterval()-enemy.attackCooldown;
+  return age<combat::Duration(heavy)?age:-1.f;
+}
 }
 
 void Game::Initialize() {
@@ -173,7 +184,8 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   if (simulation_.Health()<=0) effects_.CancelTrails();
   if (wasSparring && !simulation_.Sparring()) effects_.CancelTrail(simulation_.SparringOpponent().id);
   playerPose_.Update(simulation_.Facing(),simulation_.GroundMovementDistance(),simulation_.Grounded() && !simulation_.Dashing(),
-    simulation_.Health()>0,simulation_.AttackFlash()*5,dt,simulation_.Dashing() || simulation_.DashedThisUpdate());
+    simulation_.Health()>0,simulation_.AttackFlash()*5,dt,simulation_.Dashing() || simulation_.DashedThisUpdate(),
+    simulation_.Attacking()?42.f:22.f);
   const auto velocity=simulation_.MovementVelocity();
   bool castStarted=false,dashImpact=false,dashFinished=false;
   float dashEndElapsed=0;
@@ -191,6 +203,15 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
     simulation_.Health()>0,simulation_.DamagedThisUpdate(),playerPose_.attack,
     simulation_.LandingSpeed(),simulation_.LandingElapsed(),forwardAcceleration,castStarted);
   playerAnimation_.UpdateDash(dt,simulation_.Dashing(),simulation_.DashPhase(),dashImpact,simulation_.Health()>0,dashFinished,dashEndElapsed);
+  playerAnimation_.pose.attackSeconds=simulation_.AttackSeconds();
+  playerAnimation_.pose.heavyAttack=simulation_.HeavyAttack();
+  const float lateralAcceleration=command.haltMovement?0:
+    ((velocity.x-previousVelocity.x)*std::cos(playerPose_.facing)-
+     (velocity.z-previousVelocity.z)*std::sin(playerPose_.facing))/dt;
+  motion::Spring(playerAnimation_.pose.bank,playerAnimation_.bankVelocity,
+    simulation_.Grounded()?std::clamp(lateralAcceleration/50.f,-1.f,1.f):0.f,18.f,dt);
+  if (!simulation_.Attacking()) { playerPose_.attack=0; playerPose_.attackVelocity=0; effects_.CancelTrail(0); }
+  if (command.haltMovement) effects_.CancelTrail(0);
   if (command.haltMovement) playerAnimation_.CancelDash();
   playerAnimation_.pose.lean*=1-playerAnimation_.pose.dash;
   playerFeet_.Update(dt,simulation_.Player(),playerPose_.facing,simulation_.Grounded() && !simulation_.Dashing(),
@@ -208,6 +229,8 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
     // Use it exactly so the character always faces the displayed damage cone.
     enemyPoses_[i].Update(enemy.facing,enemy.movementDistance,true,enemy.health>0,strike,dt,true);
     enemyAnimations_[i].Update(dt,0,0,enemy.movementDistance,enemy.health>0,enemy.damagedThisUpdate,strike);
+    enemyAnimations_[i].pose.attackSeconds=EnemyAttackSeconds(enemy,simulation_.Health()>0 && (i<enemies.size() || simulation_.Sparring()));
+    enemyAnimations_[i].pose.heavyAttack=enemy.kind==rpg::EnemyKind::Captain;
     enemyFeet_[i].Update(dt,enemy.position,enemy.facing,true,enemy.health>0,enemyAnimations_[i].pose);
   }
   const auto track=[&](rpg::EntityId id,rpg::Vec2 position,float height,const motion::Actor& motion,
@@ -318,22 +341,33 @@ void Game::Render(Renderer& renderer,bool showInterface) {
       pose.attack,pose.gait,enemyOutfit,enemyAnimations_[i].pose);
     if (enemy.windup>0 && simulation_.Health()>0) {
       const float progress=1-enemy.windup/enemy.WindupDuration();
-      const XMFLOAT4 warning{1,.55f*(1-progress),.12f,1};
-      for (int segment=0;segment<=12;++segment) {
-        const float angle=enemy.facing-rpg::Enemy::attackHalfAngle+segment*rpg::Enemy::attackHalfAngle/6;
-        renderer.DrawMarkerBox({enemy.position.x+std::sin(angle)*rpg::Enemy::attackReach,.075f,
-          enemy.position.z+std::cos(angle)*rpg::Enemy::attackReach},{.42f,.05f,.09f},warning,angle);
+      const XMFLOAT4 warning{1,.55f*(1-progress),.12f,.68f};
+      const auto point=[&](float angle,float radius) -> XMFLOAT3 {
+        return {enemy.position.x+std::sin(angle)*radius,.045f,enemy.position.z+std::cos(angle)*radius};
+      };
+      for (int segment=0;segment<32;++segment) {
+        const float a=enemy.facing-rpg::Enemy::attackHalfAngle+segment*rpg::Enemy::attackHalfAngle/16;
+        const float b=a+rpg::Enemy::attackHalfAngle/16,r=rpg::Enemy::attackReach;
+        renderer.DrawEffectRibbon(point(a,r-.025f),point(a,r+.025f),point(b,r+.025f),point(b,r-.025f),warning);
       }
       for (float side : {-1.f,1.f}) {
         const float angle=enemy.facing+side*rpg::Enemy::attackHalfAngle;
-        renderer.DrawMarkerBox({enemy.position.x+std::sin(angle)*rpg::Enemy::attackReach*.5f,.075f,
-          enemy.position.z+std::cos(angle)*rpg::Enemy::attackReach*.5f},
-          {.06f,.05f,rpg::Enemy::attackReach},warning,angle);
+        const auto a=point(angle,.24f),b=point(angle,rpg::Enemy::attackReach);
+        const float x=std::cos(angle)*.018f,z=-std::sin(angle)*.018f;
+        renderer.DrawEffectRibbon({a.x-x,a.y,a.z-z},{a.x+x,a.y,a.z+z},
+          {b.x+x,b.y,b.z+z},{b.x-x,b.y,b.z-z},warning);
       }
     }
     if (i==simulation_.Target()) {
-      renderer.DrawMarkerBox({enemy.position.x,.04f,enemy.position.z},{1.3f,.06f,1.3f},{1,.72f,.2f,1});
-      renderer.DrawMarkerBox({enemy.position.x,2.5f,enemy.position.z},{enemy.health/enemy.MaxHealth(), .1f,.1f},{.8f,.15f,.2f,1});
+      // An open ground outline leaves feet and shadows visible. Health belongs
+      // to the target HUD instead of a floating opaque block above the head.
+      const auto point=[&](float angle,float radius) -> XMFLOAT3 {
+        return {enemy.position.x+std::sin(angle)*radius,.035f,enemy.position.z+std::cos(angle)*radius};
+      };
+      for(int segment=0;segment<40;++segment) {
+        const float a=segment*motion::tau/40,b=(segment+1)*motion::tau/40;
+        renderer.DrawEffectRibbon(point(a,.62f),point(a,.66f),point(b,.66f),point(b,.62f),{1,.68f,.18f,.7f});
+      }
     }
   }
   effects_.Render(renderer);

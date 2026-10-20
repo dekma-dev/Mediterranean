@@ -51,7 +51,9 @@ struct Canvas {
   RectFill({a.x+3,a.y+a.h-3,a.w-6,1},{.015f,.025f,.015f,.95f});
  }
  void Text(float x,float y,const std::string& s,float size=18,Color c=ink) {
-  const auto shadow=P(x+1,y+1); r.DrawText(shadow.x,shadow.y,s,{.01f,.015f,.008f,c.w*.85f},size*layout.scale/12);
+  if (c.x+c.y+c.z>1) {
+   const auto shadow=P(x+1,y+1); r.DrawText(shadow.x,shadow.y,s,{.01f,.015f,.008f,c.w*.85f},size*layout.scale/12);
+  }
   const auto p=P(x,y); r.DrawText(p.x,p.y,s,c,size*layout.scale/12);
  }
  float Width(const std::string& s,float size=18) const { return r.TextWidth(s,size*layout.scale/12)/layout.scale; }
@@ -194,6 +196,55 @@ struct Canvas {
    Scroll(x,a.y+a.h*.62f,side,a.w/90);
   }
  }
+ void Parchment(Rect a) {
+  Frame(a,{.66f,.52f,.32f,1},{.30f,.21f,.11f,1});
+  Gradient({a.x+4,a.y+4,a.w-8,a.h-8},{.83f,.74f,.54f,1},{.68f,.55f,.35f,1});
+  for (int i=0;i<90;++i) {
+   const float x=a.x+7+std::fmod(i*71.71f,a.w-14),y=a.y+7+std::fmod(i*43.31f,a.h-14);
+   Line(x,y,std::min(a.x+a.w-7,x+3+i%11),y,.6f,{.30f,.20f,.10f,.13f});
+  }
+  for (int i=0;i<6;++i) {
+   RectFill({a.x+4+i,a.y+4,1,a.h-8},{.24f,.15f,.065f,.12f});
+   RectFill({a.x+a.w-5-i,a.y+4,1,a.h-8},{.24f,.15f,.065f,.10f});
+  }
+ }
+ // A beveled metal medallion with a shaded face, hood and cheek plates.
+ void Portrait(float x,float y,bool enemy,int level) {
+  Oval(x+2,y+3,28,31,{0,0,0,.55f});
+  for (int i=28;i>22;--i) Oval(x,y,float(i),float(i+2),i%2?gold:Color{.19f,.30f,.24f,1});
+  Oval(x,y,22,24,{.045f,.07f,.065f,1});
+  for (float side : {-1.f,1.f}) for (int i=0;i<4;++i) {
+   const float yy=y-20+i*12.f;
+   Triangle({x+side*23,yy},{x+side*(34-i%2*3),yy-8},{x+side*26,yy+9},{.28f,.41f,.27f,1});
+   Line(x+side*25,yy,x+side*30,yy-5,1,gold);
+  }
+  Oval(x,y-2,13,18,{.40f,.27f,.18f,1});
+  Oval(x-2,y-5,11,14,{.76f,.56f,.38f,1});
+  Triangle({x+2,y-9},{x+6,y+5},{x-1,y+5},{.90f,.70f,.47f,1});
+  Line(x-8,y-5,x-3,y-4,2,{.07f,.09f,.08f,1});
+  Line(x+4,y-4,x+9,y-5,2,{.07f,.09f,.08f,1});
+  Line(x-3,y+10,x+4,y+10,1,{.30f,.16f,.12f,1});
+  const Color steel=enemy?Color{.49f,.26f,.20f,1}:Color{.34f,.48f,.54f,1};
+  for(float side : {-1.f,1.f}) {
+   Triangle({x+side*19,y+15},{x+side*12,y-16},{x+side*9,y+15},steel);
+   Line(x+side*16,y-10,x+side*14,y+13,1,{.79f,.77f,.59f,1});
+  }
+  Triangle({x-19,y-12},{x,y-24},{x+19,y-12},steel);
+  Line(x-18,y-12,x+18,y-12,2,gold);
+  Diamond(x,y-17,4,6,enemy?Color{.8f,.18f,.07f,1}:Color{.22f,.80f,.69f,1});
+  Oval(x,y+25,12,10,{.07f,.13f,.10f,1}); Ring(x,y+25,10,gold);
+  Center(x-11,y+17,22,enemy?"!":std::to_string(level),12);
+ }
+ void CooldownSweep(Rect a,float fraction) {
+  const float end=std::clamp(fraction,0.f,1.f)*6.2831853f;
+  const Point center{a.x+a.w*.5f,a.y+a.h*.5f};
+  const auto edge=[&](float angle) {
+   float x=std::sin(angle),y=-std::cos(angle),m=std::max(std::abs(x),std::abs(y));
+   return Point{center.x+x/m*a.w*.5f,center.y+y/m*a.h*.5f};
+  };
+  for (float from=0;from<end;from+=.09817477f)
+   Triangle(center,edge(from),edge(std::min(end,from+.09817477f)),{.006f,.012f,.025f,.70f});
+ }
 };
 void Icon(Canvas& c,Rect rect,Item item,float alpha=1) {
  const float x=rect.x+rect.w*.5f,y=rect.y+rect.h*.5f,s=rect.w/60;
@@ -280,6 +331,39 @@ void Icon(Canvas& c,Rect rect,Item item,float alpha=1) {
   }
  }
 }
+void AbilityArtwork(Canvas& c,Rect rect,int ability) {
+ const float x=rect.x+rect.w*.5f,y=rect.y+rect.h*.5f,s=rect.w/40;
+ const Color glow=ability==1?Color{.25f,.64f,.95f,.7f}:ability==2?Color{.18f,.85f,.78f,.7f}:
+   ability==3?Color{.72f,.91f,.30f,.7f}:Color{1,.58f,.16f,.7f};
+ c.Gradient(rect,{glow.x*.24f,glow.y*.24f,glow.z*.24f,1},{.015f,.025f,.055f,1});
+ for(int i=0;i<6;++i) {
+  const float a=i*1.0472f+.3f;
+  c.Line(x,y,x+std::cos(a)*17*s,y+std::sin(a)*17*s,(i%2+1)*s,{glow.x,glow.y,glow.z,.24f});
+ }
+ if (ability<2) {
+  for(int i=0;i<14;++i) {
+   const float a=-2.7f+i*.16f,b=a+.16f;
+   c.Line(x+std::cos(a)*17*s,y+std::sin(a)*14*s,x+std::cos(b)*17*s,y+std::sin(b)*14*s,4*s,glow);
+   c.Line(x+std::cos(a)*16*s,y+std::sin(a)*13*s,x+std::cos(b)*16*s,y+std::sin(b)*13*s,s,{1,.94f,.73f,1});
+  }
+  Icon(c,{rect.x+3*s,rect.y+3*s,rect.w-6*s,rect.h-6*s},ability?Item::Watchguard:Item::Starter);
+ } else if (ability==2) {
+  for(int i=0;i<4;++i)
+   c.Line(x-17*s,y+(i*6-11)*s,x+9*s,y+(i*6-18)*s,(3-i*.5f)*s,glow);
+  c.Line(x+4*s,y-13*s,x+1*s,y+8*s,7*s,{.55f,.70f,.69f,1});
+  c.Line(x+2*s,y+8*s,x+13*s,y+13*s,8*s,{.69f,.49f,.23f,1});
+  c.Line(x-2*s,y-3*s,x-8*s,y+14*s,5*s,{.30f,.46f,.47f,1});
+  c.Line(x+8*s,y-13*s,x+4*s,y+6*s,1.2f*s,{.94f,1,.87f,1});
+ } else if (ability==3) {
+  for(int i=0;i<5;++i) {
+   const float a=i*1.2566f;
+   c.Oval(x+std::cos(a)*7*s,y+std::sin(a)*7*s,6*s,8*s,{.28f,.49f,.16f,1});
+   c.Line(x,y,x+std::cos(a)*13*s,y+std::sin(a)*13*s,1.3f*s,glow);
+  }
+  c.Diamond(x,y,5*s,12*s,{.96f,1,.64f,1});
+  c.Diamond(x,y,12*s,4*s,{.96f,1,.64f,1});
+ } else Icon(c,rect,Item::Potion);
+}
 void TalentIcon(Canvas& c,Rect rect,int index,float alpha=1) {
  if (index%3!=2) {
   Icon(c,rect,index%3==0?(index<3?Item::Starter:Item::Watchguard):Item::Shield,alpha);
@@ -365,10 +449,10 @@ void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoin
   const float x=a.x+a.w-52,y=a.y+66;
   c.Ring(x,y,19,{.40f,.32f,.20f,.65f},.65f);
   for (int i=0;i<8;++i) {
-   const float angle=i*3.14159265f/4,radius=i%2?15.f:29.f;
-   const Point tip{x+std::sin(angle)*radius,y-std::cos(angle)*radius};
-   const Point left{x+std::sin(angle-.35f)*6,y-std::cos(angle-.35f)*6};
-   const Point right{x+std::sin(angle+.35f)*6,y-std::cos(angle+.35f)*6};
+   const float bearing=i*3.14159265f/4,radius=i%2?15.f:29.f;
+   const Point tip{x+std::sin(bearing)*radius,y-std::cos(bearing)*radius};
+   const Point left{x+std::sin(bearing-.35f)*6,y-std::cos(bearing-.35f)*6};
+   const Point right{x+std::sin(bearing+.35f)*6,y-std::cos(bearing+.35f)*6};
    c.Triangle({x,y},left,tip,{.35f,.28f,.17f,.9f});
    c.Triangle({x,y},tip,right,{.71f,.59f,.38f,1});
    c.Line(left.x,left.y,tip.x,tip.y,.65f,mapInk);
@@ -413,25 +497,33 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  const auto blockWindow=[&](Rect rect) { regions_.push_back({rect,{},false}); c.Window(rect); };
  const auto close=[&](Rect rect,Panel which) { button(rect,"X",Action::Close,int(which)); };
 
- // Carved unit frame, circular survey and compact combat dock.
- c.Window({18,23,276,72});
- c.Oval(49,58,27,29,{.04f,.07f,.025f,1}); c.Ring(49,58,26,gold,2); c.Ring(49,58,21,border,2);
- c.Diamond(49,58,17,21,{.18f,.28f,.13f,1}); c.Center(25,42,48,std::to_string(s.Level()),25,gold);
- c.Banner({77,18,208,27},"Frontier guard",16);
- c.RectFill({84,53,194,19},{.025f,.045f,.02f,1});
- c.Gradient({86,55,190*s.Health()/s.MaxHealth(),15},{.42f,.62f,.20f,1},{.12f,.29f,.085f,1});
- c.Center(84,52,194,std::to_string(int(s.Health()))+" / "+std::to_string(int(s.MaxHealth())),13);
- c.Text(87,77,"Dawnwatch expedition",12,muted);
+ // Combat frames sit beside the action; side windows move them to the top.
+ const bool combatLayout=!HasPanels();
+ const float ux=combatLayout?330.f:18.f,uy=combatLayout?518.f:23.f;
+ regions_.push_back({{ux-5,uy,285,78},{},false});
+ c.Frame({ux+27,uy+8,229,66},{.035f,.075f,.065f,.94f},{.39f,.46f,.28f,1});
+ c.Banner({ux+49,uy,208,26},"Frontier guard",15);
+ c.Portrait(ux+29,uy+36,false,s.Level());
+ c.Frame({ux+58,uy+30,189,20},{.035f,.075f,.035f,1});
+ c.Gradient({ux+61,uy+33,183*std::clamp(s.Health()/s.MaxHealth(),0.f,1.f),14},
+   {.49f,.76f,.22f,1},{.12f,.31f,.075f,1});
+ c.Center(ux+60,uy+31,185,std::to_string(int(s.Health()))+" / "+std::to_string(int(s.MaxHealth())),12);
+ c.Text(ux+62,uy+55,"Lv. "+std::to_string(s.Level())+"  /  Dawnwatch guard",11,muted);
  if (s.TargetActor()) {
-  const auto& target=*s.TargetActor(); c.Window({475,26,278,62}); c.Banner({487,20,254,26},target.Name(),16);
-  c.RectFill({491,52,246,14},{.12f,.035f,.02f,1});
-  c.Gradient({493,54,242*target.health/target.MaxHealth(),10},{.74f,.30f,.13f,1},{.35f,.06f,.03f,1});
-  c.Center(491,50,246,std::to_string(int(std::ceil(target.health)))+" / "+std::to_string(int(target.MaxHealth())),12,ink);
+  const auto& target=*s.TargetActor();
+  const float tx=combatLayout?750.f:475.f,ty=combatLayout?518.f:26.f;
+  regions_.push_back({{tx,ty,286,78},{},false});
+  c.Frame({tx,ty+8,244,66},{.085f,.045f,.035f,.94f},{.46f,.36f,.20f,1});
+  c.Banner({tx+2,ty,226,26},target.Name(),14); c.Portrait(tx+253,ty+36,true,target.kind==rpg::EnemyKind::Captain?3:1);
+  c.Frame({tx+9,ty+30,223,20},{.10f,.025f,.015f,1});
+  c.Gradient({tx+12,ty+33,217*std::clamp(target.health/target.MaxHealth(),0.f,1.f),14},
+    {.76f,.35f,.16f,1},{.35f,.075f,.04f,1});
+  c.Center(tx+10,ty+31,221,std::to_string(int(std::ceil(target.health)))+" / "+std::to_string(int(target.MaxHealth())),12);
   const auto distance=std::to_string(int(std::ceil(std::hypot(s.Player().x-target.position.x,s.Player().z-target.position.z))));
-  c.Center(479,69,270,target.windup>0?"Strike in "+Seconds(target.windup)+"s - evade!":distance+" m  /  Selected target",12,target.windup>0?gold:muted);
+  c.Center(tx+5,ty+54,228,target.windup>0?"Incoming strike  "+Seconds(target.windup)+"s":distance+" m  /  Selected target",11,target.windup>0?gold:muted);
   if (target.windup>0) {
-   c.RectFill({491,84,246,3},{.12f,.035f,.02f,1});
-   c.RectFill({491,84,246*std::clamp(1-target.windup/target.WindupDuration(),0.f,1.f),3},{1,.57f,.16f,1});
+   c.RectFill({tx+10,ty+70,220,3},{.12f,.035f,.02f,1});
+   c.RectFill({tx+10,ty+70,220*std::clamp(1-target.windup/target.WindupDuration(),0.f,1.f),3},{1,.57f,.16f,1});
   }
  }
  c.Oval(1170,94,81,81,{.025f,.04f,.02f,1});
@@ -465,24 +557,16 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  const float xp=s.Level()==3?1.f:float(s.Experience()-s.LevelStartExperience())/(s.NextLevelExperience()-s.LevelStartExperience());
  c.Frame({439,645,403,7}); c.RectFill({442,648,397*xp,2},{.55f,.63f,.29f,1});
  c.Window({437,655,406,55}); c.Scroll(420,676,-1,1.5f); c.Scroll(860,676,1,1.5f);
- for (int i=0;i<9;++i) {
+ for (int i=0;i<5;++i) {
   const float x=447+i*43.f; const Rect rect{x,662,39,40};
-  if (i>=5) { c.EmptySlot(rect); continue; }
   c.Frame(rect,{.08f,.12f,.055f,1},rect.Contains(mouseX_,mouseY_)?gold:border);
-  c.Gradient({x+4,666,31,32},i==3?Color{.16f,.36f,.16f,1}:Color{.25f,.19f,.10f,1},{.035f,.06f,.03f,1});
-  if (i==3) {
-   c.Oval(x+20,682,13,13,{.20f,.39f,.17f,1});
-   c.RectFill({x+17,671,6,22},{.76f,.91f,.43f,1}); c.RectFill({x+9,679,22,6},{.76f,.91f,.43f,1});
-  } else {
-   Icon(c,{x+2,663,35,35},i<2?Item::Starter:i==4?Item::Potion:Item::Boots);
-   if (i==1) c.Line(x+6,679,x+31,690,2,{.94f,.41f,.12f,1});
-  }
+  AbilityArtwork(c,{x+3,665,33,34},i);
   const bool ready=panel!=Panel::Merchant && (i<4?std::string(s.AbilityStatus(i))=="READY":CanUse(s,Item::Potion));
   const float cooldown=i<4?s.Cooldown(i):s.PotionCooldown();
   if (!ready) c.RectFill({x+3,665,33,34},{.02f,.025f,.01f,.36f});
   if (cooldown>0) {
    const float fraction=std::clamp(cooldown/(i<4?s.AbilityCooldown(i):3.f),0.f,1.f);
-   c.RectFill({x+3,665,33,34*fraction},{.015f,.025f,.04f,.65f});
+   c.CooldownSweep({x+3,665,33,34},fraction);
    c.Center(x,675,39,Seconds(cooldown),cooldown<1?15.f:19.f,ink);
    c.RectFill({x+4,698,31*(1-fraction),2},blue);
   } else c.RectFill({x+4,698,31,2},ready?Color{.51f,.78f,.37f,1}:Color{.58f,.25f,.13f,1});
@@ -490,19 +574,33 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Text(x+3,662,i<4?std::to_string(i+1):"Q",12,{1,.96f,.73f,1});
   regions_.push_back({rect,{i<4?Action::Ability:Action::UseItem,i<4?i:static_cast<int>(Item::Potion)},ready});
  }
- const std::pair<Action,const char*> shortcuts[]={{Action::Build,"N"},{Action::Character,"C"},{Action::Inventory,"I"},{Action::Map,"M"},{Action::Journal,"J"},{Action::Menu,"Esc"}};
- for (int i=0;i<6;++i) button({1027+i*40.f,671,37,32},shortcuts[i].second,shortcuts[i].first);
+ c.Frame({665,662,168,40},{.035f,.07f,.065f,1});
+ c.Center(668,666,162,"Strike "+std::to_string(int(s.StrikeDamage()))+"  /  Heavy "+std::to_string(int(s.HeavyDamage())),12,gold);
+ c.Center(668,684,162,s.Attacking()?"Weapon committed":s.TargetActor()?"Tab changes target":"Tab selects a target",10,muted);
+ // A second row contains real navigation tools, leaving the primary bindings intact.
+ if (panel==Panel::None) {
+  const char* labels[]={"C Gear","I Bag","N Build","M Atlas","J Journal","Esc"};
+  const Action actions[]={Action::Character,Action::Inventory,Action::Build,Action::Map,Action::Journal,Action::Menu};
+  for(int i=0;i<6;++i) button({447+i*65.f,617,62,23},labels[i],actions[i]);
+  if (s.Attacking()) {
+   const float contact=combat::Contact(s.HeavyAttack());
+   const char* phase=s.AttackSeconds()<combat::StrokeStart(s.HeavyAttack())?"Wind-up":s.AttackSeconds()<contact?"Swing":"Recovery";
+   c.Frame({505,588,270,23},{.035f,.065f,.065f,.97f});
+   c.Gradient({508,591,264*s.AttackProgress(),17},{.27f,.48f,.49f,1},{.10f,.22f,.26f,1});
+   c.Center(508,591,264,std::string(s.HeavyAttack()?"Heavy strike / ":"Strike / ")+phase,12);
+  }
+ }
  if (s.TalentPoints()>0) {
-  c.Oval(1059,670,9,9,{.35f,.20f,.06f,1}); c.Ring(1059,670,9,gold);
-  c.Center(1050,663,18,std::to_string(s.TalentPoints()),12,ink);
-  regions_.push_back({{1050,661,18,18},{Action::Build},true});
+  c.Oval(631,615,9,9,{.35f,.20f,.06f,1}); c.Ring(631,615,9,gold);
+  c.Center(622,608,18,std::to_string(s.TalentPoints()),12,ink);
+  regions_.push_back({{622,606,18,18},{Action::Build},true});
  }
  c.Text(22,674,std::to_string(s.Gold())+" gold",16,gold);
  c.Text(22,695,"WASD  Move     RMB  Orbit     F11  Display",11,muted);
- if (!characterOpen && panel!=Panel::Quest) c.Wrap(22,578,405,s.Message(),14,ink,3);
+ if (!characterOpen && panel!=Panel::Quest) c.Wrap(22,614,385,s.Message(),14,ink,3);
  if (panel==Panel::None && s.Health()>0) {
   const auto prompt=s.InteractionPrompt();
-  if (!prompt.empty()) { const float w=std::min(510.f,c.Width(prompt,14)+30); c.Frame({640-w/2,609,w,27}); c.Center(640-w/2,614,w,prompt,14,gold); }
+  if (!prompt.empty()) { const float w=std::min(510.f,c.Width(prompt,14)+30); c.Frame({640-w/2,485,w,27}); c.Center(640-w/2,490,w,prompt,14,gold); }
   if (s.Channeling()) { c.RectFill({470,640,340,3},border); c.RectFill({470,640,340*s.ChannelProgress(),3},blue); }
  }
 
@@ -559,9 +657,9 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Line(314,374,426,374,1,border);
   c.Center(304,387,132,"PROGRESSION",12,gold);
   c.Center(310,409,120,"Level "+std::to_string(s.Level()),19);
-  const float xp=s.Level()==3?1.f:std::clamp(float(s.Experience()-s.LevelStartExperience())/
+  const float characterXp=s.Level()==3?1.f:std::clamp(float(s.Experience()-s.LevelStartExperience())/
     float(s.NextLevelExperience()-s.LevelStartExperience()),0.f,1.f);
-  c.Frame({314,438,112,10}); c.Gradient({317,441,106*xp,4},blue,{.13f,.25f,.42f,1});
+  c.Frame({314,438,112,10}); c.Gradient({317,441,106*characterXp,4},blue,{.13f,.25f,.42f,1});
   c.Center(310,457,120,s.Level()==3?"Level cap reached":std::to_string(s.NextLevelExperience()-s.Experience())+" XP to next level",10,muted);
   c.Line(314,484,426,484,1,border);
   c.Text(316,501,"Gold",12,muted);
@@ -664,13 +762,15 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Text(40,164,quest.title,titleSize,ink);
   const char* heading=stage==rpg::QuestStage::Offer?"QUEST OFFER":stage==rpg::QuestStage::Progress?"IN PROGRESS":
     stage==rpg::QuestStage::TurnIn?"READY TO COMPLETE":"QUEST COMPLETED";
-  c.Text(40,202,heading,11,gold);
+  c.Parchment({32,195,416,174});
+  const Color manuscript{.22f,.145f,.075f,1};
+  c.Text(40,202,heading,11,manuscript);
   const auto lines=c.Lines(400,rpg::QuestStory(id,stage),16);
   constexpr int rows=7;
   const int pages=std::max(1,(int(lines.size())+rows-1)/rows);
   questPage=std::clamp(questPage,0,pages-1);
   for (int row=0;row<rows && questPage*rows+row<int(lines.size());++row)
-    c.Text(40,223+row*21.f,lines[questPage*rows+row],16,ink);
+    c.Text(40,219+row*20.f,lines[questPage*rows+row],16,manuscript);
   if (pages>1) {
    button({40,374,73,25},"Previous",Action::QuestPage,-1,questPage>0);
    c.Center(130,380,220,"Page "+std::to_string(questPage+1)+" / "+std::to_string(pages),12,muted);
@@ -845,8 +945,8 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   } else if (panel!=Panel::Merchant && (it->event.action==Action::Ability || it->event.action==Action::UseItem) && it->rect.y>650) {
    const bool potion=it->event.action==Action::UseItem; const int ability=it->event.value;
    static const char* names[]={"Strike","Heavy strike","Dash","Mend"};
-   const std::string detail=potion?"Restores up to 40 health.":ability==0?std::to_string(int(s.StrikeDamage()))+" melee damage.":
-    ability==1?std::to_string(int(s.HeavyDamage()))+" damage. Interrupts a windup.":ability==2?"Rush to your selected enemy within 5 m. Stops at melee distance or obstacles.":"Restores up to "+std::to_string(int(s.MendHealing()))+" health.";
+   const std::string detail=potion?"Restores up to 40 health.":ability==0?std::to_string(int(s.StrikeDamage()))+" damage at weapon contact (0.18s).":
+    ability==1?std::to_string(int(s.HeavyDamage()))+" damage at 0.30s contact. Interrupts.":ability==2?"Rush to your selected enemy within 5 m. Stops at melee distance or obstacles.":"Restores up to "+std::to_string(int(s.MendHealing()))+" health.";
    const std::string status=potion?(s.Health()<=0?"DEFEATED":s.Potions()==0?"NO POTIONS":s.Health()>=s.MaxHealth()?"FULL HEALTH":s.PotionCooldown()>0?"COOLDOWN":"READY"):s.AbilityStatus(ability);
    const float x=std::clamp(it->rect.x-30,460.f,680.f);
    c.Window({x,470,300,149}); c.Text(x+14,480,potion?"Healing draught":names[ability],19,gold);

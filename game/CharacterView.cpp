@@ -23,7 +23,7 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
     const auto world=[&](XMFLOAT3 local) { return point(local.x,local.y,local.z); };
     const auto upper=[&](XMFLOAT3 local) { return world(pose.UpperPoint(local)); };
     const auto part=[&](M mesh,float x,float h,float z,XMFLOAT3 scale,XMFLOAT4 tint,S material) {
-      renderer.DrawMesh(mesh,upper({x,h,z}),scale,tint,material,yaw,pose.upperPitch);
+      renderer.DrawMesh(mesh,upper({x,h,z}),scale,tint,material,yaw+pose.upperYaw,pose.upperPitch);
     };
     part(M::Torso,0,1.23f,0,{.61f,.64f,.36f},outfit.armor?steel:cloth,outfit.armor?S::Metal:S::Cloth);
     if (outfit.belt) {

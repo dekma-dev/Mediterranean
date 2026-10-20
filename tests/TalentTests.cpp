@@ -63,6 +63,7 @@ int main() {
  Training(master);
  const float before=master.SparringOpponent().health;
  Command attack; attack.ability=0; master.Update(.01f,attack);
+ for(int i=0;i<18;++i) master.Update(.01f,{});
  Require(master.SparringOpponent().health==before-master.StrikeDamage(),"Talents must affect a real strike, not only the panel");
  Simulation hybrid; Require(hybrid.Load(veteranSave),"Hybrid fixture");
  Learn(hybrid,Talent::Vitality); Learn(hybrid,Talent::WeaponTraining);

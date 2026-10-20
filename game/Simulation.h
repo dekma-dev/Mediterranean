@@ -8,6 +8,7 @@
 #include "game/Talents.h"
 #include "game/Quests.h"
 #include "game/Motion.h"
+#include "game/AttackMotion.h"
 
 namespace rpg {
 enum class EnemyState { Idle, Pursuing, Returning, Dead };
@@ -94,7 +95,11 @@ public:
   float MovementDistance() const { return movementDistance_; } // excludes dash/respawn
   Vec2 MovementVelocity() const { return movementVelocity_; }
   float GroundMovementDistance() const { return groundMovementDistance_; }
-  void StopMovement() { movementVelocity_={}; movementDistance_=groundMovementDistance_=0; jumpBuffer_=0; dashRemaining_=dashTravelLeft_=0; dashTarget_=0; }
+  void StopMovement() { movementVelocity_={}; movementDistance_=groundMovementDistance_=0; jumpBuffer_=0; dashRemaining_=dashTravelLeft_=0; dashTarget_=0; CancelAttack(); }
+  bool Attacking() const { return attackAbility_>=0; }
+  bool HeavyAttack() const { return attackAbility_==1; }
+  float AttackSeconds() const { return Attacking()?attackAge_:-1.f; }
+  float AttackProgress() const { return Attacking()?attackAge_/combat::Duration(HeavyAttack()):0; }
   float Health() const { return health_; }
   int Experience() const;
   int Level() const;
@@ -170,6 +175,9 @@ private:
   DashCheck CheckDashTarget() const;
   const Enemy* DashTargetActor() const;
   void UseAbility(int index,float visualElapsed=0);
+  void ResolveAttack(float elapsed);
+  void UpdateCombat(float dt,bool advanceAttack);
+  void CancelAttack() { attackAbility_=-1; attackAge_=attackDamage_=attackFlash_=0; attackTarget_=0; }
   void LearnTalent(int index);
   void Interact();
   bool CanTalkToKeeper() const;
@@ -197,6 +205,9 @@ private:
   float jumpBuffer_=0;
   float dashRemaining_=0,dashTravelLeft_=0;
   EntityId dashTarget_=0; // accepted target identity; selection may change during travel
+  int attackAbility_=-1;
+  EntityId attackTarget_=0;
+  float attackAge_=0,attackDamage_=0;
   float movementDistance_ = 0;
   float groundMovementDistance_ = 0;
   float landingSpeed_ = 0, landingElapsed_ = 0;

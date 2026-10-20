@@ -1,5 +1,11 @@
 # Dawnwatch gameplay rules
 
+## Timed movement and attacks (2026-10-20)
+
+Strike (1) commits at activation, contacts at 0.18 s and finishes recovery at 0.52 s. Heavy (2) contacts at 0.30 s and finishes at 0.76 s; interruption happens at contact. The original target and damage are captured at activation. Moving out of reach, losing line of sight, target death/return or player death can prevent the hit. Tab changes selection without transferring the strike. Other abilities cannot replace an unfinished attack; movement and potions remain available. Cooldowns start on acceptance and are not refunded for a missed or cancelled stroke. Pending attacks are transient: load, input suspension and captured menu controls cancel them.
+
+Ground acceleration now approaches speed with a 16/s response; braking uses 24/s. With RMB camera steering, side steps use 85% speed and backward steps 65%, with continuous interpolation on diagonals. A directional jump retains its takeoff pace and momentum; pressing sprint in flight does not increase its speed limit. Ordinary jumps retain 7.2 m/s takeoff and 24 m/s squared gravity. The video ability leap is not mapped onto ordinary Space jumps.
+
 This is an original single-player campaign on one island. Allods Online is the primary setting and presentation reference; these numbers are our prototype rules, not copied live-game balance. No external assets are required.
 
 ## Campaign

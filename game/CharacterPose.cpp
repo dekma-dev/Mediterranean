@@ -21,7 +21,9 @@ LimbPose Solve(XMFLOAT3 root,XMFLOAT3 target,XMFLOAT3 bend,float upper,float low
 }
 }
 DirectX::XMFLOAT3 CharacterPose::UpperDirection(DirectX::XMFLOAT3 p) const {
-  return {p.x,p.y*std::cos(upperPitch)-p.z*std::sin(upperPitch),p.y*std::sin(upperPitch)+p.z*std::cos(upperPitch)};
+  const float y=p.y*std::cos(upperPitch)-p.z*std::sin(upperPitch);
+  const float z=p.y*std::sin(upperPitch)+p.z*std::cos(upperPitch);
+  return {p.x*std::cos(upperYaw)+z*std::sin(upperYaw),y,-p.x*std::sin(upperYaw)+z*std::cos(upperYaw)};
 }
 DirectX::XMFLOAT3 CharacterPose::UpperPoint(DirectX::XMFLOAT3 p) const {
   p.y-=.95f; p=UpperDirection(p); p.y+=.95f+bodyLift; return p;
@@ -42,6 +44,9 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   const float dashImpact=animation::Unit(dynamics.dashImpact);
   // The drive/bracing pose takes priority over an earlier attack or cast pose.
   const float burst=std::max(dash,brake);
+  const auto stroke=combat::Sample(dynamics.attackSeconds,dynamics.heavyAttack);
+  const bool timed=dynamics.attackSeconds>=0;
+  if (timed) swing=stroke.weight;
   swing*=1-burst;
   const float cast=animation::Unit(dynamics.cast)*(1-swing)*(1-hit)*(1-burst);
   CharacterPose pose;
@@ -50,6 +55,12 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   pose.upperPitch=travel*.09f+animation::Signed(dynamics.lean)*.10f+landing*.12f+air*std::max(0.f,rise)*.06f-hit*.12f+sway*.015f*(1-air);
   pose.upperPitch+=dash*.42f-brake*.16f-dashImpact*.14f;
   pose.upperPitch-=cast*.08f;
+  pose.upperYaw=animation::Signed(dynamics.bank)*.08f;
+  if (timed) {
+    pose.upperYaw+=stroke.weight*((dynamics.heavyAttack?-.46f:-.36f)+stroke.cut*.82f)*(1-burst);
+    pose.upperPitch+=stroke.weight*(-.10f+stroke.cut*.22f)*(1-burst);
+    pose.bodyLift-=stroke.coil*(dynamics.heavyAttack?.065f:.035f)*(1-air);
+  }
   std::array<XMFLOAT3,2> contacts{};
   if (dynamics.feetActive) for (int i=0;i<2;++i) {
     const auto& foot=dynamics.feet[i];
@@ -70,7 +81,8 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   for (int i=0;i<2;++i) {
     const float side=i==0?-1.f:1.f,stride=side*(gait*(1-burst)+dash*.95f*drive-brake*.65f)*(1-air);
     const float positiveRise=std::max(0.f,rise),step=std::max(0.f,stride);
-    const float lift=air*(.17f+positiveRise*positiveRise*.15f+(i==0?.045f:0));
+    const float lift=air*(.17f+positiveRise*positiveRise*.15f+(i==0?.045f:0))*
+      (1-animation::Unit(dynamics.takeoff)*(i==0?.45f:.9f));
     pose.legs[i]=Solve({side*.17f,.93f+pose.bodyLift,0},{side*(.18f+air*.015f),.17f+step*step*.055f+lift,
       stride*.22f+air*(i==0?.13f:-.10f)},
       {0,0,1},CharacterPose::thigh,CharacterPose::shin);
@@ -81,13 +93,36 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     XMFLOAT3 hand{side*(.40f+air*.035f),1.02f+attack*.52f+air*.12f+landing*.08f+hit*.08f+dash*.12f+brake*.07f,
       .10f-armStride*.13f+attack*.21f+sway*side*.014f-dash*.20f+brake*.12f};
     if (i==0 && shield) hand={-.39f,1.13f+air*.08f+landing*.08f,.23f-armStride*.04f+dash*.09f};
+    if (timed) {
+      const float cut=stroke.cut,weight=stroke.weight*(1-burst);
+      // Coil beside the shoulder, cut across the body, then return to guard.
+      const XMFLOAT3 attackHand=i==1?
+        XMFLOAT3{.46f-cut*.34f,(dynamics.heavyAttack?1.66f:1.48f)-cut*.38f,-.13f+cut*.59f}:
+        XMFLOAT3{-.34f,1.25f,.23f-cut*.10f};
+      hand.x+=(attackHand.x-hand.x)*weight;
+      hand.y+=(attackHand.y-hand.y)*weight;
+      hand.z+=(attackHand.z-hand.z)*weight;
+    }
     // The free hand opens forward while the weapon arm lifts clear of the cast.
     const XMFLOAT3 spellHand{i==0?-.29f:.43f,i==0?1.39f:1.19f,i==0?.40f:.23f};
     hand.x+=(spellHand.x-hand.x)*cast; hand.y+=(spellHand.y-hand.y)*cast; hand.z+=(spellHand.z-hand.z)*cast;
     pose.arms[i]=Solve(pose.UpperPoint({side*.305f,1.43f,0}),pose.UpperPoint(hand),
       pose.UpperDirection({side*.8f,-.2f,-1}),CharacterPose::upperArm,CharacterPose::forearm);
   }
-  const auto direction=pose.UpperDirection({.12f,-.76f+swing*1.72f+landing*.25f+air*.20f+dash*.32f+brake*.16f,.63f-swing*.45f});
+  XMFLOAT3 weapon{.12f,-.76f+swing*1.72f+landing*.25f+air*.20f+dash*.32f+brake*.16f,.63f-swing*.45f};
+  if (timed) {
+    const float weight=stroke.weight*(1-burst);
+    const XMFLOAT3 cut{.22f-stroke.cut*.38f,1.05f-stroke.cut*1.25f,.05f+stroke.cut*1.05f};
+    const XMFLOAT3 rest{.12f,-.76f,.63f};
+    const auto a=XMVector3Normalize(XMLoadFloat3(&rest)),b=XMVector3Normalize(XMLoadFloat3(&cut));
+    const float angle=std::acos(std::clamp(XMVectorGetX(XMVector3Dot(a,b)),-.9999f,1.f));
+    // Interpolate orientation on the unit sphere: linear direction blending
+    // accelerated sharply as the blade crossed from hanging down to raised.
+    const auto blended=angle>.0001f?
+      (a*std::sin((1-weight)*angle)+b*std::sin(weight*angle))/std::sin(angle):a;
+    XMStoreFloat3(&weapon,blended);
+  }
+  const auto direction=pose.UpperDirection(weapon);
   XMStoreFloat3(&pose.weaponDirection,XMVector3Normalize(XMLoadFloat3(&direction)));
   return pose;
 }

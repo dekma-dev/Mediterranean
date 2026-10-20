@@ -158,7 +158,7 @@ int main() {
   rpg::Command attack; attack.nextTarget=true; attack.ability=1;
   for (int i=0;i<30;++i) game.ExecuteCommand({},1.f/60);
   game.ExecuteCommand(attack,.01f);
-  for (int i=0;i<7;++i) game.ExecuteCommand({},.02f);
+  for (int i=0;i<15;++i) game.ExecuteCommand({},.02f);
   Require(game.Effects().TrailCount()>0,"Combat stance capture must contain an accepted strike");
   liveCapture(L"feet-live-combat.png");
   game.Initialize(); Require(game.RestoreSnapshot(test::dashFixture),"Target dash feet fixture"); game.SetCameraOrbit(2.2f,.28f,4.8f);

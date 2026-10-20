@@ -77,6 +77,8 @@ int main() {
       "Stationary targets must finish at melee stand-off, including shortened dashes");
     Require(travel<=motion::dashDistance+.0001f && s.Cooldown(2)>4.6f,"Travel budget and cooldown must remain bounded");
     Command hit; hit.ability=0; s.Update(.01f,hit);
+    Require(s.Attacking() && s.TargetActor()->health==80,"Dash follow-up starts with a real wind-up");
+    for(int i=0;i<18;++i) s.Update(.01f,{});
     Require(s.Enemies()[0].health<80,"Dash arrival must allow a normal melee attack");
   }
   {

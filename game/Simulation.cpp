@@ -111,6 +111,7 @@ void Simulation::UseAbility(int index,float visualElapsed) {
   if (index<0 || index>=4 || health_<=0) return;
   if (cooldowns_[index]>0) { message_="That ability is cooling down."; return; }
   if (Dashing()) { message_="Finish the dash before using another ability."; return; }
+  if (Attacking()) { message_="Finish the weapon recovery before using another ability."; return; }
   if (index==3) {
     if (health_>=MaxHealth()) { message_="Health is already full."; return; }
     const float healed=std::min(MendHealing(),MaxHealth()-health_);
@@ -145,38 +146,83 @@ void Simulation::UseAbility(int index,float visualElapsed) {
     if (!HasLineOfSight(player_,enemy.position)) { message_="The target is behind an obstacle."; return; }
     const auto direction=Difference(enemy.position,player_);
     facing_=std::atan2(direction.x,direction.z);
-    const int previousLevel=Level();
-    const float damage=std::min(enemy.health,index==0?StrikeDamage():HeavyDamage());
-    enemy.health-=damage;
-    if (trainingTarget) sparringDealt_+=int(damage);
-    Emit(FeedbackKind::Damage,enemy.position,static_cast<int>(damage));
-    EmitVisual(index==0?CombatVisualKind::Strike:CombatVisualKind::HeavyStrike,player_,height_,facing_);
-    EmitVisual(index==0?CombatVisualKind::Hit:CombatVisualKind::HeavyHit,enemy.position,1.25f,facing_,enemy.id);
-    enemy.hitFlash=.2f; enemy.damagedThisUpdate=true; attackFlash_=.2f;
-    message_="Hit.";
-    enemy.state=EnemyState::Pursuing;
-    if (index==1 && enemy.windup>0) {
-      enemy.windup=0; enemy.attackCooldown=.8f;
-      Emit(FeedbackKind::Interrupt,enemy.position);
-      EmitVisual(CombatVisualKind::Interrupt,enemy.position,1.4f,facing_,enemy.id);
-      message_="Heavy strike interrupted the enemy attack.";
-    }
-    if (enemy.health<=0) {
-      target_=-1; enemy.state=EnemyState::Dead; enemy.path.clear(); enemy.windup=0;
-      if (trainingTarget) { EndSparring("Victory"); cooldowns_[index]=AbilityCooldown(index); return; }
-      Emit(FeedbackKind::Experience,enemy.position,40);
-      message_="Raider defeated. Press E nearby to loot.";
-      if (quest_==Quest::Active) { quest_=Quest::Return; message_="Patrol complete. Return to the gold beacon and press E."; }
-      RestoreForLevel(previousLevel);
-    }
+    attackAbility_=index; attackTarget_=enemy.id; attackAge_=0;
+    attackDamage_=index==0?StrikeDamage():HeavyDamage(); attackFlash_=.2f;
+    message_=index==0?"Strike committed.":"Heavy strike committed.";
   }
   cooldowns_[index]=AbilityCooldown(index);
+}
+
+void Simulation::ResolveAttack(float elapsed) {
+  Enemy* victim=nullptr;
+  for (auto& enemy : enemies_) if (enemy.id==attackTarget_) victim=&enemy;
+  const bool trainingTarget=sparring_ && trainer_.id==attackTarget_;
+  if (trainingTarget) victim=&trainer_;
+  if (!victim || victim->health<=0 || victim->state==EnemyState::Returning ||
+      Length(Difference(victim->position,player_))>2.5f || height_>1.5f ||
+      !HasLineOfSight(player_,victim->position)) {
+    Emit(FeedbackKind::Miss,player_); message_="The committed strike missed."; return;
+  }
+  auto& enemy=*victim;
+  const int index=attackAbility_;
+  const int previousLevel=Level();
+  const float damage=std::min(enemy.health,attackDamage_);
+  enemy.health-=damage;
+  if (trainingTarget) sparringDealt_+=int(damage);
+  Emit(FeedbackKind::Damage,enemy.position,static_cast<int>(damage));
+  EmitVisual(index==0?CombatVisualKind::Hit:CombatVisualKind::HeavyHit,enemy.position,1.25f,facing_,enemy.id,elapsed);
+  enemy.hitFlash=.2f; enemy.damagedThisUpdate=true; attackFlash_=.2f;
+  message_="Hit.";
+  enemy.state=EnemyState::Pursuing;
+  if (index==1 && enemy.windup>0) {
+    enemy.windup=0; enemy.attackCooldown=.8f;
+    Emit(FeedbackKind::Interrupt,enemy.position);
+    EmitVisual(CombatVisualKind::Interrupt,enemy.position,1.4f,facing_,enemy.id,elapsed);
+    message_="Heavy strike interrupted the enemy attack.";
+  }
+  if (enemy.health<=0) {
+    if (TargetActor() && TargetActor()->id==enemy.id) target_=-1;
+    enemy.state=EnemyState::Dead; enemy.path.clear(); enemy.windup=0;
+    if (trainingTarget) { EndSparring("Victory"); return; }
+    Emit(FeedbackKind::Experience,enemy.position,40);
+    message_="Raider defeated. Press E nearby to loot.";
+    if (quest_==Quest::Active) { quest_=Quest::Return; message_="Patrol complete. Return to the gold beacon and press E."; }
+    RestoreForLevel(previousLevel);
+  }
+}
+
+void Simulation::UpdateCombat(float dt,bool advanceAttack) {
+  const auto enemies=[&](float step) {
+    if (step<=0) return;
+    for (auto& enemy : enemies_) UpdateEnemy(enemy,step);
+    if (sparring_) UpdateEnemy(trainer_,step);
+  };
+  if (!advanceAttack || !Attacking()) { enemies(dt); return; }
+  const bool heavy=HeavyAttack();
+  const float before=attackAge_,after=before+dt,contact=combat::Contact(heavy);
+  // An earlier fatal counterattack cancels contact. Selection changes cannot
+  // redirect an already committed stroke. Equal-time enemy contact wins.
+  const bool contactReached=before<contact && after+1e-6f>=contact;
+  if (contactReached) {
+    const float first=std::clamp(contact-before,0.f,dt);
+    enemies(first);
+    if (Attacking()) ResolveAttack(dt-first);
+    enemies(dt-first);
+  } else enemies(dt);
+  if (!Attacking()) return;
+  const float stroke=combat::StrokeStart(heavy);
+  if (before<stroke && after>=stroke)
+    EmitVisual(heavy?CombatVisualKind::HeavyStrike:CombatVisualKind::Strike,
+      player_,height_,facing_,0,std::max(0.f,after-stroke));
+  attackAge_=contactReached?std::max(after,contact):after;
+  if (after>=combat::Duration(heavy)) CancelAttack();
 }
 
 const char* Simulation::AbilityStatus(int index) const {
   if (index<0 || index>=4 || health_<=0) return "DISABLED";
   if (cooldowns_[index]>0) return "COOLDOWN";
   if (Dashing()) return "DASHING";
+  if (Attacking()) return "RECOVERING";
   if (index==3) return health_>=MaxHealth()?"FULL HEALTH":"READY";
   if (index==2) {
     switch (CheckDashTarget()) {
@@ -312,6 +358,7 @@ void Simulation::Update(float seconds,const Command& command) {
   trainer_.movementDistance=0; trainer_.damagedThisUpdate=false;
   if (!std::isfinite(seconds) || seconds<=0) return;
   const float dt=std::min(seconds,.05f);
+  const bool advanceAttack=Attacking();
   if (command.restart) { *this=Simulation{}; return; }
   for (auto& feedback : feedback_) feedback.age+=dt;
   feedback_.erase(std::remove_if(feedback_.begin(),feedback_.end(),[](const CombatFeedback& f) { return f.age>=1.5f; }),feedback_.end());
@@ -329,7 +376,7 @@ void Simulation::Update(float seconds,const Command& command) {
   for (auto& cooldown : cooldowns_) cooldown=std::max(0.f,cooldown-dt);
   potionCooldown_=std::max(0.f,potionCooldown_-dt);
   if (command.learnTalent!=-1) LearnTalent(command.learnTalent);
-  attackFlash_=std::max(0.f,attackFlash_-dt);
+  if (!Attacking()) attackFlash_=std::max(0.f,attackFlash_-dt);
   const bool steering=command.steerFacing && std::isfinite(command.facingYaw) && !command.haltMovement;
   // Camera steering owns the body heading, including at rest and while strafing.
   // Accepted attacks and active dashes keep their committed heading.
@@ -337,6 +384,8 @@ void Simulation::Update(float seconds,const Command& command) {
   const float length=Length(command.movement);
   const bool moving=std::isfinite(command.movement.x) && std::isfinite(command.movement.z) &&
     std::isfinite(length) && length>.001f;
+  const float pace=moving && steering?motion::DirectionalPace(
+    (command.movement.x*std::sin(facing_)+command.movement.z*std::cos(facing_))/length):1.f;
   const bool changingGear=command.equipWeapon || command.inventory.action==InventoryAction::Equip || command.inventory.action==InventoryAction::Unequip;
   if (Channeling() && (moving || command.jump || command.ability>=0 || command.usePotion || changingGear)) {
     channelRemaining_=0; message_="Stabilization interrupted. Press E at the anchor to try again.";
@@ -348,7 +397,7 @@ void Simulation::Update(float seconds,const Command& command) {
   const auto launch=[&]() {
     jumpBuffer_=0;
     velocityY_=motion::jumpSpeed; jumpedThisUpdate_=true;
-    airSpeedLimit_=command.sprint?7.f:4.f;
+    airSpeedLimit_=(command.sprint?7.f:4.f)*pace;
     // A slow directional takeoff has a leg-driven launch impulse. Running
     // jumps preserve existing momentum, including momentum against new input.
     // Taper the push continuously with speed rather than using a rest threshold.
@@ -372,10 +421,10 @@ void Simulation::Update(float seconds,const Command& command) {
     if (interval<=0) return;
     Vec2 target{};
     if (moving) {
-      const float speed=(airborne?airSpeedLimit_:command.sprint?7.f:4.f)*std::min(1.f,length);
+      const float speed=(airborne?airSpeedLimit_:(command.sprint?7.f:4.f)*pace)*std::min(1.f,length);
       target={command.movement.x/length*speed,command.movement.z/length*speed};
     } else if (airborne) target=movementVelocity_; // Keep takeoff momentum without input.
-    const float response=airborne?3.f:moving?24.f:32.f;
+    const float response=airborne?3.f:moving?motion::groundAcceleration:motion::groundBraking;
     const Vec2 travel{motion::IntegrateVelocity(movementVelocity_.x,target.x,response,interval),
       motion::IntegrateVelocity(movementVelocity_.z,target.z,response,interval)};
     const auto before=player_;
@@ -383,7 +432,7 @@ void Simulation::Update(float seconds,const Command& command) {
     const auto actual=Difference(player_,before);
     // Ordinary locomotion follows actual travel. RMB keeps the camera heading
     // while strafing or backing up; accepted combat below can commit a new heading.
-    if (!steering && Length(actual)>.00001f) facing_=std::atan2(actual.x,actual.z);
+    if (!steering && !Attacking() && Length(actual)>.00001f) facing_=std::atan2(actual.x,actual.z);
     movementDistance_+=Length(actual);
     if (!airborne) groundMovementDistance_+=Length(actual);
     // Remove velocity into the contact, preserving motion along the wall.
@@ -398,7 +447,7 @@ void Simulation::Update(float seconds,const Command& command) {
   };
   // Selection is resolved before availability and activation, including Tab+3.
   if (command.nextTarget) SelectTarget();
-  const bool dashMotion=Dashing() || (command.ability==2 && cooldowns_[2]==0 &&
+  const bool dashMotion=Dashing() || (command.ability==2 && !Attacking() && cooldowns_[2]==0 &&
     !command.haltMovement && CheckDashTarget()==DashCheck::Ready);
   if (command.haltMovement || dashMotion) movementVelocity_={};
   else if (inFlight) integrateHorizontal(std::min(dt,contact),true);
@@ -450,7 +499,7 @@ void Simulation::Update(float seconds,const Command& command) {
       potionCooldown_=3; message_="Healing potion restored health.";
     } else message_="That potion stack has moved. Select it again.";
   }
-  if(command.ability!=2) UseAbility(command.ability);
+  if(command.ability!=2 && !command.haltMovement) UseAbility(command.ability);
   if(Dashing()) {
     const float from=DashPhase(),step=std::min(dt,dashRemaining_);
     dashRemaining_=std::max(0.f,dashRemaining_-dt);
@@ -484,13 +533,12 @@ void Simulation::Update(float seconds,const Command& command) {
       dashTarget_=0; dashTravelLeft_=0;
     }
   }
-  for (auto& enemy : enemies_) UpdateEnemy(enemy,dt);
   if (sparring_) {
     sparringRemaining_=std::max(0.f,sparringRemaining_-dt);
     if (Length(Difference(player_,WorldMap::trainingPost))>7) EndSparring("Left the arena");
     else if (sparringRemaining_==0) EndSparring("Time complete");
-    else UpdateEnemy(trainer_,dt);
   }
+  UpdateCombat(dt,advanceAttack);
   if (health_>0) SeparateEnemies(dt);
   if (Channeling()) {
     if (moving || !Grounded() || Dashing() || command.ability>=0 || command.usePotion || changingGear ||

@@ -124,8 +124,17 @@ int main() {
     "100 -4 7 80 0 0 1 0.5 3.14159\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
   Require(simulation.Load(duel),"Combat audio fixture rejected"); events.Reset();
   command={}; command.nextTarget=true; command.ability=1;
-  simulation.Update(.01f,command); const auto save=simulation.Save(); events.Update(simulation);
-  Require(Has(events,sound::Cue::Heavy) && Has(events,sound::Cue::HeavyHit) && Has(events,sound::Cue::Interrupt),"Heavy hit and interruption need distinct cues");
+  simulation.Update(.01f,command); events.Update(simulation);
+  Require(events.count==0,"Wind-up must not play a premature impact or swing");
+  bool swing=false;
+  for(int i=0;i<30;++i) {
+    simulation.Update(.01f,{}); events.Update(simulation);
+    if (Has(events,sound::Cue::Heavy)) {
+      Require(!Has(events,sound::Cue::HeavyHit),"Swing sound must precede the contact sound"); swing=true;
+    }
+  }
+  const auto save=simulation.Save();
+  Require(swing && Has(events,sound::Cue::HeavyHit) && Has(events,sound::Cue::Interrupt),"Contact and interruption need distinct cues after the swing");
   Require(simulation.Save()==save,"Audio must not change gameplay/save state");
   simulation=rpg::Simulation{}; events.Reset(); command={}; command.jump=true;
   simulation.Update(1.f/60,command); events.Update(simulation); Require(Has(events,sound::Cue::Jump),"Jump cue missing");

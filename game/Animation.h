@@ -1,5 +1,6 @@
 #pragma once
 #include "game/Motion.h"
+#include "game/AttackMotion.h"
 #include <array>
 
 // Presentation-only channels; no collision, combat timing or durable save data.
@@ -15,6 +16,9 @@ struct Sample {
   float lean=0;
   float dash=0,dashBrake=0,dashImpact=0,dashPhase=0,dashLoad=0;
   float cast=0;
+  float attackSeconds=-1;
+  bool heavyAttack=false;
+  float takeoff=0,bank=0;
 };
 inline Sample Idle(float time,float offset=0) {
   const float seconds=std::isfinite(time)?std::remainder(time,motion::tau*2/1.8f):0;
@@ -40,6 +44,7 @@ struct State {
   float phase=0,airBlend=0,riseBlend=0,travelBlend=0;
   float landingAge=2,landingStrength=0,hitAge=2,hitCarry=0;
   float castAge=2,leanVelocity=0,riseVelocity=0,travelVelocity=0;
+  float bankVelocity=0;
   float dashImpactAge=2,dashCarry=0,brakeCarry=0;
   bool dashCollision=false;
   void Reset(float offset=0) { *this=State{}; phase=std::isfinite(offset)?std::remainder(offset,motion::tau):0; }
@@ -95,6 +100,9 @@ struct State {
     pose.landing=landingStrength*Gesture(landingAge,.09f,.42f);
     // Extend the legs before touching down, regardless of filtered air state.
     pose.air=airBlend*SmoothStep(height/.25f); pose.rise=riseBlend; pose.travel=travelBlend;
+    // Keep the push leg extended during the first part of ascent, then tuck.
+    // This follows actual flight velocity; it cannot retrigger while falling.
+    pose.takeoff=onGround?0:SmoothStep((velocity/motion::jumpSpeed-.55f)/.45f);
     const float rest=(1-travelBlend)*(1-Unit(strike))*(1-pose.hit)*(1-pose.air);
     pose.breath=std::sin(phase)*rest; pose.sway=std::sin(phase*.5f)*rest;
   }

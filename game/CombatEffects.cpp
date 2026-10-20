@@ -163,7 +163,7 @@ void CombatEffects::Emit(const rpg::CombatVisualEvent& event) {
   if (event.kind==K::Strike || event.kind==K::HeavyStrike || event.kind==K::EnemySwing) {
     auto slot=std::find_if(trails_.begin(),trails_.end(),[&](const Trail& trail) { return trail.actor==event.actor && trail.age<.4f; });
     if (slot==trails_.end()) slot=std::max_element(trails_.begin(),trails_.end(),[](const Trail& a,const Trail& b) { return a.age<b.age; });
-    *slot={}; slot->actor=event.actor; slot->kind=event.kind; slot->age=0;
+    *slot={}; slot->actor=event.actor; slot->kind=event.kind; slot->age=elapsed;
     slot->origin={event.position.x,event.height,event.position.z}; slot->facing=event.facing;
     return;
   }
@@ -303,6 +303,10 @@ void CombatEffects::Render(Renderer& renderer) const {
     const XMFLOAT3 origin{e.position.x-std::sin(e.facing)*.34f,e.height,e.position.z-std::cos(e.facing)*.34f};
     auto color=Tint(e.kind);
     const float flash=std::pow(Unit(1-t/.20f),2.f);
+    // A brief pale contact core, followed by the coloured halo and fragments.
+    // Timing comes from the weapon contact event, never the initial key press.
+    const float core=std::pow(Unit(1-t/.075f),2.f);
+    if (!hurt) renderer.DrawEffectGlow(origin,heavy?.27f:.17f,{1,.94f,.77f,core*.9f});
     color.w=(heavy?.78f:.60f)*flash;
     renderer.DrawEffectGlow(origin,(heavy?.52f:hurt?.25f:.35f)+t*.6f,color);
     color.w=(heavy?.32f:.18f)*flash;
@@ -323,16 +327,29 @@ void CombatEffects::Render(Renderer& renderer) const {
       pulse.w=std::sin(phase*3.14159265f)*(interrupt?.38f:.18f);
       renderer.DrawEffectRing(origin,.18f+phase*(interrupt?.85f:.65f),pulse);
     }
+    if (heavy && e.height<1.7f) {
+      // A low pressure skirt in the ground plane anchors the impact to the
+      // target. The transparent centre keeps boots and collision cues visible.
+      const float radius=.25f+1.3f*std::sqrt(Unit(t/.48f));
+      for(int i=0;i<24;++i) {
+        const float a=i*motion::tau/24,b=(i+1)*motion::tau/24;
+        const auto point=[&](float angle,float r) -> XMFLOAT3 {
+          return {e.position.x+std::cos(angle)*r,.035f,e.position.z+std::sin(angle)*r};
+        };
+        renderer.DrawEffectRibbon(point(a,radius),point(a,radius+.10f),point(b,radius+.10f),point(b,radius),
+          {.18f,.46f,.64f,fade*.27f},1,1);
+      }
+    }
     const int count=interrupt?10:heavy?12:hurt?6:8;
     for (int i=0;i<count;++i) {
       const float angle=6.2831853f*(float(i)/count+Noise(burst.seed*71+i*11)*.10f);
       const float speed=(heavy?3.3f:2.2f)*(.65f+Noise(burst.seed*23+i*17)*.6f);
       const float lateral=std::cos(angle)*speed;
       const float outward=speed*(.35f+.45f*Noise(burst.seed*59+i*7));
-      const float sx=std::sin(e.facing),cx=std::cos(e.facing);
+      const float impactSin=std::sin(e.facing),impactCos=std::cos(e.facing);
       const XMFLOAT3 velocity=interrupt?
         XMFLOAT3{std::cos(angle)*speed,2.6f+Noise(burst.seed*37+i*13),std::sin(angle)*speed}:
-        XMFLOAT3{cx*lateral-sx*outward,.7f+Noise(burst.seed*37+i*13)*1.5f,-sx*lateral-cx*outward};
+        XMFLOAT3{impactCos*lateral-impactSin*outward,.7f+Noise(burst.seed*37+i*13)*1.5f,-impactSin*lateral-impactCos*outward};
       const auto at=[&](float age) -> XMFLOAT3 {
         const float travel=-std::expm1(-3.f*age)/3.f;
         return {origin.x+velocity.x*travel,origin.y+velocity.y*age-3.2f*age*age,origin.z+velocity.z*travel};

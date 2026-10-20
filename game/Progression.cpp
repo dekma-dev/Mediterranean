@@ -89,6 +89,7 @@ void Simulation::StartSparring() {
   message_="Sparring: 30 seconds. E stops. Nonlethal; no XP or loot. Potions are consumed normally.";
 }
 void Simulation::EndSparring(const char* result) {
+  if (attackTarget_==trainer_.id) CancelAttack();
   sparring_=false; trainer_.windup=0; trainer_.path.clear(); target_=-1;
   sparringResult_=result; sparringReportTime_=8;
   message_=std::string("Sparring: ")+result+". Dealt "+std::to_string(sparringDealt_)+", taken "+std::to_string(sparringTaken_)+". No rewards or resource refunds.";

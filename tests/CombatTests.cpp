@@ -82,6 +82,8 @@ int main() {
   BeginSwing(game);
   command={}; command.nextTarget=true; command.ability=1;
   game.Update(.05f,command);
+  Require(game.Enemies()[0].health==80 && game.Attacking(),"Heavy wind-up must not damage immediately");
+  Wait(game,6);
   Require(game.Enemies()[0].windup==0 && game.Enemies()[0].health==45 &&
     HasFeedback(game,rpg::FeedbackKind::Interrupt),"Heavy strike must damage and interrupt a pending swing");
   Wait(game,14);
@@ -115,7 +117,7 @@ int main() {
     "100 -4 7 80 0 0 1 0.01 3.14159\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
   Require(game.Load(fatalCounter),"Fatal counterattack fixture must load");
   command={}; command.nextTarget=true; command.ability=0; game.Update(.05f,command);
-  Require(game.Health()==0 && game.Enemies()[0].health==60,"Player strike and fatal counterattack must both resolve");
+  Require(game.Health()==0 && game.Enemies()[0].health==80,"An earlier fatal counterattack must cancel the unfinished player strike");
   Require(game.AttackFlash()==0,"Defeat must clear the strike pose instead of leaving the sword raised indefinitely");
   Wait(game,10);
   Require(game.AttackFlash()==0,"A defeated player must not retain an active strike");

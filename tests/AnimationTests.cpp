@@ -22,11 +22,15 @@ void TransitionRegressions() {
   Game game; Require(game.RestoreSnapshot(duel),"Variable-step recoil fixture must load.");
   rpg::Command strike; strike.nextTarget=true; strike.ability=0;
   game.ExecuteCommand(strike,.01f);
+  for(int i=0;i<18;++i) game.ExecuteCommand({},.01f);
   check(game.State().Enemies()[0].damagedThisUpdate,"A successful strike must publish an impact event.");
   game.ExecuteCommand({},.01f);
   check(!game.State().Enemies()[0].damagedThisUpdate,"An impact event must not repeat on the next update.");
+  for(int i=0;i<36;++i) game.ExecuteCommand({},.01f);
+  strike.nextTarget=false; strike.ability=1; game.ExecuteCommand(strike,.01f);
+  for(int i=0;i<5;++i) game.ExecuteCommand({},.05f);
   const float beforeHit=game.EnemyAnimation(0).hit,health=game.State().Enemies()[0].health;
-  strike.nextTarget=false; strike.ability=1; game.ExecuteCommand(strike,.05f);
+  game.ExecuteCommand({},.05f);
   Require(beforeHit>0 && game.State().Enemies()[0].health<health,"Second-hit fixture must damage a living enemy.");
   check(game.State().Enemies()[0].damagedThisUpdate,"A second strike must publish its own impact event.");
   rpg::Simulation restored;
@@ -42,10 +46,10 @@ void TransitionRegressions() {
   check(!game.State().Enemies()[0].damagedThisUpdate,"A rejected cooldown command must not emit a damage event.");
 
   const char* fatal="MEDITERRANEAN 3\n-4 5.8 5 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
-    "100 -4 7 80 0 0 1 0.08 3.14159265\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
+    "100 -4 7 80 0 0 1 0.25 3.14159265\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
   Require(game.RestoreSnapshot(fatal),"Fatal counterattack fixture must load.");
   strike.nextTarget=true; strike.ability=0; game.ExecuteCommand(strike,.01f);
-  for (int i=0;i<3;++i) game.ExecuteCommand({},.05f);
+  for (int i=0;i<6;++i) game.ExecuteCommand({},.05f);
   Require(game.State().Health()==0 && game.State().Enemies()[0].hitFlash>0,
     "Fatal counterattack must leave a living enemy with an unfinished damage flash.");
   for (int i=0;i<40;++i) game.ExecuteCommand({},.05f);
@@ -162,6 +166,31 @@ int main() {
         std::abs(Distance(arm.joint,arm.end)-CharacterPose::forearm)<.0001f,"Dash poses must not stretch limbs");
     }
     Require(pose.WeaponPoint(.96f).y>.08f,"The forward lean must keep the blade out of the floor");
+  }
+  // Inspect the entire authored melee arc, including the transition to idle.
+  for(bool heavy : {false,true}) for(bool shield : {false,true}) {
+    animation::Sample contact; contact.attackSeconds=combat::Contact(heavy); contact.heavyAttack=heavy;
+    const auto blade=BuildCharacterPose(0,0,shield,contact).WeaponPoint(.75f);
+    Require(blade.y>.85f && blade.y<1.6f && blade.z>.6f,
+      "At authoritative contact the blade must reach forward at torso height");
+    auto previous=BuildCharacterPose(0,0,shield);
+    float largestTwist=0;
+    for(int frame=0;frame<=800;++frame) {
+      animation::Sample sample; sample.attackSeconds=frame*.001f; sample.heavyAttack=heavy;
+      const auto pose=BuildCharacterPose(0,0,shield,sample);
+      largestTwist=std::max(largestTwist,std::abs(pose.upperYaw));
+      Require(Distance(pose.WeaponPoint(.96f),previous.WeaponPoint(.96f))<.055f,
+        "The weapon arc must remain continuous at wind-up, contact and recovery boundaries");
+      for(int side=0;side<2;++side) {
+        const auto& arm=pose.arms[side];
+        Require(Finite(arm.end) && std::abs(Distance(arm.root,arm.joint)-CharacterPose::upperArm)<.0001f &&
+          std::abs(Distance(arm.joint,arm.end)-CharacterPose::forearm)<.0001f,"Timed attacks must preserve arm lengths");
+        Require(pose.legs[side].end.y>=.1699f,"Attack load must keep feet above the ground");
+      }
+      Require(pose.WeaponPoint(.96f).y>.08f,"Timed weapon strokes must clear the floor");
+      previous=pose;
+    }
+    Require(largestTwist>.30f,"Melee must involve the torso, not just a raised forearm");
   }
   // Breathing and the half-frequency sway must not snap at a phase wrap.
   for (float time : {motion::tau/1.8f,motion::tau*2/1.8f,100.f}) {
