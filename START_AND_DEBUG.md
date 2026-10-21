@@ -2,6 +2,8 @@
 
 This guide covers the native C++17 / DirectX 11 game on Windows.
 
+Character bug fixes (2026-10-21): the rebuilt Debug executable includes smooth release of a landing crouch when jumping again, contact-timed landing clips and stable limb skin rotation through attacks. Use manual checks 159–160 in Release: chain jumps soon after landing, then Strike/Heavy while airborne or during Mend recovery. Logs: `character-bugs-validation.log` in both Ninja directories, `build-local/character-bugs-build.log` and the three `character-bugs-*.png.log` runtime reports.
+
 Skinned characters and movement clips (2026-10-21): Visual Studio Debug is rebuilt for F5. Inspect the connected body in C, then test forward/back/side movement with RMB, starts/stops, turning, Space jumps, landing and combat. Eleven motion clips blend over the existing responsive simulation; equipment and shadows follow the same rig. Use Release for performance/feel, and manual checks 157–158 for acceptance. All 22 Debug/Release suites and Visual Studio spawn/combat/veteran runtime checks pass. Evidence: `skin-clips-final.log` in both Ninja directories, `build-local/skin-clips-build.log` and `build-local/skin-clips-*.png.log`. Geometry/memory costs and remaining art/physics limits are in `docs/graphics.md`.
 
 Animation bug fixes (2026-10-21): Visual Studio Debug is rebuilt for F5. This build fixes delayed hit recoil, enemy tint duration and sword snapping across attack/movement transitions. Run manual check 156 in Release for live combat/jump acceptance. All 21 Debug/Release suites and the Visual Studio spawn/combat/veteran startup/render checks pass. Logs: `animation-contact-validation.log` in each Ninja directory and `build-local/animation-contact-build.log` with the matching runtime PNG logs.

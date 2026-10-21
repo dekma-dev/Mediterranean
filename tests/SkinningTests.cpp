@@ -75,7 +75,7 @@ void Poses() {
   }
 }
 void RigContinuity() {
-  float worst=0,worstJoint=0; unsigned worstBone=0; int worstFrame=0,worstLayer=0; bool worstHeavy=false;
+  float worst=0,worstJoint=0,worstExcess=0; unsigned worstBone=0; int worstFrame=0,worstLayer=0; bool worstHeavy=false;
   for(bool heavy : {false,true}) for(bool shield : {false,true}) for(int layer=0;layer<4;++layer) {
     visual::BodyPalette previous{};
     for(int frame=0;frame<=800;++frame) {
@@ -84,17 +84,25 @@ void RigContinuity() {
       const auto rig=BuildCharacterRig(BuildCharacterPose(0,0,shield,sample),{}, {.2f,.4f,.6f,1});
       if(frame) for(unsigned bone=0;bone<visual::bodyBones;++bone) {
         const auto& rest=visual::BodyBindPose()[bone];
+        float jointStep=0;
+        for(const auto endpoint : {rest.from,rest.to}) {
+          const auto p=XMLoadFloat3(&endpoint);
+          jointStep=std::max(jointStep,XMVectorGetX(XMVector3Length(XMVector3TransformCoord(p,XMLoadFloat4x4(&rig.joints[bone]))-
+            XMVector3TransformCoord(p,XMLoadFloat4x4(&previous.joints[bone])))));
+        }
         // Off-axis skin points reveal twist that joint endpoint tests miss.
         for(const auto offset : {XMFLOAT3{.08f,0,0},XMFLOAT3{0,0,.08f}}) {
           const auto p=XMVectorSet((rest.from.x+rest.to.x)*.5f+offset.x,(rest.from.y+rest.to.y)*.5f,
             (rest.from.z+rest.to.z)*.5f+offset.z,1);
           const float step=XMVectorGetX(XMVector3Length(XMVector3TransformCoord(p,XMLoadFloat4x4(&rig.joints[bone]))-
             XMVector3TransformCoord(p,XMLoadFloat4x4(&previous.joints[bone]))));
+          // Fast elbow travel at a nearly extended attack is legitimate. At
+          // an 8 cm radius, bound skin motion relative to both joint endpoints
+          // instead of imposing a speed cap on the authored attack itself.
+          worstExcess=std::max(worstExcess,step-2*jointStep-.002f);
           if(step>worst) {
             worst=step; worstBone=bone; worstFrame=frame; worstLayer=layer; worstHeavy=heavy;
-            const auto endpoint=XMLoadFloat3(&rest.to);
-            worstJoint=XMVectorGetX(XMVector3Length(XMVector3TransformCoord(endpoint,XMLoadFloat4x4(&rig.joints[bone]))-
-              XMVector3TransformCoord(endpoint,XMLoadFloat4x4(&previous.joints[bone]))));
+            worstJoint=jointStep;
           }
         }
       }
@@ -102,8 +110,9 @@ void RigContinuity() {
     }
   }
   std::cout<<"Rig 1 ms maximum surface probe change: "<<worst<<" on bone "<<worstBone
-    <<", frame "<<worstFrame<<", layer "<<worstLayer<<", heavy "<<worstHeavy<<", joint change "<<worstJoint<<'\n';
-  Check(worst<.012f,"Skinned limbs must not flip their twist frame through attack poses");
+    <<", frame "<<worstFrame<<", layer "<<worstLayer<<", heavy "<<worstHeavy<<", joint change "<<worstJoint
+    <<", excess skin motion "<<worstExcess<<'\n';
+  Check(worstExcess==0,"Skinned limbs must not flip independently of their solved joints through attack poses");
 }
 }
 int main() {

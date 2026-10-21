@@ -13,21 +13,19 @@ visual::BodyPalette BuildCharacterRig(const CharacterPose& pose,const CharacterO
     XMMatrixRotationY(pose.upperYaw)*XMMatrixTranslation(pose.bodyShift,.95f+pose.bodyLift,0));
   for(unsigned side=0;side<2;++side) for(unsigned limb=0;limb<2;++limb) {
     const auto& chain=limb?pose.arms[side]:pose.legs[side];
-    const auto torso=limb?XMMatrixRotationX(pose.upperPitch)*XMMatrixRotationZ(pose.upperRoll)*XMMatrixRotationY(pose.upperYaw):XMMatrixIdentity();
+    // The IK elbow/knee plane is continuous through raised/forward limbs.
+    // Both segments must share it; a fixed forward axis or a shortest swing
+    // from the hanging arm has a pole in the playable attack range.
+    const auto upper=XMLoadFloat3(&chain.joint)-XMLoadFloat3(&chain.root);
+    const auto lower=XMLoadFloat3(&chain.end)-XMLoadFloat3(&chain.joint);
+    const auto plane=XMVector3Normalize(XMVector3Cross(upper,lower))*(limb?1.f:-1.f);
     const unsigned first=(limb?6:2)+side*2;
     for(unsigned segment=0;segment<2;++segment) {
       const auto& rest=bind[first+segment];
       const auto bindFrame=visual::BoneFrame(rest.from,rest.to);
-      const auto reference=bindFrame*torso;
       const auto from=XMLoadFloat3(segment?&chain.joint:&chain.root),to=XMLoadFloat3(segment?&chain.end:&chain.joint);
-      const auto delta=to-from,up=XMVector3Normalize(delta),restUp=XMVector3Normalize(reference.r[1]);
-      const float alignment=std::clamp(XMVectorGetX(XMVector3Dot(restUp,up)),-1.f,1.f);
-      // Transport bind twist by the shortest rotation. Projecting a fixed
-      // forward axis flips 180 degrees when a forearm points through that axis.
-      const auto rotation=alignment<-.9999f?XMQuaternionRotationAxis(reference.r[0],XM_PI):
-        XMQuaternionNormalize(XMVectorSetW(XMVector3Cross(restUp,up),1+alignment));
-      const auto transported=XMVector3Rotate(reference.r[0],rotation);
-      const auto right=XMVector3Normalize(transported-up*XMVector3Dot(transported,up));
+      const auto delta=to-from,up=XMVector3Normalize(delta);
+      const auto right=XMVector3Normalize(plane-up*XMVector3Dot(plane,up));
       const XMMATRIX posedFrame(right,delta,XMVector3Cross(right,up),XMVectorSetW(from,1));
       store(first+segment,XMMatrixInverse(nullptr,bindFrame)*posedFrame);
     }
