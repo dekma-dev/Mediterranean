@@ -7,11 +7,15 @@
 #include "game/CombatEffects.h"
 #include "game/FootPlacement.h"
 #include "game/WorldView.h"
+#include "game/CharacterSelection.h"
 class Renderer;
 
 class Game {
 public:
   void Initialize();
+  void ChooseCharacter(const std::filesystem::path& save);
+  bool ChoosingCharacter() const { return choosingCharacter_; }
+  const ui::CharacterSelection& Selection() const { return selection_; }
   void Update(double deltaSeconds, const Input& input, float wheel);
   void Render(Renderer& renderer,bool showInterface = true);
   void SetCameraOrbit(float yaw,float pitch,float distance);
@@ -24,6 +28,7 @@ public:
   void OpenPanel(ui::Panel panel) { interface_.SetOnly(panel); }
   void ShowPanel(ui::Panel panel) { interface_.Show(panel); }
   void CancelUiGesture() {
+    selection_.CancelGesture();
     interface_.CancelDrag(); interface_.CancelBuildConfirmation(); interface_.InvalidateHitRegions(); CancelOrbit();
   }
   void SuspendInput() { CancelUiGesture(); simulation_.StopMovement(); effects_.CancelDash(); playerAnimation_.CancelDash();
@@ -47,6 +52,8 @@ public:
   float EffectsVolume() const { return interface_.effectsVolume/100.f; }
   void SetAudioAvailable(bool value) { interface_.audioAvailable=value; }
 private:
+  ui::CharacterSelection selection_;
+  bool choosingCharacter_=false,inputBarrier_=false;
   rpg::Simulation simulation_;
   WorldView worldView_;
   unsigned audioGeneration_=0;

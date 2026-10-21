@@ -1,6 +1,7 @@
 #include "engine/Geometry.h"
 #include "engine/Skinning.h"
 #include "engine/HandSkinning.h"
+#include "Blade.generated.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -310,7 +311,7 @@ Geometry BuildMesh(Mesh mesh) {
     {.34f,.47f,.4f},{.43f,.35f,.32f},{.5f,.22f,.25f}},mesh==Mesh::Torso?24:12);
   if (mesh==Mesh::Limb || mesh==Mesh::LimbLow) return Lathe({{-.5f,.24f,.24f},{-.40f,.36f,.36f},{-.25f,.38f,.39f},{-.1f,.4f,.4f},
     {.08f,.44f,.45f},{.25f,.46f,.46f},{.42f,.42f,.42f},{.5f,.25f,.25f}},mesh==Mesh::Limb?20:10);
-  if (mesh==Mesh::Blade) return Lathe({{-.5f,.28f,.16f},{-.35f,.42f,.20f},{.28f,.35f,.15f},{.5f,.02f,.02f}},4);
+  if (mesh==Mesh::Blade) return compiled_mesh::Blade();
   if (mesh==Mesh::Crystal) return Lathe({{-.5f,.07f,.06f},{-.25f,.4f,.35f},{.28f,.3f,.29f},{.5f,.04f,.03f}},6,.12f);
   Geometry g;
   if (mesh==Mesh::Box) {

@@ -5,6 +5,7 @@
 #include <sstream>
 
 #include "engine/Engine.h"
+#include "launcher/LaunchSupport.h"
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
   // Process-local DPI awareness keeps fullscreen and UI pixels crisp. This does
@@ -18,9 +19,21 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
   const std::wstring report=(benchmark || suite) && count==3?args[2]:L"";
   const std::wstring capture=smoke && (count==3 || count==4)?args[2]:L"";
   const std::wstring snapshotPath=smoke && count==4?args[3]:L"";
+  std::vector<std::wstring> playArguments;
+  if(args) for(int i=1;i<count;++i) playArguments.emplace_back(args[i]);
   if (args) LocalFree(args);
   if (smoke && capture.empty()) return 2;
   if ((benchmark || suite) && report.empty()) return 2;
+  launch::Options options;std::wstring optionError;
+  const bool diagnostic=smoke || benchmark || suite;
+  if(!diagnostic && !launch::Parse(playArguments,options,optionError)) {
+    MessageBoxW(nullptr,optionError.c_str(),L"Mediterranean launch options",MB_OK|MB_ICONERROR);return 2;
+  }
+  std::unique_ptr<launch::Instance> instanceLock;
+  if(!diagnostic) {
+    instanceLock=std::make_unique<launch::Instance>(launch::InstanceName(launch::Directory(),L"game"));
+    if(!instanceLock->Acquired()) {MessageBoxW(nullptr,L"The game is already running from this folder.",L"Mediterranean",MB_OK|MB_ICONINFORMATION);return 3;}
+  }
   std::string snapshot;
   if (!snapshotPath.empty()) {
     std::error_code error;
@@ -33,7 +46,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     if (!input) return 2;
   }
   Engine engine;
-  if (!engine.Initialize(instance, 1280, 720, !smoke && !benchmark && !suite)) {
+  const auto resolution=diagnostic?launch::resolutions[0]:launch::resolutions[options.resolution];
+  if (!engine.Initialize(instance, resolution.width, resolution.height, !diagnostic,!diagnostic && options.fullscreen)) {
     if (smoke) { std::wofstream log(std::filesystem::path(capture+L".log")); log << engine.Error(); }
     else if (benchmark || suite) { std::wofstream log(std::filesystem::path(report+L".log")); log << engine.Error(); }
     else if (!benchmark) MessageBox(nullptr, engine.Error().c_str(), L"RPG Native", MB_OK | MB_ICONERROR);

@@ -15,7 +15,7 @@ const std::array<BoneSegment,handBones>& HandBindPose() {
       XMFLOAT3 from=f==4?XMFLOAT3{.040f,-.040f,-.045f}:XMFLOAT3{.033f-f*.022f,f==3?.014f:.024f,-.045f};
       for(unsigned b=0;b<3;++b) {
         auto direction=f==4?XMVector3Normalize(XMLoadFloat3(&thumb[b])):
-          XMVector3TransformNormal(XMVectorSet(0,std::cos(.07f),std::sin(.07f),0),XMMatrixRotationZ((float(f)-1.2f)*.18f));
+          XMVector3TransformNormal(XMVectorSet(0,std::cos(.07f),std::sin(.07f),0),XMMatrixRotationZ((float(f)-1.2f)*.10f));
         XMFLOAT3 to; XMStoreFloat3(&to,XMLoadFloat3(&from)+direction*lengths[f][b]);
         const float radius=(f==3?.0085f:.0097f)*(1-b*.10f);
         result[1+f*3+b]={from,to,radius,radius*.94f}; from=to;
@@ -36,9 +36,13 @@ XMMATRIX HandBoneFrame(XMFLOAT3 from,XMFLOAT3 to,unsigned finger,bool mirrored) 
 namespace {
 float Field(unsigned bone,XMFLOAT3 p) {
   if(!bone) {
+    // The old 44 mm palm thickness intersected the shaft despite clear
+    // finger joints. Keep the inner surface behind the grip's handle envelope.
     const float x=p.x/.049f,y=(p.y+.022f)/.065f,z=(p.z+.043f)/.014f;
     const float radial=std::sqrt(x*x+y*y+z*z);
     const float gradient=std::sqrt(x*x/(.049f*.049f)+y*y/(.065f*.065f)+z*z/(.014f*.014f));
+    // Match capsule distance units; scaling by the smallest radius left
+    // inappropriate palm influence far along the fingers.
     return gradient>0?radial*(radial-1)/gradient:-.014f;
   }
   const auto& b=HandBindPose()[bone];
@@ -61,11 +65,16 @@ BodyGeometry BuildHand(unsigned level) {
   result.mesh=SurfaceMesh({-.085f,-.10f,-.085f},size,spacing,Surface);
   for(auto& vertex : result.mesh.vertices) {
     const auto p=vertex.position;
-    std::array<unsigned,handBones> order{}; std::array<float,handBones> distances{};
-    for(unsigned b=0;b<handBones;++b) {order[b]=b;distances[b]=Field(b,p);}
-    std::partial_sort(order.begin(),order.begin()+4,order.end(),[&](unsigned a,unsigned b) {return distances[a]<distances[b];});
-    SkinInfluence influence; float weights[4],sum=0;
-    for(unsigned k=0;k<4;++k) {influence.bones[k]=order[k];weights[k]=std::exp(-(distances[order[k]]-distances[order[0]])*200.f);sum+=weights[k];}
+    // Never blend different fingers across their narrow gaps. Blend only the
+    // nearest finger's three bones and the palm, including the web at its base.
+    unsigned nearest=1;
+    for(unsigned b=2;b<handBones;++b) if(Field(b,p)<Field(nearest,p)) nearest=b;
+    const unsigned first=1+((nearest-1)/3)*3;
+    SkinInfluence influence; influence.bones={0,first,first+1,first+2};
+    float distances[4],weights[4],sum=0;
+    for(unsigned k=0;k<4;++k) distances[k]=Field(influence.bones[k],p);
+    const float closest=*std::min_element(distances,distances+4);
+    for(unsigned k=0;k<4;++k) { weights[k]=std::exp(-(distances[k]-closest)*600.f); sum+=weights[k]; }
     influence.weights={weights[0]/sum,weights[1]/sum,weights[2]/sum,weights[3]/sum}; result.influences.push_back(influence);
     // Subtle warm knuckles and palm/back variation without extra textures.
     const float warm=.025f*std::exp(-std::pow((p.y-.025f)/.025f,2.f));

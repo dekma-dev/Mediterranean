@@ -1,5 +1,6 @@
 #include "game/Interface.h"
 #include "game/CharacterView.h"
+#include "game/CharacterSelection.h"
 #include "game/MapArtwork.h"
 #include "engine/Renderer.h"
 #include <algorithm>
@@ -537,6 +538,67 @@ void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoin
 }
 }
 
+void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selection) {
+ Canvas c(renderer);
+ using C=CharacterSelection::Control;
+ const bool valid=selection.State()!=CharacterSelection::Status::Unreadable;
+ const bool saved=selection.State()==CharacterSelection::Status::Saved;
+ const auto& hero=selection.Hero();
+ renderer.DrawHudRect(0,0,1,1,{.018f,.031f,.038f,1});
+ c.Gradient({0,0,1280,720},{.055f,.10f,.12f,1},{.018f,.035f,.034f,1});
+ c.Text(72,38,"MEDITERRANEAN",34,gold);
+ c.Text(74,82,"A S T R A L   F R O N T I E R",12,muted);
+ c.Text(842,46,"CHOOSE YOUR CHARACTER",20,ink);
+ c.Text(842,79,"Dawnwatch  /  Local campaign",13,muted);
+ c.Line(72,119,1208,119,1,border);
+ c.Window({72,152,692,490});
+ c.Banner({218,140,400,36},"Dawnwatch expedition",20);
+ c.Alcove({188,181,460,409});
+ if(valid) {
+  const auto p=c.P(248,180);
+  if(renderer.BeginPortrait(p.x,p.y,340*c.layout.scale/renderer.Width(),407*c.layout.scale/renderer.Height())) {
+   DrawCharacter(renderer,{0,0},0,selection.Yaw(),{.22f,.37f,.54f,1},0,0,
+     CharacterOutfit::From(hero.Items()),animation::Idle(selection.Time()));
+   renderer.EndPortrait();
+  }
+ } else {
+  c.Center(188,353,460,"Character unavailable",22,muted);
+ }
+ c.Center(326,613,184,"Rotate character",13,muted);
+ const auto card=CharacterSelection::Bounds(C::Hero);
+ c.Text(842,146,"YOUR CHARACTER",12,gold);
+ c.Frame(card,valid?Color{.11f,.20f,.18f,1}:dark,valid?gold:border);
+ if(valid) {
+  c.Gradient({card.x+5,card.y+5,card.w-10,card.h-10},{.15f,.25f,.22f,1},{.045f,.10f,.10f,1});
+  c.Portrait(882,225,false,hero.Level());
+  c.Text(925,202,hero.Nickname(),22,ink);
+  c.Text(925,240,"Level "+std::to_string(hero.Level()),17,gold);
+  c.Text(925,270,hero.ClassName(),15,muted);
+  c.Text(842,342,saved?"SAVED JOURNEY":"NEW JOURNEY",12,gold);
+  c.Wrap(842,370,350,saved?"Return to your last saved position with your equipment, talents and quest progress.":
+    "Your first expedition begins at Dawnwatch. Meet the beacon keeper and explore the frontier.",17,ink,4);
+  c.Text(842,467,saved?"Save progress in the world with F5.":"Level 1  /  Starter equipment",13,muted);
+ } else {
+  c.Text(861,211,"Unable to read this character",19,ink);
+  c.Text(861,252,"The saved file has been kept.",15,muted);
+  c.Wrap(842,350,350,"Restore a valid patrol.save in the saves folder, then select Refresh. Your existing progress will not be replaced.",17,ink,5);
+ }
+ if(selection.Changed()) c.Wrap(842,490,350,"Save changed. Review the character before entering.",13,gold,2);
+ const auto button=[&](C control,const char* label) {
+  const auto a=CharacterSelection::Bounds(control);
+  const bool enabled=selection.Enabled(control),focused=selection.Focus()==control,hover=selection.Hover()==control;
+  c.Frame(a,{.08f,.13f,.10f,1},enabled && (focused || hover)?gold:border);
+  c.Gradient({a.x+4,a.y+4,a.w-8,a.h-8},enabled?Color{.27f,.31f,.17f,1}:Color{.09f,.12f,.11f,1},{.06f,.10f,.07f,1});
+  c.Center(a.x,a.y+(a.h-18)*.5f-1,a.w,label,control==C::Enter?20.f:15.f,enabled?ink:muted);
+  if(focused && enabled) c.Line(a.x+8,a.y+a.h-7,a.x+a.w-8,a.y+a.h-7,1,gold);
+ };
+ button(C::Enter,"Enter World");button(C::Refresh,"Refresh [R]");button(C::Quit,"Exit game");
+ button(C::Left,"<");button(C::Right,">");
+ if(selection.Focus()==C::Hero && valid) c.Line(850,302,1184,302,1,gold);
+ c.Text(72,674,"Tab  Select     Enter  Confirm     Arrow keys  Rotate     F11  Display",13,muted);
+ c.Text(842,674,"1 character slot  /  Offline",13,muted);
+}
+
 void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bool debug) {
  Canvas c(renderer); regions_.clear();
  renderedState_=StateKey(); renderedWidth_=float(renderer.Width()); renderedHeight_=float(renderer.Height());
@@ -579,13 +641,13 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  const float ux=combatLayout?330.f:18.f,uy=combatLayout?518.f:23.f;
  regions_.push_back({{ux-5,uy,285,78},{},false});
  c.Frame({ux+27,uy+8,229,66},{.035f,.075f,.065f,.94f},{.39f,.46f,.28f,1});
- c.Banner({ux+49,uy,208,26},"Frontier guard",15);
+ c.Banner({ux+49,uy,208,26},s.Nickname(),15);
  c.Portrait(ux+29,uy+36,false,s.Level());
  c.Frame({ux+58,uy+30,189,20},{.035f,.075f,.035f,1});
  c.Gradient({ux+61,uy+33,183*std::clamp(s.Health()/s.MaxHealth(),0.f,1.f),14},
    {.49f,.76f,.22f,1},{.12f,.31f,.075f,1});
  c.Center(ux+60,uy+31,185,std::to_string(int(s.Health()))+" / "+std::to_string(int(s.MaxHealth())),12);
- c.Text(ux+62,uy+55,"Lv. "+std::to_string(s.Level())+"  /  Dawnwatch guard",11,muted);
+ c.Text(ux+62,uy+55,"Lv. "+std::to_string(s.Level())+"  /  "+s.ClassName(),11,muted);
  if (s.TargetActor()) {
   const auto& target=*s.TargetActor();
   const float tx=combatLayout?750.f:475.f,ty=combatLayout?518.f:26.f;
@@ -684,9 +746,9 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  // Independent side windows: no world dimming, keyboard movement remains live.
  if (characterOpen) {
   blockWindow({12,116,438,500});
-  c.Banner({30,106,265,31},"Frontier guard",19); close({420,121,24,24},Panel::Character);
+  c.Banner({30,106,265,31},s.Nickname(),19); close({420,121,24,24},Panel::Character);
   c.Frame({65,146,188,23},{.16f,.29f,.26f,1},{.42f,.47f,.32f,1});
-  c.Center(65,151,188,"Level "+std::to_string(s.Level())+"  /  Dawnwatch guard",12);
+  c.Center(65,151,188,"Level "+std::to_string(s.Level())+"  /  "+s.ClassName(),12);
   c.Alcove({65,176,188,329});
   const auto p=c.P(70,181);
   if (renderer.BeginPortrait(p.x,p.y,178*c.layout.scale/renderer.Width(),316*c.layout.scale/renderer.Height())) {
@@ -902,7 +964,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    selectedTalent=std::clamp(selectedTalent,0,int(rpg::Talent::Count)-1);
    c.Window({96,52,1088,595}); c.Banner({123,43,1003,39},"Champion build",23);
    close({1146,61,27,27},Panel::Build);
-   c.Text(124,104,"Level "+std::to_string(s.Level())+"  /  Dawnwatch guard",18,ink);
+   c.Text(124,104,"Level "+std::to_string(s.Level())+"  /  "+s.ClassName(),18,ink);
    c.Frame({850,102,306,32},{.07f,.16f,.13f,1},s.TalentPoints()>0?gold:border);
    c.Center(850,109,306,std::to_string(s.TalentPoints())+" talent point"+(s.TalentPoints()==1?"":"s")+" available",15,gold);
    button({594,102,218,32},loadoutsPage?"Talents & spellbook":"Saved builds",Action::BuildPage);

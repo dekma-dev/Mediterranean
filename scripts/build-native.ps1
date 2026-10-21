@@ -4,6 +4,7 @@ param(
   [ValidateSet('VisualStudio', 'Ninja')]
   [string]$Backend = 'VisualStudio',
   [switch]$Run,
+  [switch]$Launcher,
   [switch]$Test,
   [switch]$SmokeTest,
   [switch]$Benchmark,
@@ -13,6 +14,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+if ($Run -and $Launcher) { throw 'Choose -Run for the game or -Launcher for its launcher.' }
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $buildPath = if ($Backend -eq 'Ninja') {
   Join-Path $projectRoot ('build-ninja-' + $Configuration.ToLowerInvariant())
@@ -32,6 +34,7 @@ if ($Backend -eq 'Ninja' -and -not $DeveloperEnvironment) {
   }
   $switches = @('-DeveloperEnvironment')
   if ($Run) { $switches += '-Run' }
+  if ($Launcher) { $switches += '-Launcher' }
   if ($Test) { $switches += '-Test' }
   if ($SmokeTest) { $switches += '-SmokeTest' }
   if ($Benchmark) { $switches += '-Benchmark' }
@@ -70,6 +73,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Native build failed.' }
 $executablePath = if ($Backend -eq 'Ninja') { Join-Path $buildPath 'RPGNative.exe' }
   else { Join-Path $buildPath "$Configuration\RPGNative.exe" }
 Write-Output "Game executable: $executablePath"
+$launcherPath = Join-Path (Split-Path -Parent $executablePath) 'MediterraneanLauncher.exe'
+Write-Output "Launcher executable: $launcherPath"
 
 if ($Test) {
   $ctestPath = Join-Path (Split-Path -Parent $cmakePath) 'ctest.exe'
@@ -129,4 +134,9 @@ if ($BenchmarkSuite) {
 if ($Run) {
   & $executablePath
   if ($LASTEXITCODE -ne 0) { throw "Native application exited with code $LASTEXITCODE." }
+}
+
+if ($Launcher) {
+  & $launcherPath
+  if ($LASTEXITCODE -ne 0) { throw "Launcher exited with code $LASTEXITCODE." }
 }

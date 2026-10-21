@@ -1,5 +1,27 @@
 # Procedural graphics and performance budget
 
+## Static authored equipment pipeline (2026-10-21)
+
+The blade now comes from `assets/weapons/frontier-blade.obj`, an original editable mesh with tapered edges, bevels and recessed centre grooves. A bounded OBJ parser and native `MeshAssetCompiler` produce a per-configuration C++ header during the build. The runtime consumes the embedded arrays through the existing `Mesh::Blade` slot. Root/tip bounds, weapon frames, handles and combat-effect paths are retained. Existing procedural metal and vertex-color treatment remain in use; authored UV textures, rigs and animation are separate milestones. See [the authoring manual](asset-authoring.md).
+
+The old blade had 26 vertices/32 triangles; the new one has 168 vertices/120 triangles (62 source positions, with normal seams). Vertex/index data rises by 6,736 bytes. Including the renderer's common weight-stream allocation, immutable GPU mesh storage rises by **11,280 bytes**, to **3,469,296 bytes**. The non-body/non-hand library now contains 554,368 vertex/index bytes and 13,774 triangles, below the existing 640 KiB/16,000-triangle budgets. Materials, textures, instance buffers and skin palettes are unchanged. The source is parsed during builds only; no frame-rate improvement or sustained-performance result is claimed.
+
+The compiler enforces source, record, triangle, render-vertex and coordinate budgets, rejects malformed/degenerate faces and opposing normals, and publishes only complete validated output. Generated floats round-trip exactly. Tests cover explicit/generated normals, seams, relative indices, invalid data, deterministic compilation, source-path protection and failed-import recovery. The integrated blade has closed outward winding and fixed attachment bounds; isolated and equipped render captures cover color/shadows, alongside the existing hand/character/portrait suites. All 28 suites pass in Debug/Release. Live inspection and an editor round trip remain manual check 173; this is the initial static asset workflow, not a complete character/content pipeline.
+
+## Hand surface repairs (2026-10-21)
+
+The original continuous-hand revision (`762e3d4`) passed undirected topology and joint-clearance checks but had two uncovered defects. The palm surface penetrated the sword's rendered handle envelope by up to 5.57 mm in triangle-interior samples. Separately, orienting each extracted triangle from analytic field gradients could reverse a face in a narrow finger gap while leaving every edge shared by two triangles. That affected backface culling and shadow casting.
+
+The repaired palm uses 28 mm depth and a metre-scaled ellipsoid distance estimate. The tetrahedron's inside/outside sign split determines winding; angle-weighted normals follow the extracted surface. Finger poses, per-finger skin weights, grip anchors and weapon paths retain the established behavior. Directed shared-edge and signed-volume checks cover every orientation/detail level. Clearance samples now include triangle interiors against a conservative radius profile derived from the actual handle mesh and give a minimum +0.428 mm. Deformation checks now cover all three levels. These fixtures do not certify arbitrary future item geometry or every animated self-intersection.
+
+| Hand detail, per orientation | Vertices | Triangles | Immutable vertex/weight/index bytes |
+| --- | ---: | ---: | ---: |
+| Near / portrait | 3,278 | 6,552 | 314,640 |
+| Medium | 1,440 | 2,876 | 138,192 |
+| Far | 820 | 1,636 | 78,672 |
+
+The six meshes total 1,063,008 bytes, 72,960 fewer than the original hand implementation; total immutable mesh storage is 3,458,016 bytes. Bone buffers, instance limits and per-frame skinning are unchanged. The geometry and normal correction runs only when cached meshes are generated. No new frame-time claim is made. All 26 Debug/Release suites and Visual Studio spawn/combat/veteran checks pass; the original source fails both new defect regressions. Evidence is in `build-bugfix/`, and live acceptance is manual check 172. Measurements in older sections below describe their original revisions.
+
 ## Continuous hand surfaces and embedded shaders (2026-10-21)
 
 Each hand now uses one welded palm/finger surface with four-weight GPU skinning over sixteen rigid transforms (palm plus three bones per finger). A cached marching-tetrahedra mesh joins the palm, web and five fingers. Left/right free-hand orientations have mirrored vertices and reversed winding; item grips retain their established frame. Weights blend only the closest finger's chain and the palm, preventing cross-finger influence across narrow gaps. Bind inverses are cached. Existing curl/cast poses, wrist anchors, weapon centreline and effect points are unchanged. Gloves reuse the same surface; the wrist bridge remains separate from the forearm. This is procedural anatomy, not final authored hand art, a nail/tendon system or a general item-fitting solver.

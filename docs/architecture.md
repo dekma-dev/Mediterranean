@@ -6,6 +6,8 @@ The project is single-player today. Keep one map and its gameplay loop testable 
 
 | Component | Responsibility | Dependencies |
 | --- | --- | --- |
+| `MediterraneanLauncher` / `LaunchSupport` | Native launcher UI, local preferences, explicit-path child process, instance lifetime and validated launch arguments | Win32, GDI+, standard library; embedded project capture |
+| `CharacterSelection` | Read-only validation of the current save, character metadata/preview, keyboard and pointer routing before explicit world entry; Game blocks simulation until entry | `Simulation`, `Input`, shared UI canvas and character renderer |
 | `WorldMap` | Map bounds, solid props, areas, traversal queries, navigation routes | C++ standard library |
 | `Inventory` | Canonical item catalog, bag stacks, worn slots, transactional item commands and serialization | C++ standard library |
 | `Trade` | Offer/sale prices and Simulation purchase, sell, buyback, range and stock rules | `Inventory`, `Simulation`, C++ standard library |
@@ -21,11 +23,16 @@ The project is single-player today. Keep one map and its gameplay loop testable 
 | `Animation` | Bounded breathing, air/landing, recoil and travel channels, advanced only during updates | C++ standard library, `Motion` |
 | `FootPlacement` | World-space support contacts, lifted steps, boot heading and reset lifecycle on the flat floor | `Animation`, `WorldMap`, C++ standard library |
 | `CombatEffects` | Fixed pools of blade histories and impact bursts, driven by confirmed transient events | Simulation events, DirectXMath, `Renderer` |
-| `Geometry` | Reusable indexed meshes, generated material layers, frustum tests | DirectXMath, C++ standard library |
+| `Geometry` | Reusable indexed meshes, embedded authored blade, generated material layers, frustum tests | DirectXMath, C++ standard library, generated blade header |
+| `ObjImport` / `MeshAssetCompiler` | Bounded OBJ validation and deterministic header generation during builds | Geometry types, DirectXMath, C++ standard library; Windows atomic file replacement in the compiler |
 | `Renderer` / `GpuTimer` | DirectX resources, instanced shadow/color passes, HUD batching, capture, asynchronous timing | DirectX 11, WIC |
 | `Engine` / `Win32Window` | Window lifecycle, frame timing, pause on focus loss, resize | Win32, game, renderer |
 
 `MediterraneanSimulation` is a separate library with no Windows or DirectX includes. Tests link that library rather than recompiling a separate copy of the gameplay implementation. Rendering consumes state and does not award loot or apply damage.
+
+The launcher is a separate executable with no renderer/simulation dependency. It starts the sibling RPGNative using an explicit Unicode application path and escaped arguments, disables repeat launches while the child is active and polls its handle without blocking the UI. Per-folder named kernel objects reject duplicate launcher/game instances. Closing the launcher closes its handle without terminating the game. Both executables share the launch-option parser; only the game validates and restores gameplay state. Interactive display/resume options are separate from hidden smoke/benchmark modes. Preferences are atomically replaced beside the launcher; guide/save locations still refer to the checkout. See [launcher.md](launcher.md).
+
+Static equipment authoring begins with `assets/weapons/frontier-blade.obj`. One `EmbeddedMeshes` CMake target owns per-configuration generation for both the client and standalone geometry checks. The OBJ compiler has no runtime dependency in the game; the executable embeds only the resulting geometry. Source/compiler changes trigger regeneration, and invalid input leaves the last valid header intact while failing the build. This first importer retains normals/colors and uses existing procedural materials; it does not import rigs, animation or textures. See [asset-authoring.md](asset-authoring.md) for the format contract and tests.
 
 `Game` owns a fixed-size `FootPlacement` controller per player/enemy/trainer. It consumes actual positions and presentation headings, interpolating the path at 240 Hz contact ticks independently of render frequency. Each supporting foot keeps its world position and heading until a lifted step begins; swing sampling can lag by at most one 4.17 ms tick. Step destinations anticipate travel and ease toward revised destinations after steering or stopping. Ordinary steps alternate, with early support release for fast runs/reversals. Airborne/dead actors disable contacts; landing, large displacement, reset/load/respawn and a new sparring round establish fresh anchors. The controller exports local ankle targets through `Animation::Sample`; `CharacterPose` bounds them, lowers the pelvis as needed for fixed-length legs and counter-swings the arms. `CharacterView` uses the same boot headings for the upper boot and sole, and weapon-effect samples use the same resulting pose. All state is transient and rendering remains read-only. The controller assumes the current flat floor; it does not query sloped terrain, stairs or collision for individual feet.
 

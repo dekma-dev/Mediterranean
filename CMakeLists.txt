@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(RPGNative LANGUAGES CXX)
+project(RPGNative LANGUAGES CXX RC)
 
 if (NOT WIN32)
   message(FATAL_ERROR "Mediterranean requires Windows and DirectX 11.")
@@ -43,6 +43,26 @@ add_custom_command(OUTPUT "${scene_shader_header}"
   COMMENT "Compiling embedded DirectX 11 shaders"
   VERBATIM)
 
+add_library(ObjImport STATIC tools/ObjImport.cpp)
+target_include_directories(ObjImport PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_definitions(ObjImport PUBLIC NOMINMAX)
+add_executable(MeshAssetCompiler tools/MeshAssetCompiler.cpp)
+target_link_libraries(MeshAssetCompiler PRIVATE ObjImport)
+if(MSVC)
+  target_compile_options(ObjImport PRIVATE /W4 /EHsc)
+  target_compile_options(MeshAssetCompiler PRIVATE /W4 /EHsc)
+endif()
+set(blade_source "${CMAKE_CURRENT_SOURCE_DIR}/assets/weapons/frontier-blade.obj")
+set(blade_header "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>/Blade.generated.h")
+add_custom_command(OUTPUT "${blade_header}"
+  COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>"
+  COMMAND $<TARGET_FILE:MeshAssetCompiler> "${blade_source}" "${blade_header}" Blade
+  DEPENDS MeshAssetCompiler "${blade_source}"
+  COMMENT "Validating and embedding the authored blade mesh"
+  VERBATIM)
+# One producer shared by the client and standalone geometry checks.
+add_custom_target(EmbeddedMeshes DEPENDS "${blade_header}")
+
 add_library(MediterraneanClient STATIC
   "${scene_shader_header}"
   engine/Engine.cpp
@@ -55,6 +75,7 @@ add_library(MediterraneanClient STATIC
   engine/FontAtlas.cpp
   platform/Win32Window.cpp
   game/Game.cpp
+  game/CharacterSelection.cpp
   game/WorldView.cpp
   game/LandmarkView.cpp
   game/CharacterView.cpp
@@ -67,8 +88,21 @@ add_library(MediterraneanClient STATIC
   game/MapArtwork.cpp
   game/TerrainSurface.cpp
 )
+add_dependencies(MediterraneanClient EmbeddedMeshes)
+add_library(LaunchSupport STATIC launcher/LaunchSupport.cpp)
+target_include_directories(LaunchSupport PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_definitions(LaunchSupport PUBLIC UNICODE _UNICODE NOMINMAX)
+target_compile_definitions(LaunchSupport PRIVATE RPG_SAVE_DIRECTORY="${CMAKE_CURRENT_SOURCE_DIR}/saves" RPG_PROJECT_DIRECTORY="${CMAKE_CURRENT_SOURCE_DIR}")
+add_executable(MediterraneanLauncher WIN32 launcher/Main.cpp launcher/Launcher.rc)
+target_include_directories(MediterraneanLauncher PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/launcher)
+target_link_libraries(MediterraneanLauncher PRIVATE LaunchSupport gdiplus shlwapi shell32 user32 gdi32 ole32 uxtheme)
+if(MSVC)
+  target_compile_options(LaunchSupport PRIVATE /W4 /EHsc)
+  target_compile_options(MediterraneanLauncher PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/W4> $<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
+endif()
 add_executable(RPGNative WIN32 main.cpp)
-target_link_libraries(RPGNative PRIVATE MediterraneanClient)
+target_link_libraries(RPGNative PRIVATE MediterraneanClient LaunchSupport)
+add_dependencies(MediterraneanLauncher RPGNative)
 
 target_include_directories(MediterraneanClient PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
@@ -87,6 +121,27 @@ set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT RPGNative)
 
 include(CTest)
 if (BUILD_TESTING)
+  add_executable(CharacterSelectionTests tests/CharacterSelectionTests.cpp)
+  target_link_libraries(CharacterSelectionTests PRIVATE MediterraneanClient)
+  target_compile_definitions(CharacterSelectionTests PRIVATE RPG_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
+  add_test(NAME CharacterSelectionTests COMMAND CharacterSelectionTests)
+  set_tests_properties(CharacterSelectionTests PROPERTIES TIMEOUT 30)
+  add_executable(LauncherTests tests/LauncherTests.cpp)
+  target_link_libraries(LauncherTests PRIVATE LaunchSupport MediterraneanClient)
+  add_dependencies(LauncherTests RPGNative)
+  target_compile_definitions(LauncherTests PRIVATE RPG_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
+  add_test(NAME LauncherTests COMMAND LauncherTests)
+  add_test(NAME LauncherUiTests COMMAND MediterraneanLauncher --self-test "${CMAKE_CURRENT_BINARY_DIR}/launcher-ui-check/$<CONFIG>")
+  set_tests_properties(LauncherTests LauncherUiTests PROPERTIES TIMEOUT 45)
+  add_executable(ObjImportTests tests/ObjImportTests.cpp)
+  target_link_libraries(ObjImportTests PRIVATE ObjImport MediterraneanClient)
+  target_compile_definitions(ObjImportTests PRIVATE RPG_BLADE_SOURCE="${blade_source}")
+  add_test(NAME ObjImportTests COMMAND ObjImportTests)
+  add_test(NAME MeshAssetCompilerTests COMMAND ${CMAKE_COMMAND}
+    "-DASSET_COMPILER=$<TARGET_FILE:MeshAssetCompiler>"
+    "-DASSET_SOURCE=${blade_source}"
+    "-DASSET_OUTPUT=${CMAKE_CURRENT_BINARY_DIR}/asset-compiler-check/$<CONFIG>"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/MeshAssetCompilerTests.cmake")
   add_executable(HandSkinningTests tests/HandSkinningTests.cpp)
   target_link_libraries(HandSkinningTests PRIVATE MediterraneanClient)
   add_test(NAME HandSkinningTests COMMAND HandSkinningTests)
@@ -127,6 +182,8 @@ if (BUILD_TESTING)
   add_test(NAME InterfaceTests COMMAND InterfaceTests)
   add_executable(GeometryTests tests/GeometryTests.cpp engine/Geometry.cpp engine/Skinning.cpp engine/HandSkinning.cpp game/CharacterPose.cpp)
   target_include_directories(GeometryTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  target_include_directories(GeometryTests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>")
+  add_dependencies(GeometryTests EmbeddedMeshes)
   target_compile_definitions(GeometryTests PRIVATE NOMINMAX)
   add_test(NAME GeometryTests COMMAND GeometryTests)
   add_executable(SimulationTests tests/SimulationTests.cpp)

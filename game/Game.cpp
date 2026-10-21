@@ -33,11 +33,16 @@ float EnemyAttackSeconds(const rpg::Enemy& enemy,bool active) {
 }
 
 void Game::Initialize() {
+  choosingCharacter_=inputBarrier_=false; quitRequested_=fullscreenRequest_=false;
   simulation_=rpg::Simulation{}; time_=0; atmosphereTime_=0;
   worldView_.Reset();
   interface_.SetOnly(ui::Panel::None); orbiting_=false;
   yaw_=0; pitch_=.45f; distance_=10;
   ResetMotion();
+}
+
+void Game::ChooseCharacter(const std::filesystem::path& save) {
+  CancelUiGesture(); selection_.Open(save); choosingCharacter_=true; inputBarrier_=false;
 }
 
 bool Game::RestoreSnapshot(const std::string& snapshot) {
@@ -51,6 +56,21 @@ bool Game::RestoreSnapshot(const std::string& snapshot) {
 
 void Game::Update(double seconds,const Input& input,float wheel) {
   const float dt=std::isfinite(seconds)?static_cast<float>(std::clamp(seconds,0.0,.05)):0.f;
+  if(choosingCharacter_) {
+    const auto action=selection_.Update(dt,input);
+    if(action==ui::CharacterSelection::Action::Quit) quitRequested_=true;
+    if(action==ui::CharacterSelection::Action::Enter) {
+      if(selection_.State()==ui::CharacterSelection::Status::New) Initialize();
+      else if(!RestoreSnapshot(selection_.Snapshot())) return;
+      choosingCharacter_=false;inputBarrier_=true;
+    }
+    return;
+  }
+  // Do not carry an Enter/Space/click or a held movement key into gameplay.
+  if(inputBarrier_) {
+    for(int key=1;key<256;++key) if(input.Held(key)) return;
+    inputBarrier_=false;return;
+  }
   interface_.noticeTime=std::max(0.f,interface_.noticeTime-dt);
   // Engine changes the window after this update. Cancel before dispatching a
   // simultaneous mouse release, or that release would commit a stale drop.
@@ -394,6 +414,7 @@ void Game::UpdateCamera(float dt,bool immediate) {
 }
 
 void Game::Render(Renderer& renderer,bool showInterface) {
+  if(choosingCharacter_) {ui::RenderCharacterSelection(renderer,selection_);return;}
   renderer.SetAtmosphereTime(atmosphereTime_);
   if (!renderer.HasTerrainSurface() && !renderer.SetTerrainSurface(BuildTerrainSurface(simulation_.Map()),terrainSurfaceSize)) return;
   using DirectX::XMFLOAT3;

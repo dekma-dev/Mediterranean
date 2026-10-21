@@ -30,15 +30,24 @@ void Topology(unsigned level,bool mirrored) {
   const auto& hand=visual::CharacterHand(level,mirrored); const auto& mesh=hand.mesh;
   Check(mesh.vertices.size()==hand.influences.size(),"Missing hand weights");
   std::map<std::pair<unsigned,unsigned>,unsigned> edges;
+  std::map<std::pair<unsigned,unsigned>,int> directions;
   std::vector<std::vector<unsigned>> links(mesh.vertices.size());
+  double volume=0;
   for(std::size_t t=0;t<mesh.indices.size();t+=3) {
     for(unsigned k=0;k<3;++k) {
       const auto a=mesh.indices[t+k],b=mesh.indices[t+(k+1)%3];
       Check(a<mesh.vertices.size() && b<mesh.vertices.size() && a!=b,"Invalid hand triangle");
       ++edges[std::minmax(a,b)]; links[a].push_back(b); links[b].push_back(a);
+      directions[std::minmax(a,b)]+=a<b?1:-1;
     }
+    const auto a=XMLoadFloat3(&mesh.vertices[mesh.indices[t]].position);
+    const auto b=XMLoadFloat3(&mesh.vertices[mesh.indices[t+1]].position);
+    const auto c=XMLoadFloat3(&mesh.vertices[mesh.indices[t+2]].position);
+    volume+=XMVectorGetX(XMVector3Dot(a,XMVector3Cross(b,c)))/6;
   }
   for(const auto& edge : edges) Check(edge.second==2,"Hand must have no open seams or nonmanifold edges");
+  for(const auto& edge : directions) Check(edge.second==0,"Adjacent hand triangles must traverse their shared edge in opposite directions");
+  Check(volume>0,"Hand winding must face outward, including mirrored meshes");
   std::vector<bool> visited(mesh.vertices.size()); std::queue<unsigned> pending; pending.push(0); visited[0]=true;
   unsigned connected=0;
   while(!pending.empty()) { const auto a=pending.front(); pending.pop(); ++connected;
@@ -57,14 +66,53 @@ void Topology(unsigned level,bool mirrored) {
   Check(bytes<400*1024 && mesh.indices.size()/3<8500,"Hand exceeded its immutable geometry budget");
   if(level) Check(mesh.indices.size()<visual::CharacterHand(level-1,mirrored).mesh.indices.size()*.65,"Hand LOD must remove substantial geometry");
 }
+void GripClearance() {
+  // Derive a conservative radius profile from the actual rendered handle,
+  // including its nonuniform lathe rings, scale and offset from the palm.
+  std::map<float,float> rings;
+  for(const auto& vertex : visual::BuildMesh(visual::Mesh::Limb).vertices) {
+    const auto p=vertex.position;
+    const float x=p.y*.19f+.005f,radius=std::hypot(p.x,p.z)*.065f;
+    rings[x]=std::max(rings[x],radius);
+  }
+  const auto clearance=[&](XMFLOAT3 p) {
+    const auto upper=rings.upper_bound(p.x);
+    if(upper==rings.begin() || upper==rings.end()) return 1.f;
+    const auto lower=std::prev(upper);
+    const float t=(p.x-lower->first)/(upper->first-lower->first);
+    return std::hypot(p.y,p.z)-(lower->second+(upper->second-lower->second)*t);
+  };
+  float minimum=1;
+  const auto pose=BuildCharacterPose(0,0,false);
+  for(unsigned side=0;side<2;++side) for(unsigned level=0;level<3;++level) {
+    const auto hand=BuildHandPose(pose,side,true,true,0);
+    const auto palette=BuildHandRig(hand); const auto& geometry=visual::CharacterHand(level,hand.mirrored);
+    std::vector<XMFLOAT3> positions;
+    for(std::size_t v=0;v<geometry.mesh.vertices.size();++v)
+      positions.push_back(visual::SkinHandVertex(geometry.mesh.vertices[v],geometry.influences[v],palette).position);
+    // Test triangle interiors as well as their vertices: coarse chords can
+    // intersect a shaft even when the joint chain and all corners clear it.
+    for(std::size_t t=0;t<geometry.mesh.indices.size();t+=3) {
+      const auto a=XMLoadFloat3(&positions[geometry.mesh.indices[t]]);
+      const auto b=XMLoadFloat3(&positions[geometry.mesh.indices[t+1]]);
+      const auto c=XMLoadFloat3(&positions[geometry.mesh.indices[t+2]]);
+      for(unsigned i=0;i<=8;++i) for(unsigned j=0;j<=8-i;++j) {
+        XMFLOAT3 sample; XMStoreFloat3(&sample,(a*float(8-i-j)+b*float(i)+c*float(j))/8);
+        minimum=std::min(minimum,clearance(sample));
+      }
+    }
+  }
+  std::cout<<"Minimum sampled skin/handle clearance: "<<minimum<<" m\n";
+  Check(minimum>=.0002f,"The gripping hand surface intersects the sword handle");
+}
 void Deformation() {
   const auto pose=BuildCharacterPose(0,0,false);
   float maximumStep=0;
-  for(unsigned side=0;side<2;++side) for(bool gripping : {false,true}) {
+  for(unsigned level=0;level<3;++level) for(unsigned side=0;side<2;++side) for(bool gripping : {false,true}) {
     std::vector<XMFLOAT3> previous;
     for(unsigned step=0;step<=100;++step) {
       const auto hand=BuildHandPose(pose,side,gripping,gripping,step*.01f);
-      const auto palette=BuildHandRig(hand); const auto& geometry=visual::CharacterHand(0,hand.mirrored);
+      const auto palette=BuildHandRig(hand); const auto& geometry=visual::CharacterHand(level,hand.mirrored);
       for(unsigned b=1;b<visual::handBones;++b) {
         auto a=visual::HandBindPose()[b].from,c=visual::HandBindPose()[b].to;
         if(hand.mirrored) { a.x=-a.x; c.x=-c.x; }
@@ -92,6 +140,7 @@ void Deformation() {
 }
 int main() {
   for(unsigned level=0;level<3;++level) for(bool mirrored : {false,true}) Topology(level,mirrored);
+  GripClearance();
   Deformation();
   Check(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"Hand skin COM");
   Win32Window window; Check(window.Create(GetModuleHandle(nullptr),960,720,L"Continuous hand checks",false),"Hand skin window");

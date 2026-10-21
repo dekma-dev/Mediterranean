@@ -1,6 +1,7 @@
 #include "platform/Win32Window.h"
 #include "platform/GameCursor.h"
 #include <windowsx.h>
+#include <algorithm>
 
 bool Win32Window::SetMouseLook(bool enabled) {
   if (!enabled) { EndMouseLook(); return true; }
@@ -134,7 +135,8 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
   return DefWindowProc(hwnd,msg,wparam,lparam);
 }
 
-bool Win32Window::Create(HINSTANCE instance, int width, int height, const wchar_t* title, bool visible) {
+bool Win32Window::Create(HINSTANCE instance, int width, int height, const wchar_t* title, bool visible, bool fullscreen) {
+  if(width<=0 || height<=0) return false;
   visible_=visible;
   const wchar_t* className = L"RPGNativeWindow";
 
@@ -146,7 +148,7 @@ bool Win32Window::Create(HINSTANCE instance, int width, int height, const wchar_
   wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
   wc.hbrBackground = reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
 
-  if (!RegisterClassEx(&wc)) {
+  if (!RegisterClassEx(&wc) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) {
     return false;
   }
 
@@ -172,10 +174,24 @@ bool Win32Window::Create(HINSTANCE instance, int width, int height, const wchar_
     return false;
   }
 
+  // Fit the requested client size to the work area, retaining its aspect ratio.
+  // This keeps windowed launch options reachable on smaller/scaled monitors.
+  MONITORINFO monitor{sizeof(monitor)};
+  RECT frame{0,0,width,height};
+  if(!GetMonitorInfoW(MonitorFromWindow(hwnd_,MONITOR_DEFAULTTONEAREST),&monitor) ||
+    !AdjustWindowRectExForDpi(&frame,WS_OVERLAPPEDWINDOW,FALSE,0,GetDpiForWindow(hwnd_))) return false;
+  const int borderX=frame.right-frame.left-width,borderY=frame.bottom-frame.top-height;
+  const int availableWidth=monitor.rcWork.right-monitor.rcWork.left,availableHeight=monitor.rcWork.bottom-monitor.rcWork.top;
+  const double fit=std::min({1.,double(availableWidth-borderX)/width,double(availableHeight-borderY)/height});
+  if(fit<=0) return false;
+  const int outerWidth=int(width*fit)+borderX,outerHeight=int(height*fit)+borderY;
+  if(!SetWindowPos(hwnd_,nullptr,monitor.rcWork.left+(availableWidth-outerWidth)/2,monitor.rcWork.top+(availableHeight-outerHeight)/2,
+    outerWidth,outerHeight,SWP_NOZORDER|SWP_NOACTIVATE)) return false;
+
   RefreshCursor(GetDpiForWindow(hwnd_));
 
+  if (fullscreen && !SetFullscreen(true)) return false;
   if (visible) {
-    if (!SetFullscreen(true)) return false;
     ShowWindow(hwnd_, SW_SHOW);
     UpdateWindow(hwnd_);
   }

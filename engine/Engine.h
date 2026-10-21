@@ -15,7 +15,8 @@ public:
   Engine();
   ~Engine();
 
-  bool Initialize(HINSTANCE instance, int width, int height, bool visible = true);
+  bool Initialize(HINSTANCE instance, int width, int height, bool visible = true, bool fullscreen = true, const std::string& snapshot = {});
+  bool StartupTest(bool fullscreen,int width,int height,const std::string& snapshot,const std::wstring& capturePath);
   bool SmokeTest(const std::wstring& capturePath,const std::string& snapshot = {});
   bool Benchmark(const std::wstring& reportPath);
   bool BenchmarkSuite(const std::wstring& reportPath);

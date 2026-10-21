@@ -16,7 +16,7 @@ public:
       DestroyCursor(cursor_);
     }
   }
-  bool Create(HINSTANCE instance, int width, int height, const wchar_t* title, bool visible = true);
+  bool Create(HINSTANCE instance, int width, int height, const wchar_t* title, bool visible = true, bool fullscreen = false);
   HWND GetHandle() const { return hwnd_; }
   bool SetFullscreen(bool enabled);
   bool Fullscreen() const { return fullscreen_; }

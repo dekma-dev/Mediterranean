@@ -19,9 +19,9 @@ Engine::Engine() = default;
 
 Engine::~Engine() = default;
 
-bool Engine::Initialize(HINSTANCE instance, int width, int height, bool visible) {
+bool Engine::Initialize(HINSTANCE instance, int width, int height, bool visible, bool fullscreen,const std::string& snapshot) {
   window_ = std::make_unique<Win32Window>();
-  if (!window_->Create(instance, width, height, L"RPG Native Prototype", visible)) {
+  if (!window_->Create(instance, width, height, L"Mediterranean", visible,fullscreen)) {
     error_ = L"Could not create the application window.";
     return false;
   }
@@ -36,7 +36,12 @@ bool Engine::Initialize(HINSTANCE instance, int width, int height, bool visible)
 
   game_ = std::make_unique<Game>();
   game_->Initialize();
+  if(!snapshot.empty() && !game_->RestoreSnapshot(snapshot)) {
+    error_=L"Saved progress could not be loaded. The save has been kept. Restore a valid save and try again.";
+    return false;
+  }
   if(visible) {
+    game_->ChooseCharacter(std::filesystem::path(RPG_SAVE_DIRECTORY)/"patrol.save");
     audio_=std::make_unique<Audio>();
     if(!audio_->Initialize()) audio_.reset();
   }
@@ -46,6 +51,35 @@ bool Engine::Initialize(HINSTANCE instance, int width, int height, bool visible)
 
   running_ = true;
   return true;
+}
+
+bool Engine::StartupTest(bool fullscreen,int width,int height,const std::string& snapshot,const std::wstring& capturePath) {
+  RECT client{};GetClientRect(window_->GetHandle(),&client);
+  MONITORINFO monitor{sizeof(monitor)};
+  if(!GetMonitorInfoW(MonitorFromWindow(window_->GetHandle(),MONITOR_DEFAULTTONEAREST),&monitor)) return false;
+  if(fullscreen) {
+    width=monitor.rcMonitor.right-monitor.rcMonitor.left;height=monitor.rcMonitor.bottom-monitor.rcMonitor.top;
+  } else {
+    RECT outer{};GetWindowRect(window_->GetHandle(),&outer);
+    const bool clamped=client.right!=width || client.bottom!=height;
+    const bool fillsWidth=std::abs((outer.right-outer.left)-(monitor.rcWork.right-monitor.rcWork.left))<=2;
+    const bool fillsHeight=std::abs((outer.bottom-outer.top)-(monitor.rcWork.bottom-monitor.rcWork.top))<=2;
+    if(client.right>width || client.bottom>height || client.right<=0 || client.bottom<=0 ||
+      std::abs(double(client.right)/client.bottom-double(width)/height)>.003 ||
+      outer.left<monitor.rcWork.left || outer.top<monitor.rcWork.top || outer.right>monitor.rcWork.right || outer.bottom>monitor.rcWork.bottom ||
+      (clamped && !fillsWidth && !fillsHeight)) {error_=L"Windowed startup did not preserve requested size/aspect or fit the desktop.";return false;}
+    width=client.right;height=client.bottom;
+  }
+  rpg::Simulation expected;
+  if(!snapshot.empty() && !expected.Load(snapshot)) return false;
+  if(IsWindowVisible(window_->GetHandle()) || window_->Fullscreen()!=fullscreen || client.right!=width || client.bottom!=height ||
+    renderer_->Width()!=width || renderer_->Height()!=height) {
+    error_=L"Startup window mismatch: client "+std::to_wstring(client.right)+L"x"+std::to_wstring(client.bottom)+L", expected "+std::to_wstring(width)+L"x"+std::to_wstring(height);
+    return false;
+  }
+  if(game_->State().Save()!=expected.Save()) {error_=L"Startup saved state mismatch.";return false;}
+  renderer_->BeginFrame();game_->Render(*renderer_);
+  return renderer_->Capture(capturePath) && renderer_->EndFrame(false) && renderer_->ValidateDebugMessages();
 }
 
 bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapshot) {
@@ -462,8 +496,9 @@ void Engine::Tick(double deltaSeconds) {
   }
   game_->Update(deltaSeconds, input_, window_->ConsumeWheel());
   if(audio_) {
-    audio_->Suspend(false);
-    audio_->Update(game_->State(),game_->AudioGeneration(),game_->MusicVolume(),game_->EffectsVolume(),float(deltaSeconds));
+    audio_->Suspend(game_->ChoosingCharacter());
+    if(!game_->ChoosingCharacter())
+      audio_->Update(game_->State(),game_->AudioGeneration(),game_->MusicVolume(),game_->EffectsVolume(),float(deltaSeconds));
   }
   const bool fullscreenRequest=game_->TakeFullscreenRequest();
   if (input_.Pressed(VK_F11) || fullscreenRequest) {

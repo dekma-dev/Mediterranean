@@ -2,6 +2,10 @@
 
 This guide covers the native C++17 / DirectX 11 game on Windows.
 
+Launcher update (2026-10-21): use `.\scripts\build-native.ps1 -Backend Ninja -Configuration Release -Test -Launcher`, or open `MediterraneanLauncher.exe` next to the built game. Select fullscreen/windowed mode and a window size, then Play. In the game, review the current character's nickname, level, class and equipped preview, then select Enter World. The saved character is offered automatically; a missing save offers the level-1 starter. Direct RPGNative/F5 launches use the same selection screen. Preferences stay beside the launcher; gameplay saves remain in `saves/`. The Visual Studio output is `build-local/Debug/MediterraneanLauncher.exe`. Keep RPGNative as the startup project when debugging the game itself. See [the launcher guide](docs/launcher.md) and manual checks 174–175.
+
+Static asset update (2026-10-21): edit `assets/weapons/frontier-blade.obj`, then build normally to validate and embed the mesh. CMake runs `MeshAssetCompiler` automatically before compiling geometry; no runtime OBJ file or model editor is required. Invalid exports report a source line and stop the build while retaining the previous header/executable. Fix the source and obtain a successful build before pressing F5. See [Asset authoring](docs/asset-authoring.md) for the coordinate/export contract and manual check 173 for the playtest loop.
+
 Continuous-hand/startup update (2026-10-21): Visual Studio Debug is rebuilt for F5. Inspect bare/gloved hands in C, then attack/jump and cast Mend with/without a shield. Palms and fingers now share a continuous skinned surface; distant hands simplify with their owner. Use Release and manual checks 170–171 for appearance and frame pacing. All 26 suites and Visual Studio spawn/combat/veteran checks pass; measurements/logs are in `build-hand-skin/` and `docs/graphics.md`.
 
 Shaders now compile during the native build through the SceneShaderCompiler target. The first build after changing `engine/SceneShader.h` takes longer, but the game uses embedded bytecode on launch. Continue to build through the existing script/CMake solution; do not edit `generated/<configuration>/SceneBytecode.generated.h`. If shader compilation fails, fix the reported shader source and rebuild before launching. Debug and Release have separate generated files. To compare the embedded bytes against independent compilation, run `.\scripts\check-scene-shader.ps1 -GeneratedHeader .\build-ninja-debug\generated\Debug\SceneBytecode.generated.h`.
@@ -207,7 +211,7 @@ For an exception, inspect the call stack and the first relevant project frame be
 
 ## 6. First gameplay test
 
-Normal gameplay opens in borderless fullscreen. Use F11 or the Display button in the Escape menu to restore the previous window placement. This changes only the game window. The intended scene is a floating island with an outpost, blue player, red raiders, and gold quest beacon. A blank window is no longer the expected result.
+Gameplay opens in borderless fullscreen by default. The launcher can select windowed mode and an initial size, fitted to the desktop work area. Use F11 or the Display button in the Escape menu to toggle modes. This changes only the game window. The intended scene is a floating island with an outpost, blue player, red raiders, and gold quest beacon. A blank window is no longer the expected result.
 
 1. Press **E** near the dressed keeper beneath the gold marker at spawn to accept the patrol. Existing text calls him the beacon keeper.
 2. Follow the path north with **WASD**. Hold **Shift** to sprint and press **Space** to jump.

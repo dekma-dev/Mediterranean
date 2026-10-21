@@ -106,6 +106,9 @@ public:
   float Health() const { return health_; }
   int Experience() const;
   int Level() const;
+  // Identity of the current single-character campaign, shared by all UI views.
+  const char* Nickname() const { return "Frontier guard"; }
+  const char* ClassName() const { return "Dawnwatch guard"; }
   int LevelStartExperience() const { return Level()==1?0:Level()==2?100:250; }
   int NextLevelExperience() const { return Level()==1?100:250; }
   float MaxHealth() const { return 100.f+20.f*(Level()-1)+TalentBonus(build_,&TalentInfo::health); }
