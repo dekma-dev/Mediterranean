@@ -54,7 +54,7 @@ HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool 
     chain.width=finger==3?.020f:.023f;
     // Index is next to the thumb; the little finger has a lower knuckle.
     chain.joints[0]={mirror*(.033f-finger*.022f),finger==3?.014f:.024f,-.045f};
-    const float splay=(1-result.curl)*mirror*(float(finger)-1.2f)*.10f;
+    const float splay=(1-result.curl)*mirror*(float(finger)-1.2f)*.18f;
     constexpr float closedAngles[3]={.70f,1.66f,2.79f};
     for(unsigned bone=0;bone<3;++bone) {
       constexpr float littleAngles[3]={.70f,1.30f,1.90f};
