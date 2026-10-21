@@ -1,5 +1,30 @@
 # Procedural graphics and performance budget
 
+## Connected body and GPU skinning (2026-10-21)
+
+The body is one closed, welded surface covering chest, pelvis, arms and legs: 9,368 vertices and 18,732 triangles. A deterministic startup isosurface generator joins the anatomical volumes, regularizes near-grid crossings to avoid collapsed triangles, and assigns four normalized influences per vertex. Ten bones deform the shared mesh; no topology is generated during play. Head, hands, footwear and equipment remain attached components. This is a code-generated prototype body, not an artist-authored character or an imported animation asset.
+
+`CharacterRig` converts the final clip/foot/hand-corrected pose into skinning matrices and inverse-transpose normal matrices. DirectX 11 instancing supplies a palette index; color, both shadow layers and portraits share the same vertex deformation. Rest-space material coordinates keep surface detail attached to the body. Six material regions follow equipment colors. Skinning is limited to 32 bodies per flush in a 44,032-byte constant buffer; overflow fails explicitly, and world/portrait transitions reuse slots only after consuming the previous queue. A conservative three-metre root sphere contains the tested deformations.
+
+The shared body needs 899,280 immutable bytes including positions/normals, weights and indices. The old static-mesh budget remains separately enforced. The common indexed buffer also uses weight-stream padding for static vertices, bringing total immutable mesh storage from 313,520 to 1,398,432 bytes (+1.03 MiB). The generated CPU mesh stays cached for the process lifetime. Material textures, map art and shadow resolution are unchanged. CPU skinning exists as a test reference; live deformation runs on the GPU. This adds geometry and skinning cost, with no claim of lower memory use or a frame-rate improvement.
+
+Palettes use a dynamic constant buffer and WRITE_DISCARD, copying only the active actors. This allows buffer renaming between world and portrait draws. All nine skinning diagnostic PNGs are byte-identical before/after the upload change; it did not demonstrate a repeatable CPU improvement, so it is not credited with a measured speedup.
+
+`SkinningTests` checks that every edge belongs to two triangles, the whole body is connected, weights are normalized/in-range, bind skinning preserves vertices, and posed bones match solved joints. It sweeps attacks, flight, landing, banking and recoil for finite normals, floor clearance and bounds. GPU diagnostics cover eight poses, independent actors, portraits and palette-budget recovery. `GeometryTests` still verifies triangle winding/nondegeneracy. The shader checker now compiles ten entries, including both skinning shaders. Manual checks 157–158 cover extended play and artistic acceptance; cloth/body self-collision, facial rigs, imported assets and distance LOD remain future work.
+
+Two paired Release comparisons ran serially in baseline/new/new/baseline order with no concurrent builds or test processes. The baseline is the locally saved pre-skinning executable, including the preceding contact-animation fixes. Each workload uses a hidden 1280x720 window, present interval zero, fixed 1/60 s simulation steps, 90 warmup frames and 600 measured frames. Values are the arithmetic means of the two per-run statistics, not pooled percentiles or interactive FPS. CPU includes submission/present waits; GPU observations are asynchronous and sparse outside the portrait workload.
+
+| Workload | CPU median ms, baseline → new | CPU p95 ms, baseline → new | GPU median ms, baseline → new | GPU p95 ms, baseline → new |
+| --- | --- | --- | --- | --- |
+| Spawn HUD | 0.874 → 1.000 | 0.935 → 1.109 | 0.872 → 0.993 | 0.925 → 1.079 |
+| Village walking/orbit | 0.719 → 0.889 | 1.941 → 2.008 | 0.726 → 0.717 | 1.930 → 1.930 |
+| Repeated combat/orbit | 0.719 → 0.970 | 2.217 → 2.360 | 0.666 → 0.797 | 2.187 → 1.917 |
+| Merchant, character, bag | 2.209 → 2.248 | 3.164 → 4.187 | 1.004 → 1.070 | 1.019 → 1.084 |
+
+Gameplay CPU medians increase by 0.126–0.251 ms. Scene preparation increases by about 0.20–0.23 ms; joint/palette preparation is a profiling target. Peak submitted triangles (including shadows) rise from 627,014/630,376/652,852/581,497 to 837,446/840,808/877,440/709,297, with three additional draws in gameplay and four with the portrait. Walking distance, attack wind-up/hit counts and effect-vertex counts remain identical. The portrait CPU tail is variable and higher in this pair (new per-run p95: 3.818–4.555 ms); it remains a performance follow-up. These samples do not establish a GPU-tail improvement, leak-free long sessions or production crowd capacity. Working/private-memory snapshots fluctuate and are not used to claim memory savings.
+
+Evidence: `build-ninja-release/skin-cost-final-{baseline-a,a,b,baseline-b}.txt`, `skin-cost-summary.json`, and the earlier `skin-cost-skin-{a,b}.txt` reports before the palette upload change. All 22 suites passed in Debug and Release; the final upload change additionally passed SkinningTests, ShadowTests and InterfaceTests in both configurations (`skin-palette-validation.log`). The final Visual Studio Debug executable passes all three hidden spawn/combat/veteran scenarios. Captures and full build/test logs are described in `progress.md`.
+
 ## Static scenery and sky cost (2026-10-20)
 
 The world view now retains the 1,280 immutable scenery instances instead of rebuilding building detail, tree branches, dock planks, trail stones and their transform/normal matrices every frame. The cache uses 230,400 bytes (225 KiB) of CPU instance storage. Camera and shadow visibility are recalculated on every submission, and the existing 4,096-visible-instance budget remains enforced. Animated NPCs and crystals stay outside the cache. A new expedition invalidates it; entering/leaving sparring rebuilds it to remove/restore the four pieces of the static training dummy. Save loads keep the same immutable map. Any future editable/replaced map must explicitly reset its world view.

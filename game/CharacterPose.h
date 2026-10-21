@@ -3,7 +3,8 @@
 #include <array>
 #include "game/Animation.h"
 
-// Local visual joints, independent of combat resolution. No skinning buffers.
+// Local visual joints, independent of combat resolution. CharacterRig converts
+// the final IK-corrected pose into the shared body/attachment skinning palette.
 struct LimbPose { DirectX::XMFLOAT3 root,joint,end; };
 struct CharacterPose {
   float bodyLift=0,upperPitch=0,upperYaw=0,upperRoll=0,bodyShift=0;

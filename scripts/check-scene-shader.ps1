@@ -15,7 +15,7 @@ foreach($part in $parts) {
 $source=($parts | ForEach-Object { $_.Groups[1].Value }) -join ''
 Add-Type -Path (Join-Path $PSScriptRoot 'SceneShaderCheck.cs')
 $bytecode=@{}
-foreach($entry in @('VSMain','PSMain','VSWorld','VSShadow','VSSky','PSSky','VSEffect','PSEffect')) {
+foreach($entry in @('VSMain','PSMain','VSWorld','VSShadow','VSBody','VSBodyShadow','VSSky','PSSky','VSEffect','PSEffect')) {
  $profile=if($entry.StartsWith('VS')) {'vs_5_0'} else {'ps_5_0'}
  $bytecode[$entry]=[SceneShaderCheck]::Compile($source,$entry,$profile)
  Write-Output ("PASS {0}: {1} bytes, no compiler diagnostics" -f $entry,$bytecode[$entry].Length)

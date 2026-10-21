@@ -1,5 +1,19 @@
 # Dawnwatch gameplay rules
 
+## Movement clip controller and skinned character (2026-10-21)
+
+The final character pose now drives a ten-bone weighted body. The chest, pelvis, arms and legs share one connected surface, replacing the overlapping rigid limb segments. Head, hands, footwear, weapons and armor fittings remain attached components. World characters, enemies, NPCs and inventory portraits use the same body and pose conversion; both shadow cascades use the same deformation.
+
+Eleven small code-authored motion clips cover forward/backward travel, left/right side steps, left/right turns, starting, stopping, ascent, descent and landing. Cubic interpolation preserves velocity through keys and loop boundaries. Travel distance drives stride phase; measured direction/speed and turning drive blended weights. Starts/stops finish through short taps and takeoff instead of dropping nonzero offsets. Existing timed Strike/Heavy, Mend, dash and hit-reaction layers retain priority and authoritative timing.
+
+Clip motion is applied before the existing planted-foot and fixed-length hand/leg solves. The pelvis adjusts to contact reach, shoulders counter weight transfer, and equipment/weapon points follow the resulting pose. This is a procedural/code-authored animation pipeline, with a flat-floor foot solver; it does not add slope collision, root-motion displacement, a DCC importer, facial animation or cloth/body self-collision. Reset/load/death clear transient controller state; gameplay and save version 10 remain unchanged. Manual checks 157–158 cover live acceptance.
+
+## Contact-driven reactions and weapon transitions (2026-10-21)
+
+Player and enemy recoil consume the actual contact timestamps from the simulation. Each impact samples any previous recoil at its own contact time, then ages through the remaining frame. Multiple hits in one update retain the same reaction as separate updates; damage flashes and idle breathing stay aligned. Defeat and loading still clear transient reactions. Enemy hit tint also accounts for the remainder of the contact frame.
+
+Timed weapon attacks blend into the current airborne, landing or dash weapon orientation at both boundaries. Returning to a fixed standing blade no longer produces a sword snap when the movement layer is active. Attack timing, damage, collision and the save format are unchanged.
+
 ## Weight transfer and takeoff presentation (2026-10-20)
 
 Ground steps now shift the pelvis toward the supporting leg and counter-rotate the shoulders. Banking is damped, and both ankle contacts stay fixed while planted. A running jump retains its departing stride for a 120 ms blend into the air pose; contacts release immediately and the underlying flight remains ballistic. Descent opens the torso before landing compression. Reset/load discards support, takeoff and cloth momentum.

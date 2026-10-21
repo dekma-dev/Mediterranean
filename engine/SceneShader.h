@@ -68,6 +68,30 @@ VOut VSWorld(InstanceIn i) {
  [branch] if (eyeAndHud.w>=0) o.cloudLight=CloudSunlight(position.xyz);
  return o;
 }
+)" R"(
+// A shared palette is reused by color, both shadow cascades and portraits.
+struct BodyPalette { matrix joints[10]; matrix normals[10]; float4 colors[6]; };
+cbuffer Bodies : register(b1) { BodyPalette bodies[32]; };
+struct SkinIn { InstanceIn object; uint4 bones : BLENDINDICES; float4 weights : BLENDWEIGHT; };
+void SkinBody(inout InstanceIn i,uint4 joints,float4 weights) {
+ uint actor=(uint)i.surface.z;
+ float3 p=0,n=0;
+ [unroll] for(uint k=0;k<4;++k) {
+  p+=mul(float4(i.p,1),bodies[actor].joints[joints[k]]).xyz*weights[k];
+  n+=mul(float4(i.n,0),bodies[actor].normals[joints[k]]).xyz*weights[k];
+ }
+ float4 style=bodies[actor].colors[(uint)i.tint.w];
+ i.p=p; i.n=normalize(n); i.tint=float4(style.rgb,1); i.surface.x=style.w;
+}
+VOut VSBody(SkinIn v) {
+ float3 bindPosition=v.object.p,bindNormal=v.object.n;
+ SkinBody(v.object,v.bones,v.weights);
+ VOut o=VSWorld(v.object); o.tp=bindPosition; o.tn=bindNormal; return o;
+}
+float4 VSBodyShadow(SkinIn v) : SV_POSITION {
+ SkinBody(v.object,v.bones,v.weights); return VSShadow(v.object);
+}
+)" R"(
 float Hash(float2 p) { float3 q=frac(float3(p.xyx)*.1031); q+=dot(q,q.yzx+33.33); return frac((q.x+q.y)*q.z); }
 float Noise(float2 p) {
  float2 cell=floor(p),f=frac(p); f=f*f*(3-2*f);

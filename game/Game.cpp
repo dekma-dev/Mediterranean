@@ -203,6 +203,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   const float dt=std::isfinite(seconds)?std::clamp(seconds,0.f,.05f):0.f;
   const bool wasDead=simulation_.Health()<=0,wasSparring=simulation_.Sparring();
   const auto previousVelocity=simulation_.MovementVelocity();
+  const auto previousPosition=simulation_.Player(); const float previousFacing=playerPose_.facing;
   const auto priorDialogue=simulation_.QuestDialogue(); const auto priorStage=simulation_.DialogueStage();
   simulation_.Update(dt,command);
   if (dt<=0) return;
@@ -227,6 +228,15 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
     simulation_.Health()>0,simulation_.AttackFlash()*5,dt,simulation_.Dashing() || simulation_.DashedThisUpdate(),
     simulation_.Attacking()?42.f:22.f);
   const auto velocity=simulation_.MovementVelocity();
+  const auto applyImpacts=[&](animation::State& state,rpg::EntityId actor,bool alive) {
+    if (!alive) return;
+    for (std::size_t i=0;i<simulation_.VisualEventCount();++i) {
+      const auto& event=simulation_.VisualEvents()[i];
+      if (event.actor==actor && (event.kind==rpg::CombatVisualKind::Hurt ||
+          event.kind==rpg::CombatVisualKind::Hit || event.kind==rpg::CombatVisualKind::HeavyHit))
+        state.ApplyImpact(std::clamp(event.elapsed,0.f,dt));
+    }
+  };
   bool castStarted=false,dashImpact=false,dashFinished=false;
   float dashEndElapsed=0;
   for(std::size_t i=0;i<simulation_.VisualEventCount();++i) {
@@ -240,8 +250,9 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
     ((velocity.x-previousVelocity.x)*std::sin(playerPose_.facing)+
      (velocity.z-previousVelocity.z)*std::cos(playerPose_.facing))/dt;
   playerAnimation_.Update(dt,simulation_.Height(),simulation_.VerticalSpeed(),simulation_.MovementDistance(),
-    simulation_.Health()>0,simulation_.DamagedThisUpdate(),playerPose_.attack,
+    simulation_.Health()>0,playerPose_.attack,
     simulation_.LandingSpeed(),simulation_.LandingElapsed(),forwardAcceleration,castStarted);
+  applyImpacts(playerAnimation_,0,simulation_.Health()>0);
   playerAnimation_.UpdateDash(dt,simulation_.Dashing(),simulation_.DashPhase(),dashImpact,simulation_.Health()>0,dashFinished,dashEndElapsed);
   playerAnimation_.pose.attackSeconds=simulation_.AttackSeconds();
   playerAnimation_.pose.heavyAttack=simulation_.HeavyAttack();
@@ -256,6 +267,12 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   playerAnimation_.pose.lean*=1-playerAnimation_.pose.dash;
   playerFeet_.Update(dt,simulation_.Player(),playerPose_.facing,simulation_.Grounded() && !simulation_.Dashing(),
     simulation_.Health()>0,playerAnimation_.pose);
+  const float dx=simulation_.Player().x-previousPosition.x,dz=simulation_.Player().z-previousPosition.z;
+  const float moved=std::hypot(dx,dz),c=std::cos(playerPose_.facing),s=std::sin(playerPose_.facing);
+  playerAnimation_.locomotion.Update(dt,simulation_.GroundMovementDistance(),moved>.000001f?(s*dx+c*dz)/moved:0,
+    moved>.000001f?(c*dx-s*dz)/moved:0,motion::AngleDelta(previousFacing,playerPose_.facing)/dt,
+    simulation_.Grounded(),simulation_.VerticalSpeed(),simulation_.Height(),simulation_.Health()>0,simulation_.LandingElapsed());
+  playerAnimation_.pose.motion=playerAnimation_.locomotion.pose;
   const auto& enemies=simulation_.Enemies();
   if (enemyPoses_.size()!=enemies.size()+1) ResetMotion();
   for (std::size_t i=0;i<enemyPoses_.size();++i) {
@@ -265,13 +282,17 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
       enemyFeet_[i].Reset(enemy.position,enemy.facing);
     }
     const float strike=EnemyStrike(enemy,simulation_.Health()>0 && (i<enemies.size() || simulation_.Sparring()));
+    const float turnRate=motion::AngleDelta(enemyPoses_[i].facing,enemy.facing)/dt;
     // Enemy heading is already smoothed by simulation, then frozen for attacks.
     // Use it exactly so the character always faces the displayed damage cone.
     enemyPoses_[i].Update(enemy.facing,enemy.movementDistance,true,enemy.health>0,strike,dt,true);
-    enemyAnimations_[i].Update(dt,0,0,enemy.movementDistance,enemy.health>0,enemy.damagedThisUpdate,strike);
+    enemyAnimations_[i].Update(dt,0,0,enemy.movementDistance,enemy.health>0,strike);
+    applyImpacts(enemyAnimations_[i],enemy.id,enemy.health>0);
     enemyAnimations_[i].pose.attackSeconds=EnemyAttackSeconds(enemy,simulation_.Health()>0 && (i<enemies.size() || simulation_.Sparring()));
     enemyAnimations_[i].pose.heavyAttack=enemy.kind==rpg::EnemyKind::Captain;
     enemyFeet_[i].Update(dt,enemy.position,enemy.facing,true,enemy.health>0,enemyAnimations_[i].pose);
+    enemyAnimations_[i].locomotion.Update(dt,enemy.movementDistance,1,0,turnRate,true,0,0,enemy.health>0);
+    enemyAnimations_[i].pose.motion=enemyAnimations_[i].locomotion.pose;
   }
   const auto track=[&](rpg::EntityId id,rpg::Vec2 position,float height,const motion::Actor& motion,
     const animation::Sample& animation,bool shield,bool armed) {

@@ -6,6 +6,7 @@
 #include <vector>
 #include "engine/GpuTimer.h"
 #include "engine/Geometry.h"
+#include "engine/Skinning.h"
 #include "engine/FontAtlas.h"
 #include "engine/StaticScene.h"
 #include <array>
@@ -31,6 +32,7 @@ public:
     const DirectX::XMFLOAT4& color,visual::Material material,float yaw = 0,float pitch = 0,
     visual::ShadowMode shadow = visual::ShadowMode::Cast,float roll = 0);
   void DrawCloak(const DirectX::XMFLOAT3& shoulder,float yaw,float pitch,float roll,float side,float back);
+  void DrawBody(DirectX::XMFLOAT3 position,float yaw,const visual::BodyPalette& palette);
   void DrawSegment(const DirectX::XMFLOAT3& from,const DirectX::XMFLOAT3& to,float width,float depth,
     const DirectX::XMFLOAT4& color,visual::Material material);
   void DrawMeshBetween(visual::Mesh mesh,const DirectX::XMFLOAT3& from,const DirectX::XMFLOAT3& to,float width,float depth,
@@ -88,6 +90,11 @@ private:
   std::array<MeshRange,meshCount> meshes_{};
   std::array<std::vector<Item>,meshCount> world_;
   std::vector<Instance> instanceScratch_;
+  std::array<visual::BodyPalette,visual::maxBodies> bodyPalettes_{};
+  unsigned bodyCount_=0;
+  Microsoft::WRL::ComPtr<ID3D11Buffer> skinWeights_,skinConstants_;
+  Microsoft::WRL::ComPtr<ID3D11VertexShader> bodyShader_,bodyShadowShader_;
+  Microsoft::WRL::ComPtr<ID3D11InputLayout> bodyLayout_;
   std::vector<visual::Vertex> hud_;
   std::vector<visual::Vertex> effects_;
   unsigned effectVertices_=0;

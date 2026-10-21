@@ -1,6 +1,7 @@
 #pragma once
 #include "game/Motion.h"
 #include "game/AttackMotion.h"
+#include "game/LocomotionClips.h"
 #include <array>
 
 // Presentation-only channels; no collision, combat timing or durable save data.
@@ -22,6 +23,7 @@ struct Sample {
   float support=0,clothSide=0,clothBack=0;
   std::array<Foot,2> departureFeet{};
   float departure=0,departureSupport=0;
+  MotionChannels motion;
 };
 inline Sample Idle(float time,float offset=0) {
   const float seconds=std::isfinite(time)?std::remainder(time,motion::tau*2/1.8f):0;
@@ -46,16 +48,35 @@ inline float DashBrake(float phase) {
 }
 struct State {
   Sample pose;
+  LocomotionController locomotion;
   float phase=0,airBlend=0,riseBlend=0,travelBlend=0;
   float landingAge=2,landingStrength=0,hitAge=2,hitCarry=0;
+  float restWeight=1;
   float castAge=2,leanVelocity=0,riseVelocity=0,travelVelocity=0;
   float bankVelocity=0;
   float clothSideVelocity=0,clothBackVelocity=0;
-  float flightAge=1;
+  float flightAge=1,departureLanding=0;
   bool wasAirborne=false,hasDeparture=false;
   float dashImpactAge=2,dashCarry=0,brakeCarry=0;
   bool dashCollision=false;
   void Reset(float offset=0) { *this=State{}; phase=std::isfinite(offset)?std::remainder(offset,motion::tau):0; }
+  float RecoilAt(float age) const {
+    return age>1?0:std::max(hitCarry*std::exp(-24*age),Pulse(age,.055f));
+  }
+  void RefreshRecoil() {
+    pose.hit=RecoilAt(hitAge);
+    const float rest=restWeight*(1-pose.hit);
+    pose.breath=std::sin(phase)*rest; pose.sway=std::sin(phase*.5f)*rest;
+  }
+  // Apply after Update, in contact order. Elapsed is the time between impact
+  // and this frame's end. Sample the old reaction at contact, not at either
+  // frame boundary, so two hits in one frame preserve the same recoil as two
+  // separate updates. The event stream remains owned by the simulation.
+  void ApplyImpact(float elapsed) {
+    if (!std::isfinite(elapsed) || elapsed<0) return;
+    hitCarry=RecoilAt(std::max(0.f,hitAge-elapsed)); hitAge=elapsed;
+    RefreshRecoil();
+  }
   void CancelDash() {
     pose.dash=pose.dashBrake=pose.dashImpact=pose.dashPhase=pose.dashLoad=0;
     dashImpactAge=2; dashCarry=brakeCarry=0; dashCollision=false;
@@ -77,7 +98,7 @@ struct State {
     pose.dashImpact=dashCollision?Gesture(dashImpactAge,.045f,.23f):0;
     pose.dashLoad=active?Gesture(pose.dashPhase,.10f,.32f):0;
   }
-  void Update(float dt,float height,float velocity,float travel,bool alive,bool damaged,float strike,
+  void Update(float dt,float height,float velocity,float travel,bool alive,float strike,
               float landingSpeed=0,float landingElapsed=0,float forwardAcceleration=0,bool castStarted=false) {
     if (!std::isfinite(dt) || dt<=0) return;
     dt=std::min(dt,.05f);
@@ -90,11 +111,12 @@ struct State {
     const bool onGround=height<=0 && velocity<=0;
     if (!onGround && !wasAirborne) {
       flightAge=0; hasDeparture=pose.feetActive;
+      departureLanding=pose.landing;
       pose.departureFeet=pose.feet; pose.departureSupport=pose.support;
     }
     flightAge=std::min(1.f,flightAge+dt);
     wasAirborne=!onGround;
-    if (onGround) hasDeparture=false;
+    if (onGround) { hasDeparture=false; departureLanding=0; }
     // Carry the departing foot arrangement briefly into flight. Both contacts
     // are released immediately; this only blends the airborne joint targets.
     pose.departure=hasDeparture?1-SmoothStep(flightAge/.12f):0;
@@ -103,10 +125,8 @@ struct State {
       landingAge=std::isfinite(landingElapsed)?std::clamp(landingElapsed,0.f,dt):0;
       landingStrength=Unit(landingSpeed/motion::jumpSpeed);
     }
-    // Consume actual impact events: a fading tint is neither a timestamp nor
-    // evidence of fresh damage. Preserve recoil when a second impact arrives.
-    if (damaged) { hitAge=0; hitCarry=pose.hit; }
-    // A new takeoff cannot inherit the last landing's crouch.
+    // Discard the old impact event, but release its visible compression over
+    // the same short interval as departing feet instead of teleporting upright.
     if (!onGround) { landingAge=2; landingStrength=0; }
     phase=std::remainder(phase+dt*1.8f,motion::tau*2);
     airBlend=motion::Ease(airBlend,onGround?0.f:1.f,18.f,dt);
@@ -114,8 +134,8 @@ struct State {
     motion::Spring(travelBlend,travelVelocity,onGround?Unit(travel/dt/7.f):0.f,20.f,dt);
     const float leanTarget=onGround?Signed(forwardAcceleration/60.f):0;
     motion::Spring(pose.lean,leanVelocity,leanTarget,24.f,dt);
-    pose.hit=hitAge>1?0:std::max(hitCarry*std::exp(-24*hitAge),Pulse(hitAge,.055f));
-    pose.landing=landingStrength*Gesture(landingAge,.09f,.42f);
+    pose.landing=onGround?landingStrength*Gesture(landingAge,.09f,.42f):
+      departureLanding*(1-SmoothStep(flightAge/.12f));
     // Extend the legs before touching down, regardless of filtered air state.
     pose.air=airBlend*SmoothStep(height/.25f); pose.rise=riseBlend; pose.travel=travelBlend;
     // Keep the push leg extended during the first part of ascent, then tuck.
@@ -128,8 +148,8 @@ struct State {
       std::clamp(.025f+flow*.24f+Signed(velocity/motion::jumpSpeed)*.05f,.005f,.32f),14.f,dt);
     motion::Spring(pose.clothSide,clothSideVelocity,
       -Signed(pose.bank)*.12f+std::sin(phase*3)*flow*.025f+std::sin(phase*.5f)*.008f,12.f,dt);
-    const float rest=(1-travelBlend)*(1-Unit(strike))*(1-pose.hit)*(1-pose.air);
-    pose.breath=std::sin(phase)*rest; pose.sway=std::sin(phase*.5f)*rest;
+    restWeight=(1-travelBlend)*(1-Unit(strike))*(1-pose.air);
+    RefreshRecoil();
   }
 };
 }

@@ -34,6 +34,7 @@ add_library(MediterraneanClient STATIC
   engine/Renderer.cpp
   engine/GpuTimer.cpp
   engine/Geometry.cpp
+  engine/Skinning.cpp
   engine/FontAtlas.cpp
   platform/Win32Window.cpp
   game/Game.cpp
@@ -41,6 +42,7 @@ add_library(MediterraneanClient STATIC
   game/LandmarkView.cpp
   game/CharacterView.cpp
   game/CharacterPose.cpp
+  game/CharacterRig.cpp
   game/CombatEffects.cpp
   game/Interface.cpp
   game/InterfaceState.cpp
@@ -66,6 +68,9 @@ set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT RPGNative)
 
 include(CTest)
 if (BUILD_TESTING)
+  add_executable(SkinningTests tests/SkinningTests.cpp)
+  target_link_libraries(SkinningTests PRIVATE MediterraneanClient)
+  add_test(NAME SkinningTests COMMAND SkinningTests)
   add_executable(AudioTests tests/AudioTests.cpp)
   target_link_libraries(AudioTests PRIVATE MediterraneanClient)
   add_test(NAME AudioTests COMMAND AudioTests)
@@ -88,7 +93,7 @@ if (BUILD_TESTING)
   target_link_libraries(InterfaceTests PRIVATE MediterraneanClient)
   target_compile_definitions(InterfaceTests PRIVATE RPG_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
   add_test(NAME InterfaceTests COMMAND InterfaceTests)
-  add_executable(GeometryTests tests/GeometryTests.cpp engine/Geometry.cpp game/CharacterPose.cpp)
+  add_executable(GeometryTests tests/GeometryTests.cpp engine/Geometry.cpp engine/Skinning.cpp game/CharacterPose.cpp)
   target_include_directories(GeometryTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   target_compile_definitions(GeometryTests PRIVATE NOMINMAX)
   add_test(NAME GeometryTests COMMAND GeometryTests)

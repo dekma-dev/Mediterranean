@@ -1,4 +1,5 @@
 #include "engine/Geometry.h"
+#include "engine/Skinning.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -109,6 +110,7 @@ float Hash(int x,int y) {
 }
 
 Geometry BuildMesh(Mesh mesh) {
+  if (mesh==Mesh::Body) return CharacterBody().mesh;
   if (mesh==Mesh::Cloak) {
     Geometry g;
     // One continuous flared sheet, shared smooth normals and a separate back

@@ -69,7 +69,7 @@ bool Renderer::Resize(int width, int height) {
  return CreateTargets(width,height);
 }
 bool Renderer::CreatePipeline() {
- ComPtr<ID3DBlob> vs,ps,world,shadow,sky,skyPs,effectVs,effectPs,errors;
+ ComPtr<ID3DBlob> vs,ps,world,shadow,sky,skyPs,effectVs,effectPs,body,bodyShadow,errors;
  auto compile = [&](const char* entry,const char* profile,ComPtr<ID3DBlob>& output) {
   errors.Reset(); const HRESULT hr=D3DCompile(sceneShader,std::strlen(sceneShader),"BuiltInScene",nullptr,nullptr,entry,profile,
    D3DCOMPILE_ENABLE_STRICTNESS,0,output.GetAddressOf(),errors.GetAddressOf());
@@ -82,11 +82,14 @@ bool Renderer::CreatePipeline() {
  };
  if (!compile("VSMain","vs_5_0",vs) || !compile("PSMain","ps_5_0",ps) ||
    !compile("VSWorld","vs_5_0",world) || !compile("VSShadow","vs_5_0",shadow) ||
+   !compile("VSBody","vs_5_0",body) || !compile("VSBodyShadow","vs_5_0",bodyShadow) ||
    !compile("VSSky","vs_5_0",sky) || !compile("PSSky","ps_5_0",skyPs) ||
    !compile("VSEffect","vs_5_0",effectVs) || !compile("PSEffect","ps_5_0",effectPs)) return false;
  if (!Check(device_->CreateVertexShader(effectVs->GetBufferPointer(),effectVs->GetBufferSize(),nullptr,effectVertexShader_.GetAddressOf()),L"Create effect vertex shader") ||
    !Check(device_->CreatePixelShader(effectPs->GetBufferPointer(),effectPs->GetBufferSize(),nullptr,effectPixelShader_.GetAddressOf()),L"Create effect pixel shader")) return false;
  if (!Check(device_->CreateVertexShader(vs->GetBufferPointer(),vs->GetBufferSize(),nullptr,vertexShader_.GetAddressOf()),L"Create HUD shader") ||
+   !Check(device_->CreateVertexShader(body->GetBufferPointer(),body->GetBufferSize(),nullptr,bodyShader_.GetAddressOf()),L"Create skinning shader") ||
+   !Check(device_->CreateVertexShader(bodyShadow->GetBufferPointer(),bodyShadow->GetBufferSize(),nullptr,bodyShadowShader_.GetAddressOf()),L"Create skinned shadow shader") ||
    !Check(device_->CreateVertexShader(world->GetBufferPointer(),world->GetBufferSize(),nullptr,worldShader_.GetAddressOf()),L"Create instance shader") ||
    !Check(device_->CreateVertexShader(shadow->GetBufferPointer(),shadow->GetBufferSize(),nullptr,shadowShader_.GetAddressOf()),L"Create shadow shader") ||
    !Check(device_->CreateVertexShader(sky->GetBufferPointer(),sky->GetBufferSize(),nullptr,skyShader_.GetAddressOf()),L"Create sky shader") ||
@@ -102,24 +105,36 @@ bool Renderer::CreatePipeline() {
  elements.push_back({"PAINT",0,DXGI_FORMAT_R32G32B32A32_FLOAT,1,128,D3D11_INPUT_PER_INSTANCE_DATA,1});
  elements.push_back({"SURFACE",0,DXGI_FORMAT_R32G32B32A32_FLOAT,1,144,D3D11_INPUT_PER_INSTANCE_DATA,1});
  if (!Check(device_->CreateInputLayout(elements.data(),static_cast<UINT>(elements.size()),world->GetBufferPointer(),world->GetBufferSize(),worldLayout_.GetAddressOf()),L"Create instance layout")) return false;
+ elements.push_back({"BLENDINDICES",0,DXGI_FORMAT_R32G32B32A32_UINT,2,0,D3D11_INPUT_PER_VERTEX_DATA,0});
+ elements.push_back({"BLENDWEIGHT",0,DXGI_FORMAT_R32G32B32A32_FLOAT,2,16,D3D11_INPUT_PER_VERTEX_DATA,0});
+ if (!Check(device_->CreateInputLayout(elements.data(),static_cast<UINT>(elements.size()),body->GetBufferPointer(),body->GetBufferSize(),bodyLayout_.GetAddressOf()),L"Create skinned layout")) return false;
  static_assert(sizeof(Instance)==160,"Instance layout must match the shader.");
+ static_assert(sizeof(visual::SkinInfluence)==32 && sizeof(visual::BodyPalette)==1376,"Keep skinning layouts synchronized with HLSL.");
+ static_assert(sizeof(bodyPalettes_)<=65536,"Skin palettes must fit a D3D11 constant buffer.");
  std::vector<Vertex> vertices; std::vector<std::uint32_t> indices;
+ std::vector<visual::SkinInfluence> influences;
  for (unsigned i=0;i<meshCount;++i) {
   auto mesh=visual::BuildMesh(static_cast<visual::Mesh>(i));
   auto& range=meshes_[i]; range.start=static_cast<UINT>(indices.size()); range.count=static_cast<UINT>(mesh.indices.size());
   for (auto index : mesh.indices) indices.push_back(index+static_cast<UINT>(vertices.size()));
   for (const auto& v : mesh.vertices) range.radius=std::max(range.radius,std::sqrt(v.position.x*v.position.x+v.position.y*v.position.y+v.position.z*v.position.z));
   vertices.insert(vertices.end(),mesh.vertices.begin(),mesh.vertices.end());
+  if(i==unsigned(visual::Mesh::Body)) influences.insert(influences.end(),visual::CharacterBody().influences.begin(),visual::CharacterBody().influences.end());
+  else influences.resize(vertices.size());
  }
  D3D11_BUFFER_DESC b{}; b.ByteWidth=static_cast<UINT>(vertices.size()*sizeof(Vertex));
  b.Usage=D3D11_USAGE_IMMUTABLE; b.BindFlags=D3D11_BIND_VERTEX_BUFFER;
  D3D11_SUBRESOURCE_DATA data{}; data.pSysMem=vertices.data(); meshBytes_=b.ByteWidth;
  if (!Check(device_->CreateBuffer(&b,&data,vertices_.GetAddressOf()),L"Create reusable meshes")) return false;
+ b.ByteWidth=static_cast<UINT>(influences.size()*sizeof(visual::SkinInfluence)); data.pSysMem=influences.data(); meshBytes_+=b.ByteWidth;
+ if (!Check(device_->CreateBuffer(&b,&data,skinWeights_.GetAddressOf()),L"Create skin weights")) return false;
  b.ByteWidth=static_cast<UINT>(indices.size()*sizeof(std::uint32_t)); b.BindFlags=D3D11_BIND_INDEX_BUFFER;
  data.pSysMem=indices.data(); meshBytes_+=b.ByteWidth;
  if (!Check(device_->CreateBuffer(&b,&data,indices_.GetAddressOf()),L"Create mesh indices")) return false;
  b={}; b.ByteWidth=sizeof(Constants); b.Usage=D3D11_USAGE_DEFAULT; b.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
  if (!Check(device_->CreateBuffer(&b,nullptr,constants_.GetAddressOf()),L"Create constants")) return false;
+ b.ByteWidth=sizeof(bodyPalettes_); b.Usage=D3D11_USAGE_DYNAMIC; b.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
+ if (!Check(device_->CreateBuffer(&b,nullptr,skinConstants_.GetAddressOf()),L"Create skin palettes")) return false;
  b.ByteWidth=16380*sizeof(Vertex); b.Usage=D3D11_USAGE_DYNAMIC; b.BindFlags=D3D11_BIND_VERTEX_BUFFER; b.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
  if (!Check(device_->CreateBuffer(&b,nullptr,hudVertices_.GetAddressOf()),L"Create HUD buffer")) return false;
  b.ByteWidth=maxInstances*sizeof(Instance);
@@ -205,6 +220,7 @@ void Renderer::BeginFrame() {
  hud_.clear();
  effects_.clear(); effectVertices_=0;
  for (auto& batch : world_) batch.clear();
+ bodyCount_=0;
  const float sky[]={.19f,.23f,.38f,1};
  context_->OMSetRenderTargets(1,target_.GetAddressOf(),depth_.Get());
  context_->ClearRenderTargetView(target_.Get(),sky);
@@ -294,6 +310,19 @@ void Renderer::DrawCloak(const XMFLOAT3& shoulder,float yaw,float pitch,float ro
  item.instance.surface.w=.001f+(std::isfinite(back)?std::clamp(back,0.f,.35f):0);
  item.radius+=.41f;
 }
+void Renderer::DrawBody(XMFLOAT3 position,float yaw,const visual::BodyPalette& palette) {
+ if(bodyCount_>=visual::maxBodies) { error_=L"Scene exceeded the 32 skinned-body budget."; frameFailed_=true; return; }
+ auto& gpu=bodyPalettes_[bodyCount_]; gpu.colors=palette.colors;
+ for(unsigned bone=0;bone<visual::bodyBones;++bone) {
+  XMStoreFloat4x4(&gpu.joints[bone],XMMatrixTranspose(XMLoadFloat4x4(&palette.joints[bone])));
+  XMStoreFloat4x4(&gpu.normals[bone],XMMatrixTranspose(XMLoadFloat4x4(&palette.normals[bone])));
+ }
+ DrawMesh(visual::Mesh::Body,position,{1,1,1},{1,1,1,1},visual::Material::Cloth,yaw);
+ auto& item=world_[unsigned(visual::Mesh::Body)].back(); item.instance.surface.z=float(bodyCount_++);
+ // Covers every solved limb/torso pose, including fully raised arms. Bounds are
+ // intentionally conservative; the simulation's collision body is unchanged.
+ item.radius=3.f;
+}
 void Renderer::DrawSegment(const XMFLOAT3& from,const XMFLOAT3& to,float width,float depth,
  const XMFLOAT4& color,visual::Material material) {
  DrawMeshBetween(visual::Mesh::Limb,from,to,width,depth,color,material);
@@ -378,9 +407,18 @@ bool Renderer::FlushWorld() {
   std::memcpy(mapped.pData,instanceScratch_.data(),instanceScratch_.size()*sizeof(Instance));
   context_->Unmap(instances_.Get(),0);
  }
- ID3D11Buffer* buffers[]={vertices_.Get(),instances_.Get()};
- const UINT strides[]={sizeof(Vertex),sizeof(Instance)},offsets[]={0,0};
- context_->IASetVertexBuffers(0,2,buffers,strides,offsets);
+ if(bodyCount_) {
+  // A portrait can follow world draws immediately. DISCARD lets the driver
+  // rename the palette instead of waiting for the world's bones to finish.
+  D3D11_MAPPED_SUBRESOURCE mapped{};
+  if(!Check(context_->Map(skinConstants_.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&mapped),L"Upload skin palettes")) return false;
+  std::memcpy(mapped.pData,bodyPalettes_.data(),bodyCount_*sizeof(visual::BodyPalette));
+  context_->Unmap(skinConstants_.Get(),0);
+ }
+ context_->VSSetConstantBuffers(1,1,skinConstants_.GetAddressOf());
+ ID3D11Buffer* buffers[]={vertices_.Get(),instances_.Get(),skinWeights_.Get()};
+ const UINT strides[]={sizeof(Vertex),sizeof(Instance),sizeof(visual::SkinInfluence)},offsets[]={0,0,0};
+ context_->IASetVertexBuffers(0,3,buffers,strides,offsets);
  context_->IASetIndexBuffer(indices_.Get(),DXGI_FORMAT_R32_UINT,0);
  context_->IASetInputLayout(worldLayout_.Get());
  context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -402,6 +440,7 @@ bool Renderer::FlushWorld() {
   if (portrait_) viewport=portraitViewport_;
   context_->RSSetViewports(1,&viewport);
   context_->RSSetState(shadowPass?shadowRasterizer_.Get():rasterizer_.Get());
+  context_->IASetInputLayout(worldLayout_.Get());
   context_->VSSetShader(shadowPass?shadowShader_.Get():worldShader_.Get(),nullptr,0);
   context_->PSSetShader(shadowPass?nullptr:pixelShader_.Get(),nullptr,0);
   if (!shadowPass) {
@@ -412,15 +451,23 @@ bool Renderer::FlushWorld() {
    context_->PSSetShaderResources(4,1,terrainView_.GetAddressOf());
    context_->PSSetSamplers(2,1,fontSampler_.GetAddressOf());
   }
+  bool bodyActive=false;
   for (unsigned b=0;b<batchCounts[pass];++b) {
    const auto& batch=passes[pass][b];
    const auto& mesh=meshes_[batch.mesh];
+   const bool skinned=batch.mesh==unsigned(visual::Mesh::Body);
+   if(skinned!=bodyActive) {
+    context_->IASetInputLayout(skinned?bodyLayout_.Get():worldLayout_.Get());
+    context_->VSSetShader(skinned?(shadowPass?bodyShadowShader_.Get():bodyShader_.Get()):(shadowPass?shadowShader_.Get():worldShader_.Get()),nullptr,0);
+    bodyActive=skinned;
+   }
    context_->DrawIndexedInstanced(mesh.count,batch.count,mesh.start,0,batch.first);
    ++drawCalls_; triangles_+=mesh.count/3*batch.count;
   }
  }
  // Consume even a fully culled queue before changing camera/portrait state.
  for (auto& batch : world_) batch.clear();
+ bodyCount_=0;
  DrawSky();
  return true;
 }

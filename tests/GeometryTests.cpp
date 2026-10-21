@@ -46,8 +46,11 @@ int main() {
   for (unsigned mesh=0;mesh<static_cast<unsigned>(visual::Mesh::Count);++mesh) {
     const auto g=visual::BuildMesh(static_cast<visual::Mesh>(mesh));
     Check(!g.vertices.empty() && !g.indices.empty() && g.indices.size()%3==0,"Missing or incomplete mesh.");
-    bytes+=g.vertices.size()*sizeof(visual::Vertex)+g.indices.size()*sizeof(std::uint32_t);
-    triangles+=g.indices.size()/3;
+    // The separately budgeted weighted body is covered by SkinningTests.
+    if(mesh!=unsigned(visual::Mesh::Body)) {
+      bytes+=g.vertices.size()*sizeof(visual::Vertex)+g.indices.size()*sizeof(std::uint32_t);
+      triangles+=g.indices.size()/3;
+    }
     for (const auto& v : g.vertices) {
       Check(Finite(v.position) && Finite(v.normal),"Non-finite mesh data would poison bounds or lighting.");
       const float length=XMVectorGetX(XMVector3Length(XMLoadFloat3(&v.normal)));

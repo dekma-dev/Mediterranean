@@ -57,7 +57,13 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   pose.upperPitch=travel*.09f+animation::Signed(dynamics.lean)*.10f+landing*.12f+air*std::max(0.f,rise)*.06f-hit*.12f+sway*.015f*(1-air);
   pose.upperPitch+=dash*.42f-brake*.16f-dashImpact*.14f;
   pose.upperPitch-=cast*.08f;
+  // Clip body motion is layered before foot/hand IK. Committed combat keeps
+  // priority over locomotion, while contacts still compensate pelvis height.
+  const float clipWeight=(1-swing)*(1-burst)*(1-hit);
+  pose.bodyLift+=dynamics.motion.hip*clipWeight;
+  pose.upperPitch+=dynamics.motion.pitch*clipWeight;
   pose.upperYaw=animation::Signed(dynamics.bank)*.08f;
+  pose.upperYaw+=dynamics.motion.yaw*clipWeight;
   const float departure=animation::Unit(dynamics.departure);
   const float contactWeight=dynamics.feetActive?1.f:departure;
   const auto& sourceFeet=dynamics.feetActive?dynamics.feet:dynamics.departureFeet;
@@ -65,7 +71,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     animation::Signed(dynamics.departureSupport)*departure)*(1-air)*(1-burst);
   const float bank=animation::Signed(dynamics.bank)*(1-air)*(1-burst);
   pose.bodyShift=support*.032f+bank*.018f;
-  pose.upperRoll=-support*.035f-bank*.08f;
+  pose.upperRoll=-support*.035f-bank*.08f+dynamics.motion.roll*clipWeight;
   // The shoulders counter the planted-leg transfer; descending opens the
   // chest and lowers the hips before the existing impact compression.
   pose.upperYaw+=animation::Signed((sourceFeet[0].z-sourceFeet[1].z)/.6f)*.072f*(1-swing)*contactWeight;
@@ -120,6 +126,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     const float attack=i==1?swing:0;
     XMFLOAT3 hand{side*(.40f+air*.035f),1.02f+attack*.52f+air*.12f+landing*.08f+hit*.08f+dash*.12f+brake*.07f,
       .10f-armStride*.13f+attack*.21f+sway*side*.014f-dash*.20f+brake*.12f};
+    hand.z+=dynamics.motion.reach*clipWeight;
     if (i==0 && shield) hand={-.39f,1.13f+air*.08f+landing*.08f,.23f-armStride*.04f+dash*.09f};
     if (timed) {
       const float cut=stroke.cut,weight=stroke.weight*(1-burst);
@@ -141,7 +148,10 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   if (timed) {
     const float weight=stroke.weight*(1-burst);
     const XMFLOAT3 cut{.22f-stroke.cut*.38f,1.05f-stroke.cut*1.25f,.05f+stroke.cut*1.05f};
-    const XMFLOAT3 rest{.12f,-.76f,.63f};
+    // Blend out to the current movement layer, not a fixed standing blade.
+    // Otherwise the first/last timed-attack sample snaps during flight or a
+    // landing, and a suppressed attack overrides the dash's weapon clearance.
+    const XMFLOAT3 rest{.12f,-.76f+landing*.25f+air*.20f+dash*.32f+brake*.16f,.63f};
     const auto a=XMVector3Normalize(XMLoadFloat3(&rest)),b=XMVector3Normalize(XMLoadFloat3(&cut));
     const float angle=std::acos(std::clamp(XMVectorGetX(XMVector3Dot(a,b)),-.9999f,1.f));
     // Interpolate orientation on the unit sphere: linear direction blending

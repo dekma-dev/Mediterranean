@@ -12,6 +12,144 @@ bool Finite(DirectX::XMFLOAT3 p) { return std::isfinite(p.x) && std::isfinite(p.
 float Distance(DirectX::XMFLOAT3 a,DirectX::XMFLOAT3 b) {
   return std::sqrt((a.x-b.x)*(a.x-b.x)+(a.y-b.y)*(a.y-b.y)+(a.z-b.z)*(a.z-b.z));
 }
+void RepeatTakeoffRegressions() {
+  float worstHip=0,worstHand=0,worstClipTiming=0;
+  for(int hz : {22,30,60,144,1000}) for(float delay : {0.f,.03f,.06f,.09f,.15f,.25f,.4f}) {
+    Game game; game.Initialize(); rpg::Command jump; jump.jump=true;
+    game.ExecuteCommand(jump,.001f);
+    for(int frame=0;!game.State().Grounded() && frame<hz*2;++frame) game.ExecuteCommand({},1.f/hz);
+    Require(game.State().Grounded(),"Repeat-jump fixture must land");
+    for(float t=0;t<delay-1e-7f;) { const float dt=std::min(1.f/hz,delay-t); game.ExecuteCommand({},dt); t+=dt; }
+    const auto before=BuildCharacterPose(0,game.PlayerPose().gait,false,game.PlayerAnimation());
+    game.ExecuteCommand(jump,.001f);
+    Require(!game.State().Grounded(),"Repeat-jump fixture must take off again");
+    const auto after=BuildCharacterPose(0,game.PlayerPose().gait,false,game.PlayerAnimation());
+    worstHip=std::max(worstHip,Distance(before.legs[0].root,after.legs[0].root));
+    for(int side=0;side<2;++side) worstHand=std::max(worstHand,Distance(before.arms[side].end,after.arms[side].end));
+    for(int frame=0;frame<20;++frame) game.ExecuteCommand({},.01f);
+    Require(game.PlayerAnimation().landing==0,"Previous landing crouch must release during the new ascent");
+  }
+  for(int hz : {22,30,60,144,1000}) {
+    Game game; game.Initialize(); rpg::Command jump; jump.jump=true;
+    game.ExecuteCommand(jump,.001f);
+    for(float t=.001f;t<.8f-1e-7f;) { const float dt=std::min(1.f/hz,.8f-t); game.ExecuteCommand({},dt); t+=dt; }
+    const auto expected=animation::SampleClip(animation::MotionClip::Land,.2f);
+    worstClipTiming=std::max(worstClipTiming,std::abs(game.PlayerAnimation().motion.hip-expected.hip));
+  }
+  std::cout<<"Repeat takeoff 1 ms: hip "<<worstHip<<", hand "<<worstHand<<"; landing clip timing error "<<worstClipTiming<<'\n';
+  Require(worstHip<.005f && worstHand<.005f && worstClipTiming<.0001f,
+    "Repeated takeoff must preserve the visible crouch; landing clips must use actual contact time");
+}
+void ClipLibraryRegressions() {
+  const auto magnitude=[](animation::MotionChannels c) {
+    return std::max({std::abs(c.hip),std::abs(c.pitch),std::abs(c.roll),std::abs(c.yaw),std::abs(c.reach)});
+  };
+  for(unsigned clip=0;clip<unsigned(animation::MotionClip::Count);++clip) {
+    const auto id=animation::MotionClip(clip); const auto& definition=animation::locomotionClips[clip];
+    for(unsigned key=0;key<=4;++key) {
+      const float time=definition.duration*key/4,epsilon=.00001f;
+      const auto center=animation::SampleClip(id,time),before=animation::SampleClip(id,time-epsilon),after=animation::SampleClip(id,time+epsilon);
+      Require(magnitude(after-before)<.0001f,"Authored clip keys and loop boundaries must be position-continuous");
+      Require(magnitude((center-before)*(1/epsilon)-(after-center)*(1/epsilon))<.015f,
+        "Authored clip keys and loop boundaries must preserve velocity");
+    }
+    for(int i=0;i<=200;++i) {
+      const auto value=animation::SampleClip(id,definition.duration*i/200);
+      Require(std::isfinite(magnitude(value)) && magnitude(value)<.07f,"Additive clips must remain within their small motion envelope");
+    }
+  }
+  animation::MotionChannels reference;
+  for(int hz : {22,30,60,144,1000}) {
+    animation::LocomotionController controller;
+    for(float t=0;t<1.f-1e-7f;) {
+      const float dt=std::min(1.f/hz,1-t); controller.Update(dt,4*dt,1,0,0,true,0,0,true); t+=dt;
+    }
+    if(hz!=22) Require(magnitude(controller.pose-reference)<.0001f,"Steady stride must agree at equal time/distance across update rates");
+    reference=controller.pose;
+    for(int i=0;i<hz*2;++i) controller.Update(1.f/hz,0,0,0,0,true,0,0,true);
+    Require(magnitude(controller.pose)<.00001f,"Stopping must blend fully back to idle");
+  }
+  const float directions[][2]={{1,0},{-1,0},{0,-1},{0,1}};
+  {
+    animation::LocomotionController taps;
+    float largestStep=0;
+    for(int i=0;i<2000;++i) {
+      const auto before=taps.pose;
+      taps.Update(.001f,i%100<70?.004f:0,1,0,0,true,0,0,true);
+      largestStep=std::max(largestStep,magnitude(taps.pose-before));
+    }
+    std::cout<<"Rapid-tap maximum channel change per millisecond: "<<largestStep<<'\n';
+    // The fastest authored pitch segment reaches about 1 rad/s; blending can
+    // add to that slope. A 2 rad/s bound still catches the old 20 mm pose cut.
+    Require(largestStep<.002f,"Rapid start/stop taps must not cut or restart a nonzero clip");
+  }
+  for(unsigned direction=0;direction<4;++direction) {
+    animation::LocomotionController controller;
+    for(int i=0;i<100;++i) controller.Update(.01f,.04f,directions[direction][0],directions[direction][1],0,true,0,0,true);
+    Require(controller.weights[direction]>.999f,"Directional travel must select its matching clip");
+    controller.Update(.01f,0,0,0,0,true,0,0,false);
+    Require(magnitude(controller.pose)==0 && controller.weights[direction]==0,"Death/reset must discard clip blending and timers");
+  }
+  std::cout<<"PASS: 11 locomotion clips, continuous keys/loops, directional blending, equal-distance stride, stop/reset\n";
+}
+void ContactAndWeaponRegressions() {
+  bool passed=true;
+  const auto check=[&](bool value,const char* message) {
+    if (!value) { std::cerr<<message<<'\n'; passed=false; }
+  };
+  const char* imminent="MEDITERRANEAN 3\n-4 5.2 100 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
+    "100 -4 7 80 0 0 1 0.017 3.14159\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
+  float worstRecoil=0,worstTint=0,worstWeapon=0;
+  for (int hz : {22,30,60,144,1000}) {
+    Game game; Require(game.RestoreSnapshot(imminent),"Recoil contact fixture must load");
+    for(float t=0;t<.12f-1e-7f;) {
+      const float dt=std::min(1.f/hz,.12f-t); game.ExecuteCommand({},dt); t+=dt;
+    }
+    worstRecoil=std::max(worstRecoil,std::abs(game.PlayerAnimation().hit-animation::Pulse(.103f,.055f)));
+    check(game.State().Health()<100,"Recoil fixture must receive damage");
+
+    std::string attack=imminent; attack.replace(attack.find("0.017 3.14159"),5,"0.65");
+    Require(game.RestoreSnapshot(attack),"Outgoing contact fixture must load");
+    rpg::Command strike; strike.nextTarget=true; strike.ability=0;
+    game.ExecuteCommand(strike,.01f);
+    for(float t=0;t<.233f-1e-7f;) {
+      const float dt=std::min(1.f/hz,.233f-t); game.ExecuteCommand({},dt); t+=dt;
+    }
+    check(game.State().Enemies()[0].health<80,"Outgoing contact must damage the enemy");
+    worstRecoil=std::max(worstRecoil,std::abs(game.EnemyAnimation(0).hit-animation::Pulse(.053f,.055f)));
+    worstTint=std::max(worstTint,std::abs(game.State().Enemies()[0].hitFlash-.147f));
+  }
+  const char* crowd="MEDITERRANEAN 3\n-4 5.2 100 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
+    "100 -4 7 80 0 0 1 0.04 3.14159\n101 4 9 80 0 0 0 0 0\n102 -4 7 120 0 0 1 0.01 3.14159\n";
+  for(float step : {.001f,.01f,.05f}) {
+    Game game; Require(game.RestoreSnapshot(crowd),"Multiple recoil fixture must load");
+    for(float t=0;t<.05f-1e-7f;) {
+      const float dt=std::min(step,.05f-t); game.ExecuteCommand({},dt); t+=dt;
+    }
+    const float expected=std::max(animation::Pulse(.03f,.055f)*std::exp(-.24f),animation::Pulse(.01f,.055f));
+    worstRecoil=std::max(worstRecoil,std::abs(game.PlayerAnimation().hit-expected));
+    check(game.State().Health()==76,"Two contacts must both land without changing damage");
+    const auto saved=game.State().Save(); Require(game.RestoreSnapshot(saved),"Recoil save must load");
+    check(game.PlayerAnimation().hit==0,"Loading must discard impact history");
+  }
+  for (bool heavy : {false,true}) for (bool shield : {false,true}) for (int layer=0;layer<4;++layer) {
+    animation::Sample base;
+    base.air=layer==0?1.f:0; base.rise=.4f; base.landing=layer==1?.8f:0;
+    base.dash=layer==2?.7f:0; base.dashBrake=layer==3?.6f:0;
+    const auto rest=BuildCharacterPose(0,.4f,shield,base);
+    for(float boundary : {0.f,combat::Duration(heavy)-.000001f}) {
+      auto timed=base; timed.attackSeconds=boundary; timed.heavyAttack=heavy;
+      const auto pose=BuildCharacterPose(0,.4f,shield,timed);
+      worstWeapon=std::max(worstWeapon,Distance(rest.WeaponPoint(.96f),pose.WeaponPoint(.96f)));
+    }
+  }
+  std::cout<<"Contact/weapon regressions: recoil error "<<worstRecoil<<", tint age error "<<worstTint
+    <<", weapon boundary displacement "<<worstWeapon<<'\n';
+  check(worstRecoil<.0001f,"Player/enemy recoil must start at actual contact, including multiple contacts in one frame");
+  check(worstTint<.0001f,"Enemy tint must age from contact instead of frame end");
+  check(worstWeapon<.0001f,"Attack boundaries must retain the underlying airborne, landing and burst weapon orientation");
+  Require(passed,"Contact/weapon regressions failed");
+}
 void LocomotionContinuityRegressions() {
   float ankleStep=0,handStep=0,hipStep=0,bootTurn=0,shoulderTurn=0;
   // Exercise many points in the real contact cycle, including sprinting and
@@ -47,7 +185,7 @@ void LocomotionContinuityRegressions() {
     idleStep=std::max(idleStep,std::abs(idle.clothSide-previousIdle.clothSide));
     previousIdle=idle;
     const float velocity=cloth.clothSideVelocity;
-    cloth.Update(.001f,0,0,0,true,false,0);
+    cloth.Update(.001f,0,0,0,true,0);
     clothAcceleration=std::max(clothAcceleration,std::abs(cloth.clothSideVelocity-velocity)/.001f);
   }
   std::cout<<"Takeoff max 1 ms change: ankle "<<ankleStep<<", hand "<<handStep<<", hip "<<hipStep
@@ -77,6 +215,8 @@ void TransitionRegressions() {
   strike.nextTarget=false; strike.ability=1; game.ExecuteCommand(strike,.01f);
   for(int i=0;i<5;++i) game.ExecuteCommand({},.05f);
   const float beforeHit=game.EnemyAnimation(0).hit,health=game.State().Enemies()[0].health;
+  Game split=game;
+  for(int i=0;i<50;++i) split.ExecuteCommand({},.001f);
   game.ExecuteCommand({},.05f);
   Require(beforeHit>0 && game.State().Enemies()[0].health<health,"Second-hit fixture must damage a living enemy.");
   check(game.State().Enemies()[0].damagedThisUpdate,"A second strike must publish its own impact event.");
@@ -85,8 +225,8 @@ void TransitionRegressions() {
   Require(restored.Load(hitSave),"Impact-time save must load.");
   check(restored.Save()==hitSave && !restored.Enemies()[0].damagedThisUpdate && !restored.DamagedThisUpdate(),
     "Transient impact events must not enter the save format or replay on load.");
-  check(std::abs(game.EnemyAnimation(0).hit-beforeHit)<.0001f,
-    "A hit on a longer frame must restart recoil while preserving its current amplitude.");
+  check(std::abs(game.EnemyAnimation(0).hit-split.EnemyAnimation(0).hit)<.0001f,
+    "A longer frame must preserve recoil at the actual second contact, matching split updates.");
   game.ExecuteCommand({},.05f);
   check(game.EnemyAnimation(0).hit>.98f,"The second impact must reach its own recoil peak.");
   game.ExecuteCommand(strike,.01f);
@@ -139,6 +279,9 @@ void TransitionRegressions() {
 }
 }
 int main() {
+  RepeatTakeoffRegressions();
+  ClipLibraryRegressions();
+  ContactAndWeaponRegressions();
   TransitionRegressions();
   LocomotionContinuityRegressions();
   {
@@ -163,12 +306,12 @@ int main() {
   animation::Sample clothReference;
   for (int hz : {30,60,144}) {
     animation::State state;
-    for (int i=0;i<hz;++i) state.Update(1.f/hz,0,0,7.f/hz,true,false,0);
+    for (int i=0;i<hz;++i) state.Update(1.f/hz,0,0,7.f/hz,true,0);
     Require(state.pose.clothBack>.25f && state.pose.clothBack<.28f,"Running must lift the free cloak hem");
     const float before=state.pose.clothBack;
-    state.Update(.001f,.5f,5,0,true,false,0);
+    state.Update(.001f,.5f,5,0,true,0);
     Require(std::abs(before-state.pose.clothBack)<.001f,"A takeoff cannot snap the cloth to its new flow target");
-    for (int i=0;i<hz;++i) state.Update(1.f/hz,0,0,0,true,false,0);
+    for (int i=0;i<hz;++i) state.Update(1.f/hz,0,0,0,true,0);
     Require(std::abs(state.pose.clothBack-.025f)<.0001f,"Stopped cloth must return to its hanging rest shape");
     if (hz==30) clothReference=state.pose;
     else Require(std::abs(state.pose.clothSide-clothReference.clothSide)<.001f &&
@@ -217,7 +360,7 @@ int main() {
     "Foot lift must begin with zero slope at the grounded half of the stride.");
   animation::State lowAir,highAir;
   lowAir.airBlend=highAir.airBlend=1;
-  lowAir.Update(.001f,.2499f,0,0,true,false,0); highAir.Update(.001f,.25f,0,0,true,false,0);
+  lowAir.Update(.001f,.2499f,0,0,true,0); highAir.Update(.001f,.25f,0,0,true,0);
   Require((highAir.pose.air-lowAir.pose.air)/.0001f<.1f,
     "Air pose must join its full-height plateau without a sharp velocity corner.");
   // Fixed-length joints, planted idle/landing ankles and attached weapon safety
@@ -297,7 +440,7 @@ int main() {
   animation::Sample idleReference;
   for (int hz : {30,60,144}) {
     animation::State state;
-    for (int i=0;i<hz*8;++i) state.Update(1.f/hz,0,0,0,true,0,0);
+    for (int i=0;i<hz*8;++i) state.Update(1.f/hz,0,0,0,true,0);
     if (hz!=30) Require(std::abs(state.pose.breath-idleReference.breath)<.0001f &&
       std::abs(state.pose.sway-idleReference.sway)<.0001f,"Idle rate depends on frame rate.");
     idleReference=state.pose;
@@ -342,29 +485,36 @@ int main() {
       "Jump camera must retain some vertical tracking without following the full jump arc");
     Require(std::abs(weighted.CameraHeight()-1.4f)<.0001f,"Jump camera must settle back to its ground target");
   }
-  hit.Update(.01f,0,0,0,true,true,0);
-  for (int i=0;i<5;++i) hit.Update(.01f,0,0,0,true,false,0);
+  hit.Update(.01f,0,0,0,true,0); hit.ApplyImpact(0);
+  for (int i=0;i<5;++i) hit.Update(.01f,0,0,0,true,0);
   Require(hit.pose.hit>.98f,"A hit must produce a bounded recoil peak.");
-  for (int i=0;i<100;++i) hit.Update(.01f,0,0,0,true,0,0);
+  for (int i=0;i<100;++i) hit.Update(.01f,0,0,0,true,0);
   Require(hit.pose.hit==0,"Old hit flash must not keep retriggering recoil.");
-  hit.Update(.01f,0,0,0,true,true,0); hit.Update(.05f,0,0,0,true,false,0);
+  hit.Update(.01f,0,0,0,true,0); hit.ApplyImpact(0); hit.Update(.05f,0,0,0,true,0);
   Require(hit.pose.hit>.98f,"A new hit must retrigger after recovery.");
-  const float recoil=hit.pose.hit;
-  hit.Update(.01f,0,0,0,true,true,0);
-  Require(hit.pose.hit>=recoil,"Refreshing damage must not snap active recoil back to neutral.");
-  hit.Update(.01f,0,0,0,true,true,0);
-  Require(hit.hitAge==0 && hit.pose.hit>=recoil,"Consecutive damage events must register as fresh impacts.");
+  for (int i=0;i<2;++i) {
+    hit.Update(.01f,0,0,0,true,0);
+    const float recoil=hit.pose.hit; hit.ApplyImpact(0);
+    Require(hit.hitAge==0 && hit.pose.hit==recoil,
+      "A new impact must retain the recoil at contact, including consecutive hits");
+  }
   const auto unchanged=hit.pose;
-  for (float dt : {0.f,-1.f,std::numeric_limits<float>::quiet_NaN()}) hit.Update(dt,1,6,1,true,1,1);
+  for (float dt : {0.f,-1.f,std::numeric_limits<float>::quiet_NaN()}) hit.Update(dt,1,6,1,true,1);
+  for (float elapsed : {-1.f,std::numeric_limits<float>::quiet_NaN(),std::numeric_limits<float>::infinity()}) hit.ApplyImpact(elapsed);
   Require(hit.pose.hit==unchanged.hit && hit.pose.air==unchanged.air,"Invalid elapsed time must not advance animation.");
-  hit.Update(.01f,0,0,0,false,1,1);
+  hit.Update(.01f,0,0,0,false,1);
   Require(hit.pose.hit==0 && hit.pose.breath==0 && hit.pose.landing==0,"Defeat must clear reactions and breathing.");
   animation::State repeatJump;
-  repeatJump.Update(.01f,0,0,0,true,false,0,7.2f); repeatJump.Update(.05f,0,0,0,true,false,0);
-  repeatJump.Update(.04f,0,0,0,true,false,0);
+  repeatJump.Update(.01f,0,0,0,true,0,7.2f); repeatJump.Update(.05f,0,0,0,true,0);
+  repeatJump.Update(.04f,0,0,0,true,0);
   Require(repeatJump.pose.landing>.8f,"Landing fixture must compress.");
-  repeatJump.Update(.01f,0,7.2f,0,true,0,0);
-  Require(repeatJump.pose.landing==0,"A takeoff exactly at floor contact must clear the previous landing.");
+  repeatJump.Update(.01f,0,7.2f,0,true,0);
+  Require(repeatJump.pose.landing>.8f && repeatJump.landingStrength==0,
+    "Takeoff must discard the old impact event while retaining its visible crouch for release");
+  for(int i=0;i<15;++i) repeatJump.Update(.01f,.5f,4,0,true,0);
+  Require(repeatJump.pose.landing==0,"The departing crouch must settle promptly during ascent");
+  repeatJump.Reset(); repeatJump.Update(.01f,.01f,7,0,true,0,7.2f,.001f);
+  Require(repeatJump.pose.landing==0,"Buffered contact/takeoff with no visible crouch must not add an airborne impact pose");
   const char* encounter="MEDITERRANEAN 3\n-4 5.8 100 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
     "100 -4 7 80 0 0 1 0 3.14159265\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
   Game game; rpg::Simulation reference;

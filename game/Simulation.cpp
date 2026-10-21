@@ -174,7 +174,7 @@ void Simulation::ResolveAttack(float elapsed) {
   if (trainingTarget) sparringDealt_+=int(damage);
   Emit(FeedbackKind::Damage,enemy.position,static_cast<int>(damage));
   EmitVisual(index==0?CombatVisualKind::Hit:CombatVisualKind::HeavyHit,enemy.position,1.25f,facing_,enemy.id,elapsed);
-  enemy.hitFlash=.2f; enemy.damagedThisUpdate=true; attackFlash_=.2f;
+  enemy.hitFlash=std::max(0.f,.2f-elapsed); enemy.damagedThisUpdate=true; attackFlash_=.2f;
   message_="Hit.";
   enemy.state=EnemyState::Pursuing;
   if (index==1 && enemy.windup>0) {

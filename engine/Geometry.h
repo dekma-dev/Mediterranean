@@ -7,7 +7,7 @@
 namespace visual {
 enum class ShadowMode { Cast, None };
 inline constexpr unsigned materialSize=128,shadowSize=1024,shadowLayers=2;
-enum class Mesh : unsigned { Box, Roof, Sphere, Rock, Trunk, Foliage, Torso, Limb, Blade, Crystal, Terrain, Cliff, Head, Boot, Hair, Grass, Barrel,Arch,Canopy,Masonry,Cloak,Count };
+enum class Mesh : unsigned { Box, Roof, Sphere, Rock, Trunk, Foliage, Torso, Limb, Blade, Crystal, Terrain, Cliff, Head, Boot, Hair, Grass, Barrel,Arch,Canopy,Masonry,Cloak,Body,Count };
 enum class Material : unsigned { Plain, Ground, Stone, Wood, Plaster, Roof, Cloth, Metal, Leaves, Skin, Glow, Count };
 struct Vertex {
   DirectX::XMFLOAT3 position, normal;
