@@ -34,6 +34,17 @@ DirectX::XMFLOAT3 CharacterPose::WeaponPoint(float distance) const {
   const auto hand=arms[1].end;
   return {hand.x+weaponDirection.x*distance,hand.y+weaponDirection.y*distance,hand.z+weaponDirection.z*distance};
 }
+DirectX::XMMATRIX CharacterPose::HeadTransform() const {
+  using namespace DirectX;
+  return XMMatrixTranslation(0,-1.61f,0)*XMMatrixRotationX(headPitch)*XMMatrixRotationY(headYaw)*
+    XMMatrixTranslation(0,1.61f-.95f,0)*XMMatrixRotationX(upperPitch)*XMMatrixRotationZ(upperRoll)*
+    XMMatrixRotationY(upperYaw)*XMMatrixTranslation(bodyShift,.95f+bodyLift,0);
+}
+DirectX::XMFLOAT3 CharacterPose::HeadPoint(DirectX::XMFLOAT3 point) const {
+  DirectX::XMFLOAT3 result;
+  DirectX::XMStoreFloat3(&result,DirectX::XMVector3TransformCoord(DirectX::XMLoadFloat3(&point),HeadTransform()));
+  return result;
+}
 CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::Sample dynamics) {
   using namespace DirectX;
   swing=std::isfinite(swing)?std::clamp(swing,0.f,1.f):0;
@@ -52,6 +63,9 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   swing*=1-burst;
   const float cast=animation::Unit(dynamics.cast)*(1-swing)*(1-hit)*(1-burst);
   CharacterPose pose;
+  pose.handCast=cast;
+  pose.headYaw=animation::Signed(dynamics.face.yaw/.62f)*.62f;
+  pose.headPitch=animation::Signed(dynamics.face.pitch/.245f)*.245f;
   pose.bodyLift=gait*gait*.015f*(1-air)+breath*.006f*(1-air)-landing*.14f;
   pose.bodyLift-=dash*.09f+brake*.055f+dashImpact*.04f+animation::Unit(dynamics.dashLoad)*.035f;
   pose.upperPitch=travel*.09f+animation::Signed(dynamics.lean)*.10f+landing*.12f+air*std::max(0.f,rise)*.06f-hit*.12f+sway*.015f*(1-air);

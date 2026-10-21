@@ -1,5 +1,128 @@
 # Procedural graphics and performance budget
 
+## Head and equipment distance detail (2026-10-21)
+
+Character parts now share their body's projected-size decision and hysteresis. `DrawBody` returns a palette slot; an `AttachmentScope` tags subsequent mesh draws until the character finishes. Selection occurs at world flush after the final camera is known, before color/shadow culling. Scenery has no owner even when it uses the same head/sphere/torso shapes. Owner and maximum-detail fields reuse the old visibility word: CPU records remain 180 bytes and the GPU instance layout is unchanged. The scope contains mesh draws only; flushes and portraits must occur outside it.
+
+The reduced meshes reuse the same profile/deformation functions and are generated/uploaded once. Head receiver correction also applies to the reduced heads. Color and both shadow passes use the same selected instances and conservative bounds. The existing 32-body palette and fixed 64-actor detail history remain unchanged.
+
+| Head detail | Vertices | Triangles |
+| --- | ---: | ---: |
+| Near / portrait | 2,626 | 4,992 |
+| Medium | 530 | 960 |
+| Far | 266 | 480 |
+
+Other shared reduced meshes contain 144 triangles for hair/boots, 264 for spheres, 240 for torso-shaped fittings and 160 for limb-shaped fittings. Medium omits tiny rivets, nostrils, mouth corners and inner-ear fittings. Far also omits other facial features and abdominal trim; outer ears, main armor shapes, weapons and shields remain. Hands retain their articulated geometry at every level. Nearby and portrait meshes/features are unchanged. There is no crossfade or morph between discrete levels.
+
+Seven additional cached meshes add 129,360 immutable GPU bytes (126.3 KiB), including the common weight-stream padding, for a total of 2,395,008 bytes. The non-body library becomes 547,632 bytes/13,686 triangles; its cap rises from 512 to 640 KiB while the 16,000-triangle cap remains. Material/terrain/shadow storage remains 9,699,312 bytes and UI storage 1,529,172 bytes. The static scene retains 1,280 instances/230,400 CPU bytes. No assets or dependencies were downloaded. F3's Parts line counts simplified/omitted queued world attachments, including offscreen casters and excluding portraits; benchmark peaks need not occur in one frame.
+
+`AttachmentLodTests` adds 18 clothed/armored gait/jump/attack comparisons at three levels (54 automatic/full/background images). Body detail is identical in each comparison. At 960x720, medium/far are tested at their upper retained sizes, using 9.6/22 m views seeded from a coarser distance. Silhouette-mask differences stay below 0.6%, with none beyond a two-pixel neighborhood; mean covered-pixel RGB error stays below 1.5/255. Near comparisons and current portrait crops are pixel-identical. A separate fixture compares automatic reduction against explicitly reduced head/helmet geometry, including real floor shadows, and matches exactly. Tests also cover final-camera overrides, mixed owners, cached scenery, resolution changes, behind-eye casters and frame reset. Twenty-three valid prior close face/hand captures are unchanged; one old portrait fixture predating the final thumb fix is explicitly excluded from that historical comparison.
+
+All 25 suites pass in Debug/Release. The final queue-copy optimization additionally passes focused Debug geometry/attachment checks, and the full Release run uses that final source. Visual Studio Debug passes hidden spawn/combat/veteran checks. Representative world/character/portrait/shadow captures were inspected. Live transition and long-session acceptance remains manual checks 168–169; these static fixtures do not certify every camera angle, equipped pose or transition.
+
+Two serial Release pairs used baseline/new/new/baseline order after builds/tests completed. Baseline already includes body LOD, facial animation and articulated hands. Hidden 1280x720, present interval zero, fixed 1/60 s simulation, 90 warmup and 600 measured frames per workload. Values below are means of two per-run statistics, not pooled percentiles. CPU includes present waits; GPU samples are asynchronous/sparse. No player saves were written.
+
+| Workload | CPU median ms, before → after | CPU p95 ms, before → after | GPU median ms, before → after | GPU p95 ms, before → after |
+| --- | --- | --- | --- | --- |
+| Spawn HUD | 0.9800 → 0.9150 | 1.2225 → 2.9480 | 0.9655 → 0.9050 | 1.1525 → 2.8705 |
+| Village walking/orbit | 0.8120 → 0.7695 | 2.0410 → 2.0080 | 0.8135 → 0.6910 | 1.9915 → 1.8900 |
+| Repeated combat/orbit | 0.8435 → 0.8300 | 2.3885 → 2.3880 | 0.8175 → 0.8880 | 2.1650 → 2.2620 |
+| Merchant, character, bag | 1.1205 → 1.1485 | 1.3225 → 1.3580 | 1.0955 → 1.0815 | 1.2915 → 1.3230 |
+
+Gameplay CPU medians fall 1.6–6.6%, while the portrait median rises 2.5%. Preparation medians change by 0–0.006 ms in gameplay and +0.023 ms with the portrait. Peak triangles fall 758,406/784,228/849,676/693,913 → 679,518/725,484/820,060/671,881 (10.4%/7.5%/3.5%/3.2%). Draw peaks rise 75/77/74/92 → 87/91/91/104. Walking, windup/hit/effect and body-detail counters match. Simplified/omitted part peaks are 58/84, 61/54, 73/44 and 12/8 respectively.
+
+The first new spawn run has CPU/GPU p95 of 4.623/4.626 ms, concentrated in submit/present; its preparation p95 is 0.350 ms. The second new run has 1.273/1.115 ms, while one baseline run has a 24.139 ms maximum. One separate baseline/new pair was run to investigate that variation and is retained separately, without replacing the original ABBA results:
+
+| Follow-up workload | CPU median/p95 ms, before → after | GPU median/p95 ms, before → after |
+| --- | --- | --- |
+| Spawn HUD | 0.971/1.907 → 0.902/1.393 | 0.954/1.373 → 0.885/1.782 |
+| Village walking/orbit | 0.827/2.083 → 0.788/2.031 | 0.705/1.729 → 0.769/1.903 |
+| Repeated combat/orbit | 0.838/2.408 → 0.826/2.407 | 0.827/2.319 → 0.813/2.135 |
+| Merchant, character, bag | 1.118/1.373 → 1.113/1.285 | 1.095/1.540 → 1.080/1.270 |
+
+The large spawn p95 spike did not repeat in that pair; its cause is not established. Tail/GPU/portrait results remain mixed, and these short runs do not establish sustained FPS or a universal speedup. Larger crowds, hand LOD, attachment preparation cost, live transitions and portrait-tail profiling remain follow-ups.
+
+Evidence: `build-attachment-lod/{baseline,lod}-{a,b,c}.txt`, `paired-summary.json`, `followup-summary.json`, `close-comparison.json`; `build-ninja-{debug,release}/attachment-lod-validation.log`, Debug `attachment-lod-final-{build,test}.log`, `attachment-*.png`; `build-local/attachment-lod-build.log` and `attachment-lod-{spawn,combat,veteran}.png.log`. The checkpoint supersedes head/equipment-LOD follow-ups below; earlier sections retain measurements for their original revision.
+
+## Articulated hands and coherent weapon attachments (2026-10-21)
+
+`HandPose` builds a shaped palm and five articulated fingers over each solved arm. Four fingers and the opposed thumb each have three fixed-length phalanges. Relaxed/free hands open with the existing Mend channel; item grips stay closed. Free palms turn with a quaternion blend while their wrist anchor remains fixed. The grip frame instead stays at the established item socket. Small overlapping segment ends and a wrist bridge close joins; this remains separate geometry, not a continuously skinned hand surface. Extreme close views still reveal phalanx seams and the procedural anatomy.
+
+`WeaponFrame` projects the upper body's lateral direction onto the plane perpendicular to the blade. The authored weapon cone keeps that projection away from its pole (minimum measured lateral alignment 0.908485). Blade, handle, guard and pommel share the frame. This replaces a forward-vector cross product that could invert near forward-facing strokes, and a guard that previously retained actor yaw instead of following the blade. The blade centreline and `WeaponPoint` effect trail positions remain unchanged. No general arbitrary-orientation weapon solver is claimed.
+
+Two startup meshes are shared by all actors and portraits: palm 98 vertices/144 triangles, finger 58 vertices/80 triangles. Each hand uses one palm, fifteen phalanges and one wrist bridge. These replace two spheres and three dense ridges per hand. The shared buffers add 13,920 bytes (13.6 KiB), including existing vertex weight-stream padding, for total immutable mesh storage of 2,265,648 bytes. The non-body library is 463,008 bytes/11,294 triangles, inside the unchanged 512 KiB/16,000-triangle cap. Material/terrain/shadow storage is 9,699,312 bytes; UI storage is 1,529,172 bytes. Instances use the existing batching, lighting and shadow paths. No textures, dependencies or art files were downloaded.
+
+Two serial Release pairs used baseline/new/new/baseline order after builds/tests completed. The baseline includes the preceding body-LOD and face work. Hidden 1280x720, present interval zero, fixed 1/60 s simulation, 90 warmup and 600 measured frames per workload. Figures below are means of two per-run statistics, not pooled percentiles. GPU samples are sparse/asynchronous; this is not interactive FPS or long-session evidence.
+
+| Workload | CPU median ms, before → after | CPU p95 ms, before → after | GPU median ms, before → after | GPU p95 ms, before → after |
+| --- | --- | --- | --- | --- |
+| Spawn HUD | 0.9860 → 0.9805 | 1.2255 → 1.2805 | 0.9765 → 0.9700 | 1.2705 → 1.2075 |
+| Village walking/orbit | 0.8215 → 0.8135 | 2.0485 → 2.0575 | 0.7945 → 0.8125 | 1.9380 → 1.9545 |
+| Repeated combat/orbit | 0.8550 → 0.8490 | 2.3810 → 2.3660 | 0.8385 → 0.8445 | 2.2005 → 2.1740 |
+| Merchant, character, bag | 1.1115 → 1.1170 | 1.3000 → 1.3185 | 1.0995 → 1.0970 | 1.3710 → 1.2425 |
+
+CPU frame medians stay within 1%, while scene preparation increases 0.013–0.018 ms. CPU tails and GPU results are mixed; no speedup is claimed. Peak triangles fall 776,166/801,988/868,620/705,753 → 758,406/784,228/849,676/693,913 (1.7–2.3%). Draw peaks rise 69/71/68/84 → 75/77/74/92. Walking, windup/hit/effect and body-LOD counters match. Existing instance limits remain unchanged; hand/head/equipment LOD and larger-crowd profiling remain future work.
+
+All 24 Debug/Release suites pass; focused HandTests pass again after the final thumb correction. The new suite sweeps 17,616 poses and checks grip/wrist anchors, finger lengths, orthonormal frames, guard/blade agreement, effect-tip invariance, shaft clearance, free/held casting and invalid values. Twelve GPU views cover hand equipment/action states and portrait isolation; representative views were inspected. Visual Studio Debug also passes spawn/combat/veteran runtime checks. Evidence: `build-ninja-{debug,release}/hands-validation.log`, `hands-final-test.log`, `hands-*.png`, `build-local/hands-build.log`, `hands-*.png.log` and `build-hands/{baseline,hands}-{a,b}.txt` with `paired-summary.json`. Live acceptance is manual checks 166–167.
+
+## Facial detail, attention and curved-face shadows (2026-10-21)
+
+The head now uses 2,626 vertices and 4,992 triangles, with extra rings around the continuous nose bridge/tip, cheekbones, sockets, philtrum and chin. Vertex color adds restrained cheek/jaw variation. A reusable 86-vertex/120-triangle feature mesh replaces heavy spheres and rectangular facial marks with shaped lip volumes, eye rims, irises/pupils, brows, nostrils and ear detail. Eye apertures close smoothly to a seam; gaze moves the iris within the available opening. Focus, pain and welcome alter brows, eyes and lip corners. There is no jaw/teeth/tongue rig, speech synchronization or facial blendshape system yet.
+
+Head rotation is composed around the neck before the existing upper-body/world transforms. Hair, ears and all helmet parts share it; the body rig, hands and weapon do not. A simulation-update-only controller springs head/eye attention toward a bounded local target, releases behind the viewing arc and outside range, and seeds independent 190 ms blink cycles from stable actor IDs. Portraits sample their own idle face without changing world state. See `docs/gameplay.md` for selection/interaction rules and manual checks 163–165 for appearance and lifecycle acceptance. Reference direction: [Blizzard's Artcraft discussion of facial customization](https://worldofwarcraft.blizzard.com/en-us/news/15029247/artcraft-mise-%C3%A0-jour-de-la-personnalisation-des-visages); geometry and code here are original, with no downloaded artwork or models.
+
+Close inspection exposed triangular dark marks where the normal shadow filter extrapolated tiny nose triangles across a footprint larger than those features. Head instances now disable that receiver-plane extrapolation and offset the receiver 2.5 mm along its smooth normal. Shadow casting retains the actual head shape. This is a localized approximation for the head; other surfaces keep their established slope correction. Tiny facial features receive light/shadow but do not cast their own sub-texel shadows. An actual pixel regression confirms an external blocker still darkens the cheek (mean RGB 116.317 → 35.070); the face is not made unshadowed.
+
+The head/feature change adds 211,920 immutable GPU bytes (207 KiB) over the preceding body-LOD build, including shared weight-stream padding; total mesh storage is 2,251,728 bytes. Material/terrain/shadow and UI storage remain 9,699,312 and 1,529,172 bytes. The separately enforced static mesh-library cap is raised to 512 KiB/16,000 triangles for this denser head; body meshes retain their own budgets. Body LOD is preserved, but head/features currently retain their detail at every distance. Head/feature LOD is a follow-up before larger crowds.
+
+Two serial paired Release runs used baseline/new/new/baseline order with no concurrent builds/tests. The baseline already contains body LOD and the preceding jump/skin fixes. Both run the same hidden 1280x720 workloads with present interval zero, fixed 1/60 s steps, 90 warmup and 600 measured frames. Values are arithmetic means of two per-run statistics, not pooled percentiles or interactive FPS; GPU observations are asynchronous and sparse.
+
+| Workload | CPU median ms, before → after | CPU p95 ms, before → after | GPU median ms, before → after | GPU p95 ms, before → after |
+| --- | --- | --- | --- | --- |
+| Spawn HUD | 0.9295 → 0.9860 | 1.2095 → 1.2100 | 0.9285 → 0.9785 | 1.1915 → 1.1145 |
+| Village walking/orbit | 0.8015 → 0.8200 | 2.0160 → 2.0485 | 0.7550 → 0.8360 | 1.9950 → 2.0800 |
+| Repeated combat/orbit | 0.8135 → 0.8495 | 2.3300 → 2.3680 | 0.7905 → 0.8775 | 2.2390 → 2.2925 |
+| Merchant, character, bag | 1.1080 → 1.1130 | 1.3325 → 1.3005 | 1.0595 → 1.0990 | 1.2770 → 1.1360 |
+
+This is a visual improvement with added cost: gameplay CPU medians rise 0.019–0.057 ms (2.3–6.1%), and the portrait median is effectively unchanged. Peak submitted triangles rise from 737,346/763,168/828,400/679,873 to 776,166/801,988/868,620/705,753; draw peaks rise 68/70/67/82 → 69/71/68/84. Walking, combat-contact/effect and body-LOD counters match. Working/private-memory snapshots and short GPU-tail samples do not establish long-session behavior or a speedup.
+
+All 23 suites pass in both Debug and Release; all ten shader entries compile without diagnostics; Visual Studio Debug passes hidden spawn/combat/veteran checks. FaceTests verifies equal-time attention at 22/30/60/144/1000 Hz, blink wrapping/independence, rear-seam/target-loss behavior, invalid inputs, neck/helmet/weapon invariants and load/reset integration. Twelve GPU views cover expressions, gaze, helmet/profile, external shadow and world/portrait isolation. The blink changes 1,329 pixels confined to the eyes, leaving the rest of the frame identical. Neutral, closed, hurt, profile and helmet captures were inspected. Remaining limits include procedural likeness, coarse hair/hands, collar intersections in untested poses, no scenery-aware gaze, no deformable facial rig, and live acceptance.
+
+Evidence: `build-ninja-{debug,release}/face-validation.log`, `face-*.png` in those directories, `build-face/shaders.log`, `build-local/face-build.log`, `face-{spawn,combat,veteran}.png.log`, and `build-face/{baseline,face}-{a,b}.txt` with `paired-summary.json`.
+
+## Character body detail and rig preparation (2026-10-21)
+
+The renderer now keeps three body meshes generated from the same surface field and sharing the same ten bones, four influences and six material regions. These are created once, cached and uploaded with the existing indexed mesh buffers. Head, hands, footwear and equipment retain their current meshes. The full-detail body is unchanged.
+
+| Body detail | Vertices | Triangles | Immutable vertex/weight/index bytes |
+| --- | ---: | ---: | ---: |
+| Near / portrait | 9,368 | 18,732 | 899,280 |
+| Medium | 4,464 | 8,924 | 428,496 |
+| Far | 2,218 | 4,432 | 212,880 |
+
+Medium/far remove 52.4%/76.3% of body triangles. The added meshes cost 641,376 bytes (626 KiB); total immutable mesh storage is now 2,039,808 bytes. CPU copies remain cached too. The 44,032-byte palette buffer, 9,699,312 material/terrain/shadow bytes and 1,529,172 interface bytes are unchanged. This exchanges a modest memory increase and extra mesh batches for less vertex/shadow work, rather than reducing every resource cost.
+
+Selection happens at world flush after the final camera is known. It estimates a 1.8 m body's projected pixel height from the view/projection and render height. Initial thresholds are 150 and 65 pixels. Hysteresis retains near until below 135 and medium until below 58; returning requires above 72 and 165 respectively. A fixed 64-entry actor history prevents small camera movement from repeatedly toggling detail; entries unseen for more than two frames expire. Large camera changes can cross both boundaries immediately. Behind-eye shadow casters use radial distance instead of being promoted to full detail. Invalid projections retain full detail.
+
+Color and both shadow passes share the chosen mesh. Portraits always use full detail and do not affect world history. F3 shows the previous frame's queued near/mid/far counts, including offscreen casters and excluding portraits. Benchmark counts are per-level peaks, which need not occur in the same frame. Switching is discrete, with no morph/crossfade; it still needs live-camera acceptance. The existing 32-body limit per flush remains.
+
+`CharacterRig` caches immutable bind inverses/normal factors and computes orthogonal posed-bone normals using reciprocal squared length. Pelvis/torso normals use their translation/rotation properties directly. The solved elbow/knee plane remains authoritative. General inverse-transpose comparisons pass within 0.000003 on unnormalized reference vectors, and all nine existing close-up pose/portrait captures are pixel-identical to the baseline. Whole-scene preparation timing is essentially unchanged; these runs do not isolate a rig-preparation speedup.
+
+All 22 suites pass in both Debug and Release. SkinningTests validates topology, influences, poses and bounds for all levels, plus selection/hysteresis/history, camera overrides, resize, portraits, behind-eye casters and actual submitted triangle counts. At 960x720, medium/far meshes are tested near their upper retained size (9.6/22 m camera distance): silhouette-mask differences are 110/7,056 (1.6%) and 61/1,336 (4.6%) pixels, with no discrepancy extending beyond a two-pixel neighborhood in either direction. These are isolated idle-body comparisons against full detail, not all-pose or live-motion certification. Existing palette overflow/recovery, skin rotation, attachment and shadow tests remain passing. Visual Studio Debug passes hidden spawn/combat/veteran runtime checks. Manual checks 161–162 cover live transitions and longer sessions.
+
+Two paired Release runs used the saved pre-LOD executable, including the preceding jump/skin bug fixes, in serial baseline/new/new/baseline order with no concurrent builds/tests. Each workload runs hidden at 1280x720, present interval zero, fixed 1/60 s steps, 90 warmup and 600 measured frames. Values below are arithmetic means of the two per-run statistics, not pooled percentiles or interactive FPS. CPU includes submission/present waits; GPU observations are asynchronous (34–36 per gameplay run, 73–81 for portraits).
+
+| Workload | CPU median ms, before → after | CPU p95 ms, before → after | GPU median ms, before → after | GPU p95 ms, before → after |
+| --- | --- | --- | --- | --- |
+| Spawn HUD | 1.0045 → 0.9345 | 1.2750 → 1.1210 | 0.9950 → 0.9290 | 1.1530 → 1.1510 |
+| Village walking/orbit | 0.8335 → 0.7810 | 2.0560 → 2.0190 | 0.8035 → 0.7630 | 1.9460 → 2.0410 |
+| Repeated combat/orbit | 0.8535 → 0.8105 | 2.3670 → 2.3565 | 0.8900 → 0.8295 | 2.1670 → 2.1090 |
+| Merchant, character, bag | 1.0950 → 1.0915 | 1.2590 → 1.2755 | 1.0800 → 1.0605 | 1.1765 → 1.2125 |
+
+Gameplay CPU medians improve 5.0–7.0%; the portrait result is effectively unchanged. Peak submitted triangles, including shadows, fall from 837,446/840,808/877,440/709,297 to 737,346/763,168/828,400/679,873 (12.0%/9.2%/5.6%/4.1%). Draw peaks rise from 65/65/64/79 to 68/70/67/82 because each mesh level has its own batches. Walk distance (32.716 m), combat windup/hit counts (270/6) and effect counts (600 active frames, 888 peak vertices) match exactly. GPU tails are mixed; do not infer a universal GPU-tail improvement, sustained FPS or solved portrait latency from these short runs. Working/private memory snapshots fluctuate and are not evidence of savings.
+
+Evidence: `build-character-lod/{baseline,lod}-{a,b}.txt`, `paired-summary.json`, `close-image-comparison.json`; `skin-lod-*.png` and `body-lod-validation.log` in both Ninja directories; `build-local/body-lod-build.log` and `body-lod-{spawn,combat,veteran}.png.log`. This supersedes the distance-LOD follow-up in the original skinning checkpoint below. Authored anatomy, equipment LOD, larger crowds, facial rigs, imported assets and portrait-tail profiling remain separate work.
+
 ## Connected body and GPU skinning (2026-10-21)
 
 The body is one closed, welded surface covering chest, pelvis, arms and legs: 9,368 vertices and 18,732 triangles. A deterministic startup isosurface generator joins the anatomical volumes, regularizes near-grid crossings to avoid collapsed triangles, and assigns four normalized influences per vertex. Ten bones deform the shared mesh; no topology is generated during play. Head, hands, footwear and equipment remain attached components. This is a code-generated prototype body, not an artist-authored character or an imported animation asset.
@@ -12,7 +135,7 @@ The shared body needs 899,280 immutable bytes including positions/normals, weigh
 
 Palettes use a dynamic constant buffer and WRITE_DISCARD, copying only the active actors. This allows buffer renaming between world and portrait draws. All nine skinning diagnostic PNGs are byte-identical before/after the upload change; it did not demonstrate a repeatable CPU improvement, so it is not credited with a measured speedup.
 
-`SkinningTests` checks that every edge belongs to two triangles, the whole body is connected, weights are normalized/in-range, bind skinning preserves vertices, and posed bones match solved joints. It sweeps attacks, flight, landing, banking and recoil for finite normals, floor clearance and bounds. GPU diagnostics cover eight poses, independent actors, portraits and palette-budget recovery. `GeometryTests` still verifies triangle winding/nondegeneracy. The shader checker now compiles ten entries, including both skinning shaders. Manual checks 157–158 cover extended play and artistic acceptance; cloth/body self-collision, facial rigs, imported assets and distance LOD remain future work.
+`SkinningTests` checks that every edge belongs to two triangles, the whole body is connected, weights are normalized/in-range, bind skinning preserves vertices, and posed bones match solved joints. It sweeps attacks, flight, landing, banking and recoil for finite normals, floor clearance and bounds. GPU diagnostics cover eight poses, independent actors, portraits and palette-budget recovery. `GeometryTests` still verifies triangle winding/nondegeneracy. The shader checker now compiles ten entries, including both skinning shaders. Manual checks 157–158 cover extended play and artistic acceptance; cloth/body self-collision, facial rigs and imported assets remain future work. Distance LOD is implemented in the newer checkpoint above.
 
 Two paired Release comparisons ran serially in baseline/new/new/baseline order with no concurrent builds or test processes. The baseline is the locally saved pre-skinning executable, including the preceding contact-animation fixes. Each workload uses a hidden 1280x720 window, present interval zero, fixed 1/60 s simulation steps, 90 warmup frames and 600 measured frames. Values are the arithmetic means of the two per-run statistics, not pooled percentiles or interactive FPS. CPU includes submission/present waits; GPU observations are asynchronous and sparse outside the portrait workload.
 

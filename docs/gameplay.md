@@ -1,12 +1,24 @@
 # Dawnwatch gameplay rules
 
+## Hand articulation and item grips (2026-10-21)
+
+Characters now use shaped palms and five articulated fingers per hand. An unoccupied hand relaxes while moving and opens with the existing Mend casting envelope; attacks, recoil and dash suppress that envelope using the same priorities as the arm pose. A sword or shield keeps a closed grip. Unequipping an item immediately selects the free-hand pose, and gloves use the same articulation. The sword, guard and pommel share one orientation, while the blade's established centreline and effect-trail points remain unchanged.
+
+The articulation is a stateless visual layer over the solved wrists. It adds no input, cooldown, collision, save or gameplay-randomness changes. World actors and C portraits use the same construction. The continuous-hand follow-up replaces the separate palm/finger pieces with a connected, weighted surface driven by sixteen rigid bones. Bare hands and gloves share the deformation; wrist bridges remain attached to the forearm. Hands follow their owner's distance-detail level, while portraits keep full detail. This remains procedural anatomy; artist-authored topology, individual gestures, nails/tendons and arbitrary-item fitting remain future work. Manual checks 166–167 and 170–171 cover appearance and equipment/action transitions.
+
+## Head attention and facial presentation (2026-10-21)
+
+Selected living opponents attract the player's head/eyes; active quest/merchant interactions take priority. Nearby enemies look toward the player, and the keeper/quartermaster acknowledge nearby players. Attention fades outside the forward viewing arc and range, then springs back to neutral instead of twisting through the rear seam. Head yaw is bounded to 0.62 radians, pitch to 0.245, with smaller/faster eye movements. This is a cosmetic offset above the existing upper-body pose: it does not turn the collision body, committed attack, weapon or solved hands. It is not obstacle-aware eye contact.
+
+Stable actor IDs seed short, independent blink cycles. Focus and welcome expressions ease in; pain uses the already contact-aged recoil channel. Reset/load/death discard transient player/enemy attention. Portraits use their own idle presentation and do not advance world controllers. NPC expression is an acknowledgement of interaction, not speech or lip synchronization. No combat rules, save fields or gameplay random sequences change. Manual checks 163–165 cover the visual result and interaction transitions.
+
 ## Movement clip controller and skinned character (2026-10-21)
 
 The final character pose now drives a ten-bone weighted body. The chest, pelvis, arms and legs share one connected surface, replacing the overlapping rigid limb segments. Head, hands, footwear, weapons and armor fittings remain attached components. World characters, enemies, NPCs and inventory portraits use the same body and pose conversion; both shadow cascades use the same deformation.
 
 Eleven small code-authored motion clips cover forward/backward travel, left/right side steps, left/right turns, starting, stopping, ascent, descent and landing. Cubic interpolation preserves velocity through keys and loop boundaries. Travel distance drives stride phase; measured direction/speed and turning drive blended weights. Starts/stops and landing settle finish through short taps and takeoff instead of dropping nonzero offsets. The settle clock uses actual contact age within the frame. A repeat jump releases the already visible impact crouch over 120 ms; it discards the old impact event, and a buffered contact/takeoff cannot create a fresh airborne crouch. Existing timed Strike/Heavy, Mend, dash and hit-reaction layers retain priority and authoritative timing.
 
-Clip motion is applied before the existing planted-foot and fixed-length hand/leg solves. The pelvis adjusts to contact reach, shoulders counter weight transfer, and equipment/weapon points follow the resulting pose. This is a procedural/code-authored animation pipeline, with a flat-floor foot solver; it does not add slope collision, root-motion displacement, a DCC importer, facial animation or cloth/body self-collision. Reset/load/death clear transient controller state; gameplay and save version 10 remain unchanged. Manual checks 157–158 cover live acceptance.
+Clip motion is applied before the existing planted-foot and fixed-length hand/leg solves. The pelvis adjusts to contact reach, shoulders counter weight transfer, and equipment/weapon points follow the resulting pose. This is a procedural/code-authored animation pipeline, with a flat-floor foot solver; it does not add slope collision, root-motion displacement, a DCC importer or cloth/body self-collision. The later facial presentation pass is described above. Reset/load/death clear transient controller state; gameplay and save version 10 remain unchanged. Manual checks 157–158 cover live acceptance.
 
 ## Contact-driven reactions and weapon transitions (2026-10-21)
 

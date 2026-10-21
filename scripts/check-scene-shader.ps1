@@ -1,5 +1,5 @@
 # Run with PowerShell 7. Uses only installed Windows D3D runtime components.
-param([switch]$Preview)
+param([switch]$Preview,[string]$GeneratedHeader)
 $ErrorActionPreference='Stop'
 $projectRoot=Split-Path -Parent $PSScriptRoot
 $header=[IO.File]::ReadAllText((Join-Path $projectRoot 'engine\SceneShader.h'))
@@ -15,11 +15,19 @@ foreach($part in $parts) {
 $source=($parts | ForEach-Object { $_.Groups[1].Value }) -join ''
 Add-Type -Path (Join-Path $PSScriptRoot 'SceneShaderCheck.cs')
 $bytecode=@{}
-foreach($entry in @('VSMain','PSMain','VSWorld','VSShadow','VSBody','VSBodyShadow','VSSky','PSSky','VSEffect','PSEffect')) {
+$generated=if($GeneratedHeader) { [IO.File]::ReadAllText($GeneratedHeader) } else { $null }
+foreach($entry in @('VSMain','PSMain','VSWorld','VSShadow','VSBody','VSBodyShadow','VSHand','VSHandShadow','VSSky','PSSky','VSEffect','PSEffect')) {
  $profile=if($entry.StartsWith('VS')) {'vs_5_0'} else {'ps_5_0'}
  $bytecode[$entry]=[SceneShaderCheck]::Compile($source,$entry,$profile)
+ if($GeneratedHeader) {
+  $match=[regex]::Match($generated,'(?s)bytes_'+[regex]::Escape($entry)+'\[\]=\{(.*?)\};')
+  if(-not $match.Success) { throw "Generated shader missing: $entry" }
+  [byte[]]$embedded=@([regex]::Matches($match.Groups[1].Value,'\d+') | ForEach-Object { [byte]$_.Value })
+  if([SceneShaderCheck]::Difference($bytecode[$entry],$embedded) -ne 0) { throw "Generated shader differs from current source: $entry" }
+ }
  Write-Output ("PASS {0}: {1} bytes, no compiler diagnostics" -f $entry,$bytecode[$entry].Length)
 }
+if($GeneratedHeader) { Write-Output 'PASS: all embedded shader bytes match independent compilation of current source' }
 if($Preview) {
  $outputPath=Join-Path $projectRoot 'build-shader-check'
  [IO.Directory]::CreateDirectory($outputPath) | Out-Null

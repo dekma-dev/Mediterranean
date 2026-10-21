@@ -294,6 +294,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
     enemyAnimations_[i].locomotion.Update(dt,enemy.movementDistance,1,0,turnRate,true,0,0,enemy.health>0);
     enemyAnimations_[i].pose.motion=enemyAnimations_[i].locomotion.pose;
   }
+  UpdateFaces(dt);
   const auto track=[&](rpg::EntityId id,rpg::Vec2 position,float height,const motion::Actor& motion,
     const animation::Sample& animation,bool shield,bool armed) {
     if (!armed) { effects_.CancelTrail(id); return; }
@@ -316,6 +317,39 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   }
   UpdateCamera(dt);
 }
+void Game::UpdateFaces(float dt) {
+  const auto player=simulation_.Player();
+  const auto target=simulation_.TargetActor();
+  const bool talking=simulation_.QuestDialogue()!=rpg::QuestId::None;
+  const bool shopping=interface_.panel==ui::Panel::Merchant;
+  const bool alive=simulation_.Health()>0;
+  facial::Aim aim;
+  if(talking || shopping) {
+    const auto npc=talking?rpg::WorldMap::questGiver:rpg::WorldMap::quartermaster;
+    aim=facial::LookAt(npc.x-player.x,-simulation_.Height(),npc.z-player.z,playerPose_.facing);
+  } else if(target && target->health>0)
+    aim=facial::LookAt(target->position.x-player.x,-simulation_.Height(),target->position.z-player.z,playerPose_.facing);
+  playerFace_.Update(dt,aim,simulation_.Attacking()?.85f:target && target->health>0?.25f:playerAnimation_.pose.cast*.35f,
+    playerAnimation_.pose.hit,talking?.18f:0,alive);
+  playerAnimation_.pose.face=playerFace_.pose;
+  const auto& enemies=simulation_.Enemies();
+  for(std::size_t i=0;i<enemyFaces_.size();++i) {
+    const auto& enemy=i<enemies.size()?enemies[i]:simulation_.SparringOpponent();
+    const bool active=alive && enemy.health>0 && (i<enemies.size() || simulation_.Sparring());
+    const float distance=std::hypot(enemy.position.x-player.x,enemy.position.z-player.z);
+    const auto gaze=active && distance<8?facial::LookAt(player.x-enemy.position.x,simulation_.Height(),
+      player.z-enemy.position.z,enemyPoses_[i].facing):facial::Aim{};
+    enemyFaces_[i].Update(dt,gaze,active && distance<8?.65f:0,enemyAnimations_[i].pose.hit,0,active);
+    enemyAnimations_[i].pose.face=enemyFaces_[i].pose;
+  }
+  const auto npc=[&](facial::State& state,rpg::Vec2 position,float facing,bool interaction) {
+    const float distance=std::hypot(player.x-position.x,player.z-position.z);
+    const auto gaze=alive && distance<4?facial::LookAt(player.x-position.x,simulation_.Height(),player.z-position.z,facing):facial::Aim{};
+    state.Update(dt,gaze,0,0,interaction?.5f:distance<3?.12f:0);
+  };
+  npc(keeperFace_,rpg::WorldMap::questGiver,1.25f,talking);
+  npc(merchantFace_,rpg::WorldMap::quartermaster,0,shopping);
+}
 void Game::SetCameraOrbit(float yaw,float pitch,float distance) {
   if (!std::isfinite(yaw) || !std::isfinite(pitch) || !std::isfinite(distance)) return;
   yaw_=std::remainder(yaw,6.2831853f);
@@ -328,14 +362,17 @@ void Game::ResetMotion() {
   effects_.Reset();
   playerPose_.Reset(simulation_.Facing());
   playerAnimation_.Reset();
+  playerFace_.Reset(1); keeperFace_.Reset(3); merchantFace_.Reset(2);
   playerFeet_.Reset(simulation_.Player(),simulation_.Facing());
   enemyPoses_.resize(simulation_.Enemies().size()+1);
   enemyAnimations_.resize(enemyPoses_.size());
+  enemyFaces_.resize(enemyPoses_.size());
   enemyFeet_.resize(enemyPoses_.size());
   for (std::size_t i=0;i<enemyPoses_.size();++i) {
     const auto& enemy=i<simulation_.Enemies().size()?simulation_.Enemies()[i]:simulation_.SparringOpponent();
     enemyPoses_[i].Reset(enemy.facing);
     enemyAnimations_[i].Reset(float(enemy.id)*.37f);
+    enemyFaces_[i].Reset(enemy.id+16);
     enemyFeet_[i].Reset(enemy.position,enemy.facing);
     enemyPoses_[i].attack=EnemyStrike(enemy,simulation_.Health()>0 &&
       (i<simulation_.Enemies().size() || simulation_.Sparring()));
@@ -367,11 +404,11 @@ void Game::Render(Renderer& renderer,bool showInterface) {
   const float cameraDistance=cameraBoom_.distance;
   renderer.SetCamera({player.x+direction.x*cameraDistance,cameraHeight_+std::sin(cameraPitch_)*cameraDistance,
     player.z+direction.z*cameraDistance},{player.x,cameraHeight_,player.z});
-  worldView_.Draw(renderer,simulation_.Map(),time_,simulation_.Sparring());
+  worldView_.Draw(renderer,simulation_.Map(),time_,simulation_.Sparring(),merchantFace_.pose,keeperFace_.pose);
   using M=visual::Mesh;
   using S=visual::Material;
   DrawCharacter(renderer,player,y,playerPose_.facing,simulation_.HurtFlash()>0?XMFLOAT4{1,.48f,.35f,1}:
-    XMFLOAT4{.22f,.37f,.54f,1},playerPose_.attack,playerPose_.gait,CharacterOutfit::From(simulation_.Items()),playerAnimation_.pose);
+    XMFLOAT4{.22f,.37f,.54f,1},playerPose_.attack,playerPose_.gait,CharacterOutfit::From(simulation_.Items()),playerAnimation_.pose,1);
   const auto anchor=rpg::WorldMap::astralAnchor;
   const bool stable=simulation_.AnchorState()>=rpg::AnchorQuest::Return;
   const XMFLOAT4 crystal=stable?XMFLOAT4{.3f,.95f,.65f,1}:XMFLOAT4{.72f,.4f,.95f,1};
@@ -399,7 +436,7 @@ void Game::Render(Renderer& renderer,bool showInterface) {
     const auto& pose=enemyPoses_[i];
     DrawCharacter(renderer,enemy.position,0,pose.facing,
       enemy.hitFlash>0?XMFLOAT4{1,.7f,.55f,1}:enemy.kind==rpg::EnemyKind::Trainer?XMFLOAT4{.55f,.46f,.22f,1}:captain?XMFLOAT4{.36f,.19f,.48f,1}:XMFLOAT4{.65f,.2f,.25f,1},
-      pose.attack,pose.gait,enemyOutfit,enemyAnimations_[i].pose);
+      pose.attack,pose.gait,enemyOutfit,enemyAnimations_[i].pose,std::uint64_t(enemy.id)+16);
     if (enemy.windup>0 && simulation_.Health()>0) {
       const float progress=1-enemy.windup/enemy.WindupDuration();
       const XMFLOAT4 warning{1,.55f*(1-progress),.12f,.68f};

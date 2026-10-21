@@ -1,13 +1,30 @@
 #pragma once
 #include <DirectXMath.h>
 #include <array>
+#include <algorithm>
 #include <cstdint>
 #include <vector>
 
 namespace visual {
 enum class ShadowMode { Cast, None };
 inline constexpr unsigned materialSize=128,shadowSize=1024,shadowLayers=2;
-enum class Mesh : unsigned { Box, Roof, Sphere, Rock, Trunk, Foliage, Torso, Limb, Blade, Crystal, Terrain, Cliff, Head, Boot, Hair, Grass, Barrel,Arch,Canopy,Masonry,Cloak,Body,Count };
+enum class Mesh : unsigned { Box, Roof, Sphere, Rock, Trunk, Foliage, Torso, Limb, Blade, Crystal, Terrain, Cliff, Head, Boot, Hair, Grass, Barrel,Arch,Canopy,Masonry,Cloak,Body,BodyMedium,BodyFar,Feature,Palm,Finger,HeadMedium,HeadFar,HairLow,BootLow,SphereLow,TorsoLow,LimbLow,Hand,HandMirrored,HandMedium,HandMirroredMedium,HandFar,HandMirroredFar,Count };
+inline bool IsBodyMesh(Mesh mesh) { return mesh>=Mesh::Body && mesh<=Mesh::BodyFar; }
+inline bool IsHandMesh(Mesh mesh) { return mesh>=Mesh::Hand && mesh<=Mesh::HandMirroredFar; }
+inline bool IsHeadMesh(Mesh mesh) { return mesh==Mesh::Head || mesh==Mesh::HeadMedium || mesh==Mesh::HeadFar; }
+inline Mesh AttachmentMesh(Mesh mesh,unsigned level) {
+  if(!level) return mesh;
+  switch(mesh) {
+    case Mesh::Head: return level==1?Mesh::HeadMedium:Mesh::HeadFar;
+    case Mesh::Hair: return Mesh::HairLow;
+    case Mesh::Boot: return Mesh::BootLow;
+    case Mesh::Sphere: return Mesh::SphereLow;
+    case Mesh::Torso: return Mesh::TorsoLow;
+    case Mesh::Limb: return Mesh::LimbLow;
+    case Mesh::Hand: case Mesh::HandMirrored: return Mesh(unsigned(mesh)+std::min(level,2u)*2);
+    default: return mesh;
+  }
+}
 enum class Material : unsigned { Plain, Ground, Stone, Wood, Plaster, Roof, Cloth, Metal, Leaves, Skin, Glow, Count };
 struct Vertex {
   DirectX::XMFLOAT3 position, normal;

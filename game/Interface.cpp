@@ -1170,8 +1170,12 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Center(460,374,510,"Quests, equipment and collected loot are retained.",14,muted);
  }
  if (debug) {
-  c.Frame({24,102,360,58}); c.Text(35,110,"Draws "+std::to_string(renderer.LastDrawCalls())+"   GPU "+std::to_string(renderer.GpuMilliseconds()).substr(0,5)+" ms",15);
+  c.Frame({24,102,360,94}); c.Text(35,110,"Draws "+std::to_string(renderer.LastDrawCalls())+"   GPU "+std::to_string(renderer.GpuMilliseconds()).substr(0,5)+" ms",15);
   c.Text(35,133,"Meshes "+std::to_string(renderer.MeshBytes()/1024)+" KiB   F2 HUD   F3 metrics",12,muted);
+  const auto& detail=renderer.LastBodyLodCounts();
+  c.Text(35,151,"Body detail: "+std::to_string(detail[0])+" near / "+std::to_string(detail[1])+" mid / "+std::to_string(detail[2])+" far",12,muted);
+  const auto& parts=renderer.LastAttachmentLodCounts();
+  c.Text(35,169,"Parts: "+std::to_string(parts[0])+" simplified / "+std::to_string(parts[1])+" omitted",12,muted);
  }
 }
 }

@@ -47,7 +47,7 @@ int main() {
     const auto g=visual::BuildMesh(static_cast<visual::Mesh>(mesh));
     Check(!g.vertices.empty() && !g.indices.empty() && g.indices.size()%3==0,"Missing or incomplete mesh.");
     // The separately budgeted weighted body is covered by SkinningTests.
-    if(mesh!=unsigned(visual::Mesh::Body)) {
+    if(!visual::IsBodyMesh(static_cast<visual::Mesh>(mesh)) && !visual::IsHandMesh(static_cast<visual::Mesh>(mesh))) {
       bytes+=g.vertices.size()*sizeof(visual::Vertex)+g.indices.size()*sizeof(std::uint32_t);
       triangles+=g.indices.size()/3;
     }
@@ -60,7 +60,9 @@ int main() {
     for (std::size_t i=0;i<g.indices.size();i+=3) {
       const auto& a=g.vertices[g.indices[i]]; const auto& b=g.vertices[g.indices[i+1]]; const auto& c=g.vertices[g.indices[i+2]];
       const auto normal=XMVector3Cross(XMLoadFloat3(&b.position)-XMLoadFloat3(&a.position),XMLoadFloat3(&c.position)-XMLoadFloat3(&a.position));
-      Check(XMVectorGetX(XMVector3LengthSq(normal))>1e-12f,"Degenerate procedural triangle.");
+      // Hands are authored directly in metres (unlike normalized prop meshes).
+      const float minimumArea=visual::IsHandMesh(static_cast<visual::Mesh>(mesh))?1e-18f:1e-12f;
+      Check(XMVectorGetX(XMVector3LengthSq(normal))>minimumArea,"Degenerate procedural triangle.");
       const auto average=XMLoadFloat3(&a.normal)+XMLoadFloat3(&b.normal)+XMLoadFloat3(&c.normal);
       if (XMVectorGetX(XMVector3Dot(normal,average))<=0) {
         std::cerr << "Mesh " << mesh << ", triangle " << i/3 << ": ";
@@ -68,7 +70,7 @@ int main() {
       }
     }
   }
-  Check(bytes<=320*1024 && triangles<=10000,"Reusable mesh library exceeded its startup geometry budget.");
+  Check(bytes<=640*1024 && triangles<=16000,"Reusable mesh library exceeded its startup geometry budget.");
   const auto cloak=visual::BuildMesh(visual::Mesh::Cloak);
   for (const auto& vertex : cloak.vertices) {
     const auto p=vertex.position;

@@ -56,6 +56,8 @@ private:
   std::vector<motion::Actor> enemyPoses_;
   animation::State playerAnimation_;
   std::vector<animation::State> enemyAnimations_;
+  facial::State playerFace_,keeperFace_,merchantFace_;
+  std::vector<facial::State> enemyFaces_;
   animation::FootPlacement playerFeet_;
   std::vector<animation::FootPlacement> enemyFeet_;
   CombatEffects effects_;
@@ -69,6 +71,7 @@ private:
   void SaveProgress();
   void LoadProgress();
   void ResetMotion();
+  void UpdateFaces(float dt);
   void UpdateCamera(float dt,bool immediate=false);
   void CancelOrbit() { orbiting_=false; yaw_=cameraYaw_; pitch_=cameraPitch_; }
 };

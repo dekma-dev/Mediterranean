@@ -58,13 +58,14 @@ float Surface(XMFLOAT3 p) {
   }
   return distance;
 }
-BodyGeometry BuildBody() {
+BodyGeometry BuildBody(unsigned level) {
   BodyGeometry body;
   // A welded isosurface joins the chest, pelvis and limbs. Edge reuse produces
   // one connected surface, including the underarms and crotch, without spheres
   // covering gaps. No file assets or per-frame topology generation.
-  constexpr int nx=39,ny=48,nz=19;
-  constexpr float spacing=.035f;
+  const float spacing=level==0?.035f:level==1?.05f:.07f;
+  const int nx=level==0?39:int(std::ceil(1.33f/spacing))+1;
+  const int ny=level==0?48:int(std::ceil(1.645f/spacing))+1,nz=level==0?19:int(std::ceil(.63f/spacing))+1;
   const auto id=[=](int x,int y,int z) { return (y*nz+z)*nx+x; };
   std::vector<XMFLOAT3> points(nx*ny*nz); std::vector<float> values(points.size());
   for(int y=0;y<ny;++y) for(int z=0;z<nz;++z) for(int x=0;x<nx;++x) {
@@ -126,5 +127,8 @@ BodyGeometry BuildBody() {
   return body;
 }
 }
-const BodyGeometry& CharacterBody() { static const BodyGeometry body=BuildBody(); return body; }
+const BodyGeometry& CharacterBody(unsigned level) {
+  static const std::array<BodyGeometry,bodyLodCount> bodies={BuildBody(0),BuildBody(1),BuildBody(2)};
+  return bodies[std::min(level,bodyLodCount-1)];
+}
 }

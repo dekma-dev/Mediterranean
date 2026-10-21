@@ -2,6 +2,7 @@
 #include "game/Motion.h"
 #include "game/AttackMotion.h"
 #include "game/LocomotionClips.h"
+#include "game/FaceMotion.h"
 #include <array>
 
 // Presentation-only channels; no collision, combat timing or durable save data.
@@ -24,6 +25,7 @@ struct Sample {
   std::array<Foot,2> departureFeet{};
   float departure=0,departureSupport=0;
   MotionChannels motion;
+  facial::Pose face;
 };
 inline Sample Idle(float time,float offset=0) {
   const float seconds=std::isfinite(time)?std::remainder(time,motion::tau*2/1.8f):0;
@@ -31,6 +33,7 @@ inline Sample Idle(float time,float offset=0) {
   Sample result; result.breath=std::sin(phase); result.sway=std::sin(phase*.5f);
   // Half-integer harmonics stay continuous across the shared 4-pi clock wrap.
   result.clothSide=std::sin(phase*.5f)*.008f; result.clothBack=.025f;
+  result.face=facial::Idle(time,std::uint32_t(std::isfinite(offset)?std::fmod(std::abs(offset),97.f)*17:0));
   return result;
 }
 inline float Pulse(float age,float peak) {

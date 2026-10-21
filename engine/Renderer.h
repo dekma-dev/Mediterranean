@@ -7,6 +7,7 @@
 #include "engine/GpuTimer.h"
 #include "engine/Geometry.h"
 #include "engine/Skinning.h"
+#include "engine/HandSkinning.h"
 #include "engine/FontAtlas.h"
 #include "engine/StaticScene.h"
 #include <array>
@@ -30,9 +31,35 @@ public:
     const DirectX::XMFLOAT4& color, float yaw = 0);
   void DrawMesh(visual::Mesh mesh,const DirectX::XMFLOAT3& position,const DirectX::XMFLOAT3& scale,
     const DirectX::XMFLOAT4& color,visual::Material material,float yaw = 0,float pitch = 0,
-    visual::ShadowMode shadow = visual::ShadowMode::Cast,float roll = 0);
+    visual::ShadowMode shadow = visual::ShadowMode::Cast,float roll = 0,unsigned maxDetail=2);
   void DrawCloak(const DirectX::XMFLOAT3& shoulder,float yaw,float pitch,float roll,float side,float back);
-  void DrawBody(DirectX::XMFLOAT3 position,float yaw,const visual::BodyPalette& palette);
+  void DrawMeshTransformed(visual::Mesh mesh,const DirectX::XMMATRIX& transform,
+    const DirectX::XMFLOAT4& color,visual::Material material,visual::ShadowMode shadow=visual::ShadowMode::Cast,unsigned maxDetail=2) {
+    Queue(mesh,transform,color,material,shadow,maxDetail);
+  }
+  unsigned DrawBody(DirectX::XMFLOAT3 position,float yaw,const visual::BodyPalette& palette,std::uint64_t actor=0);
+  void DrawHand(const DirectX::XMMATRIX& transform,const visual::HandPalette& palette,bool mirrored,
+    const DirectX::XMFLOAT4& color,visual::Material material);
+  // Only mesh draws belong inside this scope; flushes/portraits begin outside.
+  class AttachmentScope {
+    friend class Renderer;
+    Renderer& renderer_; std::uint8_t previous_;
+    AttachmentScope(Renderer& renderer,unsigned body):renderer_(renderer),previous_(renderer.attachmentBody_) {
+      renderer_.attachmentBody_=body<renderer.bodyCount_?std::uint8_t(body):255;
+    }
+  public:
+    AttachmentScope(const AttachmentScope&)=delete;
+    ~AttachmentScope() { renderer_.attachmentBody_=previous_; }
+  };
+  [[nodiscard]] AttachmentScope AttachToBody(unsigned body) { return {*this,body}; }
+  void SetAttachmentLodEnabled(bool enabled) { attachmentLodEnabled_=enabled; }
+  // Remapped/omitted queued world attachments, excluding portraits.
+  const std::array<unsigned,2>& AttachmentLodCounts() const { return attachmentLodCounts_; }
+  const std::array<unsigned,2>& LastAttachmentLodCounts() const { return lastAttachmentLodCounts_; }
+  // Diagnostics can compare against full detail without changing game state.
+  void SetBodyLodEnabled(bool enabled) { bodyLodEnabled_=enabled; bodyLodHistory_.Reset(); }
+  const std::array<unsigned,visual::bodyLodCount>& BodyLodCounts() const { return bodyLodCounts_; }
+  const std::array<unsigned,visual::bodyLodCount>& LastBodyLodCounts() const { return lastBodyLodCounts_; }
   void DrawSegment(const DirectX::XMFLOAT3& from,const DirectX::XMFLOAT3& to,float width,float depth,
     const DirectX::XMFLOAT4& color,visual::Material material);
   void DrawMeshBetween(visual::Mesh mesh,const DirectX::XMFLOAT3& from,const DirectX::XMFLOAT3& to,float width,float depth,
@@ -81,7 +108,7 @@ private:
     DirectX::XMFLOAT4 color,float startAlpha,float endAlpha,float radial);
   void EffectBillboard(DirectX::XMFLOAT3 center,float radius,DirectX::XMFLOAT4 color,float shape);
   void Queue(visual::Mesh mesh,const DirectX::XMMATRIX& world,const DirectX::XMFLOAT4& color,visual::Material material,
-    visual::ShadowMode shadow = visual::ShadowMode::Cast);
+    visual::ShadowMode shadow = visual::ShadowMode::Cast,unsigned maxDetail=2);
   static constexpr unsigned meshCount = static_cast<unsigned>(visual::Mesh::Count);
   static constexpr unsigned maxInstances = 4096;
   using Instance=visual::SceneInstance;
@@ -92,6 +119,17 @@ private:
   std::vector<Instance> instanceScratch_;
   std::array<visual::BodyPalette,visual::maxBodies> bodyPalettes_{};
   unsigned bodyCount_=0;
+  std::array<visual::HandPalette,visual::maxHands> handPalettes_{};
+  unsigned handCount_=0;
+  Microsoft::WRL::ComPtr<ID3D11Buffer> handConstants_;
+  Microsoft::WRL::ComPtr<ID3D11VertexShader> handShader_,handShadowShader_;
+  std::array<std::uint64_t,visual::maxBodies> bodyActors_{};
+  visual::BodyLodHistory bodyLodHistory_;
+  std::array<unsigned,visual::bodyLodCount> bodyLodCounts_{},lastBodyLodCounts_{};
+  bool bodyLodEnabled_=true;
+  bool attachmentLodEnabled_=true;
+  std::uint8_t attachmentBody_=255;
+  std::array<unsigned,2> attachmentLodCounts_{},lastAttachmentLodCounts_{};
   Microsoft::WRL::ComPtr<ID3D11Buffer> skinWeights_,skinConstants_;
   Microsoft::WRL::ComPtr<ID3D11VertexShader> bodyShader_,bodyShadowShader_;
   Microsoft::WRL::ComPtr<ID3D11InputLayout> bodyLayout_;

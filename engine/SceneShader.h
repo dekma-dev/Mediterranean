@@ -28,11 +28,12 @@ struct VOut {
  float4 detailShadow : TEXCOORD3;
  float3 tp : TEXCOORD4; float3 tn : TEXCOORD5;
  float cloudLight : TEXCOORD6;
+ nointerpolation float receiverPlane : TEXCOORD7;
 };
 float CloudSunlight(float3 position);
 VOut VSMain(VIn i) {
  VOut o; o.p=mul(float4(i.p,1),wvp); o.wp=i.n; o.n=i.n;
- o.tint=i.tint; o.shadow=o.detailShadow=0; o.material=0; o.tp=o.tn=0; o.cloudLight=1; return o;
+ o.tint=i.tint; o.shadow=o.detailShadow=0; o.material=0; o.tp=o.tn=0; o.cloudLight=1; o.receiverPlane=1; return o;
 }
 void DeformCloth(inout float3 p,inout float3 n,float4 surface) {
  [branch] if (surface.w>0) {
@@ -56,8 +57,11 @@ VOut VSWorld(InstanceIn i) {
  float4 position=mul(float4(i.p,1),object);
  o.wp=position.xyz; o.p=mul(position,wvp);
  o.n=normalize(mul(float4(i.n,0),normals).xyz);
- o.tint=i.tint*i.paint; o.shadow=mul(position,shadowVP[0]);
- o.detailShadow=mul(position,shadowVP[1]); o.material=i.surface.x;
+ o.receiverPlane=i.surface.w<0?0:1;
+ float4 receiver=position;
+ if (i.surface.w<0) receiver.xyz+=o.n*(i.surface.w<-1?.0007:.0025);
+ o.tint=i.tint*i.paint; o.shadow=mul(receiver,shadowVP[0]);
+ o.detailShadow=mul(receiver,shadowVP[1]); o.material=i.surface.x;
  // Metric object coordinates follow animated parts instead of sliding through
  // a world-space texture. Projection weights account for nonuniform scaling.
  float3 size=float3(length(i.w0.xyz),length(i.w1.xyz),length(i.w2.xyz));
@@ -90,6 +94,25 @@ VOut VSBody(SkinIn v) {
 }
 float4 VSBodyShadow(SkinIn v) : SV_POSITION {
  SkinBody(v.object,v.bones,v.weights); return VSShadow(v.object);
+}
+// Finger palettes contain rigid transforms only, shared by color and shadows.
+cbuffer Hands : register(b2) { matrix handJoints[1024]; };
+void SkinHand(inout InstanceIn i,uint4 joints,float4 weights) {
+ uint base=(uint)i.surface.z*16;
+ float3 p=0,n=0;
+ [unroll] for(uint k=0;k<4;++k) {
+  p+=mul(float4(i.p,1),handJoints[base+joints[k]]).xyz*weights[k];
+  n+=mul(float4(i.n,0),handJoints[base+joints[k]]).xyz*weights[k];
+ }
+ i.p=p; i.n=normalize(n);
+}
+VOut VSHand(SkinIn v) {
+ float3 bindPosition=v.object.p,bindNormal=v.object.n;
+ SkinHand(v.object,v.bones,v.weights);
+ VOut o=VSWorld(v.object); o.tp=bindPosition; o.tn=bindNormal; return o;
+}
+float4 VSHandShadow(SkinIn v) : SV_POSITION {
+ SkinHand(v.object,v.bones,v.weights); return VSShadow(v.object);
 }
 )" R"(
 float Hash(float2 p) { float3 q=frac(float3(p.xyx)*.1031); q+=dot(q,q.yzx+33.33); return frac((q.x+q.y)*q.z); }
@@ -267,11 +290,11 @@ float ShadowFilter(float3 coordinate,float2 gradient,float sunFacing,uint layer)
  }
  return sum;
 }
-float Shadow(float4 widePosition,float4 detailPosition,float sunFacing) {
+float Shadow(float4 widePosition,float4 detailPosition,float sunFacing,float receiverPlane) {
  float3 wide=ShadowCoordinate(widePosition),detail=ShadowCoordinate(detailPosition);
  // Compute both receiver planes before any cascade-dependent branch; derivatives
  // inside a divergent selection can introduce stripes at the blend boundary.
- float2 wideGradient=ShadowGradient(wide),detailGradient=ShadowGradient(detail);
+ float2 wideGradient=ShadowGradient(wide)*receiverPlane,detailGradient=ShadowGradient(detail)*receiverPlane;
  float margin=min(min(detail.x,1-detail.x),min(detail.y,1-detail.y));
  // Fade over 5.4 m of the 20 m detail map, retaining full detail in its central
  // 8 m. The old 2.4 m band made thin shadows visibly pop under bright daylight.
@@ -355,7 +378,7 @@ float4 PSMain(VOut i) : SV_TARGET {
  }
  float3 lightDir=normalize(eyeAndHud.w<0?float3(-.3,.6,1):sun.xyz);
  float diffuse=saturate(dot(n,lightDir));
- float visibility=eyeAndHud.w<0?1:Shadow(i.shadow,i.detailShadow,saturate(dot(geometric,lightDir)));
+ float visibility=eyeAndHud.w<0?1:Shadow(i.shadow,i.detailShadow,saturate(dot(geometric,lightDir)),i.receiverPlane);
  if (eyeAndHud.w>=0) visibility*=saturate(i.cloudLight);
  float hemisphere=lerp(.20,.58,n.y*.5+.5);
  // A small transmitted-light term keeps the backs of opaque leaves readable.

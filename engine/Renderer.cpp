@@ -1,9 +1,8 @@
 #include "engine/Renderer.h"
-#include "engine/SceneShader.h"
+#include "SceneBytecode.generated.h"
 #include "engine/Shadow.h"
 #include "engine/InstanceTransform.h"
 #include <cmath>
-#include <d3dcompiler.h>
 #include <d3d11sdklayers.h>
 #include <cstring>
 #include <sstream>
@@ -69,27 +68,17 @@ bool Renderer::Resize(int width, int height) {
  return CreateTargets(width,height);
 }
 bool Renderer::CreatePipeline() {
- ComPtr<ID3DBlob> vs,ps,world,shadow,sky,skyPs,effectVs,effectPs,body,bodyShadow,errors;
- auto compile = [&](const char* entry,const char* profile,ComPtr<ID3DBlob>& output) {
-  errors.Reset(); const HRESULT hr=D3DCompile(sceneShader,std::strlen(sceneShader),"BuiltInScene",nullptr,nullptr,entry,profile,
-   D3DCOMPILE_ENABLE_STRICTNESS,0,output.GetAddressOf(),errors.GetAddressOf());
-  if (errors) OutputDebugStringA(static_cast<const char*>(errors->GetBufferPointer()));
-  if (FAILED(hr) && errors) {
-   const std::string details(static_cast<const char*>(errors->GetBufferPointer()),errors->GetBufferSize());
-   error_=L"Shader compilation failed: "+std::wstring(details.begin(),details.end()); return false;
-  }
-  return Check(hr,L"Compile scene shader");
- };
- if (!compile("VSMain","vs_5_0",vs) || !compile("PSMain","ps_5_0",ps) ||
-   !compile("VSWorld","vs_5_0",world) || !compile("VSShadow","vs_5_0",shadow) ||
-   !compile("VSBody","vs_5_0",body) || !compile("VSBodyShadow","vs_5_0",bodyShadow) ||
-   !compile("VSSky","vs_5_0",sky) || !compile("PSSky","ps_5_0",skyPs) ||
-   !compile("VSEffect","vs_5_0",effectVs) || !compile("PSEffect","ps_5_0",effectPs)) return false;
+ const auto *vs=&compiled_scene::VSMain,*ps=&compiled_scene::PSMain,*world=&compiled_scene::VSWorld,*shadow=&compiled_scene::VSShadow;
+ const auto *body=&compiled_scene::VSBody,*bodyShadow=&compiled_scene::VSBodyShadow;
+ const auto *hand=&compiled_scene::VSHand,*handShadow=&compiled_scene::VSHandShadow;
+ const auto *sky=&compiled_scene::VSSky,*skyPs=&compiled_scene::PSSky,*effectVs=&compiled_scene::VSEffect,*effectPs=&compiled_scene::PSEffect;
  if (!Check(device_->CreateVertexShader(effectVs->GetBufferPointer(),effectVs->GetBufferSize(),nullptr,effectVertexShader_.GetAddressOf()),L"Create effect vertex shader") ||
    !Check(device_->CreatePixelShader(effectPs->GetBufferPointer(),effectPs->GetBufferSize(),nullptr,effectPixelShader_.GetAddressOf()),L"Create effect pixel shader")) return false;
  if (!Check(device_->CreateVertexShader(vs->GetBufferPointer(),vs->GetBufferSize(),nullptr,vertexShader_.GetAddressOf()),L"Create HUD shader") ||
    !Check(device_->CreateVertexShader(body->GetBufferPointer(),body->GetBufferSize(),nullptr,bodyShader_.GetAddressOf()),L"Create skinning shader") ||
    !Check(device_->CreateVertexShader(bodyShadow->GetBufferPointer(),bodyShadow->GetBufferSize(),nullptr,bodyShadowShader_.GetAddressOf()),L"Create skinned shadow shader") ||
+   !Check(device_->CreateVertexShader(hand->GetBufferPointer(),hand->GetBufferSize(),nullptr,handShader_.GetAddressOf()),L"Create hand shader") ||
+   !Check(device_->CreateVertexShader(handShadow->GetBufferPointer(),handShadow->GetBufferSize(),nullptr,handShadowShader_.GetAddressOf()),L"Create hand shadow shader") ||
    !Check(device_->CreateVertexShader(world->GetBufferPointer(),world->GetBufferSize(),nullptr,worldShader_.GetAddressOf()),L"Create instance shader") ||
    !Check(device_->CreateVertexShader(shadow->GetBufferPointer(),shadow->GetBufferSize(),nullptr,shadowShader_.GetAddressOf()),L"Create shadow shader") ||
    !Check(device_->CreateVertexShader(sky->GetBufferPointer(),sky->GetBufferSize(),nullptr,skyShader_.GetAddressOf()),L"Create sky shader") ||
@@ -111,6 +100,7 @@ bool Renderer::CreatePipeline() {
  static_assert(sizeof(Instance)==160,"Instance layout must match the shader.");
  static_assert(sizeof(visual::SkinInfluence)==32 && sizeof(visual::BodyPalette)==1376,"Keep skinning layouts synchronized with HLSL.");
  static_assert(sizeof(bodyPalettes_)<=65536,"Skin palettes must fit a D3D11 constant buffer.");
+ static_assert(sizeof(visual::HandPalette)==1024 && sizeof(handPalettes_)==65536,"Hand palettes must match HLSL and the D3D11 constant limit.");
  std::vector<Vertex> vertices; std::vector<std::uint32_t> indices;
  std::vector<visual::SkinInfluence> influences;
  for (unsigned i=0;i<meshCount;++i) {
@@ -119,8 +109,15 @@ bool Renderer::CreatePipeline() {
   for (auto index : mesh.indices) indices.push_back(index+static_cast<UINT>(vertices.size()));
   for (const auto& v : mesh.vertices) range.radius=std::max(range.radius,std::sqrt(v.position.x*v.position.x+v.position.y*v.position.y+v.position.z*v.position.z));
   vertices.insert(vertices.end(),mesh.vertices.begin(),mesh.vertices.end());
-  if(i==unsigned(visual::Mesh::Body)) influences.insert(influences.end(),visual::CharacterBody().influences.begin(),visual::CharacterBody().influences.end());
-  else influences.resize(vertices.size());
+  if(visual::IsBodyMesh(static_cast<visual::Mesh>(i))) {
+    const auto& weights=visual::CharacterBody(i-unsigned(visual::Mesh::Body)).influences;
+    influences.insert(influences.end(),weights.begin(),weights.end());
+  }
+  else if(visual::IsHandMesh(static_cast<visual::Mesh>(i))) {
+    const auto index=i-unsigned(visual::Mesh::Hand);
+    const auto& weights=visual::CharacterHand(index/2,index%2!=0).influences;
+    influences.insert(influences.end(),weights.begin(),weights.end());
+  } else influences.resize(vertices.size());
  }
  D3D11_BUFFER_DESC b{}; b.ByteWidth=static_cast<UINT>(vertices.size()*sizeof(Vertex));
  b.Usage=D3D11_USAGE_IMMUTABLE; b.BindFlags=D3D11_BIND_VERTEX_BUFFER;
@@ -135,6 +132,8 @@ bool Renderer::CreatePipeline() {
  if (!Check(device_->CreateBuffer(&b,nullptr,constants_.GetAddressOf()),L"Create constants")) return false;
  b.ByteWidth=sizeof(bodyPalettes_); b.Usage=D3D11_USAGE_DYNAMIC; b.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
  if (!Check(device_->CreateBuffer(&b,nullptr,skinConstants_.GetAddressOf()),L"Create skin palettes")) return false;
+ b.ByteWidth=sizeof(handPalettes_);
+ if (!Check(device_->CreateBuffer(&b,nullptr,handConstants_.GetAddressOf()),L"Create hand palettes")) return false;
  b.ByteWidth=16380*sizeof(Vertex); b.Usage=D3D11_USAGE_DYNAMIC; b.BindFlags=D3D11_BIND_VERTEX_BUFFER; b.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
  if (!Check(device_->CreateBuffer(&b,nullptr,hudVertices_.GetAddressOf()),L"Create HUD buffer")) return false;
  b.ByteWidth=maxInstances*sizeof(Instance);
@@ -220,7 +219,9 @@ void Renderer::BeginFrame() {
  hud_.clear();
  effects_.clear(); effectVertices_=0;
  for (auto& batch : world_) batch.clear();
- bodyCount_=0;
+ bodyCount_=handCount_=0;
+ bodyLodCounts_={}; bodyLodHistory_.BeginFrame();
+ attachmentBody_=255; attachmentLodCounts_={};
  const float sky[]={.19f,.23f,.38f,1};
  context_->OMSetRenderTargets(1,target_.GetAddressOf(),depth_.Get());
  context_->ClearRenderTargetView(target_.Get(),sky);
@@ -285,22 +286,26 @@ void Renderer::Draw(const XMMATRIX& world,const XMMATRIX& vp,const XMFLOAT4& col
 void Renderer::DrawMarkerBox(const XMFLOAT3& p,const XMFLOAT3& s,const XMFLOAT4& color,float yaw) {
  DrawMesh(visual::Mesh::Box,p,s,color,visual::Material::Plain,yaw,0,visual::ShadowMode::None);
 }
-void Renderer::Queue(visual::Mesh mesh,const XMMATRIX& transform,const XMFLOAT4& color,visual::Material material,visual::ShadowMode shadow) {
+void Renderer::Queue(visual::Mesh mesh,const XMMATRIX& transform,const XMFLOAT4& color,visual::Material material,visual::ShadowMode shadow,unsigned maxDetail) {
  // Private callers construct scaled orthonormal bases, never sheared matrices.
  Item item{};
+ item.body=attachmentBody_; item.maxDetail=std::uint8_t(std::min(maxDetail,2u));
  XMStoreFloat4x4(&item.instance.world,transform);
  const auto prepared=visual::PrepareInstanceTransform(transform);
  XMStoreFloat4x4(&item.instance.normal,prepared.normal);
  item.instance.color=color; item.instance.surface={static_cast<float>(material),shadow==visual::ShadowMode::Cast?1.f:0.f,0,0};
+ // A face is smaller than the PCF footprint: extrapolating each tiny triangle's
+ // receiver plane across the curved nose produces triangular self-shadow marks.
+ if(visual::IsHeadMesh(mesh)) item.instance.surface.w=-1;
  const auto& m=item.instance.world; item.center={m._41,m._42,m._43};
  item.radius=meshes_[static_cast<unsigned>(mesh)].radius*prepared.radiusScale;
  world_[static_cast<unsigned>(mesh)].push_back(item);
 }
 void Renderer::DrawMesh(visual::Mesh mesh,const XMFLOAT3& p,const XMFLOAT3& s,const XMFLOAT4& color,
- visual::Material material,float yaw,float pitch,visual::ShadowMode shadow,float roll) {
+ visual::Material material,float yaw,float pitch,visual::ShadowMode shadow,float roll,unsigned maxDetail) {
  if (s.x<=0 || s.y<=0 || s.z<=0) return;
  Queue(mesh,XMMatrixScaling(s.x,s.y,s.z)*XMMatrixRotationX(pitch)*XMMatrixRotationZ(roll)*XMMatrixRotationY(yaw)*
-  XMMatrixTranslation(p.x,p.y,p.z),color,material,shadow);
+  XMMatrixTranslation(p.x,p.y,p.z),color,material,shadow,maxDetail);
 }
 void Renderer::DrawCloak(const XMFLOAT3& shoulder,float yaw,float pitch,float roll,float side,float back) {
  DrawMesh(visual::Mesh::Cloak,shoulder,{1,1,1},{1,1,1,1},visual::Material::Cloth,yaw,pitch,visual::ShadowMode::Cast,roll);
@@ -310,9 +315,10 @@ void Renderer::DrawCloak(const XMFLOAT3& shoulder,float yaw,float pitch,float ro
  item.instance.surface.w=.001f+(std::isfinite(back)?std::clamp(back,0.f,.35f):0);
  item.radius+=.41f;
 }
-void Renderer::DrawBody(XMFLOAT3 position,float yaw,const visual::BodyPalette& palette) {
- if(bodyCount_>=visual::maxBodies) { error_=L"Scene exceeded the 32 skinned-body budget."; frameFailed_=true; return; }
+unsigned Renderer::DrawBody(XMFLOAT3 position,float yaw,const visual::BodyPalette& palette,std::uint64_t actor) {
+ if(bodyCount_>=visual::maxBodies) { error_=L"Scene exceeded the 32 skinned-body budget."; frameFailed_=true; return visual::maxBodies; }
  auto& gpu=bodyPalettes_[bodyCount_]; gpu.colors=palette.colors;
+ bodyActors_[bodyCount_]=actor;
  for(unsigned bone=0;bone<visual::bodyBones;++bone) {
   XMStoreFloat4x4(&gpu.joints[bone],XMMatrixTranspose(XMLoadFloat4x4(&palette.joints[bone])));
   XMStoreFloat4x4(&gpu.normals[bone],XMMatrixTranspose(XMLoadFloat4x4(&palette.normals[bone])));
@@ -322,6 +328,22 @@ void Renderer::DrawBody(XMFLOAT3 position,float yaw,const visual::BodyPalette& p
  // Covers every solved limb/torso pose, including fully raised arms. Bounds are
  // intentionally conservative; the simulation's collision body is unchanged.
  item.radius=3.f;
+ item.body=255;
+ return bodyCount_-1;
+}
+void Renderer::DrawHand(const XMMATRIX& transform,const visual::HandPalette& palette,bool mirrored,const XMFLOAT4& color,visual::Material material) {
+ if(handCount_>=visual::maxHands) { error_=L"Scene exceeded the 64 skinned-hand budget."; frameFailed_=true; return; }
+ auto& gpu=handPalettes_[handCount_];
+ for(unsigned bone=0;bone<visual::handBones;++bone)
+  XMStoreFloat4x4(&gpu.joints[bone],XMMatrixTranspose(XMLoadFloat4x4(&palette.joints[bone])));
+ const auto mesh=mirrored?visual::Mesh::HandMirrored:visual::Mesh::Hand;
+ Queue(mesh,transform,color,material,visual::ShadowMode::Cast);
+ auto& item=world_[unsigned(mesh)].back(); item.instance.surface.z=float(handCount_++);
+ // Finger triangles are much smaller than a PCF footprint. Avoid projecting
+ // their receiver planes across neighboring fingers, while retaining shade.
+ item.instance.surface.w=-2;
+ // Covers opened and curled fingers; hand frames are rigid, in world metres.
+ item.radius=.23f;
 }
 void Renderer::DrawSegment(const XMFLOAT3& from,const XMFLOAT3& to,float width,float depth,
  const XMFLOAT4& color,visual::Material material) {
@@ -360,6 +382,47 @@ void Renderer::DrawStaticScene(visual::StaticScene& scene,const std::function<vo
 bool Renderer::FlushWorld() {
  if (std::all_of(world_.begin(),world_.end(),[](const auto& batch) { return batch.empty(); })) {
   DrawSky(); return true;
+ }
+ // Choose only once the final camera is known: captures can override it after
+ // queueing. A body's color and both shadow passes share the selected mesh.
+ auto& bodies=world_[unsigned(visual::Mesh::Body)]; std::size_t kept=0;
+ std::array<unsigned,visual::maxBodies> bodyLevels{};
+ const auto& camera=viewProjection_;
+ const float projectionScale=std::sqrt(camera._12*camera._12+camera._22*camera._22+camera._32*camera._32);
+ for(const auto& item : bodies) {
+  const auto p=item.center;
+  const float depth=p.x*camera._14+(p.y+.9f)*camera._24+p.z*camera._34+camera._44;
+  // Behind-eye casters still affect the shadow maps. Use radial distance there
+  // instead of promoting every distant, offscreen body to maximum detail.
+  const float distance=depth>.1f?depth:std::sqrt((p.x-eye_.x)*(p.x-eye_.x)+(p.y+.9f-eye_.y)*(p.y+.9f-eye_.y)+(p.z-eye_.z)*(p.z-eye_.z));
+  const float pixels=1.8f*projectionScale*height_*.5f/std::max(.1f,distance);
+  const auto level=portrait_ || !bodyLodEnabled_?0:bodyLodHistory_.Select(bodyActors_[unsigned(item.instance.surface.z)],pixels);
+  bodyLevels[unsigned(item.instance.surface.z)]=level;
+  if(!portrait_) ++bodyLodCounts_[level];
+  if(level) world_[unsigned(visual::Mesh::Body)+level].push_back(item);
+  else bodies[kept++]=item;
+ }
+ bodies.resize(kept);
+ // Resolve attachments from the same owner decision, before any color/shadow
+ // culling. Scenery has no owner, even when it reuses a character mesh shape.
+ if(!portrait_ && attachmentLodEnabled_) for(unsigned mesh=0;mesh<meshCount;++mesh) {
+  auto& batch=world_[mesh]; std::size_t retained=0;
+  for(std::size_t i=0;i<batch.size();++i) {
+   const auto& item=batch[i];
+   const auto level=item.body<bodyCount_?bodyLevels[item.body]:0;
+   if(level>item.maxDetail) { ++attachmentLodCounts_[1]; continue; }
+   const auto replacement=visual::AttachmentMesh(visual::Mesh(mesh),level);
+   if(unsigned(replacement)!=mesh) {
+    // Keep bounds conservative even if a reduced ring samples a larger radius.
+    auto reduced=item;
+    reduced.radius*=std::max(1.f,meshes_[unsigned(replacement)].radius/std::max(.0001f,meshes_[mesh].radius));
+    reduced.body=255; world_[unsigned(replacement)].push_back(reduced); ++attachmentLodCounts_[0];
+   } else {
+    if(retained!=i) batch[retained]=item;
+    ++retained;
+   }
+  }
+  batch.resize(retained);
  }
  struct Batch { unsigned mesh; UINT first,count; };
  constexpr unsigned colorPass=visual::shadowLayers,passCount=colorPass+1;
@@ -416,6 +479,13 @@ bool Renderer::FlushWorld() {
   context_->Unmap(skinConstants_.Get(),0);
  }
  context_->VSSetConstantBuffers(1,1,skinConstants_.GetAddressOf());
+ if(handCount_) {
+  D3D11_MAPPED_SUBRESOURCE mapped{};
+  if(!Check(context_->Map(handConstants_.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&mapped),L"Upload hand palettes")) return false;
+  std::memcpy(mapped.pData,handPalettes_.data(),handCount_*sizeof(visual::HandPalette));
+  context_->Unmap(handConstants_.Get(),0);
+ }
+ context_->VSSetConstantBuffers(2,1,handConstants_.GetAddressOf());
  ID3D11Buffer* buffers[]={vertices_.Get(),instances_.Get(),skinWeights_.Get()};
  const UINT strides[]={sizeof(Vertex),sizeof(Instance),sizeof(visual::SkinInfluence)},offsets[]={0,0,0};
  context_->IASetVertexBuffers(0,3,buffers,strides,offsets);
@@ -451,15 +521,16 @@ bool Renderer::FlushWorld() {
    context_->PSSetShaderResources(4,1,terrainView_.GetAddressOf());
    context_->PSSetSamplers(2,1,fontSampler_.GetAddressOf());
   }
-  bool bodyActive=false;
+  unsigned skinActive=0;
   for (unsigned b=0;b<batchCounts[pass];++b) {
    const auto& batch=passes[pass][b];
    const auto& mesh=meshes_[batch.mesh];
-   const bool skinned=batch.mesh==unsigned(visual::Mesh::Body);
-   if(skinned!=bodyActive) {
-    context_->IASetInputLayout(skinned?bodyLayout_.Get():worldLayout_.Get());
-    context_->VSSetShader(skinned?(shadowPass?bodyShadowShader_.Get():bodyShader_.Get()):(shadowPass?shadowShader_.Get():worldShader_.Get()),nullptr,0);
-    bodyActive=skinned;
+   const unsigned skin=visual::IsBodyMesh(static_cast<visual::Mesh>(batch.mesh))?1:visual::IsHandMesh(static_cast<visual::Mesh>(batch.mesh))?2:0;
+   if(skin!=skinActive) {
+    context_->IASetInputLayout(skin?bodyLayout_.Get():worldLayout_.Get());
+    context_->VSSetShader(skin==2?(shadowPass?handShadowShader_.Get():handShader_.Get()):
+      skin==1?(shadowPass?bodyShadowShader_.Get():bodyShader_.Get()):(shadowPass?shadowShader_.Get():worldShader_.Get()),nullptr,0);
+    skinActive=skin;
    }
    context_->DrawIndexedInstanced(mesh.count,batch.count,mesh.start,0,batch.first);
    ++drawCalls_; triangles_+=mesh.count/3*batch.count;
@@ -467,7 +538,8 @@ bool Renderer::FlushWorld() {
  }
  // Consume even a fully culled queue before changing camera/portrait state.
  for (auto& batch : world_) batch.clear();
- bodyCount_=0;
+ bodyCount_=handCount_=0;
+ attachmentBody_=255;
  DrawSky();
  return true;
 }
@@ -580,6 +652,8 @@ bool Renderer::EndFrame(bool vsync) {
  if (frameFailed_) return false;
  if (!FlushHud()) return false;
  lastDrawCalls_=drawCalls_;
+ lastBodyLodCounts_=bodyLodCounts_;
+ lastAttachmentLodCounts_=attachmentLodCounts_;
  gpuTimer_.End(context_.Get());
  return Check(swapChain_->Present(vsync?1:0,0),L"Present frame");
 }

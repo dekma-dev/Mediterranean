@@ -28,13 +28,30 @@ add_library(MediterraneanSimulation STATIC game/Simulation.cpp game/Progression.
 target_include_directories(MediterraneanSimulation PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_include_directories(MediterraneanSimulation PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
+add_executable(SceneShaderCompiler tools/SceneShaderCompiler.cpp)
+target_include_directories(SceneShaderCompiler PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_definitions(SceneShaderCompiler PRIVATE UNICODE _UNICODE NOMINMAX)
+target_link_libraries(SceneShaderCompiler PRIVATE d3dcompiler)
+if(MSVC)
+  target_compile_options(SceneShaderCompiler PRIVATE /W4 /EHsc)
+endif()
+set(scene_shader_header "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>/SceneBytecode.generated.h")
+add_custom_command(OUTPUT "${scene_shader_header}"
+  COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>"
+  COMMAND $<TARGET_FILE:SceneShaderCompiler> "${scene_shader_header}"
+  DEPENDS SceneShaderCompiler engine/SceneShader.h
+  COMMENT "Compiling embedded DirectX 11 shaders"
+  VERBATIM)
+
 add_library(MediterraneanClient STATIC
+  "${scene_shader_header}"
   engine/Engine.cpp
   engine/Audio.cpp
   engine/Renderer.cpp
   engine/GpuTimer.cpp
   engine/Geometry.cpp
   engine/Skinning.cpp
+  engine/HandSkinning.cpp
   engine/FontAtlas.cpp
   platform/Win32Window.cpp
   game/Game.cpp
@@ -42,6 +59,7 @@ add_library(MediterraneanClient STATIC
   game/LandmarkView.cpp
   game/CharacterView.cpp
   game/CharacterPose.cpp
+  game/HandPose.cpp
   game/CharacterRig.cpp
   game/CombatEffects.cpp
   game/Interface.cpp
@@ -55,6 +73,7 @@ target_link_libraries(RPGNative PRIVATE MediterraneanClient)
 target_include_directories(MediterraneanClient PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
+target_include_directories(MediterraneanClient PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>")
 
 target_compile_definitions(MediterraneanClient PUBLIC UNICODE _UNICODE NOMINMAX)
 target_compile_definitions(MediterraneanClient PRIVATE RPG_SAVE_DIRECTORY="${CMAKE_CURRENT_SOURCE_DIR}/saves")
@@ -68,6 +87,19 @@ set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT RPGNative)
 
 include(CTest)
 if (BUILD_TESTING)
+  add_executable(HandSkinningTests tests/HandSkinningTests.cpp)
+  target_link_libraries(HandSkinningTests PRIVATE MediterraneanClient)
+  add_test(NAME HandSkinningTests COMMAND HandSkinningTests)
+  add_executable(AttachmentLodTests tests/AttachmentLodTests.cpp)
+  target_link_libraries(AttachmentLodTests PRIVATE MediterraneanClient)
+  add_test(NAME AttachmentLodTests COMMAND AttachmentLodTests)
+  add_executable(HandTests tests/HandTests.cpp)
+  target_link_libraries(HandTests PRIVATE MediterraneanClient)
+  add_test(NAME HandTests COMMAND HandTests)
+  add_executable(FaceTests tests/FaceTests.cpp)
+  target_link_libraries(FaceTests PRIVATE MediterraneanClient)
+  target_compile_definitions(FaceTests PRIVATE RPG_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
+  add_test(NAME FaceTests COMMAND FaceTests)
   add_executable(SkinningTests tests/SkinningTests.cpp)
   target_link_libraries(SkinningTests PRIVATE MediterraneanClient)
   add_test(NAME SkinningTests COMMAND SkinningTests)
@@ -93,7 +125,7 @@ if (BUILD_TESTING)
   target_link_libraries(InterfaceTests PRIVATE MediterraneanClient)
   target_compile_definitions(InterfaceTests PRIVATE RPG_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
   add_test(NAME InterfaceTests COMMAND InterfaceTests)
-  add_executable(GeometryTests tests/GeometryTests.cpp engine/Geometry.cpp engine/Skinning.cpp game/CharacterPose.cpp)
+  add_executable(GeometryTests tests/GeometryTests.cpp engine/Geometry.cpp engine/Skinning.cpp engine/HandSkinning.cpp game/CharacterPose.cpp)
   target_include_directories(GeometryTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   target_compile_definitions(GeometryTests PRIVATE NOMINMAX)
   add_test(NAME GeometryTests COMMAND GeometryTests)

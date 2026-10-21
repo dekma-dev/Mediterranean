@@ -80,7 +80,7 @@ void DrawScenery(Renderer& r,const rpg::WorldMap& map,bool sparring) {
   }
 }
 }
-void WorldView::Draw(Renderer& r,const rpg::WorldMap& map,float time,bool sparring) {
+void WorldView::Draw(Renderer& r,const rpg::WorldMap& map,float time,bool sparring,facial::Pose merchantFace,facial::Pose keeperFace) {
   // The map is immutable between Game::Initialize calls. Sparring temporarily
   // replaces one authored dummy with an animated opponent.
   if (sparring!=sparring_) { scenery_.Invalidate(); sparring_=sparring; }
@@ -92,8 +92,10 @@ void WorldView::Draw(Renderer& r,const rpg::WorldMap& map,float time,bool sparri
       {.35f,.68f,.81f,1},S::Glow,time*.3f,0,visual::ShadowMode::None);
   const auto giver=rpg::WorldMap::questGiver;
   CharacterOutfit merchant; merchant.weapon=false; merchant.helm=true;
-  DrawCharacter(r,rpg::WorldMap::quartermaster,0,0,{.28f,.39f,.22f,1},0,0,merchant,animation::Idle(time,1.7f));
+  auto merchantMotion=animation::Idle(time,1.7f); merchantMotion.face=merchantFace;
+  DrawCharacter(r,rpg::WorldMap::quartermaster,0,0,{.28f,.39f,.22f,1},0,0,merchant,merchantMotion,2);
   CharacterOutfit keeper; keeper.weapon=false;
-  DrawCharacter(r,giver,0,1.25f,{.57f,.45f,.26f,1},0,0,keeper,animation::Idle(time,4.1f));
+  auto keeperMotion=animation::Idle(time,4.1f); keeperMotion.face=keeperFace;
+  DrawCharacter(r,giver,0,1.25f,{.57f,.45f,.26f,1},0,0,keeper,keeperMotion,3);
   r.DrawMesh(M::Crystal,{giver.x,2.9f+std::sin(time*2)*.15f,giver.z},{.30f,.55f,.30f},{1,.8f,.25f,1},S::Glow,time,0,visual::ShadowMode::None);
 }

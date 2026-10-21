@@ -1,5 +1,6 @@
 #include "engine/Geometry.h"
 #include "engine/Skinning.h"
+#include "engine/HandSkinning.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -110,7 +111,8 @@ float Hash(int x,int y) {
 }
 
 Geometry BuildMesh(Mesh mesh) {
-  if (mesh==Mesh::Body) return CharacterBody().mesh;
+  if (IsBodyMesh(mesh)) return CharacterBody(unsigned(mesh)-unsigned(Mesh::Body)).mesh;
+  if (IsHandMesh(mesh)) return CharacterHand((unsigned(mesh)-unsigned(Mesh::Hand))/2,(unsigned(mesh)-unsigned(Mesh::Hand))%2!=0).mesh;
   if (mesh==Mesh::Cloak) {
     Geometry g;
     // One continuous flared sheet, shared smooth normals and a separate back
@@ -244,44 +246,70 @@ Geometry BuildMesh(Mesh mesh) {
     }
     Normals(g); return g;
   }
-  if (mesh==Mesh::Hair) {
-    auto g=Lathe({{.17f,.46f,.45f},{.24f,.45f,.44f},{.32f,.43f,.42f},{.39f,.39f,.38f},{.46f,.30f,.30f},{.51f,.19f,.19f}},32);
+  if (mesh==Mesh::Hair || mesh==Mesh::HairLow) {
+    auto g=Lathe({{.17f,.46f,.45f},{.24f,.45f,.44f},{.32f,.43f,.42f},{.39f,.39f,.38f},{.46f,.30f,.30f},{.51f,.19f,.19f}},mesh==Mesh::Hair?32:12);
     for (auto& v : g.vertices) if (v.position.z>0) v.position.z=std::min(v.position.z,.36f);
     Normals(g); return g;
   }
-  if (mesh==Mesh::Head) {
-    auto g=Lathe({{-.5f,.20f,.26f},{-.44f,.27f,.31f},{-.38f,.34f,.35f},{-.28f,.39f,.38f},
-      {-.19f,.43f,.40f},{-.09f,.46f,.42f},{.02f,.46f,.44f},{.11f,.44f,.43f},
-      {.21f,.45f,.44f},{.30f,.43f,.41f},{.38f,.38f,.37f},{.44f,.30f,.29f},{.49f,.19f,.19f}},32);
-    // A narrower jaw, flatter face, cheekbones and brow replace the spherical head.
+  if (IsHeadMesh(mesh)) {
+    const std::vector<XMFLOAT3> profile={{-.5f,.16f,.23f},{-.46f,.23f,.29f},{-.42f,.29f,.33f},{-.36f,.34f,.36f},
+      {-.30f,.38f,.38f},{-.25f,.40f,.39f},{-.20f,.43f,.40f},{-.15f,.45f,.41f},
+      {-.10f,.46f,.42f},{-.05f,.46f,.43f},{0,.46f,.44f},{.05f,.45f,.44f},
+      {.10f,.44f,.43f},{.15f,.44f,.44f},{.20f,.45f,.44f},{.26f,.44f,.43f},
+      {.32f,.42f,.40f},{.38f,.38f,.37f},{.44f,.30f,.29f},{.49f,.19f,.19f}};
+    std::vector<XMFLOAT3> rings;
+    for(std::size_t row=0;row<profile.size();++row) {
+      rings.push_back(profile[row]);
+      if(mesh==Mesh::Head && row+1<profile.size()) {
+        const auto a=profile[row],b=profile[row+1];
+        rings.push_back({(a.x+b.x)*.5f,(a.y+b.y)*.5f,(a.z+b.z)*.5f});
+      }
+    }
+    auto g=Lathe(rings,mesh==Mesh::Head?64:mesh==Mesh::HeadMedium?24:12);
+    // Continuous bridge, nose tip, cheeks, philtrum and chin. Extra rings are
+    // concentrated around the features; the nose is no longer a floating ball.
     for (auto& v : g.vertices) {
       auto& p=v.position;
       if (p.z>0) {
+        const float front=std::clamp(p.z/.20f,0.f,1.f);
         p.z=std::min(p.z,.34f);
-        const float brow=(p.y-.05f)*8,cheekHeight=p.y*7,cheekWidth=(std::abs(p.x)-.28f)*10;
-        p.z+=.045f*std::exp(-brow*brow);
-        p.z+=.035f*std::exp(-cheekHeight*cheekHeight)*std::exp(-cheekWidth*cheekWidth);
-        const float socketY=(p.y-.09f)*20,socketX=(std::abs(p.x)-.20f)*14;
-        p.z-=.035f*std::exp(-socketY*socketY-socketX*socketX);
+        const auto bump=[](float x,float y) { return std::exp(-x*x-y*y); };
+        p.z+=front*(.035f*bump((std::abs(p.x)-.20f)/.18f,(p.y-.15f)/.065f)
+          +.055f*bump((std::abs(p.x)-.29f)/.14f,(p.y+.055f)/.10f)
+          -.050f*bump((std::abs(p.x)-.20f)/.12f,(p.y-.07f)/.06f)
+          +.105f*bump(p.x/.075f,(p.y-.01f)/.17f)
+          +.180f*bump(p.x/.105f,(p.y+.10f)/.075f)
+          +.040f*bump((std::abs(p.x)-.10f)/.055f,(p.y+.14f)/.05f)
+          -.018f*bump(p.x/.035f,(p.y+.20f)/.06f)
+          +.030f*bump(p.x/.20f,(p.y+.35f)/.075f));
+        const float cheek=bump((std::abs(p.x)-.26f)/.15f,(p.y+.10f)/.13f)*front;
+        const float beard=bump(p.x/.30f,(p.y+.34f)/.17f)*front;
+        v.color={1-.08f*beard,1-.055f*cheek-.11f*beard,1-.055f*cheek-.13f*beard,1};
       }
     }
     Normals(g); return g;
   }
-  if (mesh==Mesh::Boot) {
+  if (mesh==Mesh::Boot || mesh==Mesh::BootLow) {
     auto g=Lathe({{-.5f,.37f,.44f},{-.38f,.44f,.49f},{-.18f,.43f,.47f},{.02f,.36f,.37f},
-      {.19f,.28f,.24f},{.5f,.27f,.24f}},24);
+      {.19f,.28f,.24f},{.5f,.27f,.24f}},mesh==Mesh::Boot?24:12);
     // Flat sole and extended toe; the upper rows form an ankle instead of a ball.
     for (auto& v : g.vertices) v.position.z+=.12f*(.5f-v.position.y);
     Normals(g); return g;
   }
-  if (mesh==Mesh::Sphere) return Lathe(SphereProfile(),24);
+  if (mesh==Mesh::Sphere || mesh==Mesh::SphereLow) return Lathe(SphereProfile(),mesh==Mesh::Sphere?24:12);
+  if (mesh==Mesh::Palm) return Lathe({{-.5f,.28f,.30f},{-.36f,.35f,.40f},{-.12f,.47f,.50f},
+    {.20f,.50f,.43f},{.42f,.48f,.32f},{.5f,.40f,.23f}},12);
+  if (mesh==Mesh::Finger) return Lathe({{-.5f,.35f,.33f},{-.35f,.50f,.47f},{.20f,.46f,.43f},
+    {.40f,.42f,.40f},{.5f,.30f,.28f}},8);
+  if (mesh==Mesh::Feature) return Lathe({{-.5f,.16f,.12f},{-.35f,.38f,.31f},{0,.5f,.5f},
+    {.35f,.38f,.31f},{.5f,.16f,.12f}},12);
   if (mesh==Mesh::Rock) return Lathe(SphereProfile(),12,.24f,.05f);
   if (mesh==Mesh::Trunk) return Lathe({{-.5f,.5f,.5f},{-.4f,.38f,.39f},{0,.25f,.28f},{.4f,.19f,.22f},{.5f,.12f,.14f}},10,.12f,.14f);
-  if (mesh==Mesh::Torso) return Lathe({{-.5f,.39f,.4f},{-.38f,.37f,.38f},{-.26f,.35f,.36f},
+  if (mesh==Mesh::Torso || mesh==Mesh::TorsoLow) return Lathe({{-.5f,.39f,.4f},{-.38f,.37f,.38f},{-.26f,.35f,.36f},
     {-.13f,.36f,.38f},{-.05f,.37f,.4f},{.08f,.45f,.44f},{.22f,.5f,.46f},
-    {.34f,.47f,.4f},{.43f,.35f,.32f},{.5f,.22f,.25f}},24);
-  if (mesh==Mesh::Limb) return Lathe({{-.5f,.24f,.24f},{-.40f,.36f,.36f},{-.25f,.38f,.39f},{-.1f,.4f,.4f},
-    {.08f,.44f,.45f},{.25f,.46f,.46f},{.42f,.42f,.42f},{.5f,.25f,.25f}},20);
+    {.34f,.47f,.4f},{.43f,.35f,.32f},{.5f,.22f,.25f}},mesh==Mesh::Torso?24:12);
+  if (mesh==Mesh::Limb || mesh==Mesh::LimbLow) return Lathe({{-.5f,.24f,.24f},{-.40f,.36f,.36f},{-.25f,.38f,.39f},{-.1f,.4f,.4f},
+    {.08f,.44f,.45f},{.25f,.46f,.46f},{.42f,.42f,.42f},{.5f,.25f,.25f}},mesh==Mesh::Limb?20:10);
   if (mesh==Mesh::Blade) return Lathe({{-.5f,.28f,.16f},{-.35f,.42f,.20f},{.28f,.35f,.15f},{.5f,.02f,.02f}},4);
   if (mesh==Mesh::Crystal) return Lathe({{-.5f,.07f,.06f},{-.25f,.4f,.35f},{.28f,.3f,.29f},{.5f,.04f,.03f}},6,.12f);
   Geometry g;

@@ -337,6 +337,8 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath) {
     std::vector<double> cpu,gpu,updateCpu,renderCpu,submitCpu;
     for (auto* values : {&cpu,&gpu,&updateCpu,&renderCpu,&submitCpu}) values->reserve(600);
     double distance=0; unsigned drawPeak=0,trianglePeak=0,windups=0,hits=0,effectPeak=0,effectFrames=0;
+    std::array<unsigned,visual::bodyLodCount> bodyPeak{};
+    std::array<unsigned,2> attachmentPeak{};
     const rpg::Vec2 route[]={{3,-10},{3,-6},{0,-6},{0,-10}}; unsigned waypoint=0;
     for (int frame=0;frame<690;++frame) {
       if (scene==2 && frame%180==0 && !game_->RestoreSnapshot(combat)) return false;
@@ -362,6 +364,8 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath) {
       submitCpu.push_back(1000.0*double(finish.QuadPart-rendered.QuadPart)/double(frequency.QuadPart));
       if (renderer_->GpuSamples()!=samples) gpu.push_back(renderer_->GpuMilliseconds());
       drawPeak=std::max(drawPeak,renderer_->DrawCalls()); trianglePeak=std::max(trianglePeak,renderer_->Triangles());
+      for(unsigned level=0;level<visual::bodyLodCount;++level) bodyPeak[level]=std::max(bodyPeak[level],renderer_->BodyLodCounts()[level]);
+      for(unsigned i=0;i<2;++i) attachmentPeak[i]=std::max(attachmentPeak[i],renderer_->AttachmentLodCounts()[i]);
       effectPeak=std::max(effectPeak,renderer_->EffectVertices());
       if (renderer_->EffectVertices()>0) ++effectFrames;
       const auto after=game_->State().Player(); distance+=std::hypot(after.x-before.x,after.z-before.z);
@@ -378,6 +382,8 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath) {
       <<"\nCPU submit/present median / p95 ms: "<<percentile(submitCpu,.5)<<" / "<<percentile(submitCpu,.95)
       <<"\nGPU median / p95 ms: "<<percentile(gpu,.5)<<" / "<<percentile(gpu,.95)
       <<"\nPeak submissions / triangles: "<<drawPeak<<" / "<<trianglePeak
+      <<"\nPeak queued bodies near / mid / far: "<<bodyPeak[0]<<" / "<<bodyPeak[1]<<" / "<<bodyPeak[2]
+      <<"\nPeak simplified / omitted attachments: "<<attachmentPeak[0]<<" / "<<attachmentPeak[1]
       <<"\nCombat effect frames / peak vertices: "<<effectFrames<<" / "<<effectPeak
       <<"\nWalked distance / windup frames / received hits: "<<distance<<" / "<<windups<<" / "<<hits<<'\n';
   }

@@ -11,8 +11,11 @@ struct SceneItem {
   SceneInstance instance;
   DirectX::XMFLOAT3 center;
   float radius;
-  unsigned visibility=0;
+  // Reuse the visibility word: character ownership is CPU-only and must not
+  // enlarge cached scenery or the GPU instance layout. 255 means independent.
+  std::uint8_t visibility=0,body=255,maxDetail=2,reserved=0;
 };
+static_assert(sizeof(SceneItem)==180,"Keep the immutable scenery record budget unchanged.");
 class StaticScene {
 public:
   void Invalidate() {

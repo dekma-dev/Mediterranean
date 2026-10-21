@@ -2,6 +2,7 @@
 #include "game/WorldMap.h"
 #include "game/Inventory.h"
 #include <DirectXMath.h>
+#include <cstdint>
 #include "game/Animation.h"
 class Renderer;
 struct CharacterOutfit {
@@ -11,4 +12,4 @@ struct CharacterOutfit {
   static CharacterOutfit From(const rpg::Inventory& inventory);
 };
 void DrawCharacter(Renderer& renderer,rpg::Vec2 position,float base,float yaw,DirectX::XMFLOAT4 color,
-  float swing,float gait,CharacterOutfit outfit = {},animation::Sample dynamics = {});
+  float swing,float gait,CharacterOutfit outfit = {},animation::Sample dynamics = {},std::uint64_t actor=0);
