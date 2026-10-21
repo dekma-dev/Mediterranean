@@ -204,11 +204,12 @@ int main() {
     renderer.BeginFrame(); renderer.SetCamera({0,1,-4},{0,1,0});
     renderer.DrawMesh(visual::Mesh::Box,{0,1,0},{1.6f,1.6f,.3f},{.12f,.12f,.12f,1},visual::Material::Plain);
   };
-  scene(); const auto base=Capture(renderer,L"effects-depth-reference.png"); const auto baseDraws=renderer.LastDrawCalls();
+  scene(); const auto base=Capture(renderer,L"effects-depth-reference.png");
+  const auto baseDraws=renderer.LastDrawCalls()-renderer.CloudLightUpdates();
   scene(); renderer.DrawEffectGlow({0,1,1},.3f,{1,.7f,.2f,1}); const auto hidden=Capture(renderer,L"effects-occluded.png");
   Require(Difference(base,hidden)==0,"Opaque scenery must occlude effects completely");
   scene(); renderer.DrawEffectGlow({0,1,-1},.3f,{1,.7f,.2f,1}); const auto visible=Capture(renderer,L"effects-visible.png");
-  Require(Difference(base,visible)>80 && renderer.LastDrawCalls()==baseDraws+1,"Visible effects need one additional batched draw");
+  Require(Difference(base,visible)>80 && renderer.LastDrawCalls()-renderer.CloudLightUpdates()==baseDraws+1,"Visible effects need one additional batched draw");
   scene(); renderer.DrawEffectRing({0,1,1},.4f,{.1f,.6f,1,1}); const auto hiddenRing=Capture(renderer,L"effects-ring-occluded.png");
   Require(Difference(base,hiddenRing)==0,"Shock rings must obey opaque depth just like sparks");
   scene(); renderer.DrawEffectRing({0,1,-1},.4f,{.1f,.6f,1,1}); const auto ring=Capture(renderer,L"effects-ring-visible.png");

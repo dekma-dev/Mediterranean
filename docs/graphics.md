@@ -1,5 +1,40 @@
 # Procedural graphics and performance budget
 
+## Shared cloud lighting (2026-10-22)
+
+World vertices previously repeated twelve cloud-volume samples each. The renderer now evaluates that same function into a 64-by-64 R32_FLOAT field, then samples it for rigid meshes, bodies and hands. Texel centres are two metres apart across the central 128 metres; vertices beyond the last centres use the original analytic function. The sky volume, shadow maps/filter, materials, meshes, animation, effects and UI quality settings are unchanged.
+
+The field refreshes before the first visible world color pass at a changed cloud phase. It is reused at the same phase across camera changes, resize and multiple flushes. Portrait-only, sky-only and fully culled scenes skip the update. Resources are bound for portrait-first startup, and the vertex SRV is unbound before writing its render target. There is no readback, temporal lag or per-frame allocation. The cache key is valid for the current fixed sun and cloud-coverage parameters; any future mutable sun/coverage settings must also invalidate it.
+
+Cost: **16,384 texture bytes plus a 16-byte constant buffer**, and at most one full-screen triangle per changed phase actually used by a visible world. Material/shadow/terrain/lighting textures total **9,715,696 bytes**. Mesh storage remains 4,113,360 bytes; font/map/UI artwork remain 19,791,764 bytes. Cached static geometry remains 1,280 instances / 230,400 CPU bytes. The new lighting draw is included in submission/triangle statistics; `CloudLightUpdates()` distinguishes it from scene geometry.
+
+Three alternating runs of each Release build, using the existing hidden 1280x720 suite (90 warmup + 600 measured frames per workload), produced these medians of the three reports. The baseline is the Release application at the start of this pass, including the current uncommitted UI/creation work. No build, test or other benchmark was run concurrently with these timing runs.
+
+| Workload | CPU frame median, before → after (ms) | Median reduction | CPU frame p95, before → after (ms) | GPU median, before → after (ms) |
+| --- | --- | --- | --- | --- |
+| Stationary HUD | 1.448 → 0.802 | 44.6% | 3.022 → 1.474 | 1.440 → 0.883 |
+| Walking and orbit | 0.982 → 0.680 | 30.8% | 2.625 → 2.659 | 0.964 → 0.666 |
+| Combat and orbit | 0.895 → 0.578 | 35.4% | 2.409 → 2.411 | 0.888 → 0.568 |
+| Merchant, character and bag | 0.918 → 0.570 | 37.9% | 0.949 → 0.614 | 0.912 → 0.566 |
+
+CPU frame time includes submission/present and waiting on rendering. GPU timestamps are sparse asynchronous observations. **Walking p95 did not improve** (+0.034 ms), and combat p95 was essentially unchanged. These short hidden workloads demonstrate median rendering savings, not guaranteed interactive FPS or elimination of slow frames. The sky shader is still costly in sky-heavy orbit views. The earlier 128-square trial had a larger walking p95 increase; the final field retains its two-metre spacing with one quarter of the texture/update work.
+
+Evidence is under `build-perf-oct22/`: preserved `baseline.exe` and `optimized.exe`, `final-before-{1,2,3}.txt`, `final-compact-{1,2,3}.txt` and `final-summary.json`. Renderer regressions compare analytic/field lighting across the full cloud cycle, both axes/signs of the field boundary, its exterior, resize, invalid time, exact period wrap, portraits and fully culled scenes. `SetCloudLightFieldEnabled(false)` is the diagnostic reference path, not a gameplay quality setting. Manual check 195 covers visible gameplay acceptance.
+
+Final validation: all 34 Debug and Release suites pass, plus four Visual Studio Debug checks (shadow, character selection, launcher UI and interface). Across the 24 cloud phases and field-edge/exterior probes, the maximum analytic/field RGB difference is 1/255 and the worst image mean is 0.000809/255. All 66 paired veteran smoke captures match pixel-for-pixel (`image-comparison.csv`); these include world views, UI, poses, jump phases and multiple sizes. All 13 embedded shader entry points match independent source compilation without diagnostics. These automated checks do not replace visible gameplay acceptance.
+
+Interface artwork (2026-10-22): frame, hall and icon resources add 18,262,592 bytes of mipmapped GPU textures, decoded once through WIC. Font/map/artwork combined remain below 20 MiB. The existing HUD batch selects textures in its shader; no additional per-panel draw pass or texture upload is needed. True vertex-interpolated gradients replace sixteen stacked rectangles per gradient, eliminating visible bands and reducing that geometry from 96 to 6 vertices. This is not a measured FPS claim. See [asset provenance](../assets/ui/README.md).
+
+## Class equipment (2026-10-22)
+
+`ClassEquipment.h` maps the eleven classes to two named equipment tiers and a weapon form. `Geometry.cpp` authors ten original complete weapon meshes in metres around a common grip; the Warrior continues to use the embedded blade OBJ. Fitted collars, flanges, strings, crowns, crystals, stock, barrel and hammer are merged at startup. Meshes have vertex colors and use the existing material system. These are original procedural assets, not imported reference art or a replacement for authored UV materials.
+
+The class weapon meshes total **399,840 vertex/index bytes and 7,880 triangles**, with 340–1,160 triangles per form. The renderer's weight streams add another 244,224 bytes, bringing the incremental GPU allocation to **644,064 bytes (629 KiB)** and total immutable mesh storage to **4,113,360 bytes**. The separate equipment budget is 416 KiB / 8,500 triangles; the existing 640 KiB / 16,000-triangle scene-prop budget is retained. Each non-sword weapon submits one cached mesh instead of four assembled weapon parts. Textures, shadow maps and skin palettes are unchanged. Higher-detail weapons increase triangle cost; no frame-rate gain is claimed.
+
+The same class/outfit and weapon frame feed world, roster, C portrait, gripping hands and physical release sockets. Staffs and focuses are carried upright, launchers lower at rest and aim through the action channel, and mace/cleaver effects end at their actual tip lengths. Scout's quick offhand preparation is reduced relative to the heavy brace. Shield-bearing launchers keep their guarding hand instead of reaching across the weapon. Physical traces and the pistol muzzle flash reuse the bounded effect buffer; they are presentation for the existing timed-hit simulation, not independent ballistic projectiles. Bow and pistol cues add 42,336 PCM bytes; the complete bank plus music remains under 2 MiB.
+
+`ClassEquipmentTests` exercises both tiers for every class, migration, equip/remove, sale/buyback, unarmed rejection, pre/post-release equipment changes, four refresh rates, world/portrait/roster rendering and actual combat views (46 captures). Geometry checks cover normals/winding and budgets; pose checks include jump, landing, dash and shield layers. Skinned triangle-interior samples retain at least 3.64 mm against the fitted grip envelope. Existing ActionClipTests retains its strict continuity limits and 44 pose captures. Live acceptance is manual checks 183–185. Class clothing, final character art, weapon LOD, authored textures and fuller interaction/reload animations remain future work.
+
 ## Class action presentation (2026-10-21)
 
 `ActionClips.h` adds original preparation/release/follow-through curves and class restoration gestures over the existing body/hand rig. Basic ranged attacks use smaller travel than heavy casts; Warrior retains its established base clips. Cancellation blends out for 160 ms, and the wrist solve avoids shortest-rotation seams. Spell traces start at the solved palm or shield face and arrive on ground-level enemy capsules when cast in flight. No meshes, textures, palettes or render passes were added. The change adds small fixed CPU pose records and a cached origin in each of the existing 32 effect slots; no heap allocation occurs during clip sampling. This pass does not claim a measured FPS improvement.

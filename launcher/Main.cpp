@@ -1,8 +1,10 @@
 #include "launcher/LaunchSupport.h"
+#include "game/UiSkin.h"
 #include <gdiplus.h>
 #include <shellapi.h>
 #include <shlwapi.h>
 #include <uxtheme.h>
+#include <commctrl.h>
 #include <algorithm>
 #include <cmath>
 #include <memory>
@@ -12,7 +14,7 @@ namespace {
 using namespace Gdiplus;
 constexpr int Play=1001,Display=1002,Size=1003,Guide=1005,Saves=1006;
 constexpr float canvasWidth=940,canvasHeight=590;
-const Color background(255,24,24,18),panel(255,32,38,29),gold(255,211,179,111),ink(255,235,236,225),muted(255,159,178,181);
+const Color background(255,24,24,18),panel(255,29,25,22),gold(255,211,179,111),ink(255,242,228,201),muted(255,191,177,153);
 void Text(Graphics& g,const wchar_t* text,float x,float y,float width,float height,float size,Color color,const wchar_t* family=L"Segoe UI",INT style=FontStyleRegular) {
   Font font(family,size,style,UnitPixel);SolidBrush brush(color);StringFormat format;
   format.SetTrimming(StringTrimmingEllipsisCharacter);
@@ -26,7 +28,7 @@ public:
     game_=directory_/L"RPGNative.exe";settings_=directory_/L"launcher-settings.ini";
     gameName_=launch::InstanceName(directory_,L"game");
     if(!launch::LoadSettings(settings_,options_)) status_=L"Saved launch settings could not be read. Defaults are selected.";
-    brush_=CreateSolidBrush(RGB(23,33,39));
+    brush_=CreateSolidBrush(RGB(29,25,22));
     WNDCLASSEXW wc{sizeof(wc)};wc.lpfnWndProc=Procedure;wc.hInstance=instance;wc.lpszClassName=L"MediterraneanLauncherWindow";
     wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);wc.hIcon=LoadIconW(nullptr,IDI_APPLICATION);
     if(!RegisterClassExW(&wc) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) return false;
@@ -43,16 +45,23 @@ public:
     guide_=make(L"BUTTON",L"Game &guide",Guide,BS_OWNERDRAW);
     saves_=make(L"BUTTON",L"&Saves folder",Saves,BS_OWNERDRAW);
     if(!display_ || !size_ || !play_ || !guide_ || !saves_) return false;
+    for(auto control:{display_,size_}) {
+      SetWindowTheme(control,L"",L"");
+      if(!SetWindowSubclass(control,ComboProcedure,1,reinterpret_cast<DWORD_PTR>(this))) return false;
+    }
     for(const wchar_t* item:{L"Borderless fullscreen",L"Windowed"}) SendMessageW(display_,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(item));
     for(const auto& resolution:launch::resolutions) SendMessageW(size_,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(resolution.label));
     SendMessageW(display_,CB_SETCURSEL,options_.fullscreen?0:1,0);SendMessageW(size_,CB_SETCURSEL,options_.resolution,0);
     options_.resume=false; // Character selection owns the saved-journey choice.
-    const auto resource=FindResourceW(instance,MAKEINTRESOURCEW(101),RT_RCDATA);
-    if(resource) {
-      const auto data=LoadResource(instance,resource);
-      stream_.reset(SHCreateMemStream(static_cast<const BYTE*>(LockResource(data)),SizeofResource(instance,resource)));
-      if(stream_) {art_=std::make_unique<Bitmap>(stream_.get());if(art_->GetLastStatus()!=Ok) art_.reset();}
-    }
+    const auto load=[&](unsigned id,auto& stream,auto& bitmap) {
+      const auto resource=FindResourceW(instance,MAKEINTRESOURCEW(id),RT_RCDATA);
+      const auto data=resource?LoadResource(instance,resource):nullptr;
+      if(!data) return false;
+      stream.reset(SHCreateMemStream(static_cast<const BYTE*>(LockResource(data)),SizeofResource(instance,resource)));
+      if(!stream) return false;
+      bitmap=std::make_unique<Bitmap>(stream.get());return bitmap->GetLastStatus()==Ok;
+    };
+    if(!load(202,stream_,art_) || !load(201,frameStream_,frame_)) return false;
     MONITORINFO monitor{sizeof(monitor)};GetMonitorInfoW(MonitorFromWindow(window_,MONITOR_DEFAULTTONEAREST),&monitor);
     const float scale=std::min({GetDpiForWindow(window_)/96.f,(monitor.rcWork.right-monitor.rcWork.left-24)/canvasWidth,(monitor.rcWork.bottom-monitor.rcWork.top-64)/canvasHeight});
     Resize(std::max(.65f,scale),true);Refresh();SetTimer(window_,1,500,nullptr);
@@ -92,7 +101,7 @@ private:
   struct ReleaseStream {void operator()(IStream* value) const {if(value) value->Release();}};
   HWND window_=nullptr,display_=nullptr,size_=nullptr,play_=nullptr,guide_=nullptr,saves_=nullptr;
   HFONT font_=nullptr;HBRUSH brush_=nullptr;
-  std::unique_ptr<IStream,ReleaseStream> stream_;std::unique_ptr<Bitmap> art_;
+  std::unique_ptr<IStream,ReleaseStream> stream_,frameStream_;std::unique_ptr<Bitmap> art_,frame_;
   std::filesystem::path directory_,game_,settings_;
   launch::Options options_;launch::Process process_;
   std::wstring gameName_,status_=L"Ready to enter Dawnwatch.";
@@ -155,56 +164,69 @@ private:
       status_=folder?L"Could not open the saves folder.":L"Could not open the guide. Read START_AND_DEBUG.md in the project folder.";InvalidateRect(window_,nullptr,FALSE);
     }
   }
+  void Skin(Graphics& g,RectF box,float corner,bool center=true) {
+    if(!frame_) return;
+    g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+    ImageAttributes attributes;attributes.SetWrapMode(WrapModeTileFlipXY);
+    ui::skin::Panel(box.X,box.Y,box.Width,box.Height,corner,[&](float x,float y,float w,float h,float u,float v,float uu,float vv) {
+      g.DrawImage(frame_.get(),RectF(x,y,w,h),u*frame_->GetWidth(),v*frame_->GetHeight(),
+        (uu-u)*frame_->GetWidth(),(vv-v)*frame_->GetHeight(),UnitPixel,&attributes);
+    },center);
+  }
   void Paint(HDC dc) {
     Graphics g(dc);g.ScaleTransform(scale_,scale_);g.SetSmoothingMode(SmoothingModeAntiAlias);g.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
-    SolidBrush base(background),card(panel),goldBrush(gold);g.FillRectangle(&base,0.f,0.f,canvasWidth,canvasHeight);
-    Pen trim(Color(255,75,79,63),1);g.DrawLine(&trim,24.f,88.f,916.f,88.f);
-    // Incised bronze borders and leather grain drawn at logical DPI scale.
-    const auto frame=[&](float x,float y,float w,float h) {
-      Pen shadow(Color(255,8,12,9),5),metal(Color(255,117,96,53),2),light(Color(255,199,173,105),.7f);
-      g.DrawRectangle(&shadow,x,y,w,h);g.DrawRectangle(&metal,x,y,w,h);g.DrawRectangle(&light,x+4,y+4,w-8,h-8);
-      for(int n=0;n<42;++n) {
-        const float px=x+8+(w-16)*n/42,grain=std::fmod(n*1.731f,1.f);
-        g.DrawLine(&light,px,y+2,px+2+grain*4,y+3);g.DrawLine(&light,px,y+h-3,px+2,y+h-2);
-      }
-      for(float side:{0.f,1.f}) for(float bottom:{0.f,1.f}) {
-        const float cx=x+side*w,cy=y+bottom*h,sx=side?-1.f:1.f,sy=bottom?-1.f:1.f;
-        for(int n=0;n<3;++n) {
-          const float d=10+n*6.f;g.DrawLine(&metal,cx+sx*3,cy+sy*d,cx+sx*d,cy+sy*3);
-          g.DrawArc(&light,cx+(side?-25.f:1.f),cy+(bottom?-25.f:1.f),24.f,24.f,side?90.f:0.f,220.f);
-        }
-        SolidBrush stud(Color(255,154,120,63));g.FillEllipse(&stud,cx-3,cy-3,6.f,6.f);
-      }
-    };
-    for(int n=0;n<220;++n) {
-      const float x=std::fmod(n*71.7f,canvasWidth),y=std::fmod(n*43.3f,canvasHeight);
-      Pen grain(Color(18,175,145,92),.6f);g.DrawLine(&grain,x,y,x+3+float(n%7),y+1);
-    }
-    frame(9,9,922,572);
-    Text(g,L"MEDITERRANEAN",30,20,650,40,31,gold,L"Georgia");Text(g,L"A S T R A L   F R O N T I E R",32,61,570,19,11,muted);
-    Text(g,L"OFFLINE  /  SINGLE PLAYER",696,42,220,20,11,muted);
-    g.FillRectangle(&card,24.f,108.f,558.f,404.f);g.FillRectangle(&card,610.f,108.f,306.f,404.f);
-    if(art_) {g.SetInterpolationMode(InterpolationModeHighQualityBicubic);g.DrawImage(art_.get(),RectF(24,108,558,314));}
-    LinearGradientBrush shade(Point(0,245),Point(0,423),Color(0,10,20,26),Color(245,10,20,26));g.FillRectangle(&shade,24,245,558,178);
-    frame(24,108,558,404);frame(610,108,306,404);
-    Text(g,L"DAWNWATCH",45,331,510,46,32,ink,L"Georgia");Text(g,L"Your journey begins on the astral frontier.",47,378,495,27,15,ink);
-    Text(g,L"ELEVEN CALLINGS. ONE FRONTIER.",43,441,515,24,12,gold,L"Segoe UI",FontStyleBold);
-    Text(g,L"Choose your class, master its disciplines and defend Dawnwatch.\nNine assignments. Ten levels. Your own chronicle.",43,472,519,38,13,muted);
-    Text(g,L"START YOUR JOURNEY",635,131,255,30,18,ink,L"Georgia");
-    Text(g,L"Display mode",636,185,250,22,13,muted);Text(g,L"Window size (fits desktop)",636,258,250,22,13,muted);
-    Text(g,L"CHOOSE YOUR CHARACTER",636,337,255,22,12,gold);
-    Text(g,saveAvailable_?L"Review your saved hero in the game,\nthen select Enter World.":L"Meet your first hero in the game,\nthen select Enter World.",636,369,255,34,12,muted);
-    g.DrawLine(&trim,24.f,532.f,916.f,532.f);
-    const wchar_t* state=!available_?L"GAME BUILD MISSING":busy_?L"GAME RUNNING":L"READY";
-    const auto stateColor=!available_?Color(255,236,164,136):busy_?gold:Color(255,151,211,175);
-    Text(g,state,31,548,175,21,12,stateColor,L"Segoe UI",FontStyleBold);
+    SolidBrush base(background);g.FillRectangle(&base,0.f,0.f,canvasWidth,canvasHeight);
+    if(art_) {g.SetInterpolationMode(InterpolationModeHighQualityBicubic);g.DrawImage(art_.get(),RectF(10,10,920,570));}
+    LinearGradientBrush shade(RectF(10,10,920,150),Color(240,10,9,8),Color(0,10,9,8),LinearGradientModeVertical);
+    shade.SetWrapMode(WrapModeTileFlipXY);g.FillRectangle(&shade,10,10,920,150);
+    Skin(g,RectF(9,9,922,572),42,false);
+    Text(g,L"MEDITERRANEAN",45,29,650,45,34,gold,L"Georgia");
+    Text(g,L"T H E   D A W N W A T C H   C H R O N I C L E",47,76,530,22,11,ink,L"Georgia");
+    Skin(g,RectF(610,118,298,406),30);
+    Skin(g,RectF(636,102,247,42),19);
+    Text(g,L"Prepare your journey",654,113,218,27,17,ink,L"Georgia");
+    Text(g,L"I.   DISPLAY",636,180,250,24,12,gold,L"Georgia");
+    Text(g,L"II.  WINDOW SIZE",636,256,250,24,12,gold,L"Georgia");
+    Text(g,L"THE HERO'S CHRONICLE",636,337,255,22,12,gold,L"Georgia");
+    Text(g,saveAvailable_?L"Your saved heroes await in the hall.\nChoose a character after launching.":L"Eleven callings await in the hall.\nCreate a hero after launching.",636,369,249,35,12,ink);
+    Skin(g,RectF(42,390,540,132),28);
+    Text(g,L"DAWNWATCH",64,408,480,42,29,gold,L"Georgia");
+    Text(g,L"At the edge of the known world, your chronicle begins.",66,453,490,26,15,ink,L"Georgia");
+    Text(g,L"Eleven classes  /  Nine assignments  /  Ten levels",66,489,490,24,12,muted);
+    Skin(g,RectF(29,537,882,33),12);
+    const wchar_t* state=!available_?L"BUILD MISSING":busy_?L"GAME RUNNING":L"READY TO PLAY";
+    const auto stateColor=!available_?Color(255,246,157,117):busy_?gold:Color(255,179,210,156);
+    Text(g,state,45,547,158,19,11,stateColor,L"Segoe UI",FontStyleBold);
     const auto status=!available_?L"Build RPGNative.exe beside MediterraneanLauncher.exe, then try again.":status_.c_str();
-    Text(g,status,216,545,686,34,12,muted);
+    Text(g,status,216,546,672,21,11,ink);
+    Text(g,L"LOCAL CAMPAIGN",735,57,165,22,11,gold,L"Georgia");
+  }
+  void ComboChrome(HWND control,HDC dc) {
+    COMBOBOXINFO info{sizeof(info)};RECT client{};
+    if(!GetComboBoxInfo(control,&info) || !GetClientRect(control,&client)) return;
+    Graphics g(dc);g.SetSmoothingMode(SmoothingModeAntiAlias);
+    const bool enabled=IsWindowEnabled(control)!=FALSE;
+    Pen border(enabled?gold:muted,std::max(1.f,scale_));
+    g.DrawRectangle(&border,scale_*.5f,scale_*.5f,client.right-scale_,client.bottom-scale_);
+    const RectF arrow(float(info.rcButton.left),float(info.rcButton.top),float(info.rcButton.right-info.rcButton.left),float(info.rcButton.bottom-info.rcButton.top));
+    Skin(g,arrow,6*scale_);
+    const float x=arrow.X+arrow.Width*.5f,y=arrow.Y+arrow.Height*.5f;
+    PointF points[]={{x-4*scale_,y-2*scale_},{x+4*scale_,y-2*scale_},{x,y+3*scale_}};
+    SolidBrush goldBrush(enabled?gold:muted);g.FillPolygon(&goldBrush,points,3);
+  }
+  static LRESULT CALLBACK ComboProcedure(HWND control,UINT message,WPARAM wparam,LPARAM lparam,UINT_PTR id,DWORD_PTR data) {
+    auto* self=reinterpret_cast<Launcher*>(data);
+    const auto result=DefSubclassProc(control,message,wparam,lparam);
+    if(message==WM_PAINT) {
+      const auto dc=GetDC(control);if(dc){self->ComboChrome(control,dc);ReleaseDC(control,dc);}
+    } else if(message==WM_PRINT || message==WM_PRINTCLIENT) self->ComboChrome(control,reinterpret_cast<HDC>(wparam));
+    else if(message==WM_NCDESTROY) RemoveWindowSubclass(control,ComboProcedure,id);
+    return result;
   }
   void DrawButton(const DRAWITEMSTRUCT& item) {
     Graphics g(item.hDC);g.SetSmoothingMode(SmoothingModeAntiAlias);g.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
     if(item.CtlType==ODT_COMBOBOX) {
-      SolidBrush fill(item.itemState&ODS_SELECTED?Color(255,54,70,75):panel);
+      SolidBrush fill(item.itemState&ODS_SELECTED?Color(255,85,55,31):panel);
       g.FillRectangle(&fill,item.rcItem.left,item.rcItem.top,item.rcItem.right-item.rcItem.left,item.rcItem.bottom-item.rcItem.top);
       wchar_t label[96]{};
       if(item.itemID!=UINT(-1)) SendMessageW(item.hwndItem,CB_GETLBTEXT,item.itemID,reinterpret_cast<LPARAM>(label));
@@ -216,10 +238,9 @@ private:
     }
     const bool primary=item.CtlID==Play,disabled=(item.itemState&ODS_DISABLED)!=0,pressed=(item.itemState&ODS_SELECTED)!=0;
     const RectF box(float(item.rcItem.left),float(item.rcItem.top),float(item.rcItem.right-item.rcItem.left),float(item.rcItem.bottom-item.rcItem.top));
-    const Color first=disabled?Color(255,48,57,59):primary?Color(255,116,99,54):Color(255,39,52,57);
-    const Color last=disabled?Color(255,37,44,47):primary?Color(255,64,62,36):Color(255,26,38,44);
-    LinearGradientBrush fill(box,pressed?last:first,pressed?first:last,LinearGradientModeVertical);g.FillRectangle(&fill,box);
-    Pen border(disabled?Color(255,72,81,81):primary?gold:Color(255,82,102,105),1);g.DrawRectangle(&border,box.X+.5f,box.Y+.5f,box.Width-1,box.Height-1);
+    Skin(g,box,std::min(18.f*scale_,box.Height*.32f));
+    SolidBrush wash(disabled?Color(150,18,17,16):primary?Color(pressed?180:155,111,12,19):Color(pressed?125:65,47,54,47));
+    g.FillRectangle(&wash,box.X+5*scale_,box.Y+5*scale_,box.Width-10*scale_,box.Height-10*scale_);
     const wchar_t* label=primary?(busy_?L"GAME RUNNING":L"PLAY"):item.CtlID==Guide?L"Game guide":L"Saves folder";
     Font font(primary?L"Georgia":L"Segoe UI",(primary?22:12)*scale_,FontStyleRegular,UnitPixel);SolidBrush foreground(disabled?muted:ink);StringFormat format;
     format.SetAlignment(StringAlignmentCenter);format.SetLineAlignment(StringAlignmentCenter);g.DrawString(label,-1,&font,box,&format,&foreground);
@@ -268,7 +289,7 @@ private:
       case WM_DRAWITEM: self->DrawButton(*reinterpret_cast<DRAWITEMSTRUCT*>(lparam));return TRUE;
       case WM_CTLCOLORSTATIC:
       case WM_CTLCOLORLISTBOX:
-      case WM_CTLCOLORBTN: SetTextColor(reinterpret_cast<HDC>(wparam),RGB(235,236,225));SetBkColor(reinterpret_cast<HDC>(wparam),RGB(23,33,39));return reinterpret_cast<LRESULT>(self->brush_);
+      case WM_CTLCOLORBTN: SetTextColor(reinterpret_cast<HDC>(wparam),RGB(242,228,201));SetBkColor(reinterpret_cast<HDC>(wparam),RGB(29,25,22));return reinterpret_cast<LRESULT>(self->brush_);
       case WM_COMMAND:
         switch(LOWORD(wparam)) {
           case Play: case IDOK: self->Start();break;

@@ -70,7 +70,7 @@ void ClassCombat(const std::string& veteran) {
    const auto target=s.TargetActor()->id;const auto maximum=s.TargetActor()->health;
    const float damage=s.HeavyDamage();int cast=0,hit=0,castSound=0;
    const auto observe=[&] {
-    sound::Events audio;audio.Update(s);for(unsigned n=0;n<audio.count;++n) castSound+=audio.cues[n]==sound::Cue::Cast;
+    sound::Events audio;audio.Update(s);for(unsigned n=0;n<audio.count;++n) castSound+=audio.cues[n]==(ClassId(id)==ClassId::Scout?sound::Cue::Bow:ClassId(id)==ClassId::Engineer?sound::Cue::Pistol:sound::Cue::Cast);
     for(std::size_t n=0;n<s.VisualEventCount();++n) {
      const auto& event=s.VisualEvents()[n];
      if(event.kind==CombatVisualKind::SpellCast) {

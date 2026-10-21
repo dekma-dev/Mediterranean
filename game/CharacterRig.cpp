@@ -50,7 +50,9 @@ visual::BodyPalette BuildCharacterRig(const CharacterPose& pose,const CharacterO
       store(first+segment,XMLoadFloat4x4(&rest.inverse)*posedFrame,XMLoadFloat4x4(&rest.normal)*posedNormal);
     }
   }
-  const XMFLOAT4 skin{.72f,.51f,.35f,float(visual::Material::Skin)},steel{.52f,.59f,.61f,float(visual::Material::Metal)},
+  const auto& tone=rpg::skinTones[outfit.appearance.skin];
+  if(outfit.appearance.dye!=0) {const auto& dye=rpg::tunicDyes[outfit.appearance.dye];cloth={dye.r,dye.g,dye.b,1};}
+  const XMFLOAT4 skin{tone.r,tone.g,tone.b,float(visual::Material::Skin)},steel{.52f,.59f,.61f,float(visual::Material::Metal)},
     leather{.20f,.14f,.095f,float(visual::Material::Cloth)},trousers{.24f,.25f,.23f,float(visual::Material::Cloth)};
   cloth.w=float(visual::Material::Cloth);
   if(!outfit.tunic) cloth={.61f,.58f,.46f,float(visual::Material::Cloth)};

@@ -1,5 +1,7 @@
 # Authoring static equipment meshes
 
+Class weapon extension (2026-10-22): the Warrior blade below remains the editable OBJ example. The other ten class weapon meshes are original code-authored geometry in `engine/Geometry.cpp` (`Equipment`), selected through `game/WeaponVisual.h`. They use grip-local metres: +Y along the haft, +Z along the launcher barrel/bolt rail, grip at the origin. Keep the shaft inside the tested 25.6 mm radius envelope through the hand; launcher release sockets are shared with `HandPose.cpp`. Changes must pass ClassEquipmentTests, GeometryTests and ActionClipTests. Weapon meshes are generated once at startup, not per frame. Their separate budget and current costs are recorded in `graphics.md`; skeletal/animation import remains open.
+
 The first asset pipeline imports a triangulated OBJ during the native build and embeds its vertices and indices in the executable. The game still uses our C++ / DirectX 11 renderer. No model editor, library or asset is downloaded by the build.
 
 ## Edit the blade

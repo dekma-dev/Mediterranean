@@ -45,7 +45,7 @@ DirectX::XMFLOAT3 CharacterPose::HeadPoint(DirectX::XMFLOAT3 point) const {
   DirectX::XMStoreFloat3(&result,DirectX::XMVector3TransformCoord(DirectX::XMLoadFloat3(&point),HeadTransform()));
   return result;
 }
-CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::Sample dynamics) {
+CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::Sample dynamics,rpg::WeaponForm form) {
   using namespace DirectX;
   swing=std::isfinite(swing)?std::clamp(swing,0.f,1.f):0;
   gait=std::isfinite(gait)?std::clamp(gait,-1.f,1.f):0;
@@ -160,8 +160,13 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     // The free hand opens forward while the weapon arm lifts clear of the cast.
     const XMFLOAT3 spellHand{i==0?-.29f:.43f,i==0?1.39f:1.19f,i==0?.40f:.23f};
     hand.x+=(spellHand.x-hand.x)*cast; hand.y+=(spellHand.y-hand.y)*cast; hand.z+=(spellHand.z-hand.z)*cast;
-    const auto offset=i==0?action.left:action.right;
+    auto offset=i==0?action.left:action.right;
+    if(i==0 && shield && rpg::PhysicalLauncher(form)) offset=offset*.15f;
     hand.x+=offset.x; hand.y+=offset.y; hand.z+=offset.z;
+    if(i==1 && rpg::PhysicalLauncher(form)) {
+      hand.y+=.20f*animation::Unit(action.aim);hand.z+=.20f*animation::Unit(action.aim);
+      if(form==rpg::WeaponForm::Handbow) hand.x-=.12f*animation::Unit(action.aim);
+    }
     pose.arms[i]=Solve(pose.UpperPoint({side*.305f,1.43f,0}),pose.UpperPoint(hand),
       pose.UpperDirection({side*.8f,-.2f,-1}),CharacterPose::upperArm,CharacterPose::forearm);
   }
@@ -181,6 +186,12 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
       (a*std::sin((1-weight)*angle)+b*std::sin(weight*angle))/std::sin(angle):a;
     XMStoreFloat3(&weapon,blended);
   }
+  if(rpg::StaffWeapon(form)) weapon={.10f,.99f,.04f+dash*.18f};
+  else if(rpg::PhysicalLauncher(form)) {
+    const float aim=animation::Unit(action.aim);
+    weapon={0,.75f+.25f*aim,.66f*(1-aim)};
+  } else if(form==rpg::WeaponForm::Scepter || form==rpg::WeaponForm::Focus || form==rpg::WeaponForm::Baton)
+    weapon={.08f,.93f,.32f+dash*.15f};
   const auto direction=pose.UpperDirection(weapon);
   XMStoreFloat3(&pose.weaponDirection,XMVector3Normalize(XMLoadFloat3(&direction)));
   return pose;

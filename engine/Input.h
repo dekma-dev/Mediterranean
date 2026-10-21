@@ -6,6 +6,7 @@ public:
   // Sample the platform once; transitions are also testable without desktop input.
   struct Frame {
     bool focused=false;
+    bool capsLock=false;
     std::array<bool,256> down{};
     POINT screen{},client{};
     int width=1280,height=720;
@@ -14,6 +15,7 @@ public:
   };
   void Update(HWND window,bool relativeMouse=false,float mouseX=0,float mouseY=0) {
     Frame frame; frame.focused=GetForegroundWindow()==window;
+    frame.capsLock=(GetKeyState(VK_CAPITAL)&1)!=0;
     frame.relativeMouse=relativeMouse; frame.mouseX=mouseX; frame.mouseY=mouseY;
     for (int key=0;key<256;++key) frame.down[key]=(GetAsyncKeyState(key)&0x8000)!=0;
     GetCursorPos(&frame.screen); frame.client=frame.screen; ScreenToClient(window,&frame.client);
@@ -21,7 +23,7 @@ public:
     Update(frame);
   }
   void Update(const Frame& frame) {
-    const bool focused=frame.focused;
+    const bool focused=frame.focused;capsLock_=frame.capsLock;
     for (int key = 0; key < 256; ++key) {
       const bool down = focused && frame.down[key];
       pressed_[key] = wasFocused_ && down && !held_[key];
@@ -49,6 +51,7 @@ public:
   }
   bool Held(int key) const { return held_[key]; }
   bool Focused() const { return wasFocused_; }
+  bool CapsLock() const { return capsLock_; }
   bool Pressed(int key) const { return pressed_[key]; }
   bool Released(int key) const { return released_[key]; }
   float MouseX() const { return dx_; }
@@ -62,5 +65,5 @@ private:
   POINT previous_{};
   float dx_ = 0, dy_ = 0;
   float clientX_ = -1, clientY_ = -1,width_ = 1280,height_ = 720;
-  bool wasFocused_ = false, dragging_ = false,wasRelative_=false;
+  bool wasFocused_ = false, dragging_ = false,wasRelative_=false,capsLock_=false;
 };

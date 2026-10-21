@@ -1,6 +1,6 @@
 #pragma once
 #include "game/AttackMotion.h"
-#include "game/Classes.h"
+#include "game/ClassEquipment.h"
 #include <array>
 
 namespace animation {
@@ -12,13 +12,13 @@ inline ActionVector operator-(ActionVector a,ActionVector b) { return {a.x-b.x,a
 inline ActionVector operator*(ActionVector a,float t) { return {a.x*t,a.y*t,a.z*t}; }
 struct ActionChannels {
   ActionVector left,right;
-  float pitch=0,yaw=0,roll=0,hip=0,open=0;
+  float pitch=0,yaw=0,roll=0,hip=0,open=0,aim=0;
 };
 inline ActionChannels operator+(ActionChannels a,ActionChannels b) {
-  return {a.left+b.left,a.right+b.right,a.pitch+b.pitch,a.yaw+b.yaw,a.roll+b.roll,a.hip+b.hip,a.open+b.open};
+  return {a.left+b.left,a.right+b.right,a.pitch+b.pitch,a.yaw+b.yaw,a.roll+b.roll,a.hip+b.hip,a.open+b.open,a.aim+b.aim};
 }
 inline ActionChannels operator*(ActionChannels a,float t) {
-  return {a.left*t,a.right*t,a.pitch*t,a.yaw*t,a.roll*t,a.hip*t,a.open*t};
+  return {a.left*t,a.right*t,a.pitch*t,a.yaw*t,a.roll*t,a.hip*t,a.open*t,a.aim*t};
 }
 inline ActionChannels operator-(ActionChannels a,ActionChannels b) { return a+b*-1.f; }
 enum class ActionClip { Basic,Heavy,Restore };
@@ -26,8 +26,8 @@ struct ClassActionClip {
   const char* name;
   ActionChannels prepare,release,follow;
 };
-// The equipped prototype blade remains held by the right hand. These are
-// class gestures, not bow/rifle/instrument simulations; those need real items.
+// Authored class gestures share the arm solve and the equipped right-hand
+// socket. Physical launchers add a continuous aim channel at accepted release.
 inline const std::array<ClassActionClip,int(rpg::ClassId::Count)> classActionClips={{
   {"Guarded cut",{},{},{}}, // Warrior retains the established contact stroke.
   {"Templar weight",{{0,.03f,-.025f},{.025f,.04f,-.02f},-.025f,-.035f,0,-.012f},
@@ -85,6 +85,16 @@ inline ActionChannels SampleAction(rpg::ClassId id,ActionClip clip,float seconds
     ready=ready*.32f; cast=cast*.60f; settle=settle*.55f;
     ready.open*=.75f; cast.open*=.75f; settle.open*=.75f;
   }
+  if(!restore && rpg::PhysicalLauncher(rpg::WeaponFor(id).form)) {
+    ready.aim=.85f;cast.aim=1;settle.aim=.85f;
+    ready.open=cast.open=settle.open=.08f;
+    if(id==rpg::ClassId::Scout) {
+      ready.left={.28f,.15f,.20f};cast.left={.45f,.23f,.29f};settle.left={.36f,.19f,.22f};
+      if(!heavy) {ready.left=ready.left*.30f;cast.left=cast.left*.65f;settle.left=settle.left*.65f;}
+    } else {
+      ready.left={-.02f,.035f,0};cast.left={-.035f,.06f,.025f};settle.left={-.025f,.035f,0};
+    }
+  }
   const std::array<ActionChannels,5> keys{{{},ready,cast,settle,{}}};
   unsigned segment=0; while(segment<3 && seconds>times[segment+1]) ++segment;
   const float interval=times[segment+1]-times[segment],t=(seconds-times[segment])/interval;
@@ -96,6 +106,7 @@ inline ActionChannels SampleAction(rpg::ClassId id,ActionClip clip,float seconds
   const float t2=t*t,t3=t2*t;
   auto result=a*(2*t3-3*t2+1)+ma*(t3-2*t2+t)+b*(-2*t3+3*t2)+mb*(t3-t2);
   result.open=std::clamp(result.open,0.f,1.f);
+  result.aim=std::clamp(result.aim,0.f,1.f);
   return result;
 }
 struct ActionController {

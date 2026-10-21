@@ -7,6 +7,8 @@
 #include "game/Trade.h"
 #include "game/Talents.h"
 #include "game/Classes.h"
+#include "game/Appearance.h"
+#include "game/ClassEquipment.h"
 #include "game/Quests.h"
 #include "game/Motion.h"
 #include "game/AttackMotion.h"
@@ -81,7 +83,8 @@ struct CombatVisualEvent {
 class Simulation {
 public:
   Simulation();
-  bool CreateCharacter(ClassId id,const std::string& nickname);
+  bool CreateCharacter(ClassId id,const std::string& nickname,Appearance look={});
+  const Appearance& Look() const { return appearance_; }
   ClassId Class() const { return class_; }
   const ClassInfo& ClassInfo() const { return DescribeClass(class_); }
   TalentInfo TalentDefinition(int index) const { return ClassTalent(class_,index); }
@@ -148,6 +151,7 @@ public:
   bool HasWardArmor() const { return anchorQuest_==AnchorQuest::Complete; }
   bool WardArmorEquipped() const { return inventory_.Worn(GearSlot::Chest)==Item::Ward; }
   const Inventory& Items() const { return inventory_; }
+  ItemInfo ItemDefinition(Item item) const { return DescribeClassItem(item,class_); }
   float DamageReduction() const;
   const std::vector<CombatFeedback>& Feedback() const { return feedback_; }
   float HurtFlash() const { return hurtFlash_; }
@@ -205,6 +209,7 @@ private:
   void PrepareFrontierEnemies(int rank);
   ClassId class_=ClassId::Warrior;
   std::string nickname_="Frontier guard";
+  Appearance appearance_;
   void Move(Vec2& position, Vec2 displacement, float radius);
   void SelectTarget();
   enum class DashCheck { Ready, NoTarget, Returning, TooClose, TooFar, Blocked };

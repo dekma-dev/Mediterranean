@@ -285,6 +285,7 @@ int main() {
   const bool initialized=renderer.Initialize(window.GetHandle(),1280,720);
   if (!initialized) std::wcerr<<renderer.Error()<<L'\n';
   Require(initialized,"screen renderer initialization failed.");
+  Require(renderer.InterfaceBytes()<20*1024*1024,"Interface artwork exceeds its 20 MiB texture budget.");
   InterruptedInputRegressions(window,renderer);
   // Quest conversations keep rewards/objectives visible and paginate all prose.
   for (const auto size : {std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
@@ -370,13 +371,13 @@ int main() {
     Require(game.EnemyPose(0).attack==0,"A defeated save must load with a neutral enemy attack pose.");
     renderer.BeginFrame(); game.Render(renderer,false);
     Require(renderer.EndFrame(false),"Defeated windup render failed.");
-    const auto triangles=renderer.Triangles();
+    const auto triangles=renderer.Triangles()-renderer.CloudLightUpdates();
     const auto windup=snapshot.find("1 0.5 3.14159"); Require(windup!=std::string::npos,"Expected pending enemy swing.");
     snapshot.replace(windup,std::string("1 0.5 3.14159").size(),"1 0 3.14159");
     Require(game.RestoreSnapshot(snapshot),"Defeated neutral fixture must load.");
     renderer.BeginFrame(); game.Render(renderer,false);
     Require(renderer.EndFrame(false),"Defeated neutral render failed.");
-    Require(renderer.Triangles()==triangles,"A defeated save must not render an obsolete attack warning cone.");
+    Require(renderer.Triangles()-renderer.CloudLightUpdates()==triangles,"A defeated save must not render an obsolete attack warning cone.");
   }
   {
     Game game; game.Initialize(); rpg::Command jump; jump.jump=true; game.ExecuteCommand(jump,.05f);
@@ -986,6 +987,7 @@ int main() {
       "Combat HUD diagnostic capture failed");
     Require(state.Save()==before,"HUD rendering and disabled clicks must not change combat state");
   }
+  Require(renderer.InterfaceBytes()<20*1024*1024,"Map and repeated UI draws exceed the combined texture budget.");
   Require(renderer.ValidateDebugMessages(),"Combat HUD emitted a DirectX warning/error");
   std::cout<<"PASS: live menus, item actions, persistence, scaled pointer routing and UI rendering.\n";
 }

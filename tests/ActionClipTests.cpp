@@ -17,7 +17,7 @@ void Check(bool ok,const char* text) { if(!ok) { std::cerr<<text<<'\n'; std::exi
 float Distance(XMFLOAT3 a,XMFLOAT3 b) { return XMVectorGetX(XMVector3Length(XMLoadFloat3(&a)-XMLoadFloat3(&b))); }
 float Size(ActionChannels a) {
   return std::abs(a.left.x)+std::abs(a.left.y)+std::abs(a.left.z)+std::abs(a.right.x)+std::abs(a.right.y)+
-    std::abs(a.right.z)+std::abs(a.pitch)+std::abs(a.yaw)+std::abs(a.roll)+std::abs(a.hip)+std::abs(a.open);
+    std::abs(a.right.z)+std::abs(a.pitch)+std::abs(a.yaw)+std::abs(a.roll)+std::abs(a.hip)+std::abs(a.open)+std::abs(a.aim);
 }
 Sample Motion(ClassId id,ActionClip clip,float t,int layer=0) {
   Sample result; result.action=SampleAction(id,clip,t);
@@ -45,7 +45,7 @@ void ClipsAndRig() {
         std::array<XMFLOAT3,2> previous{};XMFLOAT3 previousTip{};
         for(int tick=0;tick<=int(end*1000)+2;++tick) {
           const float t=tick*.001f;
-          const auto pose=BuildCharacterPose(0,.35f,shield,Motion(type,clip,t,layer));
+          const auto pose=BuildCharacterPose(0,.35f,shield,Motion(type,clip,t,layer),rpg::WeaponFor(type).form);
           for(int side=0;side<2;++side) {
             const auto& arm=pose.arms[side];const auto& leg=pose.legs[side];
             Check(std::abs(Distance(arm.root,arm.joint)-CharacterPose::upperArm)<.00001f &&
@@ -148,7 +148,7 @@ void Captures() {
     auto sample=Motion(type,clip,t);sample.face.focus=.5f;
     const auto& color=rpg::DescribeClass(type).color;
     renderer.BeginFrame();renderer.SetCamera({2.2f,1.7f,3.5f},{0,1.0f,0});
-    DrawCharacter(renderer,{0,0},0,0,{color[0],color[1],color[2],1},0,0,{},sample,1);
+    DrawCharacter(renderer,{0,0},0,0,{color[0],color[1],color[2],1},0,0,CharacterOutfit::From(rpg::Inventory{},type),sample,1);
     Check(renderer.Capture((root/(std::to_string(id)+"-"+std::to_string(phase)+".png")).wstring()) && renderer.EndFrame(false),"Class gesture GPU capture");
   }
   Check(renderer.ValidateDebugMessages(),"Class action D3D debug errors");

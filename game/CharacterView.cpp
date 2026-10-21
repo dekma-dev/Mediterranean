@@ -2,21 +2,27 @@
 #include "game/CharacterPose.h"
 #include "game/CharacterRig.h"
 #include "game/HandPose.h"
+#include "game/WeaponVisual.h"
 #include "engine/Renderer.h"
 #include <cmath>
 #include <algorithm>
-CharacterOutfit CharacterOutfit::From(const rpg::Inventory& inventory) {
+CharacterOutfit CharacterOutfit::From(const rpg::Inventory& inventory,rpg::ClassId id,rpg::Appearance look) {
  return {inventory.Worn(rpg::GearSlot::Chest)==rpg::Item::Ward,inventory.Worn(rpg::GearSlot::Weapon)==rpg::Item::Watchguard,
   inventory.Worn(rpg::GearSlot::Weapon)!=rpg::Item::None,inventory.Worn(rpg::GearSlot::Chest)!=rpg::Item::None,
   inventory.Worn(rpg::GearSlot::Legs)!=rpg::Item::None,inventory.Worn(rpg::GearSlot::Feet)!=rpg::Item::None,
   inventory.Worn(rpg::GearSlot::Head)==rpg::Item::Helm,inventory.Worn(rpg::GearSlot::Offhand)==rpg::Item::Shield,
   inventory.Worn(rpg::GearSlot::Shoulders)==rpg::Item::Shoulders,inventory.Worn(rpg::GearSlot::Hands)==rpg::Item::Gloves,
-  inventory.Worn(rpg::GearSlot::Waist)==rpg::Item::Belt,inventory.Worn(rpg::GearSlot::Back)==rpg::Item::Cloak};
+  inventory.Worn(rpg::GearSlot::Waist)==rpg::Item::Belt,inventory.Worn(rpg::GearSlot::Back)==rpg::Item::Cloak,id,look};
 }
 void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::XMFLOAT4 color,float swing,float gait,CharacterOutfit outfit,animation::Sample dynamics,std::uint64_t actor) {
  using namespace DirectX; using M=visual::Mesh; using S=visual::Material;
-    const auto pose=BuildCharacterPose(swing,gait,outfit.shield,dynamics);
-    const XMFLOAT4 skin{.72f,.51f,.35f,1},leather{.20f,.14f,.095f,1},steel{.52f,.59f,.61f,1};
+    const auto form=rpg::WeaponFor(outfit.classId).form;
+    const auto pose=BuildCharacterPose(swing,gait,outfit.shield,dynamics,form);
+    const auto& tone=rpg::skinTones[outfit.appearance.skin];
+    const auto& hair=rpg::hairColors[outfit.appearance.hair];
+    const XMFLOAT4 hairTint{hair.r,hair.g,hair.b,1};
+    const auto shade=[&](float r,float g,float b) {return XMFLOAT4{tone.r*r/.72f,tone.g*g/.51f,tone.b*b/.35f,1};};
+    const XMFLOAT4 skin{tone.r,tone.g,tone.b,1},leather{.20f,.14f,.095f,1},steel{.52f,.59f,.61f,1};
     const XMFLOAT4 blade=outfit.rewardWeapon?XMFLOAT4{.76f,.67f,.42f,1}:steel;
     const auto point=[&](float x,float h,float z) -> XMFLOAT3 {
       return {p.x+std::cos(yaw)*x+std::sin(yaw)*z,base+h,p.z-std::sin(yaw)*x+std::cos(yaw)*z};
@@ -70,7 +76,7 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       part(M::Torso,0,1.29f,.20f,{.09f,.14f,.02f},{.21f,.37f,.43f,1},S::Metal);
     }
     head(M::Head,0,1.76f,.012f,{.265f,.31f,.26f},skin,S::Skin);
-    if (!outfit.helm) head(M::Hair,0,1.76f,.012f,{.267f,.31f,.262f},{.19f,.13f,.08f,1},S::Cloth);
+    if (!outfit.helm) head(M::Hair,0,1.76f,.012f,{.267f,.31f,.262f},hairTint,S::Cloth);
     const auto face=dynamics.face;
     const float pain=facial::Unit(face.pain),focus=facial::Unit(face.focus),smile=facial::Unit(face.smile)*(1-pain);
     const float closed=std::max(facial::Unit(face.blink),pain*.68f+focus*.16f);
@@ -78,16 +84,16 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
     const float eyeX=animation::Signed(face.eyeYaw/.22f)*.0038f,eyeY=-animation::Signed(face.eyePitch/.105f)*.0022f;
     // Tapered lip volumes with an inset seam, instead of a rectangular mouth.
     const float mouthY=1.691f-pain*.002f,mouthWidth=.060f+smile*.008f+pain*.004f;
-    head(M::Feature,0,mouthY,.106f,{mouthWidth,.003f+pain*.003f,.008f},{.23f,.12f,.10f,1},S::Skin);
+    head(M::Feature,0,mouthY,.106f,{mouthWidth,.003f+pain*.003f,.008f},shade(.23f,.12f,.10f),S::Skin);
     for(float side : {-1.f,1.f}) {
-      head(M::Feature,side*.014f,mouthY+.0035f,.108f,{.031f,.005f,.010f},{.58f,.34f,.28f,1},S::Skin,side*(smile*.10f-pain*.10f));
-      head(M::Feature,side*.013f,mouthY-.003f,.108f,{.030f,.006f,.010f},{.63f,.38f,.31f,1},S::Skin,side*smile*.08f);
-      head(M::Feature,side*mouthWidth*.44f,mouthY+smile*.004f-pain*.002f,.104f,{.008f,.004f,.006f},{.40f,.24f,.19f,1},S::Skin,0,0);
-      head(M::Feature,side*.014f,1.715f,.139f,{.010f,.0038f,.007f},{.29f,.17f,.12f,1},S::Skin,0,0);
+      head(M::Feature,side*.014f,mouthY+.0035f,.108f,{.031f,.005f,.010f},shade(.58f,.34f,.28f),S::Skin,side*(smile*.10f-pain*.10f));
+      head(M::Feature,side*.013f,mouthY-.003f,.108f,{.030f,.006f,.010f},shade(.63f,.38f,.31f),S::Skin,side*smile*.08f);
+      head(M::Feature,side*mouthWidth*.44f,mouthY+smile*.004f-pain*.002f,.104f,{.008f,.004f,.006f},shade(.40f,.24f,.19f),S::Skin,0,0);
+      head(M::Feature,side*.014f,1.715f,.139f,{.010f,.0038f,.007f},shade(.29f,.17f,.12f),S::Skin,0,0);
       const float x=side*.052f,y=1.782f;
       // Dark socket/rim stays visible through closure. Iris and pupil are
       // contained inside the aperture, including at maximum gaze and blink.
-      head(M::Feature,x,y,.109f,{.041f,eyeHeight+.004f,.014f},{.42f,.29f,.22f,1},S::Skin);
+      head(M::Feature,x,y,.109f,{.041f,eyeHeight+.004f,.014f},shade(.42f,.29f,.22f),S::Skin);
       if(eyeHeight>.0007f) {
         head(M::Feature,x,y,.114f,{.034f,eyeHeight,.010f},{.64f,.63f,.57f,1},S::Plain);
         const float irisHeight=std::min(.010f,eyeHeight*.78f);
@@ -96,9 +102,9 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
         head(M::Feature,x+eyeX,y+irisY,.122f,{.0045f,irisHeight*.65f,.002f},{.025f,.028f,.025f,1},S::Plain);
       }
       const float browRoll=-side*(.06f+focus*.21f-pain*.16f);
-      head(M::Feature,x,y+.020f-focus*.003f+pain*.002f,.113f,{.046f,.0065f,.010f},{.22f,.15f,.10f,1},S::Cloth,browRoll);
+      head(M::Feature,x,y+.020f-focus*.003f+pain*.002f,.113f,{.046f,.0065f,.010f},hairTint,S::Cloth,browRoll);
       head(M::Feature,side*.121f,1.755f,-.004f,{.032f,.063f,.039f},skin,S::Skin,0,2);
-      head(M::Feature,side*.132f,1.756f,.007f,{.009f,.037f,.020f},{.55f,.34f,.24f,1},S::Skin,0,0);
+      head(M::Feature,side*.132f,1.756f,.007f,{.009f,.037f,.020f},shade(.55f,.34f,.24f),S::Skin,0,0);
     }
     if (outfit.helm) {
       head(M::Sphere,0,1.86f,.012f,{.31f,.21f,.30f},steel,S::Metal);
@@ -143,10 +149,13 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
         const auto weaponPart=[&](M mesh,float offset,XMFLOAT3 scale,XMFLOAT4 tint,S material) {
           renderer.DrawMeshTransformed(mesh,XMMatrixScaling(scale.x,scale.y,scale.z)*XMMatrixTranslation(0,offset,0)*weaponFrame,tint,material);
         };
-        weaponPart(M::Blade,.53f,{.12f,.86f,.07f},blade,S::Metal);
-        weaponPart(M::Limb,.005f,{.065f,.19f,.065f},leather,S::Cloth);
-        weaponPart(M::Box,.10f,{.26f,.045f,.055f},blade,S::Metal);
-        weaponPart(M::Sphere,-.11f,{.08f,.08f,.08f},blade,S::Metal);
+        if(form==rpg::WeaponForm::Blade) {
+          weaponPart(M::Blade,.53f,{.12f,.86f,.07f},blade,S::Metal);
+          weaponPart(M::Limb,.005f,{.065f,.19f,.065f},leather,S::Cloth);
+          weaponPart(M::Box,.10f,{.26f,.045f,.055f},blade,S::Metal);
+          weaponPart(M::Sphere,-.11f,{.08f,.08f,.08f},blade,S::Metal);
+        } else renderer.DrawMeshTransformed(WeaponMesh(form),weaponFrame,
+          outfit.rewardWeapon?XMFLOAT4{1,.92f,.70f,1}:XMFLOAT4{.88f,.91f,.94f,1},S::Metal);
       }
       if (side<0 && outfit.shield) {
         const auto shieldPoint=[&](XMFLOAT3 local) {

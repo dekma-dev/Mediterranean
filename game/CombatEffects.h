@@ -22,7 +22,7 @@ public:
   bool Tracking(rpg::EntityId actor) const;
   std::size_t BurstCount() const;
   std::size_t TrailCount() const;
-  static DirectX::XMFLOAT3 SpellTracePoint(DirectX::XMFLOAT3 origin,rpg::Vec2 destination,float progress);
+  static DirectX::XMFLOAT3 SpellTracePoint(DirectX::XMFLOAT3 origin,rpg::Vec2 destination,float progress,float arc=.16f);
   void Render(Renderer& renderer) const;
 private:
   struct Burst { rpg::CombatVisualEvent event; float age=1; unsigned seed=0; DirectX::XMFLOAT3 spellOrigin{}; };

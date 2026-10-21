@@ -16,7 +16,7 @@ $source=($parts | ForEach-Object { $_.Groups[1].Value }) -join ''
 Add-Type -Path (Join-Path $PSScriptRoot 'SceneShaderCheck.cs')
 $bytecode=@{}
 $generated=if($GeneratedHeader) { [IO.File]::ReadAllText($GeneratedHeader) } else { $null }
-foreach($entry in @('VSMain','PSMain','VSWorld','VSShadow','VSBody','VSBodyShadow','VSHand','VSHandShadow','VSSky','PSSky','VSEffect','PSEffect')) {
+foreach($entry in @('VSMain','PSMain','VSWorld','VSShadow','VSBody','VSBodyShadow','VSHand','VSHandShadow','VSSky','PSSky','PSCloudLight','VSEffect','PSEffect')) {
  $profile=if($entry.StartsWith('VS')) {'vs_5_0'} else {'ps_5_0'}
  $bytecode[$entry]=[SceneShaderCheck]::Compile($source,$entry,$profile)
  if($GeneratedHeader) {

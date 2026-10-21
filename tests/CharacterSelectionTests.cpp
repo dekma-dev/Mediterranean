@@ -1,5 +1,9 @@
 #include "game/Game.h"
 #include "engine/Renderer.h"
+#include "game/CharacterRig.h"
+#include "game/ProfileStorage.h"
+#include <atomic>
+#include <thread>
 #include "platform/Win32Window.h"
 #include <fstream>
 #include <iostream>
@@ -23,6 +27,84 @@ struct Driver {
   }
   void Click(Game& game,Control control) {Point(control);frame.down[VK_LBUTTON]=true;Step(game);frame.down[VK_LBUTTON]=false;Step(game);}
 };
+void ReportedRegressions(const std::filesystem::path& root) {
+  const auto folder=root/("reported-bugs-"+std::to_string(GetTickCount64()));std::filesystem::create_directories(folder);
+  int failures=0;const auto expect=[&](bool value,const char* message) {if(!value) {std::cerr<<"REGRESSION: "<<message<<'\n';++failures;}};
+  Game draft;draft.Initialize();draft.ChooseCharacter(folder/"draft.save");Driver d;d.Step(draft);
+  d.Click(draft,Control::Create);d.Click(draft,Control::Next);d.Key(draft,'A');
+  d.frame.down[VK_CONTROL]=true;d.Key(draft,'V');d.frame.down[VK_CONTROL]=false;d.Step(draft);
+  expect(draft.Selection().DraftName()=="a","Ctrl+V inserts shortcut letters in the hero name");
+  d.frame.down[VK_CONTROL]=true;d.Key(draft,'A');d.frame.down[VK_CONTROL]=false;d.Key(draft,'A');d.Key(draft,VK_SPACE);
+  expect(std::string(draft.Selection().Hero().Nickname())=="a","Typing a word separator resets the preview name");
+  const auto file=folder/"patrol.save";rpg::Simulation original;original.CreateCharacter(rpg::ClassId::Warrior,"First Hero");Write(file,original.Save());
+  Game first,second;first.Initialize();second.Initialize();first.ChooseCharacter(file);second.ChooseCharacter(file);
+  Driver one,two;one.Step(first);two.Step(second);one.Click(first,Control::Enter);two.Click(second,Control::Enter);one.Step(first);two.Step(second);
+  one.Key(first,'W');one.Key(first,VK_F5);const auto latest=Read(file);
+  two.Key(second,VK_F5);
+  expect(Read(file)==latest,"An older running game overwrites newer saved progress");
+  expect(second.State().Message().find("Save changed")!=std::string::npos,"A stale write did not explain why it was rejected");
+  two.Key(second,VK_F9);two.Key(second,'W');two.Key(second,VK_F5);
+  rpg::Simulation reloaded;
+  expect(second.State().Message()=="Progress saved." && Read(file)!=latest && reloaded.Load(Read(file)),"F9 did not refresh the save baseline for a later F5");
+  rpg::Simulation replacement;replacement.CreateCharacter(rpg::ClassId::Mage,"Another Hero");Write(file,replacement.Save());
+  one.Key(first,VK_F5);
+  expect(Read(file)==replacement.Save(),"F5 replaces an externally changed character profile");
+  d.Key(draft,VK_BACK); // remove the trailing separator
+  for(int modifier:{VK_CONTROL,VK_MENU}) {
+    d.frame.down[modifier]=true;
+    for(int key:std::array<int,8>{'C','X','V','Z',VK_SPACE,VK_BACK,VK_OEM_MINUS,VK_OEM_7}) d.Key(draft,key);
+    d.frame.down[modifier]=false;d.Step(draft);
+  }
+  expect(draft.Selection().DraftName()=="a","Control/Alt shortcuts modified the name");
+  d.frame.capsLock=true;d.Key(draft,'B');d.frame.down[VK_SHIFT]=true;d.Key(draft,'C');d.frame.down[VK_SHIFT]=false;d.Step(draft);
+  expect(draft.Selection().DraftName()=="aBc","Caps Lock and Shift did not compose correctly");
+  // Recover a failed creation without leaving the editor or losing appearance.
+  const auto blocked=folder/"blocked";Game retry;retry.Initialize();retry.ChooseCharacter(blocked/"patrol.save");Driver r;r.Step(retry);
+  r.Click(retry,Control::Create);r.Click(retry,Control::Next);r.Key(retry,'R');r.Key(retry,VK_RETURN);r.Click(retry,Control::SkinRight);
+  Write(blocked,"temporary obstacle");r.Click(retry,Control::Confirm);
+  expect(retry.Selection().Enabled(Control::Confirm),"A transient save failure disabled retry permanently");
+  std::filesystem::rename(blocked,folder/"blocked-preserved.txt");r.Click(retry,Control::Confirm);
+  rpg::Simulation created;
+  expect(created.Load(Read(blocked/"patrol.save")) && std::string(created.Nickname())=="r" && created.Look().skin==1,"Retry failed to preserve and save the creation draft");
+  Check(failures==0,"Reported regressions failed");
+}
+void StorageTransactions(const std::filesystem::path& root) {
+  using R=profile::ReadResult;using W=profile::WriteResult;
+  const auto folder=root/("storage-transactions-"+std::to_string(GetTickCount64()));std::filesystem::create_directories(folder);
+  const auto file=folder/"patrol.save";std::string content="untouched";
+  Check(profile::Read(file,content)==R::Missing && content=="untouched","Missing read changed output");
+  rpg::Simulation hero;hero.CreateCharacter(rpg::ClassId::Warrior,"First");const auto first=hero.Save();
+  hero.CreateCharacter(rpg::ClassId::Warrior,"Second");const auto second=hero.Save();
+  hero.CreateCharacter(rpg::ClassId::Warrior,"Third");const auto third=hero.Save();
+  Check(profile::Write(file,first)==W::Saved && profile::Write(file,second)==W::Conflict && Read(file)==first,"Create-only write overwrote a profile");
+  const auto oldTemporary=folder/"patrol.save.tmp";Write(oldTemporary,"Unrelated existing file");
+  Check(profile::Write(file,second,&first)==W::Saved && Read(oldTemporary)=="Unrelated existing file","Save reused an unowned temporary path");
+  Check(profile::Write(file,third,&first)==W::Conflict && Read(file)==second,"Stale compare-and-write succeeded");
+  Check(profile::Write(file,third,&second)==W::Saved && profile::Read(file,content)==R::Ready && content==third,"Valid replacement did not publish a complete snapshot");
+  for(const auto invalid:{std::string{},std::string(4097,'X')}) {
+    Write(file,invalid);content="untouched";
+    Check(profile::Read(file,content)==R::Error && content=="untouched","Unbounded/empty read accepted");
+    Check(profile::Write(file,first,&third)==W::Error && Read(file)==invalid,"Unreadable disk save replaced");
+  }
+  const auto removed=folder/"removed.save";
+  Check(profile::Write(removed,second,&first)==W::Conflict && !std::filesystem::exists(removed),"Missing expected save was silently recreated");
+  // Two writers see the same original snapshot. Exactly one may publish; the
+  // other is busy or observes the new baseline. Dot-path aliases must share a lock.
+  for(int iteration=0;iteration<8;++iteration) {
+    Write(file,first);std::atomic<int> ready{0};std::atomic<bool> start{false};W outcomes[2]={W::Error,W::Error};
+    const auto write=[&](int id) {
+      ready.fetch_add(1);while(!start.load()) std::this_thread::yield();
+      outcomes[id]=profile::Write(id?folder/"."/"patrol.save":file,id?second:third,&first);
+    };
+    std::thread left(write,0),right(write,1);while(ready.load()!=2) std::this_thread::yield();start.store(true);left.join();right.join();
+    Check(int(outcomes[0]==W::Saved)+int(outcomes[1]==W::Saved)==1,"Concurrent writers both published or both failed");
+    const int loser=outcomes[0]==W::Saved?1:0;
+    Check(outcomes[loser]==W::Busy || outcomes[loser]==W::Conflict,"Concurrent writer returned an unexpected failure");
+    Check(Read(file)==(outcomes[0]==W::Saved?third:second),"Concurrent write damaged the winning snapshot");
+  }
+  for(const auto& entry:std::filesystem::directory_iterator(folder))
+    Check(entry.path().filename().wstring().find(L".write-")==std::wstring::npos,"Save left its own temporary file behind");
+}
 void Flow(const std::filesystem::path& root,const std::string& veteran) {
   const auto file=root/"current.save";Write(file,veteran);
   Game game;game.Initialize();const auto untouched=game.State().Save();game.ChooseCharacter(file);
@@ -64,7 +146,13 @@ void Flow(const std::filesystem::path& root,const std::string& veteran) {
   const auto missing=root/("first-"+std::to_string(GetTickCount64())+".save");
   Game fresh;fresh.Initialize();fresh.ChooseCharacter(missing);Driver n;n.Step(fresh);
   Check(fresh.Selection().State()==Selection::Status::New && fresh.Selection().Hero().Level()==1,"First-run hero not available");
-  n.Key(fresh,VK_RETURN);Check(!fresh.ChoosingCharacter() && !std::filesystem::exists(missing),"First entry should not write a save");
+  Check(!fresh.Selection().Enabled(Control::Enter),"Missing profile offered world entry");
+  n.Key(fresh,VK_RETURN);Check(fresh.Selection().Screen()==Selection::Page::Class,"First-run Create did not open class selection");
+  n.Click(fresh,Control::Next);Check(fresh.Selection().Screen()==Selection::Page::Customize,"Appearance screen missing");
+  Check(!fresh.Selection().Enabled(Control::Confirm),"Empty name enabled creation");
+  n.Key(fresh,'A');n.Click(fresh,Control::SkinRight);n.Key(fresh,VK_ESCAPE);
+  Check(fresh.Selection().Screen()==Selection::Page::Class,"Escape did not return to class choice");
+  n.Click(fresh,Control::Cancel);Check(fresh.Selection().Screen()==Selection::Page::Roster && !std::filesystem::exists(missing),"Cancel wrote a character");
 
   for(const auto& invalid:{std::string{},std::string("broken save"),std::string(4097,'X')}) {
     Write(file,invalid);game.Initialize();game.ChooseCharacter(file);Driver bad;bad.Step(game);
@@ -93,6 +181,31 @@ void Render(const std::filesystem::path& root,const std::string& veteran) {
   Check(renderer.Capture((root/"selection-error.png").wstring()) && renderer.EndFrame(false),"Error-state render");
   game.ChooseCharacter(root/("empty-"+std::to_string(GetTickCount64())+".save"));renderer.BeginFrame();game.Render(renderer);
   Check(renderer.Capture((root/"selection-first.png").wstring()) && renderer.EndFrame(false),"First-character render");
+  Driver d;d.Step(game);d.Click(game,Control::Create);d.Click(game,Control::Class5);
+  for(int stage=0;stage<2;++stage) {
+    if(stage) {d.Click(game,Control::Next);d.frame.down[VK_SHIFT]=true;d.Key(game,'E');d.frame.down[VK_SHIFT]=false;
+      for(int key:{'L','A','R','A'}) d.Key(game,key);d.Key(game,VK_RETURN);d.Click(game,Control::HairRight);d.Click(game,Control::DyeRight);}
+    for(const auto size:{std::pair<int,int>{960,600},{1280,720},{1920,1080},{2560,1080}}) {
+      Check(renderer.Resize(size.first,size.second),"Creation resize");renderer.BeginFrame();game.Render(renderer);
+      Check(renderer.Capture((root/(std::string(stage?"creation-appearance-":"creation-class-")+std::to_string(size.first)+".png")).wstring()) && renderer.EndFrame(false),"Creation render/capture");
+    }
+  }
+  Check(renderer.Resize(1280,720),"Appearance palette resize");
+  for(int look=0;look<rpg::Appearance::count;++look) {
+    renderer.BeginFrame();game.Render(renderer);
+    Check(renderer.Capture((root/("creation-palette-"+std::to_string(look)+".png")).wstring()) && renderer.EndFrame(false),"Appearance palette capture");
+    d.Click(game,Control::SkinRight);d.Click(game,Control::HairRight);d.Click(game,Control::DyeRight);
+  }
+  d.Click(game,Control::Name);d.frame.down[VK_CONTROL]=true;d.Key(game,'A');d.frame.down[VK_CONTROL]=false;
+  d.frame.down[VK_SHIFT]=true;for(int i=0;i<21;++i) d.Key(game,'W');d.frame.down[VK_SHIFT]=false;d.Step(game);
+  Check(game.Selection().DraftName()==std::string(20,'W'),"Name input did not enforce maximum length");
+  renderer.BeginFrame();game.Render(renderer);
+  Check(renderer.Capture((root/"creation-long-name.png").wstring()) && renderer.EndFrame(false),"Long-name render");
+  d.frame.down[VK_CONTROL]=true;d.Key(game,'A');d.frame.down[VK_CONTROL]=false;d.Step(game);
+  Check(game.Selection().DraftName().empty() && !game.Selection().Enabled(Control::Confirm),"Ctrl+A did not clear and disable creation");
+  d.Key(game,VK_OEM_MINUS);Check(!game.Selection().Enabled(Control::Confirm),"Punctuation-only name was accepted");
+  d.Key(game,VK_BACK);d.Key(game,'X');d.Key(game,VK_SPACE);d.Key(game,VK_RETURN);
+  Check(game.Selection().DraftName()=="x" && game.Selection().Focus()==Control::Confirm,"Finish editing did not trim name/focus confirmation");
   Check(renderer.ValidateDebugMessages(),"D3D validation failed");
 }
 void ClassSlots(const std::filesystem::path& root) {
@@ -102,9 +215,15 @@ void ClassSlots(const std::filesystem::path& root) {
     Game game;game.Initialize();game.ChooseCharacter(base);Driver d;d.Step(game);
     d.Click(game,Control(int(Control::Class0)+i));
     Check(game.Selection().Hero().Class()==rpg::ClassId(i) && game.Selection().State()==Selection::Status::New,"Class choice did not create a fresh profile");
+    d.Click(game,Control::Create);d.Click(game,Control::Next);
     d.Click(game,Control::Name);d.Key(game,'A');d.Key(game,'S');d.Key(game,VK_RETURN);
     Check(game.Selection().DraftName()=="as","Name field did not accept keyboard text");
-    d.Key(game,VK_RETURN);d.Step(game);
+    d.Click(game,Control::SkinRight);d.Click(game,Control::HairRight);d.Click(game,Control::DyeLeft);
+    d.Click(game,Control::Confirm);
+    Check(game.ChoosingCharacter() && game.Selection().Screen()==Selection::Page::Roster && game.Selection().State()==Selection::Status::Saved,"Confirm did not persist and return to roster");
+    Check(game.Selection().Hero().Look().skin==1 && game.Selection().Hero().Look().hair==1 && game.Selection().Hero().Look().dye==4,"Creation lost appearance");
+    d.Click(game,Control::Enter);d.Step(game);
+    Check(game.State().Look().skin==1 && game.State().Look().hair==1 && game.State().Look().dye==4,"World entry lost appearance");
     Check(!game.ChoosingCharacter() && game.State().Class()==rpg::ClassId(i) && std::string(game.State().Nickname())=="as","Created character identity lost at entry");
     d.Key(game,VK_F5);
     const auto file=i==0?base:folder/("hero-"+std::to_string(i)+".save");
@@ -116,11 +235,53 @@ void ClassSlots(const std::filesystem::path& root) {
     game.ChooseCharacter(base);d.Step(game);d.Click(game,Control(int(Control::Class0)+i));
     Check(game.Selection().State()==Selection::Status::Saved && !game.Selection().Enabled(Control::Name),"Existing character was editable/replaced");
   }
+  Game full;full.Initialize();full.ChooseCharacter(base);
+  Check(!full.Selection().Enabled(Control::Create),"Full roster allowed new creation");
+}
+void CreationSafety(const std::filesystem::path& root) {
+  const auto folder=root/("creation-safety-"+std::to_string(GetTickCount64()));std::filesystem::create_directories(folder);
+  const auto file=folder/"patrol.save";
+  Game game;game.Initialize();game.ChooseCharacter(file);Driver d;d.Step(game);
+  d.Click(game,Control::Create);d.Click(game,Control::Next);d.Key(game,'A');d.Key(game,VK_RETURN);
+  // Another process wins the slot after the preview was opened.
+  rpg::Simulation other;other.CreateCharacter(rpg::ClassId::Warrior,"Existing Hero");const auto stable=other.Save();Write(file,stable);
+  d.Click(game,Control::Confirm);
+  Check(Read(file)==stable && game.Selection().Screen()==Selection::Page::Customize && !game.Selection().Enabled(Control::Confirm) && !game.Selection().Notice().empty(),"Creation replaced an externally created hero");
+  d.Click(game,Control::Back);Check(!game.Selection().Enabled(Control::Next),"Occupied class allowed customization");
+  d.Click(game,Control::Cancel);Check(game.Selection().State()==Selection::Status::Saved,"Cancel failed to restore roster state");
+  for(const auto& entry:std::filesystem::directory_iterator(folder)) Check(entry.path().extension()==".save","Creation left a temporary file");
+  // Folder becomes unwritable (a regular file) after the creation form opens.
+  const auto blocked=folder/"blocked";game.ChooseCharacter(blocked/"patrol.save");d.Step(game);
+  d.Click(game,Control::Create);d.Click(game,Control::Next);d.Key(game,'B');d.Key(game,VK_RETURN);Write(blocked,"keep");
+  d.Click(game,Control::Confirm);
+  Check(Read(blocked)=="keep" && game.Selection().Screen()==Selection::Page::Customize && game.Selection().DraftName()=="b" && !game.Selection().Notice().empty(),"Save error lost the draft or overwrote a file");
+  // Page transition while a button is held must not deliver its release to the next page.
+  game.ChooseCharacter(folder/"new.save");d.Step(game);d.Point(Control::Create);d.frame.down[VK_LBUTTON]=true;d.Step(game);
+  d.Key(game,VK_RETURN);d.Point(Control::Next);d.frame.down[VK_LBUTTON]=false;d.Step(game);
+  Check(game.Selection().Screen()==Selection::Page::Class,"Stale mouse release advanced the creation wizard");
+}
+void AppearancePersistence() {
+  for(int index=0;index<rpg::Appearance::count;++index) {
+    rpg::Simulation s;Check(s.CreateCharacter(rpg::ClassId::Mage,"Dawn's Watch",{index,4-index,index}),"Valid appearance rejected");
+    const auto saved=s.Save();rpg::Simulation copy;Check(copy.Load(saved) && copy.Save()==saved,"Appearance round-trip");
+    rpg::Command reset;reset.restart=true;copy.Update(.01f,reset);Check(copy.Look().skin==index && copy.Look().hair==4-index && copy.Look().dye==index,"Restart lost appearance");
+    const auto at=saved.find("APPEARANCE ");
+    for(const auto* record:{"APPEARANCE -1 0 0\n","APPEARANCE 0 5 0\n","APPEARANCE 0 0 5\n","APPEARANCE 0 0\n","APPEARANCE 0 0 0 1\n",""}) {
+      auto bad=saved.substr(0,at)+record;Check(!s.Load(bad) && s.Save()==saved,"Invalid appearance changed live profile");
+    }
+    auto legacy=saved.substr(0,at);legacy.replace(14,legacy.find('\n')-14,"11");
+    Check(copy.Load(legacy) && copy.Class()==rpg::ClassId::Mage && copy.Look().skin==0 && copy.Look().hair==0 && copy.Look().dye==0,"Version 11 appearance migration");
+    Check(!s.CreateCharacter(rpg::ClassId::Mage,"Test",{0,0,99}) && s.Save()==saved,"Invalid creation appearance mutated state");
+    const auto outfit=CharacterOutfit::From(s.Items(),s.Class(),s.Look());
+    const auto palette=BuildCharacterRig(BuildCharacterPose(0,0,false,animation::Idle(0)),outfit,{.1f,.2f,.3f,1});
+    Check(palette.colors[5].x==rpg::skinTones[index].r,"Skin palette did not reach the continuous mesh");
+    if(index) Check(palette.colors[0].x==rpg::tunicDyes[index].r,"Tunic dye did not reach the continuous mesh");
+  }
 }
 }
 int main() {
   const auto root=std::filesystem::current_path()/"character-selection-check";std::filesystem::create_directories(root);
   const auto veteran=Read(std::filesystem::path(RPG_TEST_FIXTURES)/"veteran-preview.save");
-  Flow(root,veteran);ClassSlots(root);Render(root,veteran);
+  ReportedRegressions(root);StorageTransactions(root);Flow(root,veteran);ClassSlots(root);CreationSafety(root);AppearancePersistence();Render(root,veteran);
   std::cout<<"PASS: character metadata, frozen world, input isolation, saved/new/error/repaired states, changed saves, resize/focus, hidden DX11 captures\n";
 }

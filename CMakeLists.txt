@@ -76,6 +76,7 @@ add_library(MediterraneanClient STATIC
   platform/Win32Window.cpp
   game/Game.cpp
   game/CharacterSelection.cpp
+  game/ProfileStorage.cpp
   game/WorldView.cpp
   game/LandmarkView.cpp
   game/CharacterView.cpp
@@ -89,13 +90,17 @@ add_library(MediterraneanClient STATIC
   game/TerrainSurface.cpp
 )
 add_dependencies(MediterraneanClient EmbeddedMeshes)
+# Embed artwork in every native client host (including offscreen test hosts).
+# Resource include paths make RC independent of the build working directory.
+target_sources(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/UiArtwork.rc")
+target_include_directories(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui")
 add_library(LaunchSupport STATIC launcher/LaunchSupport.cpp)
 target_include_directories(LaunchSupport PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(LaunchSupport PUBLIC UNICODE _UNICODE NOMINMAX)
 target_compile_definitions(LaunchSupport PRIVATE RPG_SAVE_DIRECTORY="${CMAKE_CURRENT_SOURCE_DIR}/saves" RPG_PROJECT_DIRECTORY="${CMAKE_CURRENT_SOURCE_DIR}")
 add_executable(MediterraneanLauncher WIN32 launcher/Main.cpp launcher/Launcher.rc)
 target_include_directories(MediterraneanLauncher PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/launcher)
-target_link_libraries(MediterraneanLauncher PRIVATE LaunchSupport gdiplus shlwapi shell32 user32 gdi32 ole32 uxtheme)
+target_link_libraries(MediterraneanLauncher PRIVATE LaunchSupport gdiplus shlwapi shell32 user32 gdi32 ole32 uxtheme comctl32)
 if(MSVC)
   target_compile_options(LaunchSupport PRIVATE /W4 /EHsc)
   target_compile_options(MediterraneanLauncher PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/W4> $<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
@@ -121,6 +126,10 @@ set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT RPGNative)
 
 include(CTest)
 if (BUILD_TESTING)
+  add_executable(ClassEquipmentTests tests/ClassEquipmentTests.cpp)
+  target_link_libraries(ClassEquipmentTests PRIVATE MediterraneanClient)
+  add_test(NAME ClassEquipmentTests COMMAND ClassEquipmentTests)
+  set_tests_properties(ClassEquipmentTests PROPERTIES TIMEOUT 45)
   add_executable(ActionClipTests tests/ActionClipTests.cpp)
   target_link_libraries(ActionClipTests PRIVATE MediterraneanClient)
   add_test(NAME ActionClipTests COMMAND ActionClipTests)

@@ -20,4 +20,5 @@ HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool 
 // Spell release uses the same solved palm as drawing; an occupied offhand
 // emits beyond its shield face instead of hiding the trace inside equipment.
 DirectX::XMFLOAT3 SpellReleasePoint(const CharacterPose& pose,bool shield);
+DirectX::XMFLOAT3 WeaponReleasePoint(const CharacterPose& pose,rpg::WeaponForm form);
 visual::HandPalette BuildHandRig(const HandPose& pose);

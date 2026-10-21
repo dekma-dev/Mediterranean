@@ -57,6 +57,14 @@ std::vector<std::int16_t> Generate(Cue cue) {
     const float air=noise-low;
     float value=0;
     switch(cue) {
+    case Cue::Bow:
+      value=.22f*Sweep(460,140,duration,t)*Decay(t,.002f,22.f);
+      value+=.14f*Tone(840,t)*Decay(t,.003f,38.f)+.27f*air*Decay(t,.002f,65.f);
+      break;
+    case Cue::Pistol:
+      value=.58f*air*Decay(t,.002f,80.f)+.65f*low*Decay(t,.002f,36.f);
+      value+=.22f*Sweep(155,55,duration,t)*Decay(t,.003f,24.f)+.065f*Metal(1150,t-.035f);
+      break;
     case Cue::Cast:
       value=.20f*Sweep(330,880,duration,t)*Decay(t,.025f,12.f);
       value+=.14f*Bell(1318.51f,t-.045f)+.22f*low*Decay(t,.035f,14.f);
@@ -144,7 +152,7 @@ void Events::Update(const rpg::Simulation& state) {
     if(std::hypot(event.position.x-p.x,event.position.z-p.z)>18) continue;
     switch(event.kind) {
     case K::Strike:add(Cue::Strike);break; case K::HeavyStrike:add(Cue::Heavy);break;
-    case K::SpellCast:add(Cue::Cast);break;
+    case K::SpellCast:add(event.school==rpg::ClassId::Scout?Cue::Bow:event.school==rpg::ClassId::Engineer?Cue::Pistol:Cue::Cast);break;
     case K::EnemySwing:add(Cue::Enemy);break; case K::Hit:add(Cue::Hit);break;
     case K::HeavyHit:add(Cue::HeavyHit);break; case K::Hurt:add(Cue::Hurt);break;
     case K::Interrupt:add(Cue::Interrupt);break; case K::Mend:add(Cue::Mend);break;

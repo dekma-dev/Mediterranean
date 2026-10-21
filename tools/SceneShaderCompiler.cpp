@@ -18,7 +18,7 @@ int wmain(int argc,wchar_t** argv) {
       "struct Bytecode { const unsigned char* data; std::size_t size;\n"
       " const void* GetBufferPointer() const { return data; }\n"
       " std::size_t GetBufferSize() const { return size; } };\n";
-    constexpr const char* entries[]={"VSMain","PSMain","VSWorld","VSShadow","VSBody","VSBodyShadow", "VSHand","VSHandShadow","VSSky","PSSky","VSEffect","PSEffect"};
+    constexpr const char* entries[]={"VSMain","PSMain","VSWorld","VSShadow","VSBody","VSBodyShadow", "VSHand","VSHandShadow","VSSky","PSSky","PSCloudLight","VSEffect","PSEffect"};
     for(const char* entry : entries) {
       Microsoft::WRL::ComPtr<ID3DBlob> code,errors;
       const HRESULT result=D3DCompile(sceneShader,std::strlen(sceneShader),"BuiltInScene",nullptr,nullptr,entry,

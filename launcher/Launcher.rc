@@ -1,2 +1,3 @@
 #include <Windows.h>
-101 RCDATA "../assets/launcher/dawnwatch.png"
+201 RCDATA "../assets/ui/antique-frame.png"
+202 RCDATA "../assets/ui/chapter-hall.png"

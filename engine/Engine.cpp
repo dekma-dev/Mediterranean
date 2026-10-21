@@ -327,7 +327,7 @@ bool Engine::Benchmark(const std::wstring& reportPath) {
     << "\nSubmitted triangles including HUD: " << renderer_->Triangles()
     << "\nImmutable mesh bytes: " << renderer_->MeshBytes()
     << "\nMaterial and shadow texture bytes: " << renderer_->MaterialBytes();
-  report << "\nInterface font and map texture bytes: " << renderer_->InterfaceBytes();
+  report << "\nInterface font, map and artwork texture bytes: " << renderer_->InterfaceBytes();
   if (memoryAvailable) report << "\nProcess working set MiB: " << memory.WorkingSetSize/1048576.0
     << "\nProcess private bytes MiB: " << memory.PrivateUsage/1048576.0;
   report << "\nNot an interactive FPS guarantee. Driver, visibility and workload affect results.\n";

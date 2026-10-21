@@ -48,7 +48,7 @@ void Normals(Geometry& g) {
   }
   for (auto& v : g.vertices) {
     const auto n=XMLoadFloat3(&v.normal);
-    XMStoreFloat3(&v.normal,XMVectorGetX(XMVector3LengthSq(n))>.0000001f?XMVector3Normalize(n):XMVectorSet(0,1,0,0));
+    XMStoreFloat3(&v.normal,XMVectorGetX(XMVector3LengthSq(n))>1e-20f?XMVector3Normalize(n):XMVectorSet(0,1,0,0));
   }
 }
 // Each row is height, horizontal radius, depth radius. Shared ring vertices give
@@ -92,6 +92,117 @@ std::vector<XMFLOAT3> SphereProfile() {
   }
   return p;
 }
+// Complete, immutable weapons in grip-local metres. Parts are merged once at
+// startup: worn trim and fitted hardware do not multiply per-frame draw calls.
+Geometry Equipment(Mesh mesh) {
+  Geometry g;
+  const XMFLOAT4 wood{.30f,.16f,.075f,1},iron{.46f,.51f,.55f,1},brass{.80f,.57f,.24f,1},pale{.85f,.89f,.88f,1};
+  const auto append=[&](const Geometry& part,const XMMATRIX& transform,XMFLOAT4 color) {
+    const auto offset=std::uint32_t(g.vertices.size());
+    const auto normal=XMMatrixTranspose(XMMatrixInverse(nullptr,transform));
+    for(auto v:part.vertices) {
+      XMStoreFloat3(&v.position,XMVector3TransformCoord(XMLoadFloat3(&v.position),transform));
+      XMStoreFloat3(&v.normal,XMVector3Normalize(XMVector3TransformNormal(XMLoadFloat3(&v.normal),normal)));
+      v.color={v.color.x*color.x,v.color.y*color.y,v.color.z*color.z,1};g.vertices.push_back(v);
+    }
+    for(auto i:part.indices) g.indices.push_back(offset+i);
+  };
+  const auto shape=[&](const std::vector<XMFLOAT3>& profile,unsigned sides,XMFLOAT4 color,const XMMATRIX& transform=XMMatrixIdentity()) {
+    append(Lathe(profile,sides),transform,color);
+  };
+  const auto box=[&](XMFLOAT3 p,XMFLOAT3 size,XMFLOAT4 color,float roll=0.f) {
+    append(BuildMesh(Mesh::Box),XMMatrixScaling(size.x,size.y,size.z)*XMMatrixRotationZ(roll)*XMMatrixTranslation(p.x,p.y,p.z),color);
+  };
+  const auto rod=[&](XMFLOAT3 a,XMFLOAT3 b,float radius,XMFLOAT4 color) {
+    const auto delta=XMLoadFloat3(&b)-XMLoadFloat3(&a);
+    const float length=XMVectorGetX(XMVector3Length(delta));
+    const auto y=delta/length;
+    const auto seed=std::abs(XMVectorGetY(y))>.9f?XMVectorSet(0,0,1,0):XMVectorSet(0,1,0,0);
+    const auto x=XMVector3Normalize(XMVector3Cross(seed,y)),z=XMVector3Cross(x,y);
+    const XMMATRIX frame{x,y,z,XMVectorSet(a.x,a.y,a.z,1)};
+    shape({{0,radius,radius},{length,radius*.85f,radius*.85f}},8,color,frame);
+  };
+  const auto jewel=[&](XMFLOAT3 p,float radius,float height,XMFLOAT4 color) {
+    shape({{0,.004f,.004f},{height*.25f,radius,radius},{height*.75f,radius*.70f,radius*.70f},{height,.004f,.004f}},6,color,
+      XMMatrixTranslation(p.x,p.y,p.z));
+  };
+  if(mesh==Mesh::WeaponPistol || mesh==Mesh::WeaponHandbow) {
+    shape({{-.13f,.027f,.028f},{-.09f,.024f,.024f},{.09f,.024f,.024f},{.16f,.044f,.05f}},12,wood);
+    box({0,.14f,.02f},{.09f,.085f,.27f},brass);
+    if(mesh==Mesh::WeaponPistol) {
+      // Y-profile is rotated onto +Z. A dark inset sits just behind the rim.
+      shape({{-.07f,.049f,.049f},{.30f,.040f,.040f},{.34f,.044f,.044f},{.40f,.044f,.044f}},12,brass,
+        XMMatrixRotationX(XM_PIDIV2)*XMMatrixTranslation(0,.16f,0));
+      shape({{0,.029f,.029f},{.004f,.029f,.029f}},12,{.035f,.032f,.03f,1},
+        XMMatrixRotationX(XM_PIDIV2)*XMMatrixTranslation(0,.16f,.4001f));
+      box({0,.216f,-.075f},{.025f,.065f,.045f},iron);
+      box({0,.211f,.31f},{.015f,.026f,.025f},iron);
+      rod({0,-.01f,.055f},{0,-.035f,.12f},.008f,brass);
+      rod({0,-.035f,.12f},{0,.10f,.15f},.008f,brass);
+    } else {
+      box({0,.16f,.11f},{.046f,.04f,.50f},wood);
+      box({0,.184f,.13f},{.012f,.008f,.46f},iron);
+      for(float side:{-1.f,1.f}) {
+        XMFLOAT3 last{0,.16f,.28f};
+        for(int i=1;i<=6;++i) {
+          const float t=i/6.f;XMFLOAT3 next{side*t*.33f,.16f+.025f*std::sin(t*XM_PI),.28f-.14f*t*t};
+          rod(last,next,.013f,brass);last=next;
+        }
+        rod(last,{0,.16f,-.06f},.0028f,pale);
+      }
+      rod({0,.191f,-.065f},{0,.191f,.36f},.004f,pale);
+    }
+    return g;
+  }
+  const bool staff=mesh==Mesh::WeaponGroveStaff || mesh==Mesh::WeaponAstralStaff || mesh==Mesh::WeaponAshStaff;
+  const float bottom=staff?-.73f:-.12f,top=staff?.67f:mesh==Mesh::WeaponBaton?.54f:.45f;
+  shape({{bottom,.026f,.026f},{bottom+.01f,.028f,.028f},{-.09f,.024f,.024f},{.09f,.024f,.024f},
+    {top-.04f,.023f,.023f},{top,.035f,.035f}},12,wood);
+  for(float y:{staff?bottom+.015f:-.13f,-.12f,.105f,top-.045f})
+    shape({{y,.034f,.034f},{y+.022f,.034f,.034f}},12,brass);
+  // Leather binding is real raised geometry, kept above the closed grip radius.
+  for(int i=0;i<5;++i) shape({{-.08f+i*.034f,.025f,.025f},{-.069f+i*.034f,.025f,.025f}},10,{.14f,.09f,.055f,1});
+  if(mesh==Mesh::WeaponMace) {
+    shape({{.37f,.05f,.05f},{.42f,.075f,.075f},{.62f,.075f,.075f},{.67f,.038f,.038f}},12,iron);
+    for(int i=0;i<6;++i) {
+      const float a=i*XM_PI/3;
+      append(Lathe({{.40f,.012f,.012f},{.45f,.08f,.024f},{.60f,.08f,.024f},{.64f,.012f,.012f}},6),
+        XMMatrixTranslation(.045f,0,0)*XMMatrixRotationY(a),pale);
+    }
+  } else if(mesh==Mesh::WeaponCleaver) {
+    shape({{.11f,.035f,.022f},{.18f,.10f,.024f},{.68f,.14f,.026f},{.76f,.125f,.02f},{.80f,.08f,.004f}},8,iron);
+    box({0,.12f,0},{.27f,.045f,.065f},brass);
+    for(int i=0;i<3;++i) box({.05f,.27f+i*.14f,.026f},{.04f,.018f,.008f},brass);
+  } else if(mesh==Mesh::WeaponBaton) {
+    jewel({0,.48f,0},.035f,.14f,pale);
+    jewel({0,-.18f,0},.044f,.07f,brass);
+  } else {
+    const XMFLOAT4 stone=mesh==Mesh::WeaponGroveStaff?XMFLOAT4{.35f,.69f,.25f,1}:
+      mesh==Mesh::WeaponAshStaff?XMFLOAT4{.65f,.82f,.72f,1}:
+      mesh==Mesh::WeaponScepter?XMFLOAT4{.94f,.79f,.33f,1}:XMFLOAT4{.42f,.51f,.91f,1};
+    const float crown=staff?.68f:.42f;
+    jewel({0,crown,0},mesh==Mesh::WeaponFocus?.11f:.075f,.22f,stone);
+    for(int i=0;i<4;++i) {
+      const float a=i*XM_PIDIV2;
+      const XMFLOAT3 root{std::sin(a)*.035f,crown-.04f,std::cos(a)*.035f};
+      const XMFLOAT3 mid{std::sin(a)*.13f,crown+.08f,std::cos(a)*.13f};
+      const XMFLOAT3 tip{std::sin(a)*.07f,crown+.25f,std::cos(a)*.07f};
+      const auto trim=mesh==Mesh::WeaponGroveStaff?wood:brass;
+      rod(root,mid,.013f,trim);rod(mid,tip,.011f,trim);
+      if(mesh==Mesh::WeaponGroveStaff) jewel(mid,.025f,.10f,stone);
+    }
+    if(mesh==Mesh::WeaponAshStaff) {
+      XMFLOAT3 last{0,.65f,0};
+      for(int i=1;i<=10;++i) {
+        const float a=i*XM_PI*.15f;
+        XMFLOAT3 next{.17f*(1-std::cos(a)),.65f+.17f*std::sin(a),0};
+        rod(last,next,.024f,wood);last=next;
+      }
+    }
+  }
+  return g;
+}
+
 std::vector<float> BoundaryAngles() {
   std::vector<float> angles;
   for (int i=0;i<64;++i) angles.push_back(2*pi*i/64);
@@ -112,6 +223,7 @@ float Hash(int x,int y) {
 }
 
 Geometry BuildMesh(Mesh mesh) {
+  if(mesh>=Mesh::WeaponMace && mesh<=Mesh::WeaponCleaver) return Equipment(mesh);
   if (IsBodyMesh(mesh)) return CharacterBody(unsigned(mesh)-unsigned(Mesh::Body)).mesh;
   if (IsHandMesh(mesh)) return CharacterHand((unsigned(mesh)-unsigned(Mesh::Hand))/2,(unsigned(mesh)-unsigned(Mesh::Hand))%2!=0).mesh;
   if (mesh==Mesh::Cloak) {

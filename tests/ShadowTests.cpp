@@ -2,6 +2,7 @@
 #include "engine/Shadow.h"
 #include "game/WorldView.h"
 #include "game/WorldMap.h"
+#include "game/CharacterView.h"
 #include "platform/Win32Window.h"
 #include <wincodec.h>
 #include <algorithm>
@@ -63,6 +64,13 @@ float MaximumDifference(const Image& a,const Image& b) {
   for (size_t i=0;i<a.pixels.size();++i) maximum=std::max(maximum,std::abs(int(a.pixels[i])-int(b.pixels[i])));
   return float(maximum);
 }
+double MeanDifference(const Image& a,const Image& b) {
+  Require(a.pixels.size()==b.pixels.size(),"Image comparison size changed.");
+  double sum=0;
+  for (size_t i=0;i<a.pixels.size();++i) if(i%4!=3)
+    sum+=std::abs(int(a.pixels[i])-int(b.pixels[i]));
+  return sum/(a.pixels.size()/4*3);
+}
 }
 int main() {
   const auto origin=visual::ShadowProjections({0,0,0}),tiny=visual::ShadowProjections({.0001f,0,.0001f});
@@ -120,6 +128,66 @@ int main() {
     Check(MaximumDifference(north,wrapped)==0,"Cloud drift must close smoothly without a wrap jump.");
   }
   const XMFLOAT4 white{.8f,.8f,.8f,1};
+  {
+    // Compare the production field against the original volume integration,
+    // including skinned body/hands, rigid attachments and field-edge fallback.
+    // Full cloud-cycle phases exercise light/dark transitions, not just spawn.
+    const auto scene=[&](bool cached,double time,XMFLOAT2 origin,const wchar_t* path) {
+      renderer.SetCloudLightFieldEnabled(cached);
+      renderer.BeginFrame(); renderer.SetAtmosphereTime(time);
+      renderer.SetCamera({origin.x+4,6,origin.y-9},{origin.x,1,origin.y});
+      renderer.DrawMesh(M::Box,{origin.x,-.1f,origin.y},{18,.2f,18},white,S::Stone);
+      for(int i=-2;i<=2;++i)
+        renderer.DrawMesh(M::Sphere,{origin.x+i*2.f,.7f,origin.y+3},{1.2f,1.4f,1.2f},white,S::Metal);
+      CharacterOutfit outfit; outfit.armor=outfit.helm=outfit.cloak=outfit.gloves=true;
+      DrawCharacter(renderer,{origin.x,origin.y},0,.7f,{.3f,.5f,.7f,1},.4f,.3f,outfit);
+      return Capture(renderer,path);
+    };
+    scene(true,1725,{0,0},L"cloud-light-warmup.png");
+    float worst=0; double mean=0;
+    for(int phase=0;phase<24;++phase) {
+      const auto reference=scene(false,phase*75,{0,0},L"cloud-light-reference.png");
+      const auto result=scene(true,phase*75,{0,0},L"cloud-light-field.png");
+      worst=std::max(worst,MaximumDifference(reference,result));
+      mean=std::max(mean,MeanDifference(reference,result));
+      Check(renderer.CloudLightUpdates()==1,"A changed cloud phase must refresh lighting before drawing the same frame.");
+      const auto repeated=scene(true,phase*75,{0,0},L"cloud-light-reused.png");
+      Check(renderer.CloudLightUpdates()==0 && MaximumDifference(result,repeated)==0,
+        "An unchanged phase must reuse the field without changing pixels.");
+    }
+    // Both signs/axes, interpolation at the edge and fully analytic exterior.
+    for(const auto origin : {XMFLOAT2{62.5f,0},XMFLOAT2{-62.5f,0},XMFLOAT2{0,62.5f},
+                            XMFLOAT2{0,-62.5f},XMFLOAT2{78,78}}) {
+      const auto reference=scene(false,525,origin,L"cloud-light-edge-reference.png");
+      const auto result=scene(true,525,origin,L"cloud-light-edge-field.png");
+      worst=std::max(worst,MaximumDifference(reference,result));
+      mean=std::max(mean,MeanDifference(reference,result));
+    }
+    std::cout<<"Cloud field vs analytic RGB: max "<<worst<<"/255; worst image mean "<<mean<<"/255\n";
+    Check(worst<=2 && mean<=.02,"The field must preserve analytic lighting within two RGB levels and .02 mean.");
+    const auto original=scene(true,0,{0,0},L"cloud-light-reset.png");
+    Require(renderer.Resize(800,600),"Cloud field resize failed.");
+    scene(true,1800,{0,0},L"cloud-light-resize.png");
+    Check(renderer.CloudLightUpdates()==0,"Resize and an exact cloud period must reuse the same world field.");
+    Require(renderer.Resize(960,720),"Cloud field restore size failed.");
+    renderer.BeginFrame(); renderer.SetAtmosphereTime(600);
+    Require(renderer.BeginPortrait(.1f,.1f,.7f,.8f),"Cloud field portrait failed.");
+    DrawCharacter(renderer,{0,0},0,0,white,0,0);
+    Require(renderer.EndPortrait() && renderer.EndFrame(false),"Cloud field portrait end failed.");
+    Check(renderer.CloudLightUpdates()==0,"A portrait-only frame must not integrate world cloud lighting.");
+    scene(true,600,{0,0},L"cloud-light-after-portrait.png");
+    Check(renderer.CloudLightUpdates()==1,"Returning to the world must refresh a phase changed before a portrait.");
+    const auto returned=scene(true,0,{0,0},L"cloud-light-returned.png");
+    Check(MaximumDifference(original,returned)==0,"Returning to a prior cloud phase must restore its lighting exactly.");
+    const auto ignored=scene(true,std::numeric_limits<double>::quiet_NaN(),{0,0},L"cloud-light-invalid.png");
+    Check(renderer.CloudLightUpdates()==0 && MaximumDifference(returned,ignored)==0,"Invalid time must not invalidate lighting.");
+    renderer.BeginFrame(); renderer.SetAtmosphereTime(300);
+    renderer.SetCamera({500,3,500},{501,3,501});
+    renderer.DrawMesh(M::Box,{-500,0,-500},{1,1,1},white,S::Plain);
+    Require(renderer.EndFrame(false),"Fully culled cloud frame failed.");
+    Check(renderer.CloudLightUpdates()==0,"A fully culled scene must not integrate unused surface lighting.");
+    renderer.SetAtmosphereTime(0);
+  }
   const auto floor=[&]() {
     renderer.BeginFrame(); renderer.SetCamera({3,4,5},{0,0,0});
     renderer.DrawMesh(M::Box,{0,-.1f,0},{12,.2f,12},white,S::Plain);

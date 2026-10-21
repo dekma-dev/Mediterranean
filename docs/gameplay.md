@@ -1,5 +1,7 @@
 # Dawnwatch gameplay rules
 
+Class weapon behavior (2026-10-22): the existing Starter/Watchguard tiers now display the class's weapon identity without changing their damage, inventory IDs, shop prices or save format. Scout/Engineer require the weapon slot for basic/heavy shots; rejection spends no cooldown. Removing/swapping it before release cancels preparation and retains the spent cooldown. Once released, the timed projectile contact continues independently of equipment removal. Dash/restoration retain their existing availability. Physical traces start at the visible muzzle and have separate release cues; spellcasters still cast from their palm/shield. There is no ammunition, ballistic collision or reload simulation yet. See [class equipment](classes-and-campaign.md).
+
 Current expansion: eleven class profiles, class-specific N-key upgrades and nine assignments through level 10 are described in [classes and campaign](classes-and-campaign.md). Existing equipment, input, animation and merchant systems below remain shared. Historical animation checkpoints retain their original dates.
 
 ## Hand articulation and item grips (2026-10-21)

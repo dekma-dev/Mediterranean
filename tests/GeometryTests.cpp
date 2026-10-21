@@ -42,14 +42,15 @@ int main() {
     }
     Check(std::abs(prepared.radiusScale-std::max({x,y,z}))<.00001f,"Optimized transform changed culling bounds.");
   }
-  std::size_t bytes=0,triangles=0;
+  std::size_t bytes=0,triangles=0,weaponBytes=0,weaponTriangles=0;
   for (unsigned mesh=0;mesh<static_cast<unsigned>(visual::Mesh::Count);++mesh) {
     const auto g=visual::BuildMesh(static_cast<visual::Mesh>(mesh));
     Check(!g.vertices.empty() && !g.indices.empty() && g.indices.size()%3==0,"Missing or incomplete mesh.");
     // The separately budgeted weighted body is covered by SkinningTests.
     if(!visual::IsBodyMesh(static_cast<visual::Mesh>(mesh)) && !visual::IsHandMesh(static_cast<visual::Mesh>(mesh))) {
-      bytes+=g.vertices.size()*sizeof(visual::Vertex)+g.indices.size()*sizeof(std::uint32_t);
-      triangles+=g.indices.size()/3;
+      const auto cost=g.vertices.size()*sizeof(visual::Vertex)+g.indices.size()*sizeof(std::uint32_t);
+      if(mesh>=unsigned(visual::Mesh::WeaponMace)) {weaponBytes+=cost;weaponTriangles+=g.indices.size()/3;}
+      else {bytes+=cost;triangles+=g.indices.size()/3;}
     }
     for (const auto& v : g.vertices) {
       Check(Finite(v.position) && Finite(v.normal),"Non-finite mesh data would poison bounds or lighting.");
@@ -71,6 +72,9 @@ int main() {
     }
   }
   Check(bytes<=640*1024 && triangles<=16000,"Reusable mesh library exceeded its startup geometry budget.");
+  std::cout<<"Equipment budget measured: "<<weaponBytes<<" bytes / "<<weaponTriangles<<" triangles\n";
+  Check(weaponBytes<=416*1024 && weaponTriangles<=8500,"Class equipment exceeded its separate cached geometry budget.");
+  std::cout<<"Class weapon bytes: "<<weaponBytes<<"; triangles: "<<weaponTriangles<<'\n';
   const auto cloak=visual::BuildMesh(visual::Mesh::Cloak);
   for (const auto& vertex : cloak.vertices) {
     const auto p=vertex.position;

@@ -2,6 +2,7 @@
 #include "game/CharacterView.h"
 #include "game/CharacterSelection.h"
 #include "game/MapArtwork.h"
+#include "game/UiSkin.h"
 #include "engine/Renderer.h"
 #include <algorithm>
 #include <array>
@@ -25,8 +26,8 @@ template<unsigned Segments> const std::array<Point,Segments+1>& CirclePoints() {
  }();
  return points;
 }
-const Color ink{.97f,.93f,.80f,1},muted{.73f,.77f,.67f,1},gold{.86f,.67f,.30f,1};
-const Color dark{.038f,.075f,.065f,.99f},border{.39f,.38f,.24f,1},blue{.23f,.46f,.63f,1};
+const Color ink{.97f,.93f,.80f,1},muted{.78f,.74f,.65f,1},gold{.86f,.67f,.30f,1};
+const Color dark{.055f,.044f,.032f,.99f},border{.39f,.34f,.24f,1},blue{.23f,.46f,.63f,1};
 std::string Seconds(float value) {
  std::ostringstream text;
  if (value<1) text<<std::fixed<<std::setprecision(1)<<std::ceil(std::max(0.f,value)*10)/10;
@@ -54,23 +55,49 @@ std::string TalentEffect(const rpg::Simulation& s,int index) {
  if(info.dashCooldown) return "Dash cooldown: -"+Number(info.dashCooldown)+"s";
  return index==6?"Heavy: +25% finishing damage":"Healing: +20 at low health";
 }
+Color IconUv(int tile) {
+ // Authored atlas cell edges, inset three source pixels to exclude separators.
+ // The last painted row is taller; explicit UVs keep every object intact.
+ constexpr float xx[]={0,252,500,750,1005,1254};
+ constexpr float yy[]={0,249,485,730,962,1254};
+ const int col=tile%5,row=tile/5;
+ return {(xx[col]+3)/1254,(yy[row]+3)/1254,(xx[col+1]-3)/1254,(yy[row+1]-3)/1254};
+}
 struct Canvas {
  Renderer& r; Layout layout;
  explicit Canvas(Renderer& renderer):r(renderer),layout(float(r.Width()),float(r.Height())) {}
  Point P(float x,float y) const { return {(layout.x+x*layout.scale)/r.Width(),(layout.y+y*layout.scale)/r.Height()}; }
  void RectFill(Rect a,Color c) { const auto p=P(a.x,a.y); r.DrawHudRect(p.x,p.y,a.w*layout.scale/r.Width(),a.h*layout.scale/r.Height(),c); }
  void Gradient(Rect a,Color top,Color bottom) {
-  for (int i=0;i<16;++i) {
-   const float t=float(i)/15;
-   RectFill({a.x,a.y+a.h*i/16,a.w,a.h/16+.1f},{top.x+(bottom.x-top.x)*t,top.y+(bottom.y-top.y)*t,top.z+(bottom.z-top.z)*t,top.w+(bottom.w-top.w)*t});
-  }
+  const auto p=P(a.x,a.y);
+  r.DrawHudGradient(p.x,p.y,a.w*layout.scale/r.Width(),a.h*layout.scale/r.Height(),top,bottom);
+ }
+ void Art(Rect a,Renderer::UiArt art=Renderer::UiArt::Frame,Color uv={0,0,1,1},Color tint={1,1,1,1}) {
+  const auto p=P(a.x,a.y);r.DrawUiArt(art,p.x,p.y,a.w*layout.scale/r.Width(),a.h*layout.scale/r.Height(),uv,tint);
+ }
+ void Skin(Rect a,float corner=24,Color tint={1,1,1,1},bool center=true) {
+  skin::Panel(a.x,a.y,a.w,a.h,corner,[&](float x,float y,float w,float h,float u,float v,float uu,float vv) {
+   Art({x,y,w,h},Renderer::UiArt::Frame,{u,v,uu,vv},tint);
+  },center);
  }
  void Frame(Rect a,Color fill=dark,Color line=border) {
-  RectFill({a.x+3,a.y+4,a.w,a.h},{0,0,0,.40f}); RectFill(a,{.018f,.024f,.013f,1});
-  RectFill({a.x+1,a.y+1,a.w-2,a.h-2},line);
-  RectFill({a.x+3,a.y+3,a.w-6,a.h-6},fill);
-  RectFill({a.x+2,a.y+2,a.w-4,1},{.72f,.62f,.32f,.6f});
-  RectFill({a.x+3,a.y+a.h-3,a.w-6,1},{.015f,.025f,.015f,.95f});
+  RectFill({a.x+2,a.y+3,a.w,a.h},{0,0,0,.5f});
+  const float corner=std::min(18.f,a.h*.28f);Skin(a,corner);
+  RectFill({a.x+5,a.y+5,a.w-10,a.h-10},{fill.x,fill.y,fill.z,.28f});
+  if (line.y>.5f) {
+   Line(a.x+5,a.y+2,a.x+a.w-5,a.y+2,1,line);
+   Line(a.x+5,a.y+a.h-3,a.x+a.w-5,a.y+a.h-3,1,{line.x,line.y,line.z,.6f});
+  }
+ }
+ void Button(Rect a,bool enabled=true,bool highlight=false,bool primary=false) {
+  Skin(a,std::min(16.f,a.h*.32f),enabled?Color{1,1,1,1}:Color{.48f,.48f,.48f,1});
+  const float edge=std::min(6.f,a.h*.14f);
+  const Color tint=primary?Color{.46f,.025f,.035f,highlight?.78f:.65f}:Color{.19f,.22f,.19f,highlight?.62f:.24f};
+  RectFill({a.x+edge,a.y+edge,a.w-2*edge,a.h-2*edge},enabled?tint:Color{0,0,0,.3f});
+  if(highlight && enabled) {
+   Line(a.x+7,a.y+4,a.x+a.w-7,a.y+4,1,{1,.82f,.45f,1});
+   Line(a.x+7,a.y+a.h-5,a.x+a.w-7,a.y+a.h-5,1,{1,.82f,.45f,.6f});
+  }
  }
  void Text(float x,float y,const std::string& s,float size=18,Color c=ink) {
   if (c.x+c.y+c.z>1) {
@@ -157,122 +184,23 @@ struct Canvas {
   }
  }
  void Window(Rect a) {
-  Frame(a,dark,{.37f,.39f,.17f,1});
-  Gradient({a.x+5,a.y+5,a.w-10,a.h-10},{.13f,.23f,.19f,1},{.035f,.065f,.059f,1});
-  // Recessed cast-bronze header and footer with a continuous woven relief.
-  for (float y : {a.y+4,a.y+a.h-9}) {
-   Gradient({a.x+10,y,a.w-20,5},{.19f,.32f,.27f,1},{.06f,.13f,.12f,1});
-   for (float x=a.x+15;x<a.x+a.w-30;x+=24) {
-    for (int step=0;step<8;++step) {
-     const float u=step/8.f,v=(step+1)/8.f;
-     const float yy=y+2+std::sin(u*6.2831853f)*1.7f,ty=y+2+std::sin(v*6.2831853f)*1.7f;
-     Line(x+u*24,yy+1,x+v*24,ty+1,1.6f,{.025f,.07f,.06f,1});
-     Line(x+u*24,yy,x+v*24,ty,.7f,{.43f,.53f,.35f,.65f});
-    }
-   }
-  }
-  // Fine horizontal tool marks keep large panels from reading as flat plastic.
-  for(float y=a.y+15;y<a.y+a.h-15;y+=7) {
-   const float shade=.025f+.015f*std::sin(y*1.7f);
-   RectFill({a.x+12,y,a.w-24,1},{.55f,.62f,.47f,shade});
-  }
-  // Embossed rails and leaf inlays give the frame depth without an art atlas.
-  for (float side : {0.f,1.f}) {
-   const float x=a.x+side*(a.w-9);
-   RectFill({x+2,a.y+7,6,a.h-14},{.075f,.12f,.055f,1});
-   Line(x+3,a.y+8,x+3,a.y+a.h-8,1,{.47f,.47f,.23f,1});
-   Line(x+7,a.y+8,x+7,a.y+a.h-8,1,{.025f,.04f,.018f,1});
-  }
-  Gradient({a.x+8,a.y+3,a.w-16,6},{.36f,.40f,.20f,1},{.08f,.13f,.045f,1});
-  Gradient({a.x+8,a.y+a.h-9,a.w-16,6},{.08f,.13f,.045f,1},{.32f,.36f,.17f,1});
-  for (float y=a.y+35;y<a.y+a.h-25;y+=72) {
-   for (float side : {0.f,1.f}) {
-    const float x=a.x+12+side*(a.w-24),dir=side==0?1.f:-1.f;
-    Scroll(x,y,dir,.55f);
-    Triangle({x,y+14},{x+dir*5,y+9},{x+dir*4,y+18},{.28f,.36f,.16f,1});
-    Line(x,y+14,x+dir*5,y+9,.8f,{.51f,.51f,.27f,1});
-   }
-  }
-  RectFill({a.x+18,a.y+21,a.w-36,a.h-42},{.015f,.022f,.012f,.24f});
-  // Deterministic rubbed bronze, edge chips and inset leather seams.
-  for(int n=0;n<36;++n) {
-   const float t=(n+.37f)/36,grain=std::fmod(n*7.31f,1.f);
-   for(float side:{0.f,1.f}) {
-    const float x=a.x+12+t*(a.w-24),y=a.y+side*(a.h-7)+3;
-    Line(x,y,x+2+grain*6,y+.7f,.65f,{.73f,.59f,.32f,.35f});
-    RectFill({a.x+3+side*(a.w-7),a.y+18+t*(a.h-36),2,1+grain*4},{.05f,.04f,.02f,.65f});
-   }
-  }
-  for(float side:{0.f,1.f}) for(float y=a.y+30;y<a.y+a.h-30;y+=12) {
-   const float x=a.x+15+side*(a.w-30);Line(x-1,y-2,x+1,y+2,.8f,{.58f,.48f,.28f,.35f});
-  }
-
-  for (float side : {0.f,1.f}) for (float bottom : {0.f,1.f}) {
-   const float x=a.x+side*a.w,y=a.y+bottom*a.h;
-   const float dx=side?-1.f:1.f,dy=bottom?-1.f:1.f;
-   // Cast-metal corner brackets: overlapping leaves, incised veins and studs.
-   for(int leaf=0;leaf<3;++leaf) {
-    const float length=25.f-leaf*5,offset=leaf*5.f;
-    Triangle({x+dx*3,y+dy*3},{x+dx*(length+8),y+dy*(offset+4)},
-      {x+dx*(offset+5),y+dy*(length+7)},{.24f,.29f,.19f,1});
-    Line(x+dx*5,y+dy*5,x+dx*(length+5),y+dy*(offset+4),1,{.66f,.58f,.32f,1});
-    Line(x+dx*7,y+dy*7,x+dx*(offset+5),y+dy*(length+3),1,{.08f,.12f,.08f,1});
-   }
-   Oval(x,y,6,6,{.11f,.14f,.10f,1}); Oval(x,y,4,4,gold); Oval(x-1,y-1,1.5f,1.5f,{1,.88f,.52f,1});
-  }
+  RectFill({a.x+4,a.y+6,a.w,a.h},{0,0,0,.55f});
+  Skin(a,28);
+  RectFill({a.x+11,a.y+11,a.w-22,a.h-22},{.006f,.005f,.004f,.24f});
  }
  void Banner(Rect a,const std::string& label,float size=18) {
-  const float cy=a.y+a.h*.5f;
-  Diamond(a.x+11,cy,18,a.h*.5f,{.16f,.19f,.065f,1}); Diamond(a.x+a.w-11,cy,18,a.h*.5f,{.16f,.19f,.065f,1});
-  Frame({a.x+10,a.y,a.w-20,a.h},{.22f,.16f,.055f,1},gold);
-  Gradient({a.x+13,a.y+3,a.w-26,a.h-6},{.51f,.34f,.13f,1},{.15f,.115f,.055f,1});
-  for(float x=a.x+19;x<a.x+a.w-19;x+=6) {
-   Line(x,a.y+5,x+2,a.y+7,.6f,{.90f,.72f,.39f,.45f});
-   Line(x,a.y+a.h-6,x+2,a.y+a.h-4,.6f,{.08f,.06f,.025f,.6f});
-  }
-  Line(a.x+15,a.y+4,a.x+a.w-15,a.y+4,1,{1,.81f,.40f,.75f});
-  for (float x : {a.x+8,a.x+a.w-8}) { Diamond(x,cy,7,11,gold); Diamond(x,cy,4,7,{.23f,.29f,.08f,1}); }
-  Center(a.x,a.y+(a.h-size)*.5f-2,a.w,label,size,{1,.9f,.51f,1});
+  Skin(a,std::min(20.f,a.h*.48f));
+  RectFill({a.x+12,a.y+5,a.w-24,a.h-10},{.25f,.10f,.035f,.45f});
+  Center(a.x+14,a.y+(a.h-size)*.5f-2,a.w-28,label,size,{1,.88f,.61f,1});
  }
  void EmptySlot(Rect a) {
-  Frame(a,{.10f,.083f,.052f,1},{.31f,.28f,.16f,1});
-  Gradient({a.x+4,a.y+4,a.w-8,a.h-8},{.15f,.13f,.08f,1},{.065f,.062f,.043f,1});
-  // Quiet tooled leather, instead of four bright repeated glyphs per cell.
-  for (float yy=a.y+7;yy<a.y+a.h-6;yy+=4)
-   Line(a.x+6,yy,a.x+a.w-6,yy,1,{.28f,.23f,.14f,.12f});
-  const float cx=a.x+a.w*.5f,cy=a.y+a.h*.5f;
-  for (float side : {-1.f,1.f}) {
-   Scroll(cx+side*a.w*.17f,cy,-side,a.w/110);
-   for (float yy : {a.y+5,a.y+a.h-5})
-    Line(cx+side*(a.w*.5f-5),yy,cx+side*(a.w*.5f-9),yy,.7f,{.52f,.42f,.24f,.6f});
-  }
+  Skin(a,10,{.46f,.44f,.38f,1});
+  RectFill({a.x+4,a.y+4,a.w-8,a.h-8},{.005f,.008f,.006f,.38f});
  }
  void Alcove(Rect a) {
-  Frame(a,{.020f,.032f,.030f,1},{.32f,.38f,.27f,1});
-  for (int i=0;i<44;++i) {
-   const float x=a.x+4+i*(a.w-8)/44,fold=.5f+.5f*std::sin(i*.83f);
-   Gradient({x,a.y+4,(a.w-8)/44+.1f,a.h-8},
-    {.10f+fold*.11f,.026f+fold*.018f,.022f+fold*.012f,1},{.024f,.041f,.035f,1});
-  }
-  // Stone arch, recessed keystone and dressed side piers frame the live model.
-  const float cx=a.x+a.w*.5f,cy=a.y+48,rx=a.w*.5f-12;
-  for (int i=0;i<18;++i) {
-   const float t=3.14159265f+i*3.14159265f/18,u=t+3.14159265f/18-.018f;
-   const Point p{cx+std::cos(t)*rx,cy+std::sin(t)*36},q{cx+std::cos(u)*rx,cy+std::sin(u)*36};
-   const Point inner{cx+std::cos(u)*(rx-8),cy+std::sin(u)*28},s{cx+std::cos(t)*(rx-8),cy+std::sin(t)*28};
-   const Color stone{.25f+(i%3)*.025f,.31f+(i%3)*.025f,.25f,1};
-   Triangle(p,q,inner,stone); Triangle(p,inner,s,stone);
-   Line(p.x,p.y,q.x,q.y,.8f,{.56f,.55f,.38f,1});
-  }
-  for (float x : {a.x+7,a.x+a.w-15}) {
-   Gradient({x,cy,8,a.h-67},{.31f,.36f,.27f,1},{.10f,.16f,.13f,1});
-   for (float y=cy+21;y<a.y+a.h-22;y+=25) Line(x,y,x+8,y,1,{.035f,.06f,.045f,1});
-  }
-  for (int row=0;row<5;++row) for (int column=0;column<6;++column) {
-   const float x=a.x+12+column*(a.w-24)/6,y=a.y+a.h-44+row*7.f;
-   Gradient({x+1,y,(a.w-24)/6-2,6},{.22f+row*.015f,.26f+row*.014f,.21f,1},{.10f,.15f,.12f,1});
-  }
-  Oval(cx,a.y+a.h-29,a.w*.32f,10,{.005f,.014f,.01f,.7f});
+  Skin(a,18);
+  Art({a.x+6,a.y+6,a.w-12,a.h-12},Renderer::UiArt::Hall,{.32f,0,.67f,1},{.66f,.69f,.72f,1});
+  Oval(a.x+a.w*.5f,a.y+a.h-28,a.w*.28f,9,{.005f,.008f,.01f,.6f});
  }
  void Parchment(Rect a) {
   Frame(a,{.66f,.52f,.32f,1},{.30f,.21f,.11f,1});
@@ -286,31 +214,11 @@ struct Canvas {
    RectFill({a.x+a.w-5-i,a.y+4,1,a.h-8},{.24f,.15f,.065f,.10f});
   }
  }
- // A beveled metal medallion with a shaded face, hood and cheek plates.
+ // Painted armor crest with a live level/threat medallion.
  void Portrait(float x,float y,bool enemy,int level) {
-  Oval(x+2,y+3,28,31,{0,0,0,.55f});
-  for (int i=28;i>22;--i) Oval(x,y,float(i),float(i+2),i%2?gold:Color{.19f,.30f,.24f,1});
-  Oval(x,y,22,24,{.045f,.07f,.065f,1});
-  for (float side : {-1.f,1.f}) for (int i=0;i<4;++i) {
-   const float yy=y-20+i*12.f;
-   Triangle({x+side*23,yy},{x+side*(34-i%2*3),yy-8},{x+side*26,yy+9},{.28f,.41f,.27f,1});
-   Line(x+side*25,yy,x+side*30,yy-5,1,gold);
-  }
-  Oval(x,y-2,13,18,{.40f,.27f,.18f,1});
-  Oval(x-2,y-5,11,14,{.76f,.56f,.38f,1});
-  Triangle({x+2,y-9},{x+6,y+5},{x-1,y+5},{.90f,.70f,.47f,1});
-  Line(x-8,y-5,x-3,y-4,2,{.07f,.09f,.08f,1});
-  Line(x+4,y-4,x+9,y-5,2,{.07f,.09f,.08f,1});
-  Line(x-3,y+10,x+4,y+10,1,{.30f,.16f,.12f,1});
-  const Color steel=enemy?Color{.49f,.26f,.20f,1}:Color{.34f,.48f,.54f,1};
-  for(float side : {-1.f,1.f}) {
-   Triangle({x+side*19,y+15},{x+side*12,y-16},{x+side*9,y+15},steel);
-   Line(x+side*16,y-10,x+side*14,y+13,1,{.79f,.77f,.59f,1});
-  }
-  Triangle({x-19,y-12},{x,y-24},{x+19,y-12},steel);
-  Line(x-18,y-12,x+18,y-12,2,gold);
-  Diamond(x,y-17,4,6,enemy?Color{.8f,.18f,.07f,1}:Color{.22f,.80f,.69f,1});
-  Oval(x,y+25,12,10,{.07f,.13f,.10f,1}); Ring(x,y+25,10,gold);
+  Skin({x-29,y-29,58,59},17);
+  Art({x-23,y-23,46,45},Renderer::UiArt::Icons,IconUv(16),enemy?Color{.88f,.59f,.48f,1}:Color{1,1,1,1});
+  Oval(x,y+25,12,10,{.07f,.055f,.035f,1}); Ring(x,y+25,10,gold);
   Center(x-11,y+17,22,enemy?"!":std::to_string(level),12);
  }
  void CooldownSweep(Rect a,float fraction) {
@@ -324,187 +232,35 @@ struct Canvas {
    Triangle(center,edge(from),edge(std::min(end,from+.09817477f)),{.006f,.012f,.025f,.70f});
  }
 };
-void Icon(Canvas& c,Rect rect,Item item,float alpha=1) {
- const float x=rect.x+rect.w*.5f,y=rect.y+rect.h*.5f,s=rect.w/60;
- const Color metal{.72f,.77f,.77f,alpha},leather{.48f,.30f,.16f,alpha},cloth{.25f,.44f,.60f,alpha};
- if (item==Item::Starter || item==Item::Watchguard) {
-  c.Line(x-12*s,y+17*s,x+15*s,y-18*s,10*s,{.07f,.12f,.15f,alpha});
-  c.Line(x-12*s,y+17*s,x+13*s,y-15*s,7*s,item==Item::Watchguard?Color{.84f,.75f,.48f,alpha}:metal);
-  c.Line(x-10*s,y+15*s,x+15*s,y-18*s,2*s,{.94f,.98f,1,alpha});
-  c.Line(x-14*s,y+15*s,x+10*s,y-15*s,2*s,{.30f,.40f,.46f,alpha});
-  c.Triangle({x+10*s,y-17*s},{x+20*s,y-24*s},{x+17*s,y-12*s},metal);
-  c.Line(x-16*s,y+5*s,x-1*s,y+17*s,4*s,gold); c.Line(x-12*s,y+17*s,x-18*s,y+24*s,5*s,leather);
-  c.Oval(x-18*s,y+24*s,4*s,3*s,gold);
-  for(int i=0;i<3;++i) c.Line(x-(13+i*2)*s,y+(18+i*2)*s,x-(16+i*2)*s,y+(16+i*2)*s,.9f*s,metal);
- } else if (item==Item::Potion) {
-  c.Oval(x,y+7*s,14*s,17*s,{.33f,.57f,.61f,alpha});
-  c.Oval(x,y+11*s,11*s,12*s,{.67f,.13f,.16f,alpha});
-  c.Oval(x-3*s,y+7*s,7*s,9*s,{.95f,.22f,.19f,alpha});
-  c.Oval(x+3*s,y+18*s,7*s,3*s,{.34f,.035f,.09f,alpha});
-  c.RectFill({x-6*s,y-17*s,12*s,16*s},{.54f,.72f,.72f,alpha});
-  c.RectFill({x-8*s,y-21*s,16*s,6*s},leather); c.Line(x-6*s,y+2*s,x-7*s,y+13*s,2*s,{.92f,.86f,.72f,alpha});
- } else if (item==Item::Tunic || item==Item::Ward) {
-  const Color tint=item==Item::Ward?metal:cloth;
-  c.Triangle({x-14*s,y-18*s},{x+14*s,y-18*s},{x+17*s,y+19*s},tint);
-  c.Triangle({x-14*s,y-18*s},{x+17*s,y+19*s},{x-17*s,y+19*s},tint);
-  c.Line(x-15*s,y-14*s,x-22*s,y+1*s,11*s,tint); c.Line(x+15*s,y-14*s,x+22*s,y+1*s,11*s,tint);
-  c.RectFill({x-17*s,y+13*s,34*s,4*s},leather); c.Oval(x,y-20*s,7*s,5*s,dark);
-  for(float side : {-1.f,1.f}) {
-   c.Line(x+side*11*s,y-8*s,x+side*13*s,y+11*s,3*s,{.11f,.22f,.29f,alpha});
-   c.Line(x+side*7*s,y-12*s,x+side*8*s,y+9*s,1.3f*s,{.64f,.76f,.80f,alpha});
-  }
-  c.Line(x,y-14*s,x,y+12*s,2*s,gold); c.RectFill({x-3*s,y+12*s,6*s,5*s},gold);
-  if (item==Item::Ward) { c.Oval(x-18*s,y-12*s,10*s,7*s,gold); c.Oval(x+18*s,y-12*s,10*s,7*s,gold); }
- } else if (item==Item::Helm) {
-  c.Oval(x,y-5*s,20*s,20*s,metal);
-  c.Oval(x-4*s,y-10*s,13*s,11*s,{.86f,.91f,.88f,alpha});
-  c.RectFill({x-14*s,y-5*s,28*s,26*s},{.055f,.08f,.07f,alpha});
-  c.Line(x-19*s,y-7*s,x+19*s,y-7*s,5*s,gold);
-  c.Line(x-18*s,y-3*s,x-15*s,y+20*s,7*s,metal); c.Line(x+18*s,y-3*s,x+15*s,y+20*s,7*s,metal);
-  c.Line(x,y-24*s,x,y-10*s,5*s,gold);
-  c.Line(x,y-5*s,x,y+12*s,4*s,metal);
- } else if (item==Item::Shield) {
-  c.Diamond(x,y,23*s,28*s,gold); c.Diamond(x,y-1*s,18*s,23*s,cloth);
-  c.Line(x,y-20*s,x,y+19*s,3*s,metal); c.Line(x-14*s,y-5*s,x+14*s,y-5*s,3*s,metal);
-  c.Oval(x,y-4*s,6*s,6*s,gold);
- } else if (item==Item::Shoulders) {
-  for (float side : {-1.f,1.f}) {
-   c.Oval(x+side*13*s,y-5*s,13*s,13*s,leather);
-   for (int layer=0;layer<3;++layer)
-    c.Line(x+side*4*s,y+layer*6*s,x+side*25*s,y+(layer*6-4)*s,4*s,metal);
-   c.Oval(x+side*14*s,y-12*s,2*s,2*s,gold);
-  }
- } else if (item==Item::Gloves) {
-  for (float side : {-1.f,1.f}) {
-   const float cx=x+side*13*s;
-   c.RectFill({cx-7*s,y-20*s,14*s,10*s},gold);
-   c.Oval(cx,y-2*s,9*s,13*s,leather);
-   c.Line(cx+side*6*s,y-7*s,cx+side*11*s,y+4*s,5*s,leather);
-   for (int finger=0;finger<3;++finger)
-    c.Line(cx+(finger-1)*5*s,y+2*s,cx+(finger-1)*5*s,y+(18-finger*2)*s,4*s,leather);
-  }
- } else if (item==Item::Belt) {
-  c.RectFill({x-25*s,y-7*s,50*s,13*s},leather);
-  c.RectFill({x-6*s,y-9*s,12*s,17*s},gold);
-  c.RectFill({x-3*s,y-5*s,6*s,9*s},leather);
-  for (float side : {-1.f,1.f}) {
-   c.Oval(x+side*17*s,y+10*s,8*s,11*s,leather);
-   c.Line(x+side*17*s-6*s,y+4*s,x+side*17*s+6*s,y+4*s,3*s,gold);
-  }
- } else if (item==Item::Cloak) {
-  for (int fold=0;fold<12;++fold) {
-   const float u=-1+fold/6.f,v=u+1/6.f,tone=.60f+.40f*std::sin(fold*1.8f);
-   const Color shade{cloth.x*tone,cloth.y*tone,cloth.z*tone,alpha};
-   c.Triangle({x+u*7*s,y-20*s},{x+v*7*s,y-20*s},{x+v*24*s,y+22*s},shade);
-   c.Triangle({x+u*7*s,y-20*s},{x+v*24*s,y+22*s},{x+u*24*s,y+22*s},shade);
-  }
-  for (float side : {-1.f,1.f})
-   c.Line(x+side*3*s,y-17*s,x+side*21*s,y+21*s,2*s,gold);
-  c.Line(x-21*s,y+21*s,x+21*s,y+21*s,2*s,gold);
-  c.Oval(x,y-15*s,4*s,3*s,gold);
- } else if (item==Item::Trousers) {
-  c.RectFill({x-15*s,y-20*s,30*s,15*s},leather);
-  c.Line(x-8*s,y-6*s,x-10*s,y+21*s,12*s,{.39f,.43f,.40f,alpha});
-  c.Line(x+8*s,y-6*s,x+10*s,y+21*s,12*s,{.39f,.43f,.40f,alpha});
-  for(float side : {-1.f,1.f}) {
-   c.Line(x+side*5*s,y-5*s,x+side*7*s,y+20*s,2*s,{.59f,.59f,.44f,alpha});
-   for(int crease=0;crease<4;++crease)
-    c.Line(x+side*5*s,y+(crease*6-3)*s,x+side*13*s,y+(crease*6)*s,1.1f*s,{.19f,.23f,.22f,alpha});
-  }
- } else {
-  for (float side : {-1.f,1.f}) {
-   c.RectFill({x+side*10*s-5*s,y-19*s,11*s,31*s},leather);
-   c.Oval(x+side*10*s+3*s,y+17*s,11*s,6*s,leather);
-   c.RectFill({x+side*10*s-6*s,y-10*s,13*s,3*s},gold);
-   c.Line(x+side*10*s-3*s,y-17*s,x+side*10*s-3*s,y+10*s,2*s,{.71f,.48f,.25f,alpha});
-   c.Line(x+side*10*s-7*s,y+21*s,x+side*10*s+12*s,y+21*s,3*s,{.13f,.11f,.07f,alpha});
-   for(int lace=0;lace<4;++lace) {
-    const float yy=y+(-4+lace*5)*s;
-    c.Line(x+side*10*s-3*s,yy,x+side*10*s+4*s,yy+3*s,s,{.84f,.65f,.36f,alpha});
-   }
-  }
- }
+std::string ItemTypeLabel(const rpg::ItemInfo& info) {
+ return info.slot==rpg::GearSlot::Weapon?std::string(info.type)+(info.id==Item::Watchguard?" / Uncommon":" / Common"):info.type;
+}
+void PaintedIcon(Canvas& c,Rect rect,int tile,float alpha=1) {
+ if(tile<0 || tile>=25) return;
+ c.Art(rect,Renderer::UiArt::Icons,IconUv(tile),{1,1,1,alpha});
+}
+void Icon(Canvas& c,Rect rect,Item item,float alpha=1,rpg::ClassId id=rpg::ClassId::Warrior) {
+ if(item==Item::None) return;
+ int tile=-1;
+ if(item==Item::Starter || item==Item::Watchguard) tile=int(rpg::WeaponFor(id).form);
+ else if(item>=Item::Potion && item<=Item::Cloak) tile=11+int(item)-int(Item::Potion);
+ PaintedIcon(c,rect,tile,alpha);
 }
 void ClassSigil(Canvas& c,Rect rect,rpg::ClassId id,float alpha=1) {
- const float x=rect.x+rect.w*.5f,y=rect.y+rect.h*.5f,s=std::min(rect.w,rect.h)/40;
- const auto& tint=rpg::DescribeClass(id).color;
- const Color metal{.92f,.79f,.48f,alpha},light{.95f,.94f,.78f,alpha},shade{.035f,.045f,.04f,alpha};
- const Color color{std::min(1.f,tint[0]+.24f),std::min(1.f,tint[1]+.24f),std::min(1.f,tint[2]+.24f),alpha};
- c.Oval(x,y,18*s,18*s,{tint[0]*.22f,tint[1]*.22f,tint[2]*.22f,alpha});c.Ring(x,y,17*s,metal,.7f*s);
- const auto line=[&](float ax,float ay,float bx,float by,float width,Color pigment) {c.Line(x+ax*s,y+ay*s,x+bx*s,y+by*s,width*s,pigment);};
- using C=rpg::ClassId;
- if(id==C::Scout) {
-  for(int i=0;i<16;++i) {
-   const float a=-1.4f+i*2.8f/16,b=a+2.8f/16;
-   line(std::cos(a)*12-5,std::sin(a)*13,std::cos(b)*12-5,std::sin(b)*13,2.4f,metal);
-  }
-  line(-3,-13,-3,13,.8f,light);line(-13,4,13,-4,1.3f,light);
-  line(13,-4,8,-7,1.8f,metal);line(13,-4,10,1,1.8f,metal);
- } else if(id==C::Mage || id==C::Demonologist) {
-  c.Triangle({x-11*s,y+10*s},{x+10*s,y+10*s},{x+4*s,y-15*s},color);
-  c.Triangle({x-12*s,y+9*s},{x+2*s,y+10*s},{x-6*s,y-8*s},color);
-  c.Triangle({x-4*s,y+10*s},{x+6*s,y+10*s},{x+2*s,y-3*s},light);
-  if(id==C::Demonologist) {line(-8,-3,-13,-13,2,metal);line(8,-3,13,-13,2,metal);}
- } else if(id==C::Priest || id==C::Paladin) {
-  for(int i=0;i<8;++i) {const float a=i*.7854f;line(std::cos(a)*10,std::sin(a)*10,std::cos(a)*14,std::sin(a)*14,1,metal);}
-  line(0,-12,0,12,4,color);line(-8,-4,8,-4,4,color);line(0,-12,0,12,1,light);
-  if(id==C::Paladin) c.Ring(x,y,9*s,metal,1.2f*s);
- } else if(id==C::Necromancer) {
-  c.Oval(x,y-3*s,10*s,11*s,light);c.RectFill({x-6*s,y+3*s,12*s,9*s},light);
-  c.Oval(x-4*s,y-3*s,3*s,3*s,shade);c.Oval(x+4*s,y-3*s,3*s,3*s,shade);
-  for(int i=-1;i<=1;++i) line(i*3.f,7,i*3.f,12,.8f,shade);
-  c.Triangle({x,y+1*s},{x-2*s,y+5*s},{x+2*s,y+5*s},shade);
- } else if(id==C::Engineer) {
-  for(int i=0;i<10;++i) {const float a=i*.6283f;line(std::cos(a)*10,std::sin(a)*10,std::cos(a)*14,std::sin(a)*14,4,metal);}
-  c.Ring(x,y,10*s,metal,4*s);c.Ring(x,y,4*s,light,2*s);line(-10,10,10,-10,1,shade);
- } else if(id==C::Psionic) {
-  for(int i=0;i<14;++i) for(float side:{-1.f,1.f}) {
-   const float a=i/14.f,b=(i+1)/14.f;
-   line(-14+28*a,side*std::sin(a*3.14159f)*8,-14+28*b,side*std::sin(b*3.14159f)*8,1.3f,light);
-  }
-  c.Oval(x,y,5*s,7*s,color);c.Oval(x,y,2*s,4*s,shade);c.Oval(x-s,y-2*s,s,s,light);
- } else if(id==C::Bard) {
-  c.Oval(x-3*s,y+5*s,8*s,9*s,metal);line(0,3,7,-13,5,metal);c.Oval(x-2*s,y+3*s,3*s,3*s,shade);
-  for(int i=-1;i<=1;++i) line(-6.f+i,11,6.f+i,-13,.5f,light);
-  line(4,-10,11,-8,2,color);
- } else if(id==C::Druid) {
-  line(-7,13,5,-12,2,metal);
-  for(int i=0;i<3;++i) {c.Oval(x+2*s,y+(-8+i*7)*s,8*s,3*s,color);line(-4,-5+i*7.f,8,-9+i*7.f,.6f,light);}
- } else Icon(c,{rect.x+4*s,rect.y+4*s,rect.w-8*s,rect.h-8*s},Item::Starter,alpha);
+ PaintedIcon(c,rect,int(rpg::WeaponFor(id).form),alpha);
 }
 void AbilityArtwork(Canvas& c,Rect rect,int ability,rpg::ClassId id=rpg::ClassId::Warrior) {
- const float x=rect.x+rect.w*.5f,y=rect.y+rect.h*.5f,s=rect.w/40;
- const Color glow=ability==1?Color{.25f,.64f,.95f,.7f}:ability==2?Color{.18f,.85f,.78f,.7f}:
-   ability==3?Color{.72f,.91f,.30f,.7f}:Color{1,.58f,.16f,.7f};
- c.Gradient(rect,{glow.x*.24f,glow.y*.24f,glow.z*.24f,1},{.015f,.025f,.055f,1});
- for(int i=0;i<6;++i) {
-  const float a=i*1.0472f+.3f;
-  c.Line(x,y,x+std::cos(a)*17*s,y+std::sin(a)*17*s,(i%2+1)*s,{glow.x,glow.y,glow.z,.24f});
+ if(ability==2) PaintedIcon(c,rect,22);
+ else if(ability==3) PaintedIcon(c,rect,23);
+ else if(ability>=4) PaintedIcon(c,rect,11);
+ else if(ability==1 && (id==rpg::ClassId::Warrior || id==rpg::ClassId::Paladin || id==rpg::ClassId::Demonologist)) PaintedIcon(c,rect,24);
+ else {
+  PaintedIcon(c,rect,int(rpg::WeaponFor(id).form));
+  if(ability==1) {
+   c.Line(rect.x+3,rect.y+4,rect.x+rect.w-3,rect.y+4,2,gold);
+   c.Line(rect.x+3,rect.y+8,rect.x+rect.w-3,rect.y+8,1,gold);
+  }
  }
- if (ability<2) {
-  if(id!=rpg::ClassId::Warrior) {ClassSigil(c,rect,id);return;}
-  for(int i=0;i<14;++i) {
-   const float a=-2.7f+i*.16f,b=a+.16f;
-   c.Line(x+std::cos(a)*17*s,y+std::sin(a)*14*s,x+std::cos(b)*17*s,y+std::sin(b)*14*s,4*s,glow);
-   c.Line(x+std::cos(a)*16*s,y+std::sin(a)*13*s,x+std::cos(b)*16*s,y+std::sin(b)*13*s,s,{1,.94f,.73f,1});
-  }
-  Icon(c,{rect.x+3*s,rect.y+3*s,rect.w-6*s,rect.h-6*s},ability?Item::Watchguard:Item::Starter);
- } else if (ability==2) {
-  for(int i=0;i<4;++i)
-   c.Line(x-17*s,y+(i*6-11)*s,x+9*s,y+(i*6-18)*s,(3-i*.5f)*s,glow);
-  c.Line(x+4*s,y-13*s,x+1*s,y+8*s,7*s,{.55f,.70f,.69f,1});
-  c.Line(x+2*s,y+8*s,x+13*s,y+13*s,8*s,{.69f,.49f,.23f,1});
-  c.Line(x-2*s,y-3*s,x-8*s,y+14*s,5*s,{.30f,.46f,.47f,1});
-  c.Line(x+8*s,y-13*s,x+4*s,y+6*s,1.2f*s,{.94f,1,.87f,1});
- } else if (ability==3) {
-  for(int i=0;i<5;++i) {
-   const float a=i*1.2566f;
-   c.Oval(x+std::cos(a)*7*s,y+std::sin(a)*7*s,6*s,8*s,{.28f,.49f,.16f,1});
-   c.Line(x,y,x+std::cos(a)*13*s,y+std::sin(a)*13*s,1.3f*s,glow);
-  }
-  c.Diamond(x,y,5*s,12*s,{.96f,1,.64f,1});
-  c.Diamond(x,y,12*s,4*s,{.96f,1,.64f,1});
- } else Icon(c,rect,Item::Potion);
 }
 void TalentIcon(Canvas& c,Rect rect,int index,float alpha=1,rpg::ClassId id=rpg::ClassId::Warrior) {
  if(id!=rpg::ClassId::Warrior && index%3==0) {ClassSigil(c,rect,id,alpha);return;}
@@ -515,15 +271,8 @@ void TalentIcon(Canvas& c,Rect rect,int index,float alpha=1,rpg::ClassId id=rpg:
   Icon(c,rect,index%3==0?(index<3?Item::Starter:Item::Watchguard):Item::Shield,alpha);
   return;
  }
- const float x=rect.x+rect.w*.5f,y=rect.y+rect.h*.5f,s=std::min(rect.w,rect.h)/48;
- c.Oval(x,y,20*s,20*s,{.10f,.25f,.20f,alpha});
- c.Ring(x,y,18*s,{.40f,.71f,.58f,alpha},1.5f*s);
- c.RectFill({x-3*s,y-12*s,6*s,24*s},{.73f,.93f,.59f,alpha});
- c.RectFill({x-12*s,y-3*s,24*s,6*s},{.73f,.93f,.59f,alpha});
- if (index>=3) {
-  c.Ring(x,y,23*s,{.88f,.76f,.45f,alpha},s);
-  c.Triangle({x+19*s,y-16*s},{x+24*s,y-10*s},{x+16*s,y-10*s},{.88f,.76f,.45f,alpha});
- }
+ PaintedIcon(c,rect,23,alpha);
+ if(index>=3) c.Line(rect.x+4,rect.y+rect.h-3,rect.x+rect.w-4,rect.y+rect.h-3,2,{.88f,.76f,.45f,alpha});
 }
 Point MapPoint(Rect a,rpg::Vec2 p) { const float span=46*a.w/a.h; return {a.x+(p.x+span*.5f)/span*a.w,a.y+(23-p.z)/46*a.h}; }
 void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoint,rpg::Vec2 pin) {
@@ -611,78 +360,111 @@ void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoin
 }
 
 void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selection) {
- Canvas c(renderer);
- using C=CharacterSelection::Control;
- const bool valid=selection.State()!=CharacterSelection::Status::Unreadable;
- const bool saved=selection.State()==CharacterSelection::Status::Saved;
- const auto& hero=selection.Hero();
- renderer.DrawHudRect(0,0,1,1,{.018f,.031f,.038f,1});
- c.Gradient({0,0,1280,720},{.055f,.10f,.12f,1},{.018f,.035f,.034f,1});
- c.Text(72,38,"MEDITERRANEAN",34,gold);
- c.Text(74,82,"A S T R A L   F R O N T I E R",12,muted);
- c.Text(842,46,"CHOOSE YOUR CHARACTER",20,ink);
- c.Text(842,79,"Dawnwatch  /  Local campaign",13,muted);
- c.Line(72,119,1208,119,1,border);
- c.Window({72,152,692,490});
- c.Banner({218,140,400,36},"Dawnwatch expedition",20);
- c.Alcove({290,181,440,409});
+ Canvas c(renderer);using C=CharacterSelection::Control;using Page=CharacterSelection::Page;using Status=CharacterSelection::Status;
+ const auto page=selection.Screen();const bool roster=page==Page::Roster,customize=page==Page::Customize;
+ const bool valid=!roster || selection.State()!=Status::Unreadable,saved=selection.State()==Status::Saved;
+ const auto& hero=selection.Hero();const auto& info=hero.ClassInfo();
+ renderer.DrawHudRect(0,0,1,1,{.017f,.016f,.014f,1});
+ c.Art({0,0,1280,720},Renderer::UiArt::Hall);
+ c.Gradient({0,0,1280,132},{.015f,.012f,.01f,.9f},{.015f,.012f,.01f,0});
+ c.Gradient({0,628,1280,92},{.015f,.012f,.01f,0},{.015f,.012f,.01f,.94f});
+ c.Text(66,35,"MEDITERRANEAN",34,{1,.85f,.54f,1});
+ c.Text(68,80,"T H E   D A W N W A T C H   C H R O N I C L E",11,ink);
+ c.Text(842,46,roster?"YOUR CHARACTERS":customize?"GIVE YOUR HERO AN IDENTITY":"CHOOSE YOUR CALLING",customize?17.f:20.f,ink);
+ c.Text(842,79,roster?"Dawnwatch  /  Local campaign":customize?"CREATE  /  II. Appearance & name":"CREATE  /  I. Class & talents",13,gold);
+ c.Window({64,144,222,480});c.Banner({74,133,202,36},roster?"The company":"The eleven callings",16);
+ c.Window({814,140,400,510});c.Banner({852,129,324,36},roster?"Hero's chronicle":customize?"A name for the ages":"Choose a path",19);
  if(valid) {
-  const auto p=c.P(338,180);
-  if(renderer.BeginPortrait(p.x,p.y,340*c.layout.scale/renderer.Width(),407*c.layout.scale/renderer.Height())) {
-   DrawCharacter(renderer,{0,0},0,selection.Yaw(),{hero.ClassInfo().color[0],hero.ClassInfo().color[1],hero.ClassInfo().color[2],1},0,0,
-     CharacterOutfit::From(hero.Items()),animation::Idle(selection.Time()));
+  const auto p=c.P(326,112);
+  if(renderer.BeginPortrait(p.x,p.y,464*c.layout.scale/renderer.Width(),490*c.layout.scale/renderer.Height())) {
+   DrawCharacter(renderer,{0,0},0,selection.Yaw(),{info.color[0],info.color[1],info.color[2],1},0,0,
+     CharacterOutfit::From(hero.Items(),hero.Class(),hero.Look()),animation::Idle(selection.Time()));
    renderer.EndPortrait();
   }
- } else {
-  c.Center(188,353,460,"Character unavailable",22,muted);
- }
+ } else c.Center(326,353,464,"Character unavailable",22,muted);
+ c.Center(326,565,464,roster && !saved?"An unclaimed calling":hero.Nickname(),22,ink);
  c.Center(438,613,144,"Rotate character",13,muted);
- const auto card=CharacterSelection::Bounds(C::Hero);
- c.Text(842,146,"YOUR CHARACTER",12,gold);
- c.Frame(card,valid?Color{.11f,.20f,.18f,1}:dark,valid?gold:border);
- if(valid) {
-  c.Gradient({card.x+5,card.y+5,card.w-10,card.h-10},{.15f,.25f,.22f,1},{.045f,.10f,.10f,1});
-  c.Portrait(882,225,false,hero.Level());
-  const float nameSize=std::min(22.f,22.f*248.f/std::max(1.f,c.Width(hero.Nickname(),22)));
-  c.Text(925,202,hero.Nickname(),nameSize,ink);
-  c.Text(925,240,"Level "+std::to_string(hero.Level()),17,gold);
-  c.Text(925,270,hero.ClassName(),15,muted);
-  c.Text(842,378,saved?"SAVED JOURNEY":"NEW JOURNEY",12,gold);
-  c.Wrap(842,407,350,saved?"Continue your saved expedition with its equipment, talents and quest progress.":
-    "Begin your first expedition at Dawnwatch. Meet the beacon keeper.",16,ink,3);
-  c.Text(842,463,hero.ClassInfo().role,12,muted);
-  c.Wrap(842,484,350,selection.Changed()?"Save changed. Review the hero before entering.":hero.ClassInfo().identity,13,gold,2);
- } else {
-  c.Text(861,211,"Unable to read this character",19,ink);
-  c.Text(861,252,"The saved file has been kept.",15,muted);
-  c.Wrap(842,350,350,"Restore this class's save in the saves folder, then select Refresh. Your existing progress will not be replaced.",17,ink,5);
- }
-
  const auto button=[&](C control,const char* label) {
   const auto a=CharacterSelection::Bounds(control);
   const bool enabled=selection.Enabled(control),focused=selection.Focus()==control,hover=selection.Hover()==control;
-  c.Frame(a,{.08f,.13f,.10f,1},enabled && (focused || hover)?gold:border);
-  c.Gradient({a.x+4,a.y+4,a.w-8,a.h-8},enabled?Color{.27f,.31f,.17f,1}:Color{.09f,.12f,.11f,1},{.06f,.10f,.07f,1});
-  c.Center(a.x,a.y+(a.h-18)*.5f-1,a.w,label,control==C::Enter?20.f:15.f,enabled?ink:muted);
+  const bool primary=control==C::Enter || control==C::Next || control==C::Confirm || control==C::Create;
+  c.Button(a,enabled,focused || hover,primary);
+  c.Center(a.x,a.y+(a.h-18)*.5f-1,a.w,label,primary?19.f:15.f,enabled?ink:muted);
   if(focused && enabled) c.Line(a.x+8,a.y+a.h-7,a.x+a.w-8,a.y+a.h-7,1,gold);
  };
- button(C::Enter,"Enter World");button(C::Refresh,"Refresh [R]");button(C::Quit,"Exit game");
  button(C::Left,"<");button(C::Right,">");
- if(selection.Focus()==C::Hero && valid) c.Line(850,302,1184,302,1,gold);
- c.Text(72,674,"Tab  Select     Enter  Confirm     Arrow keys  Rotate     F11  Display",13,muted);
- c.Text(842,674,"11 class slots  /  Offline",13,muted);
+ if(roster) {
+  const auto card=CharacterSelection::Bounds(C::Hero);c.Frame(card,dark,valid?gold:border);
+  if(valid) {
+   ClassSigil(c,{857,207,52,52},hero.Class());
+   const std::string name=saved?hero.Nickname():info.name;
+   const float nameSize=std::min(22.f,22.f*248.f/std::max(1.f,c.Width(name,22)));
+   c.Text(925,202,name,nameSize,ink);
+   c.Text(925,240,saved?"Level "+std::to_string(hero.Level()):"Empty class slot",17,gold);
+   c.Text(925,270,saved?hero.ClassName():"Create a hero to begin",14,muted);
+   c.Text(842,334,saved?"SAVED JOURNEY":"A NEW CHRONICLE",12,gold);
+   c.Wrap(842,361,350,saved?"Continue this hero's expedition, equipment, talents and quest progress.":
+     "Create a character: choose a class, customize your appearance and give your hero a name.",16,ink,3);
+   c.Wrap(842,430,350,selection.Changed()?"Save changed. Review the hero before entering.":info.role,13,gold,2);
+  } else {
+   c.Text(861,211,"Unable to read this character",19,ink);c.Text(861,252,"The saved file has been kept.",15,muted);
+   c.Wrap(842,348,350,"Restore this class's save in the saves folder, then select Refresh. You can create a hero in another empty class slot.",16,ink,5);
+  }
+  button(C::Create,"Create character");button(C::Enter,"Enter World");button(C::Refresh,"Refresh [R]");button(C::Quit,"Exit game");
+ } else {
+  ClassSigil(c,{842,181,46,46},hero.Class());c.Text(900,182,info.name,22,ink);c.Text(900,213,info.role,12,gold);
+  if(!customize) {
+   c.Wrap(842,240,350,info.identity,14,ink,3);
+   c.Text(842,292,"STARTING ARTS",11,gold);
+   for(int i=0;i<4;++i) {
+    const Rect r{842+180.f*(i%2),313+54.f*(i/2),170,47};
+    c.Frame(r,dark,border);AbilityArtwork(c,{r.x+5,r.y+6,34,34},i,hero.Class());
+    c.Wrap(r.x+46,r.y+8,118,hero.Spell(i).name,13,ink,2);
+   }
+   c.Text(842,429,"TALENT PATHS  /  N IN GAME",11,gold);
+   c.Wrap(842,451,350,std::string(info.branches[0])+"  /  "+info.branches[1]+"  /  "+info.branches[2],14,ink,2);
+   c.Text(842,495,"Health "+std::to_string(int(hero.MaxHealth()))+"  /  Range "+Number(info.range)+" m",13,muted);
+   button(C::Next,selection.ClassSlot(int(selection.SelectedClass())).status==Status::New?"Appearance & name":"Class slot occupied");
+  } else {
+   c.Text(842,241,"HERO'S NAME",11,gold);const auto a=CharacterSelection::Bounds(C::Name);
+   c.Frame(a,dark,selection.Focus()==C::Name?gold:border);
+   std::string name=selection.DraftName().empty()?"Enter a name":selection.DraftName();
+   if(selection.Focus()==C::Name && std::fmod(selection.Time(),1.f)<.55f) name+="|";
+   const float nameSize=std::min(17.f,17.f*(a.w-20)/std::max(1.f,c.Width(name,17)));
+   c.Text(a.x+10,a.y+10,name,nameSize,selection.DraftName().empty()?muted:ink);
+   c.Text(842,308,"1-20 letters; spaces, apostrophe, hyphen. Ctrl+A clears.",10,muted);
+   const auto& look=hero.Look();
+   const auto choice=[&](float y,const char* title,const rpg::Swatch& swatch,C left,C right) {
+    c.Text(842,y-18,title,11,gold);c.Frame({882,y,270,34},dark,border);
+    const Color color{swatch.r,swatch.g,swatch.b,1};
+    c.Frame({892,y+7,20,20},dark,gold);
+    c.RectFill({895,y+10,14,14},swatch.r==0?Color{info.color[0],info.color[1],info.color[2],1}:color);
+    c.Text(923,y+9,swatch.name,15,ink);button(left,"<");button(right,">");
+   };
+   choice(348,"COMPLEXION",rpg::skinTones[look.skin],C::SkinLeft,C::SkinRight);
+   choice(406,"HAIR COLOR",rpg::hairColors[look.hair],C::HairLeft,C::HairRight);
+   choice(464,"TUNIC DYE",rpg::tunicDyes[look.dye],C::DyeLeft,C::DyeRight);
+   button(C::Confirm,"Create character");
+  }
+  button(C::Back,"< Back");button(C::Cancel,"Cancel");
+ }
  for(int i=0;i<int(rpg::ClassId::Count);++i) {
-  const auto a=CharacterSelection::Bounds(C(int(C::Class0)+i));
-  const bool selected=int(selection.SelectedClass())==i;
-  c.Frame(a,selected?Color{.19f,.25f,.15f,1}:dark,selected?gold:border);
-  ClassSigil(c,{a.x+4,a.y+3,25,25},rpg::ClassId(i));
-  c.Text(a.x+34,a.y+8,rpg::classes[i].name,14,selected?ink:muted);
+  const auto control=C(int(C::Class0)+i);const auto a=CharacterSelection::Bounds(control);const bool selected=int(selection.SelectedClass())==i;
+  const auto& slot=selection.ClassSlot(i);
+  c.Button(a,selection.Enabled(control),selected || selection.Hover()==control || selection.Focus()==control,selected);
+  ClassSigil(c,{a.x+4,a.y+4,25,25},rpg::ClassId(i));
+  if(roster && slot.status==Status::Saved) {
+   const float size=std::min(12.f,12.f*139.f/std::max(1.f,c.Width(slot.name,12)));
+   c.Text(a.x+34,a.y+3,slot.name,size,ink);
+   c.Text(a.x+34,a.y+18,std::string(rpg::classes[i].name)+"  /  Lv. "+std::to_string(slot.level),10,gold);
+  } else {
+   c.Text(a.x+34,a.y+3,rpg::classes[i].name,13,selected?ink:muted);
+   c.Text(a.x+34,a.y+18,slot.status==Status::New?"Empty slot":slot.status==Status::Saved?"Already recruited":"Save unavailable",9,muted);
+  }
  }
- if(!saved && valid) {
-  const auto a=CharacterSelection::Bounds(C::Name);c.Frame(a,dark,selection.Focus()==C::Name?gold:border);
-  c.Text(a.x+10,a.y+8,selection.DraftName().empty()?"Enter a name":selection.DraftName(),16,ink);
-  c.Text(a.x,a.y+39,"Click to name / A-Z, spaces / 20 letters",11,muted);
- }
+ c.Text(84,594,customize?"Back to change your class":"One hero per class",11,muted);
+ if(!selection.Notice().empty()) c.Wrap(842,650,350,selection.Notice(),12,gold,3);
+ c.Text(72,674,"Tab  Select     Enter  Confirm     Arrow keys  Rotate     F11  Display",13,muted);
 }
 
 void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bool debug) {
@@ -691,8 +473,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  if (!renderer.HasMapArtwork() && !renderer.SetMapArtwork(BuildMapArtwork(s.Map()),512)) return;
  const auto button=[&](Rect rect,const std::string& label,Action action,int value=0,bool enabled=true) {
   const bool hover=rect.Contains(mouseX_,mouseY_);
-  c.Frame(rect,enabled && hover?Color{.26f,.31f,.12f,1}:Color{.10f,.16f,.075f,1},hover && enabled?gold:border);
-  c.Gradient({rect.x+4,rect.y+4,rect.w-8,rect.h-8},enabled?Color{.23f,.28f,.12f,1}:Color{.12f,.14f,.08f,1},{.065f,.10f,.045f,1});
+  c.Button(rect,enabled,hover);
   c.Center(rect.x,rect.y+(rect.h-15)*.5f-2,rect.w,label,15,enabled?ink:muted);
   regions_.push_back({rect,{action,value},enabled});
  };
@@ -709,7 +490,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Frame(rect,{.03f,.065f,.065f,1},hover || selectedSlot?gold:rare?Color{.35f,.64f,.31f,1}:Color{.44f,.43f,.25f,1});
   c.Gradient({rect.x+4,rect.y+4,rect.w-8,rect.h-8},rare?Color{.14f,.31f,.20f,1}:Color{.14f,.22f,.25f,1},{.025f,.045f,.06f,1});
   for (int i=0;i<5;++i) c.Line(rect.x+rect.w*.5f,rect.y+rect.h*.5f,rect.x+5+i*(rect.w-10)/4,rect.y+5,1,{.52f,.60f,.39f,.15f});
-  Icon(c,{rect.x+3,rect.y+3,rect.w-6,rect.h-6},item,dragging_ && item==dragItem_?.35f:1.f);
+  Icon(c,{rect.x+3,rect.y+3,rect.w-6,rect.h-6},item,dragging_ && item==dragItem_?.35f:1.f,s.Class());
   for(float dx : {4.f,rect.w-5}) {
    c.Oval(rect.x+dx,rect.y+4,1.4f,1.4f,gold);
    c.Line(rect.x+dx,rect.y+rect.h-8,rect.x+dx,rect.y+rect.h-4,.8f,border);
@@ -777,8 +558,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Text(485,141,"Dealt "+std::to_string(s.SparringDamageDealt())+"  /  Taken "+std::to_string(s.SparringDamageTaken())+"  /  No XP or loot",13);
   c.Text(485,164,s.Sparring()?"E stops. Nonlethal. Potions are consumed normally.":"Health and consumables are not refunded. E at the post starts again.",11,muted);
  }
- c.Gradient({0,704,1280,16},{.13f,.20f,.085f,1},{.035f,.06f,.03f,1}); c.Line(0,704,1280,704,2,border);
- for (float x=14;x<1280;x+=32) c.Scroll(x,706,1,.5f);
+ c.Skin({0,704,1280,16},7,{.65f,.64f,.57f,1});
  const float xp=s.Level()==rpg::levelCap?1.f:float(s.Experience()-s.LevelStartExperience())/(s.NextLevelExperience()-s.LevelStartExperience());
  c.Frame({439,645,403,7}); c.RectFill({442,648,397*xp,2},{.55f,.63f,.29f,1});
  c.Window({437,655,406,55}); c.Scroll(420,676,-1,1.5f); c.Scroll(860,676,1,1.5f);
@@ -801,7 +581,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  }
  c.Frame({665,662,168,40},{.035f,.07f,.065f,1});
  c.Center(668,666,162,"Basic "+std::to_string(int(s.StrikeDamage()))+"  /  Heavy "+std::to_string(int(s.HeavyDamage())),12,gold);
- c.Center(668,684,162,s.Attacking()?(s.ClassInfo().range>3?"Cast in progress":"Attack in progress"):
+ c.Center(668,684,162,s.Attacking()?(rpg::PhysicalLauncher(rpg::WeaponFor(s.Class()).form)?"Shot in progress":s.ClassInfo().range>3?"Cast in progress":"Attack in progress"):
    s.TargetActor()?"Tab changes target":"Tab selects a target",10,muted);
  // A second row contains real navigation tools, leaving the primary bindings intact.
  if (panel==Panel::None) {
@@ -841,7 +621,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   const auto p=c.P(70,181);
   if (renderer.BeginPortrait(p.x,p.y,178*c.layout.scale/renderer.Width(),316*c.layout.scale/renderer.Height())) {
    DrawCharacter(renderer,{0,0},0,previewYaw+std::sin(time*.35f)*.05f,
-     {s.ClassInfo().color[0],s.ClassInfo().color[1],s.ClassInfo().color[2],1},0,0,CharacterOutfit::From(s.Items()),animation::Idle(time));
+     {s.ClassInfo().color[0],s.ClassInfo().color[1],s.ClassInfo().color[2],1},0,0,CharacterOutfit::From(s.Items(),s.Class(),s.Look()),animation::Idle(time));
    renderer.EndPortrait();
   }
   using G=rpg::GearSlot;
@@ -863,7 +643,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   button({131,579,34,27},">",Action::RotatePreview,1);
   button({174,579,117,27},inventoryOpen?"Close bag [I]":"Open bag [I]",Action::Inventory);
   c.Frame({304,152,132,449},{.07f,.12f,.10f,1});
-  c.Gradient({309,157,122,75},{.27f,.30f,.17f,1},{.10f,.16f,.11f,1});
+  c.Gradient({309,157,122,75},{.28f,.20f,.09f,.5f},{.08f,.05f,.025f,.3f});
   c.Center(304,163,132,"VITALITY",12,gold);
   c.Center(310,186,120,std::to_string(int(s.Health()))+" / "+std::to_string(int(s.MaxHealth())),16);
   c.Frame({314,211,112,12});
@@ -876,7 +656,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    const float x=312+i*60.f;
    c.Frame({x,314,56,80},{.14f,.20f,.14f,1},{.36f,.39f,.24f,1});
    c.Center(x,319,56,i?"Heavy":"Basic",11,gold);
-   Icon(c,{x+13,334,30,30},i?Item::Watchguard:Item::Starter);
+   Icon(c,{x+13,334,30,30},i?Item::Watchguard:Item::Starter,1,s.Class());
    c.Center(x,368,56,std::to_string(int(i?s.HeavyDamage():s.StrikeDamage())),21,ink);
   }
   c.Center(304,407,132,"PROGRESSION",11,gold);
@@ -908,19 +688,19 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   }
   c.Frame({1008,430,248,27},{.035f,.065f,.06f,1}); c.Text(1017,436,std::to_string(24-s.Items().UsedSlots())+" free slots",12,muted);
   c.Oval(1189,443,5,5,gold); c.Text(1200,434,std::to_string(s.Gold()),14,gold);
-  const auto& info=Describe(selected);
+  const auto info=s.ItemDefinition(selected);
   c.Frame({1008,464,248,104},{.065f,.105f,.09f,1});
-  c.Gradient({1012,468,240,40},{.18f,.27f,.20f,1},{.09f,.15f,.13f,1});
-  if(selected!=Item::None) Icon(c,{1017,473,30,30},selected);
+  c.Gradient({1012,468,240,40},{.28f,.20f,.09f,.5f},{.08f,.05f,.025f,.3f});
+  if(selected!=Item::None) Icon(c,{1017,473,30,30},selected,1,s.Class());
   c.Text(1056,475,selected==Item::None?"Select an item":info.name,13,selected==Item::Watchguard || selected==Item::Ward?Color{.63f,.85f,.43f,1}:ink);
-  c.Text(1056,494,selected==Item::None?"Inspect your belongings":info.type,10,muted);
+  c.Text(1056,494,selected==Item::None?"Inspect your belongings":ItemTypeLabel(info),10,muted);
   c.Line(1017,510,1247,510,1,{.37f,.40f,.24f,1});
   std::string detail=info.description;
   const auto delta=[](float value) { return (value>=0?std::string("+"):std::string())+std::to_string(int(value)); };
   if (info.slot==rpg::GearSlot::Weapon) {
    detail="Basic "+std::to_string(int(info.strike+s.StrikeBonus()+s.ClassInfo().strike))+"  /  Heavy "+std::to_string(int(info.heavy+s.HeavyBonus()+s.ClassInfo().heavy))+" damage.\n";
    const auto& current=Describe(s.Items().Worn(info.slot));
-   detail+=Equipped(s,selected)?"Equipped / remove to fight unarmed":"Vs worn: "+delta(info.strike-current.strike)+" strike / "+delta(info.heavy-current.heavy)+" heavy";
+   detail+=Equipped(s,selected)?(rpg::PhysicalLauncher(rpg::WeaponFor(s.Class()).form)?"Equipped / required to fire":"Equipped / remove to fight unarmed"):"Vs worn: "+delta(info.strike-current.strike)+" strike / "+delta(info.heavy-current.heavy)+" heavy";
   } else if (info.slot!=rpg::GearSlot::None) {
    detail="Damage reduction: "+std::to_string(int(info.armor))+".\n";
    detail+=Equipped(s,selected)?"Equipped / right-click to remove":"Compared to worn: "+delta(info.armor-Describe(s.Items().Worn(info.slot)).armor)+" armor";
@@ -952,9 +732,9 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   close({939,158,24,24},Panel::Merchant);
   c.Text(489,168,"FIELD SUPPLIES",13,gold); c.Text(755,168,std::to_string(s.Gold())+" gold",14,gold);
   for (int i=0;i<int(rpg::shopOffers.size());++i) {
-   const auto& offer=rpg::shopOffers[i]; const auto& info=Describe(offer.item); const float y=196+i*70.f;
+   const auto& offer=rpg::shopOffers[i]; const auto info=s.ItemDefinition(offer.item); const float y=196+i*70.f;
    c.Frame({487,y,471,66},{.065f,.11f,.06f,1}); c.Frame({496,y+10,43,46},{.11f,.20f,.14f,1},gold);
-   Icon(c,{500,y+14,35,38},offer.item);
+   Icon(c,{500,y+14,35,38},offer.item,1,s.Class());
    c.Text(550,y+6,info.name,16,ink);
    c.Text(550,y+28,"Stock "+std::to_string(s.ShopStock(i))+" / "+std::to_string(offer.stock)+"   |   "+info.type,11,muted);
    const bool available=std::string(s.PurchaseStatus(i))=="Available";
@@ -968,7 +748,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    if (count==0) { c.EmptySlot(rect); continue; }
    const bool available=std::string(s.TradeStatus({rpg::TradeAction::Buyback,item}))=="Available";
    c.Frame(rect,{.08f,.16f,.11f,1},rect.Contains(mouseX_,mouseY_)?gold:border);
-   Icon(c,{rect.x+4,rect.y+4,35,37},item,available?1.f:.5f);
+   Icon(c,{rect.x+4,rect.y+4,35,37},item,available?1.f:.5f,s.Class());
    if (count>1) c.Text(rect.x+28,rect.y+28,std::to_string(count),12,gold);
    c.Center(rect.x,rect.y+50,rect.w,std::to_string(rpg::SellPrice(item))+" g",12,gold);
    regions_.push_back({rect,{Action::Buyback,i},available});
@@ -1009,10 +789,10 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Wrap(46,436,390,quest.objective,14,ink,2);
   c.Frame({34,484,414,70},{.07f,.12f,.08f,1},gold);
   if (quest.item!=rpg::Item::None && rpg::ValidItem(quest.item)) {
-   Icon(c,{46,496,42,45},quest.item);
+   Icon(c,{46,496,42,45},quest.item,1,s.Class());
    c.Text(100,492,std::string(stage==rpg::QuestStage::Complete?"RECEIVED  /  ":"REWARD  /  ")+
      std::to_string(quest.gold)+" gold  /  "+std::to_string(quest.experience)+" XP",13,gold);
-   c.Text(100,512,Describe(quest.item).name,16,ink);
+   c.Text(100,512,s.ItemDefinition(quest.item).name,16,ink);
    const auto& item=Describe(quest.item);
    const auto stats=item.slot==rpg::GearSlot::Weapon?
      "Base strike "+std::to_string(int(item.strike))+" / Heavy "+std::to_string(int(item.heavy))+"  -  In your bag":
@@ -1265,10 +1045,10 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    const bool purchase=it->event.action==Action::Purchase;
    const Item item=purchase?rpg::shopOffers[it->event.value].item:static_cast<Item>(it->event.value);
    if (!rpg::ValidItem(item)) break;
-   const auto& info=Describe(item); const auto summary=SummarizeItem(s,item);
+   const auto info=s.ItemDefinition(item); const auto summary=SummarizeItem(s,item);
    const float x=std::clamp(mouseX_>640?mouseX_-329:mouseX_+21,8.f,963.f),y=std::clamp(mouseY_-42,8.f,466.f);
-   c.Window({x,y,309,246}); Icon(c,{x+13,y+12,34,38},item);
-   c.Text(x+57,y+11,info.name,16,gold); c.Text(x+57,y+37,info.type,11,muted);
+   c.Window({x,y,309,246}); Icon(c,{x+13,y+12,34,38},item,1,s.Class());
+   c.Text(x+57,y+11,info.name,16,gold); c.Text(x+57,y+37,ItemTypeLabel(info),11,muted);
    c.RectFill({x+14,y+62,281,1},border);
    c.Text(x+14,y+73,summary.stats,14,ink);
    const Color comparison=summary.difference>0?Color{.48f,.86f,.37f,1}:summary.difference<0?Color{1,.43f,.32f,1}:muted;
@@ -1282,7 +1062,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Text(x+14,y+221,action,12,ink);
   } else if (it->event.action==Action::Buyback) {
    const auto item=Item(it->event.value); const float x=std::clamp(mouseX_-140,475.f,659.f);
-   c.Window({x,312,309,116}); c.Text(x+14,322,Describe(item).name,17,gold);
+   c.Window({x,312,309,116}); c.Text(x+14,322,s.ItemDefinition(item).name,17,gold);
    c.Text(x+14,351,"Held: "+std::to_string(s.BuybackCount(item))+"  /  "+std::to_string(rpg::SellPrice(item))+" gold each",13,ink);
    const auto status=s.TradeStatus({rpg::TradeAction::Buyback,item});
    c.Text(x+14,390,std::string(status)=="Available"?"Click to reclaim one into your bag":status,12,muted);
@@ -1295,7 +1075,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Wrap(x+14,512,272,detail,14,ink,2);
    const float remaining=potion?s.PotionCooldown():s.Cooldown(ability);
    c.Text(x+14,554,"Cooldown: "+Number(potion?3.f:s.AbilityCooldown(ability))+"s"+
-     (potion?"  /  Stock: "+std::to_string(s.Potions()):ability<2?"  /  Range: 2.5 m":ability==2?"  /  Range: 5 m":""),12,muted);
+     (potion?"  /  Stock: "+std::to_string(s.Potions()):ability<2?"  /  Range: "+Number(s.Spell(ability).range)+" m":ability==2?"  /  Range: 5 m":""),12,muted);
    c.Line(x+14,576,x+286,576,1,border);
    c.Text(x+14,589,status+(remaining>0?"  "+Seconds(remaining)+"s":""),12,status=="READY"?Color{.57f,.84f,.40f,1}:Color{1,.64f,.40f,1});
   }
@@ -1308,11 +1088,11 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     const auto replacement=s.Items().Bag()[it->bag].item;
     compatible=replacement==Item::None || int(Describe(replacement).slot)==dragGear_;
    }
-   if (it->bag>=0 || it->gear>=0) c.Frame(it->rect,{.1f,.2f,.1f,.15f},compatible?Color{.5f,.9f,.3f,1}:Color{.9f,.2f,.1f,1});
+   if (it->bag>=0 || it->gear>=0) c.Skin(it->rect,10,compatible?Color{.5f,.9f,.3f,1}:Color{.9f,.2f,.1f,1},false);
    break;
   }
   c.Frame({mouseX_-21,mouseY_-21,42,42},{.04f,.08f,.04f,.8f},gold);
-  Icon(c,{mouseX_-19,mouseY_-19,38,38},dragItem_);
+  Icon(c,{mouseX_-19,mouseY_-19,38,38},dragItem_,1,s.Class());
  }
  if (noticeTime>0 && panel==Panel::None) {
   c.Frame({465,111,510,58},{.035f,.06f,.025f,.95f});

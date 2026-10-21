@@ -26,6 +26,9 @@ public:
   void SetCamera(const DirectX::XMFLOAT3& eye, const DirectX::XMFLOAT3& target);
   void SetShadowFocus(const DirectX::XMFLOAT3& focus);
   void SetAtmosphereTime(double seconds);
+  // Compare the shared field with the original per-vertex integration.
+  void SetCloudLightFieldEnabled(bool enabled) { cloudLightFieldEnabled_=enabled; }
+  unsigned CloudLightUpdates() const { return cloudLightUpdates_; }
   bool Project(const DirectX::XMFLOAT3& world, DirectX::XMFLOAT2& screen) const;
   void DrawMarkerBox(const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& scale,
     const DirectX::XMFLOAT4& color, float yaw = 0);
@@ -84,7 +87,12 @@ public:
   bool EndPortrait();
   UINT DrawCalls() const { return drawCalls_ + static_cast<UINT>((hud_.size()+16379)/16380) + UINT(!effects_.empty()); }
   void DrawHudRect(float x, float y, float width, float height, const DirectX::XMFLOAT4& color);
+  void DrawHudGradient(float x,float y,float width,float height,DirectX::XMFLOAT4 top,DirectX::XMFLOAT4 bottom);
   void DrawHudTriangle(DirectX::XMFLOAT2 a,DirectX::XMFLOAT2 b,DirectX::XMFLOAT2 c,const DirectX::XMFLOAT4& color);
+  enum class UiArt { Frame, Hall, Icons };
+  // Artwork joins the existing HUD batch; no texture swaps or per-panel upload.
+  void DrawUiArt(UiArt art,float x,float y,float width,float height,
+    DirectX::XMFLOAT4 uv={0,0,1,1},DirectX::XMFLOAT4 tint={1,1,1,1});
   float TextWidth(const std::string& text,float size) const;
   bool HasMapArtwork() const { return mapView_!=nullptr; }
   bool HasTerrainSurface() const { return terrainView_!=nullptr; }
@@ -92,7 +100,7 @@ public:
   bool SetMapArtwork(const std::vector<std::uint8_t>& pixels,unsigned size);
   void DrawMapArtwork(float x,float y,float width,float height);
   void DrawRoundMapArtwork(float x,float y,float width,float height);
-  std::size_t InterfaceBytes() const { return 512*256+mapBytes_; }
+  std::size_t InterfaceBytes() const { return 512*256+mapBytes_+uiBytes_; }
   void DrawText(float x, float y, const std::string& text, const DirectX::XMFLOAT4& color, float size = 2);
   const std::wstring& Error() const { return error_; }
 private:
@@ -101,7 +109,9 @@ private:
   bool CreatePipeline();
   bool FlushHud();
   bool CreateMaterials();
+  bool CreateUiArtwork();
   void DrawSky();
+  void PrepareCloudLight();
   bool FlushWorld();
   bool FlushEffects();
   void EffectQuad(DirectX::XMFLOAT3 a,DirectX::XMFLOAT3 b,DirectX::XMFLOAT3 c,DirectX::XMFLOAT3 d,
@@ -138,6 +148,8 @@ private:
   unsigned effectVertices_=0;
   FontAtlas font_;
   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> mapView_;
+  std::array<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>,3> uiViews_;
+  std::size_t uiBytes_=0;
   std::size_t mapBytes_ = 0;
   Microsoft::WRL::ComPtr<ID3D11SamplerState> fontSampler_;
   Microsoft::WRL::ComPtr<ID3D11BlendState> hudBlend_;
@@ -164,6 +176,14 @@ private:
   Microsoft::WRL::ComPtr<ID3D11Buffer> indices_,instances_;
   Microsoft::WRL::ComPtr<ID3D11VertexShader> worldShader_,shadowShader_,skyShader_;
   Microsoft::WRL::ComPtr<ID3D11PixelShader> skyPixel_;
+  static constexpr unsigned cloudLightSize=64;
+  Microsoft::WRL::ComPtr<ID3D11PixelShader> cloudLightShader_;
+  Microsoft::WRL::ComPtr<ID3D11Buffer> cloudLightConstants_;
+  Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> cloudLightView_;
+  Microsoft::WRL::ComPtr<ID3D11RenderTargetView> cloudLightTarget_;
+  bool cloudLightFieldEnabled_=true;
+  float cloudLightPhase_=-1;
+  unsigned cloudLightUpdates_=0;
   Microsoft::WRL::ComPtr<ID3D11InputLayout> worldLayout_;
   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> materialView_,shadowView_;
   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> terrainView_;

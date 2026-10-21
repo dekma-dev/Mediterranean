@@ -12,6 +12,13 @@ Texture2DArray<float> shadowMap : register(t1);
 Texture2D<float> fontAtlas : register(t2);
 Texture2D<float4> mapArtwork : register(t3);
 Texture2D<float4> terrainSurface : register(t4);
+Texture2D<float4> uiFrame : register(t5);
+Texture2D<float4> uiHall : register(t6);
+Texture2D<float4> uiIcons : register(t7);
+Texture2D<float> cloudLightField : register(t8);
+// x = world half extent, y = last texel-center world coordinate. A zero
+// extent selects the analytic reference path for regression diagnostics.
+cbuffer CloudField : register(b3) { float4 cloudField; };
 SamplerState fontSampler : register(s2);
 SamplerState surfaceSampler : register(s0);
 SamplerComparisonState shadowSampler : register(s1);
@@ -31,6 +38,7 @@ struct VOut {
  nointerpolation float receiverPlane : TEXCOORD7;
 };
 float CloudSunlight(float3 position);
+float SurfaceCloudSunlight(float3 position);
 VOut VSMain(VIn i) {
  VOut o; o.p=mul(float4(i.p,1),wvp); o.wp=i.n; o.n=i.n;
  o.tint=i.tint; o.shadow=o.detailShadow=0; o.material=0; o.tp=o.tn=0; o.cloudLight=1; o.receiverPlane=1; return o;
@@ -69,7 +77,7 @@ VOut VSWorld(InstanceIn i) {
  // The cloud footprint spans hundreds of metres. Interpolating this slow field
  // avoids a volume integration in every opaque pixel, including overdraw.
  o.cloudLight=1;
- [branch] if (eyeAndHud.w>=0) o.cloudLight=CloudSunlight(position.xyz);
+ [branch] if (eyeAndHud.w>=0) o.cloudLight=SurfaceCloudSunlight(position.xyz);
  return o;
 }
 )" R"(
@@ -202,6 +210,14 @@ float CloudSunlight(float3 position) {
  }
  return exp(-opticalDepth*(.50/(light.y+.20))*13/12);
 }
+float SurfaceCloudSunlight(float3 position) {
+ float value=1;
+ [branch] if (cloudField.x>0 && all(abs(position.xz)<=cloudField.y))
+  value=cloudLightField.SampleLevel(fontSampler,position.xz/(2*cloudField.x)+.5,0);
+ // Preserve lighting for geometry outside the bounded field, too.
+ else value=CloudSunlight(position);
+ return value;
+}
 float4 CloudRadiance(float3 ray,float footprint,float sampleOffset) {
  if (ray.y<=.015) return float4(0,0,0,1);
  float3 light=SunDirection(),sky=SkyRadiance(float3(0,1,0)),day=Daylight();
@@ -308,7 +324,10 @@ float Shadow(float4 widePosition,float4 detailPosition,float sunFacing,float rec
 float4 PSMain(VOut i) : SV_TARGET {
  if (eyeAndHud.w>.5) {
   float4 result=color*i.tint;
-  if (i.wp.z>1.5) result*=mapArtwork.Sample(fontSampler,i.wp.xy);
+  if (i.wp.z>4.5) result*=uiIcons.Sample(fontSampler,i.wp.xy);
+  else if (i.wp.z>3.5) result*=uiHall.Sample(fontSampler,i.wp.xy);
+  else if (i.wp.z>2.5) result*=uiFrame.Sample(fontSampler,i.wp.xy);
+  else if (i.wp.z>1.5) result*=mapArtwork.Sample(fontSampler,i.wp.xy);
   else if (i.wp.z>.5) result.a*=fontAtlas.Sample(fontSampler,i.wp.xy);
   return result;
  }
@@ -433,6 +452,10 @@ float4 PSEffect(EffectOut i) : SV_TARGET {
 struct SkyOut { float4 p : SV_POSITION; float2 uv : TEXCOORD0; };
 SkyOut VSSky(uint id : SV_VertexID) {
  SkyOut o; o.uv=float2((id<<1)&2,id&2); o.p=float4(o.uv*float2(2,-2)+float2(-1,1),1,1); return o;
+}
+float PSCloudLight(SkyOut i) : SV_TARGET {
+ float2 position=(i.uv*2-1)*cloudField.x;
+ return CloudSunlight(float3(position.x,0,position.y));
 }
 [earlydepthstencil]
 float4 PSSky(SkyOut i) : SV_TARGET {

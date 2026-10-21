@@ -1,0 +1,4 @@
+#include <Windows.h>
+201 RCDATA "antique-frame.png"
+202 RCDATA "chapter-hall.png"
+203 RCDATA "equipment-icons.png"

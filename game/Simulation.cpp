@@ -21,10 +21,9 @@ Simulation::Simulation() {
     enemies_.push_back(enemy);
   }
 }
-bool Simulation::CreateCharacter(ClassId id,const std::string& name) {
-  if(!ValidClass(id) || name.empty() || name.size()>20 || name.front()==' ' || name.back()==' ') return false;
-  for(unsigned char c:name) if(!((c>='A' && c<='Z') || (c>='a' && c<='z') || c==' ' || c=='-' || c=='\'')) return false;
-  *this=Simulation{};class_=id;nickname_=name;health_=MaxHealth();return true;
+bool Simulation::CreateCharacter(ClassId id,const std::string& name,Appearance look) {
+  if(!ValidClass(id) || !ValidCharacterName(name) || !look.Valid()) return false;
+  *this=Simulation{};class_=id;nickname_=name;appearance_=look;health_=MaxHealth();return true;
 }
 float Simulation::BuildBonus(unsigned mask,float TalentInfo::*stat) const {
   float value=0;for(int i=0;i<int(Talent::Count);++i) if(rpg::HasTalent(mask,Talent(i))) value+=TalentDefinition(i).*stat;return value;
@@ -120,6 +119,9 @@ void Simulation::UseAbility(int index,float visualElapsed) {
   if (cooldowns_[index]>0) { message_="That ability is cooling down."; return; }
   if (Dashing()) { message_="Finish the dash before using another ability."; return; }
   if (Attacking()) { message_="Finish the weapon recovery before using another ability."; return; }
+  if (index<2 && PhysicalLauncher(WeaponFor(class_).form) && inventory_.Worn(GearSlot::Weapon)==Item::None) {
+    message_="Equip your class weapon before firing."; return;
+  }
   if (index==3) {
     if (health_>=MaxHealth()) { message_="Health is already full."; return; }
     const float healed=std::min(MendHealingNow(),MaxHealth()-health_);
@@ -253,6 +255,7 @@ const char* Simulation::AbilityStatus(int index) const {
   if (cooldowns_[index]>0) return "COOLDOWN";
   if (Dashing()) return "DASHING";
   if (Attacking()) return "RECOVERING";
+  if (index<2 && PhysicalLauncher(WeaponFor(class_).form) && inventory_.Worn(GearSlot::Weapon)==Item::None) return "NO WEAPON";
   if (index==3) return health_>=MaxHealth()?"FULL HEALTH":"READY";
   if (index==2) {
     switch (CheckDashTarget()) {
@@ -418,7 +421,7 @@ void Simulation::Update(float seconds,const Command& command) {
   if (!std::isfinite(seconds) || seconds<=0) return;
   const float dt=std::min(seconds,.05f);
   const bool advanceAttack=Attacking();
-  if (command.restart) { const auto name=nickname_;CreateCharacter(class_,name);return; }
+  if (command.restart) { const auto name=nickname_;const auto look=appearance_;CreateCharacter(class_,name,look);return; }
   for (auto& feedback : feedback_) feedback.age+=dt;
   feedback_.erase(std::remove_if(feedback_.begin(),feedback_.end(),[](const CombatFeedback& f) { return f.age>=1.5f; }),feedback_.end());
   hurtFlash_=std::max(0.f,hurtFlash_-dt);
@@ -538,10 +541,11 @@ void Simulation::Update(float seconds,const Command& command) {
   if (command.ability==2 && !command.haltMovement) UseAbility(2,dt);
   if (command.interact) Interact();
   if (!command.interact) ConfirmQuest(command.questAction);
+  const auto previousWeapon=inventory_.Worn(GearSlot::Weapon);
   if (command.equipWeapon) {
     const auto next=HasRewardWeapon() && !RewardWeaponEquipped()?Item::Watchguard:Item::Starter;
-    if (inventory_.Equip(next)) message_=std::string(DescribeItem(next).name)+" equipped.";
-    else message_="No other sword in your bag. Reclaim sold gear at the quartermaster.";
+    if (inventory_.Equip(next)) message_=std::string(ItemDefinition(next).name)+" equipped.";
+    else message_="No other weapon in your bag. Reclaim sold gear at the quartermaster.";
   }
   if (command.inventory.action!=InventoryAction::None) {
     if (inventory_.Apply(command.inventory)) message_=command.inventory.action==InventoryAction::Sort?"Bag sorted.":
@@ -550,6 +554,10 @@ void Simulation::Update(float seconds,const Command& command) {
   }
   if (command.purchase!=-1) Buy(command.purchase);
   if (command.trade.action!=TradeAction::None) Trade(command.trade);
+  // Removing/swapping a launcher during preparation cannot fire a phantom
+  // bolt. A projectile already released keeps its committed damage/contact.
+  if(PhysicalLauncher(WeaponFor(class_).form) && previousWeapon!=inventory_.Worn(GearSlot::Weapon) &&
+      Attacking() && attackAge_<combat::StrokeStart(HeavyAttack())) CancelAttack();
   if (command.usePotion) {
     if (Potions()==0) message_="No healing potions. Loot defeated raiders with E.";
     else if (health_>=MaxHealth()) message_="Health is already full. Potion retained.";
@@ -733,7 +741,7 @@ void Simulation::UpdateEnemy(Enemy& enemy,float dt,float frameTail) {
 
 std::string Simulation::Save() const {
   std::ostringstream out;
-  out << std::setprecision(9) << "MEDITERRANEAN 11\n" << "PROFILE " << int(class_) << ' ' << std::quoted(nickname_) << ' ' << frontierCompleted_ << ' ' << frontierActive_ << ' ' << legacyLoot_ << '\n' << player_.x << ' ' << player_.z << ' '
+  out << std::setprecision(9) << "MEDITERRANEAN 12\n" << "PROFILE " << int(class_) << ' ' << std::quoted(nickname_) << ' ' << frontierCompleted_ << ' ' << frontierActive_ << ' ' << legacyLoot_ << '\n' << player_.x << ' ' << player_.z << ' '
     << health_ << ' ' << facing_ << ' ' << static_cast<int>(quest_) << ' ' << gold_ << '\n';
   out << Potions() << ' ' << HasRewardWeapon() << ' ' << RewardWeaponEquipped() << ' ' << potionCooldown_ << '\n';
   out << static_cast<int>(anchorQuest_) << '\n';
@@ -748,6 +756,7 @@ std::string Simulation::Save() const {
   inventory_.Write(out);
   out<<"BUILD "<<build_<<'\n';
   out<<"LOADOUTS "<<loadouts_[0]<<' '<<loadouts_[1]<<' '<<loadouts_[2]<<'\n';
+  out<<"APPEARANCE "<<appearance_.skin<<' '<<appearance_.hair<<' '<<appearance_.dye<<'\n';
   return out.str();
 }
 
@@ -756,7 +765,7 @@ bool Simulation::Load(const std::string& data) {
   std::istringstream input(data);
   std::string magic; int version=0, quest=0,potions=2,owned=0,equipped=0;
   Simulation candidate;
-  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>11) return false;
+  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>12) return false;
   if(version>=11) {
     std::string tag,name;int id=0,completed=0,active=0,looted=0;
     if(!(input>>tag>>id>>std::quoted(name)>>completed>>active>>looted) || tag!="PROFILE" ||
@@ -873,6 +882,10 @@ bool Simulation::Load(const std::string& data) {
     if (!(input>>tag) || tag!="LOADOUTS") return false;
     for (auto& mask : candidate.loadouts_)
       if (!(input>>mask) || mask<-1 || (mask>=0 && !ValidBuild(unsigned(mask),candidate.Level()))) return false;
+  }
+  if(version>=12) {
+    std::string tag;auto& look=candidate.appearance_;
+    if(!(input>>tag>>look.skin>>look.hair>>look.dye) || tag!="APPEARANCE" || !look.Valid()) return false;
   }
   input >> std::ws;
   if (!input.eof()) return false;

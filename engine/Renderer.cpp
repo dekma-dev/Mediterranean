@@ -46,7 +46,7 @@ bool Renderer::Initialize(HWND window, int width, int height) {
  ComPtr<IDXGIFactory> factory;
  if (SUCCEEDED(swapChain_->GetParent(IID_PPV_ARGS(factory.GetAddressOf()))))
   factory->MakeWindowAssociation(window,DXGI_MWA_NO_ALT_ENTER);
- if (!CreateTargets(width,height) || !CreatePipeline()) return false;
+ if (!CreateTargets(width,height) || !CreatePipeline() || !CreateUiArtwork()) return false;
  SetCamera({0,3,-6},{0,1,0});
  return true;
 }
@@ -72,6 +72,8 @@ bool Renderer::CreatePipeline() {
  const auto *body=&compiled_scene::VSBody,*bodyShadow=&compiled_scene::VSBodyShadow;
  const auto *hand=&compiled_scene::VSHand,*handShadow=&compiled_scene::VSHandShadow;
  const auto *sky=&compiled_scene::VSSky,*skyPs=&compiled_scene::PSSky,*effectVs=&compiled_scene::VSEffect,*effectPs=&compiled_scene::PSEffect;
+ const auto& cloud=compiled_scene::PSCloudLight;
+ if (!Check(device_->CreatePixelShader(cloud.GetBufferPointer(),cloud.GetBufferSize(),nullptr,cloudLightShader_.GetAddressOf()),L"Create cloud lighting shader")) return false;
  if (!Check(device_->CreateVertexShader(effectVs->GetBufferPointer(),effectVs->GetBufferSize(),nullptr,effectVertexShader_.GetAddressOf()),L"Create effect vertex shader") ||
    !Check(device_->CreatePixelShader(effectPs->GetBufferPointer(),effectPs->GetBufferSize(),nullptr,effectPixelShader_.GetAddressOf()),L"Create effect pixel shader")) return false;
  if (!Check(device_->CreateVertexShader(vs->GetBufferPointer(),vs->GetBufferSize(),nullptr,vertexShader_.GetAddressOf()),L"Create HUD shader") ||
@@ -130,6 +132,10 @@ bool Renderer::CreatePipeline() {
  if (!Check(device_->CreateBuffer(&b,&data,indices_.GetAddressOf()),L"Create mesh indices")) return false;
  b={}; b.ByteWidth=sizeof(Constants); b.Usage=D3D11_USAGE_DEFAULT; b.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
  if (!Check(device_->CreateBuffer(&b,nullptr,constants_.GetAddressOf()),L"Create constants")) return false;
+ b.ByteWidth=sizeof(XMFLOAT4);
+ const XMFLOAT4 emptyField{};
+ D3D11_SUBRESOURCE_DATA fieldData{}; fieldData.pSysMem=&emptyField;
+ if (!Check(device_->CreateBuffer(&b,&fieldData,cloudLightConstants_.GetAddressOf()),L"Create cloud field constants")) return false;
  b.ByteWidth=sizeof(bodyPalettes_); b.Usage=D3D11_USAGE_DYNAMIC; b.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
  if (!Check(device_->CreateBuffer(&b,nullptr,skinConstants_.GetAddressOf()),L"Create skin palettes")) return false;
  b.ByteWidth=sizeof(handPalettes_);
@@ -202,6 +208,16 @@ bool Renderer::CreateMaterials() {
  resource.Texture2DArray.MipLevels=1; resource.Texture2DArray.ArraySize=visual::shadowLayers;
  if (!Check(device_->CreateShaderResourceView(shadow.Get(),&resource,shadowView_.GetAddressOf()),L"Create shadow resource view")) return false;
  materialBytes_+=visual::shadowSize*visual::shadowSize*4*visual::shadowLayers;
+ // A two-metre grid preserves the broad cloud footprint without repeating
+ // twelve volume samples for every vertex of the island and its characters.
+ texture={}; texture.Width=texture.Height=cloudLightSize; texture.MipLevels=1;
+ texture.ArraySize=1; texture.SampleDesc.Count=1; texture.Format=DXGI_FORMAT_R32_FLOAT;
+ texture.BindFlags=D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE;
+ ComPtr<ID3D11Texture2D> cloudLight;
+ if (!Check(device_->CreateTexture2D(&texture,nullptr,cloudLight.GetAddressOf()),L"Create cloud lighting field") ||
+     !Check(device_->CreateRenderTargetView(cloudLight.Get(),nullptr,cloudLightTarget_.GetAddressOf()),L"Create cloud lighting target") ||
+     !Check(device_->CreateShaderResourceView(cloudLight.Get(),nullptr,cloudLightView_.GetAddressOf()),L"Create cloud lighting view")) return false;
+ materialBytes_+=cloudLightSize*cloudLightSize*sizeof(float);
  D3D11_SAMPLER_DESC sampler{}; sampler.Filter=D3D11_FILTER_ANISOTROPIC; sampler.MaxAnisotropy=4;
  sampler.AddressU=sampler.AddressV=sampler.AddressW=D3D11_TEXTURE_ADDRESS_WRAP;
  sampler.MaxLOD=D3D11_FLOAT32_MAX;
@@ -213,6 +229,7 @@ bool Renderer::CreateMaterials() {
 }
 void Renderer::BeginFrame() {
  drawCalls_=0; frameFailed_=false; portrait_=false; skyPending_=true;
+ cloudLightUpdates_=0;
  context_->OMSetBlendState(nullptr,nullptr,0xffffffff);
  triangles_=0;
  gpuTimer_.Begin(context_.Get());
@@ -229,6 +246,11 @@ void Renderer::BeginFrame() {
  D3D11_VIEWPORT v{0,0,static_cast<float>(width_),static_cast<float>(height_),0,1};
  context_->RSSetViewports(1,&v); context_->RSSetState(rasterizer_.Get());
  context_->VSSetConstantBuffers(0,1,constants_.GetAddressOf()); context_->PSSetConstantBuffers(0,1,constants_.GetAddressOf());
+ // A launcher/roster can render a portrait before any world. Bind valid
+ // resources even though portrait shaders bypass atmospheric lighting.
+ context_->VSSetConstantBuffers(3,1,cloudLightConstants_.GetAddressOf());
+ context_->VSSetShaderResources(8,1,cloudLightView_.GetAddressOf());
+ context_->VSSetSamplers(2,1,fontSampler_.GetAddressOf());
 }
 void Renderer::DrawSky() {
  // SetCamera can arrive after BeginFrame (including capture camera overrides).
@@ -253,6 +275,36 @@ void Renderer::SetAtmosphereTime(double seconds) {
  if (portrait_ || !std::isfinite(seconds) || seconds<0) return;
  // A closed drift path avoids accumulated float error and a visible wrap seam.
  atmospherePhase_=float(std::fmod(seconds,1800.0)*(6.283185307179586/1800.0));
+}
+void Renderer::PrepareCloudLight() {
+ const float extent=float(cloudLightSize); // Two metres per texel.
+ const XMFLOAT4 field{cloudLightFieldEnabled_?extent:0.f,extent-1,0,0};
+ context_->UpdateSubresource(cloudLightConstants_.Get(),0,nullptr,&field,0,0);
+ context_->VSSetConstantBuffers(3,1,cloudLightConstants_.GetAddressOf());
+ context_->PSSetConstantBuffers(3,1,cloudLightConstants_.GetAddressOf());
+ if (cloudLightFieldEnabled_ && cloudLightPhase_!=atmospherePhase_) {
+  // Unbind before making this SRV an output. The field depends only on phase,
+  // not camera, viewport, shadow focus or actor pose. No readback or lag.
+  ID3D11ShaderResourceView* empty=nullptr;
+  context_->VSSetShaderResources(8,1,&empty);
+  context_->OMSetRenderTargets(1,cloudLightTarget_.GetAddressOf(),nullptr);
+  context_->OMSetBlendState(nullptr,nullptr,0xffffffff);
+  context_->OMSetDepthStencilState(depthOff_.Get(),0);
+  context_->RSSetState(rasterizer_.Get());
+  D3D11_VIEWPORT viewport{0,0,float(cloudLightSize),float(cloudLightSize),0,1};
+  context_->RSSetViewports(1,&viewport);
+  Constants data{}; data.atmosphere.x=atmospherePhase_;
+  context_->UpdateSubresource(constants_.Get(),0,nullptr,&data,0,0);
+  context_->IASetInputLayout(nullptr);
+  context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+  context_->VSSetShader(skyShader_.Get(),nullptr,0);
+  context_->PSSetShader(cloudLightShader_.Get(),nullptr,0);
+  context_->Draw(3,0); ++drawCalls_; ++triangles_; ++cloudLightUpdates_;
+  context_->OMSetRenderTargets(0,nullptr,nullptr);
+  cloudLightPhase_=atmospherePhase_;
+ }
+ context_->VSSetShaderResources(8,1,cloudLightView_.GetAddressOf());
+ context_->VSSetSamplers(2,1,fontSampler_.GetAddressOf());
 }
 void Renderer::SetCamera(const XMFLOAT3& eye,const XMFLOAT3& target) {
  eye_=eye;
@@ -464,6 +516,8 @@ bool Renderer::FlushWorld() {
   for (const auto& item : world_[mesh]) if (item.visibility)
     instanceScratch_[offsets[item.visibility]++]=item.instance;
  }
+ // Shadow-only/fully culled scenes do not consume surface cloud lighting.
+ if (!portrait_ && batchCounts[colorPass]) PrepareCloudLight();
  if (!instanceScratch_.empty()) {
   D3D11_MAPPED_SUBRESOURCE mapped{};
   if (!Check(context_->Map(instances_.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&mapped),L"Upload scene instances")) return false;
@@ -612,6 +666,63 @@ void Renderer::DrawHudRect(float x,float y,float width,float height,const XMFLOA
  DrawHudTriangle({x,y},{x+width,y},{x+width,y+height},color);
  DrawHudTriangle({x,y},{x+width,y+height},{x,y+height},color);
 }
+void Renderer::DrawHudGradient(float x,float y,float width,float height,XMFLOAT4 top,XMFLOAT4 bottom) {
+ if(width<=0 || height<=0) return;
+ const Vertex a{{x*2-1,1-y*2,.5f},{0,0,0},top},b{{(x+width)*2-1,1-y*2,.5f},{0,0,0},top};
+ const Vertex c{{(x+width)*2-1,1-(y+height)*2,.5f},{0,0,0},bottom},d{{x*2-1,1-(y+height)*2,.5f},{0,0,0},bottom};
+ hud_.insert(hud_.end(),{a,b,c,a,c,d});
+}
+void Renderer::DrawUiArt(UiArt art,float x,float y,float width,float height,XMFLOAT4 uv,XMFLOAT4 tint) {
+ if (width<=0 || height<=0) return;
+ const float texture=3.f+static_cast<float>(art);
+ const Vertex a{{x*2-1,1-y*2,.5f},{uv.x,uv.y,texture},tint};
+ const Vertex b{{(x+width)*2-1,1-y*2,.5f},{uv.z,uv.y,texture},tint};
+ const Vertex c{{(x+width)*2-1,1-(y+height)*2,.5f},{uv.z,uv.w,texture},tint};
+ const Vertex d{{x*2-1,1-(y+height)*2,.5f},{uv.x,uv.w,texture},tint};
+ hud_.insert(hud_.end(),{a,b,c,a,c,d});
+}
+bool Renderer::CreateUiArtwork() {
+ // Resource-backed PNGs travel with the executable. Decode once, bounded to
+ // under 18 MiB including mipmaps; WIC objects/pixels are released immediately.
+ const HRESULT apartment=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
+ if (FAILED(apartment) && apartment!=RPC_E_CHANGED_MODE) return Check(apartment,L"Initialize UI decoder apartment");
+ struct Apartment {bool owned;~Apartment(){if(owned) CoUninitialize();}} scope{SUCCEEDED(apartment)};
+ ComPtr<IWICImagingFactory> factory;
+ if (!Check(CoCreateInstance(CLSID_WICImagingFactory,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(factory.GetAddressOf())),L"Create UI image decoder")) return false;
+ uiBytes_=0;
+ for (unsigned i=0;i<uiViews_.size();++i) {
+  const auto module=GetModuleHandleW(nullptr);
+  const auto resource=FindResourceW(module,MAKEINTRESOURCEW(201+i),RT_RCDATA);
+  const auto loaded=resource?LoadResource(module,resource):nullptr;
+  auto* bytes=loaded?static_cast<BYTE*>(LockResource(loaded)):nullptr;
+  if (!bytes) {error_=L"Embedded interface artwork is missing. Rebuild the complete executable.";return false;}
+  ComPtr<IWICStream> stream;ComPtr<IWICBitmapDecoder> decoder;ComPtr<IWICBitmapFrameDecode> frame;
+  ComPtr<IWICBitmapScaler> scaler;ComPtr<IWICFormatConverter> converter;
+  const UINT width=i==1?1536:1024,height=i==1?864:1024;
+  if (!Check(factory->CreateStream(stream.GetAddressOf()),L"Create UI stream") ||
+      !Check(stream->InitializeFromMemory(bytes,SizeofResource(module,resource)),L"Read UI resource") ||
+      !Check(factory->CreateDecoderFromStream(stream.Get(),nullptr,WICDecodeMetadataCacheOnLoad,decoder.GetAddressOf()),L"Decode UI artwork") ||
+      !Check(decoder->GetFrame(0,frame.GetAddressOf()),L"Read UI artwork frame") ||
+      !Check(factory->CreateBitmapScaler(scaler.GetAddressOf()),L"Create UI scaler") ||
+      !Check(scaler->Initialize(frame.Get(),width,height,WICBitmapInterpolationModeFant),L"Scale UI artwork") ||
+      !Check(factory->CreateFormatConverter(converter.GetAddressOf()),L"Create UI converter") ||
+      !Check(converter->Initialize(scaler.Get(),GUID_WICPixelFormat32bppRGBA,WICBitmapDitherTypeNone,nullptr,0,WICBitmapPaletteTypeCustom),L"Convert UI artwork")) return false;
+  std::vector<BYTE> pixels(std::size_t(width)*height*4);
+  if (!Check(converter->CopyPixels(nullptr,width*4,UINT(pixels.size()),pixels.data()),L"Read UI pixels")) return false;
+  D3D11_TEXTURE2D_DESC desc{};desc.Width=width;desc.Height=height;desc.ArraySize=1;
+  desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;desc.SampleDesc.Count=1;
+  desc.BindFlags=D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_RENDER_TARGET;desc.MiscFlags=D3D11_RESOURCE_MISC_GENERATE_MIPS;
+  ComPtr<ID3D11Texture2D> texture;
+  if (!Check(device_->CreateTexture2D(&desc,nullptr,texture.GetAddressOf()),L"Create UI texture") ||
+      !Check(device_->CreateShaderResourceView(texture.Get(),nullptr,uiViews_[i].ReleaseAndGetAddressOf()),L"Create UI texture view")) return false;
+  context_->UpdateSubresource(texture.Get(),0,nullptr,pixels.data(),width*4,0);
+  context_->GenerateMips(uiViews_[i].Get());
+  for(UINT w=width,h=height;;w=std::max(1u,w/2),h=std::max(1u,h/2)) {
+   uiBytes_+=std::size_t(w)*h*4;if(w==1 && h==1) break;
+  }
+ }
+ return true;
+}
 bool Renderer::FlushHud() {
  if (!FlushWorld() || !FlushEffects()) return false;
  if (hud_.empty()) return true;
@@ -622,6 +733,8 @@ bool Renderer::FlushHud() {
  context_->OMSetBlendState(hudBlend_.Get(),nullptr,0xffffffff);
  auto* atlas=font_.View(); context_->PSSetShaderResources(2,1,&atlas);
  context_->PSSetShaderResources(3,1,mapView_.GetAddressOf());
+ ID3D11ShaderResourceView* art[]={uiViews_[0].Get(),uiViews_[1].Get(),uiViews_[2].Get()};
+ context_->PSSetShaderResources(5,3,art);
  context_->PSSetSamplers(2,1,fontSampler_.GetAddressOf());
  for (std::size_t start=0;start<hud_.size();start+=16380) {
   const UINT count=static_cast<UINT>(std::min<std::size_t>(16380,hud_.size()-start));

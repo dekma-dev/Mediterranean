@@ -31,7 +31,7 @@ void Simulation::Buy(int offer) {
   // Item, stock and gold commit together; no UI path can bypass these checks.
   if (!inventory_.Add(entry.item)) return;
   gold_-=entry.price; ++purchases_[offer];
-  message_=std::string("Bought ")+DescribeItem(entry.item).name+" for "+std::to_string(entry.price)+" gold. Stored in your bag.";
+  message_=std::string("Bought ")+ItemDefinition(entry.item).name+" for "+std::to_string(entry.price)+" gold. Stored in your bag.";
 }
 int Simulation::BuybackValue() const {
   int result=0; for (int i=0;i<int(Item::Count);++i) result+=buyback_[i]*SellPrice(Item(i));
@@ -59,11 +59,11 @@ void Simulation::Trade(const TradeCommand& command) {
   if (command.action==TradeAction::Sell) {
     if (!inventory_.Remove(command.source,command.item)) return;
     gold_+=price; ++buyback_[int(command.item)];
-    message_=std::string("Sold one ")+DescribeItem(command.item).name+" for "+std::to_string(price)+" gold. Available in buyback.";
+    message_=std::string("Sold one ")+ItemDefinition(command.item).name+" for "+std::to_string(price)+" gold. Available in buyback.";
   } else {
     if (!inventory_.Add(command.item)) return;
     gold_-=price; --buyback_[int(command.item)];
-    message_=std::string("Reclaimed ")+DescribeItem(command.item).name+" for "+std::to_string(price)+" gold. Stored in your bag.";
+    message_=std::string("Reclaimed ")+ItemDefinition(command.item).name+" for "+std::to_string(price)+" gold. Stored in your bag.";
   }
 }
 }

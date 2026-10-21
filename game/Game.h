@@ -1,5 +1,6 @@
 #pragma once
 #include "engine/Input.h"
+#include <optional>
 #include "game/Simulation.h"
 #include "game/Interface.h"
 #include "game/Motion.h"
@@ -53,6 +54,7 @@ public:
   void SetAudioAvailable(bool value) { interface_.audioAvailable=value; }
 private:
   std::filesystem::path saveFile_;
+  std::optional<std::string> savedSnapshot_;
   ui::CharacterSelection selection_;
   bool choosingCharacter_=false,inputBarrier_=false;
   rpg::Simulation simulation_;

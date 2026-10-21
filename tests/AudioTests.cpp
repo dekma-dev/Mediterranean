@@ -56,6 +56,10 @@ int main() {
         "Effect edges must not introduce a full-scale click");
     preview.insert(preview.end(),samples.begin(),samples.end()); preview.insert(preview.end(),sound::sampleRate/4,0);
   }
+  Require(sound::Generate(sound::Cue::Bow)!=sound::Generate(sound::Cue::Pistol) &&
+    sound::Generate(sound::Cue::Bow)!=sound::Generate(sound::Cue::Cast),"Physical weapons must have distinct release sounds");
+  WriteWave("handbow-release.wav",sound::Generate(sound::Cue::Bow));
+  WriteWave("pistol-release.wav",sound::Generate(sound::Cue::Pistol));
   const auto music=sound::GenerateMusic(); bytes+=music.size()*2;
   const auto mend=sound::Generate(sound::Cue::Mend);
   double tailEnergy=0;

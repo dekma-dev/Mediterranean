@@ -108,3 +108,11 @@ visual::HandPalette BuildHandRig(const HandPose& pose) {
   }
   return result;
 }
+
+DirectX::XMFLOAT3 WeaponReleasePoint(const CharacterPose& pose,rpg::WeaponForm form) {
+  // These sockets match the barrel/bolt rail endpoints in cached weapon geometry.
+  const DirectX::XMFLOAT3 muzzle{0,form==rpg::WeaponForm::Pistol?.16f:.191f,form==rpg::WeaponForm::Pistol?.40f:.36f};
+  DirectX::XMFLOAT3 result;
+  DirectX::XMStoreFloat3(&result,DirectX::XMVector3TransformCoord(DirectX::XMLoadFloat3(&muzzle),WeaponFrame(pose)));
+  return result;
+}

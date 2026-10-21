@@ -2,6 +2,7 @@
 #include <DirectXMath.h>
 #include <array>
 #include "game/Animation.h"
+#include "game/ClassEquipment.h"
 
 // Local visual joints, independent of combat resolution. CharacterRig converts
 // the final IK-corrected pose into the shared body/attachment skinning palette.
@@ -20,4 +21,4 @@ struct CharacterPose {
   DirectX::XMFLOAT3 HeadPoint(DirectX::XMFLOAT3 point) const;
   DirectX::XMFLOAT3 WeaponPoint(float distance) const;
 };
-CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::Sample dynamics = {});
+CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::Sample dynamics = {},rpg::WeaponForm weapon=rpg::WeaponForm::Blade);
