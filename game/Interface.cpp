@@ -37,12 +37,22 @@ std::string Number(float value) {
  std::ostringstream text; text<<std::setprecision(4)<<value; return text.str();
 }
 std::string SpellEffect(const rpg::Simulation& s,int ability) {
- if (ability==0) return Number(s.StrikeDamage())+" weapon damage";
- if (ability==1) return Number(s.HeavyDamage())+" weapon damage"+
+ if (ability==0) return Number(s.StrikeDamage())+" base damage";
+ if (ability==1) return Number(s.HeavyDamage())+" base damage"+
    (s.HasTalent(rpg::Talent::Executioner)?" / "+Number(s.HeavyDamage()*1.25f)+" at half target HP":"");
  if (ability==2) return "5 m acquisition / 1.5 m stopping distance";
  return "Up to "+Number(s.MendHealingNow())+" healing"+
    (s.HasTalent(rpg::Talent::Mercy)?" / "+Number(s.MendHealing()+20)+" at low HP":"");
+}
+std::string TalentEffect(const rpg::Simulation& s,int index) {
+ const auto info=s.TalentDefinition(index);
+ if(info.strike || info.heavy) return "+"+Number(info.strike)+" basic / +"+Number(info.heavy)+" heavy damage";
+ if(info.health) return "+"+Number(info.health)+" maximum health";
+ if(info.armor) return "+"+Number(info.armor)+" damage reduction";
+ if(info.mend) return "+"+Number(info.mend)+" self healing";
+ if(info.mendCooldown) return "Healing cooldown: -"+Number(info.mendCooldown)+"s";
+ if(info.dashCooldown) return "Dash cooldown: -"+Number(info.dashCooldown)+"s";
+ return index==6?"Heavy: +25% finishing damage":"Healing: +20 at low health";
 }
 struct Canvas {
  Renderer& r; Layout layout;
@@ -184,6 +194,19 @@ struct Canvas {
    }
   }
   RectFill({a.x+18,a.y+21,a.w-36,a.h-42},{.015f,.022f,.012f,.24f});
+  // Deterministic rubbed bronze, edge chips and inset leather seams.
+  for(int n=0;n<36;++n) {
+   const float t=(n+.37f)/36,grain=std::fmod(n*7.31f,1.f);
+   for(float side:{0.f,1.f}) {
+    const float x=a.x+12+t*(a.w-24),y=a.y+side*(a.h-7)+3;
+    Line(x,y,x+2+grain*6,y+.7f,.65f,{.73f,.59f,.32f,.35f});
+    RectFill({a.x+3+side*(a.w-7),a.y+18+t*(a.h-36),2,1+grain*4},{.05f,.04f,.02f,.65f});
+   }
+  }
+  for(float side:{0.f,1.f}) for(float y=a.y+30;y<a.y+a.h-30;y+=12) {
+   const float x=a.x+15+side*(a.w-30);Line(x-1,y-2,x+1,y+2,.8f,{.58f,.48f,.28f,.35f});
+  }
+
   for (float side : {0.f,1.f}) for (float bottom : {0.f,1.f}) {
    const float x=a.x+side*a.w,y=a.y+bottom*a.h;
    const float dx=side?-1.f:1.f,dy=bottom?-1.f:1.f;
@@ -402,7 +425,54 @@ void Icon(Canvas& c,Rect rect,Item item,float alpha=1) {
   }
  }
 }
-void AbilityArtwork(Canvas& c,Rect rect,int ability) {
+void ClassSigil(Canvas& c,Rect rect,rpg::ClassId id,float alpha=1) {
+ const float x=rect.x+rect.w*.5f,y=rect.y+rect.h*.5f,s=std::min(rect.w,rect.h)/40;
+ const auto& tint=rpg::DescribeClass(id).color;
+ const Color metal{.92f,.79f,.48f,alpha},light{.95f,.94f,.78f,alpha},shade{.035f,.045f,.04f,alpha};
+ const Color color{std::min(1.f,tint[0]+.24f),std::min(1.f,tint[1]+.24f),std::min(1.f,tint[2]+.24f),alpha};
+ c.Oval(x,y,18*s,18*s,{tint[0]*.22f,tint[1]*.22f,tint[2]*.22f,alpha});c.Ring(x,y,17*s,metal,.7f*s);
+ const auto line=[&](float ax,float ay,float bx,float by,float width,Color pigment) {c.Line(x+ax*s,y+ay*s,x+bx*s,y+by*s,width*s,pigment);};
+ using C=rpg::ClassId;
+ if(id==C::Scout) {
+  for(int i=0;i<16;++i) {
+   const float a=-1.4f+i*2.8f/16,b=a+2.8f/16;
+   line(std::cos(a)*12-5,std::sin(a)*13,std::cos(b)*12-5,std::sin(b)*13,2.4f,metal);
+  }
+  line(-3,-13,-3,13,.8f,light);line(-13,4,13,-4,1.3f,light);
+  line(13,-4,8,-7,1.8f,metal);line(13,-4,10,1,1.8f,metal);
+ } else if(id==C::Mage || id==C::Demonologist) {
+  c.Triangle({x-11*s,y+10*s},{x+10*s,y+10*s},{x+4*s,y-15*s},color);
+  c.Triangle({x-12*s,y+9*s},{x+2*s,y+10*s},{x-6*s,y-8*s},color);
+  c.Triangle({x-4*s,y+10*s},{x+6*s,y+10*s},{x+2*s,y-3*s},light);
+  if(id==C::Demonologist) {line(-8,-3,-13,-13,2,metal);line(8,-3,13,-13,2,metal);}
+ } else if(id==C::Priest || id==C::Paladin) {
+  for(int i=0;i<8;++i) {const float a=i*.7854f;line(std::cos(a)*10,std::sin(a)*10,std::cos(a)*14,std::sin(a)*14,1,metal);}
+  line(0,-12,0,12,4,color);line(-8,-4,8,-4,4,color);line(0,-12,0,12,1,light);
+  if(id==C::Paladin) c.Ring(x,y,9*s,metal,1.2f*s);
+ } else if(id==C::Necromancer) {
+  c.Oval(x,y-3*s,10*s,11*s,light);c.RectFill({x-6*s,y+3*s,12*s,9*s},light);
+  c.Oval(x-4*s,y-3*s,3*s,3*s,shade);c.Oval(x+4*s,y-3*s,3*s,3*s,shade);
+  for(int i=-1;i<=1;++i) line(i*3.f,7,i*3.f,12,.8f,shade);
+  c.Triangle({x,y+1*s},{x-2*s,y+5*s},{x+2*s,y+5*s},shade);
+ } else if(id==C::Engineer) {
+  for(int i=0;i<10;++i) {const float a=i*.6283f;line(std::cos(a)*10,std::sin(a)*10,std::cos(a)*14,std::sin(a)*14,4,metal);}
+  c.Ring(x,y,10*s,metal,4*s);c.Ring(x,y,4*s,light,2*s);line(-10,10,10,-10,1,shade);
+ } else if(id==C::Psionic) {
+  for(int i=0;i<14;++i) for(float side:{-1.f,1.f}) {
+   const float a=i/14.f,b=(i+1)/14.f;
+   line(-14+28*a,side*std::sin(a*3.14159f)*8,-14+28*b,side*std::sin(b*3.14159f)*8,1.3f,light);
+  }
+  c.Oval(x,y,5*s,7*s,color);c.Oval(x,y,2*s,4*s,shade);c.Oval(x-s,y-2*s,s,s,light);
+ } else if(id==C::Bard) {
+  c.Oval(x-3*s,y+5*s,8*s,9*s,metal);line(0,3,7,-13,5,metal);c.Oval(x-2*s,y+3*s,3*s,3*s,shade);
+  for(int i=-1;i<=1;++i) line(-6.f+i,11,6.f+i,-13,.5f,light);
+  line(4,-10,11,-8,2,color);
+ } else if(id==C::Druid) {
+  line(-7,13,5,-12,2,metal);
+  for(int i=0;i<3;++i) {c.Oval(x+2*s,y+(-8+i*7)*s,8*s,3*s,color);line(-4,-5+i*7.f,8,-9+i*7.f,.6f,light);}
+ } else Icon(c,{rect.x+4*s,rect.y+4*s,rect.w-8*s,rect.h-8*s},Item::Starter,alpha);
+}
+void AbilityArtwork(Canvas& c,Rect rect,int ability,rpg::ClassId id=rpg::ClassId::Warrior) {
  const float x=rect.x+rect.w*.5f,y=rect.y+rect.h*.5f,s=rect.w/40;
  const Color glow=ability==1?Color{.25f,.64f,.95f,.7f}:ability==2?Color{.18f,.85f,.78f,.7f}:
    ability==3?Color{.72f,.91f,.30f,.7f}:Color{1,.58f,.16f,.7f};
@@ -412,6 +482,7 @@ void AbilityArtwork(Canvas& c,Rect rect,int ability) {
   c.Line(x,y,x+std::cos(a)*17*s,y+std::sin(a)*17*s,(i%2+1)*s,{glow.x,glow.y,glow.z,.24f});
  }
  if (ability<2) {
+  if(id!=rpg::ClassId::Warrior) {ClassSigil(c,rect,id);return;}
   for(int i=0;i<14;++i) {
    const float a=-2.7f+i*.16f,b=a+.16f;
    c.Line(x+std::cos(a)*17*s,y+std::sin(a)*14*s,x+std::cos(b)*17*s,y+std::sin(b)*14*s,4*s,glow);
@@ -435,7 +506,8 @@ void AbilityArtwork(Canvas& c,Rect rect,int ability) {
   c.Diamond(x,y,12*s,4*s,{.96f,1,.64f,1});
  } else Icon(c,rect,Item::Potion);
 }
-void TalentIcon(Canvas& c,Rect rect,int index,float alpha=1) {
+void TalentIcon(Canvas& c,Rect rect,int index,float alpha=1,rpg::ClassId id=rpg::ClassId::Warrior) {
+ if(id!=rpg::ClassId::Warrior && index%3==0) {ClassSigil(c,rect,id,alpha);return;}
  if (index==int(rpg::Talent::Pursuit)) {
   AbilityArtwork(c,rect,2); return;
  }
@@ -553,37 +625,39 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  c.Line(72,119,1208,119,1,border);
  c.Window({72,152,692,490});
  c.Banner({218,140,400,36},"Dawnwatch expedition",20);
- c.Alcove({188,181,460,409});
+ c.Alcove({290,181,440,409});
  if(valid) {
-  const auto p=c.P(248,180);
+  const auto p=c.P(338,180);
   if(renderer.BeginPortrait(p.x,p.y,340*c.layout.scale/renderer.Width(),407*c.layout.scale/renderer.Height())) {
-   DrawCharacter(renderer,{0,0},0,selection.Yaw(),{.22f,.37f,.54f,1},0,0,
+   DrawCharacter(renderer,{0,0},0,selection.Yaw(),{hero.ClassInfo().color[0],hero.ClassInfo().color[1],hero.ClassInfo().color[2],1},0,0,
      CharacterOutfit::From(hero.Items()),animation::Idle(selection.Time()));
    renderer.EndPortrait();
   }
  } else {
   c.Center(188,353,460,"Character unavailable",22,muted);
  }
- c.Center(326,613,184,"Rotate character",13,muted);
+ c.Center(438,613,144,"Rotate character",13,muted);
  const auto card=CharacterSelection::Bounds(C::Hero);
  c.Text(842,146,"YOUR CHARACTER",12,gold);
  c.Frame(card,valid?Color{.11f,.20f,.18f,1}:dark,valid?gold:border);
  if(valid) {
   c.Gradient({card.x+5,card.y+5,card.w-10,card.h-10},{.15f,.25f,.22f,1},{.045f,.10f,.10f,1});
   c.Portrait(882,225,false,hero.Level());
-  c.Text(925,202,hero.Nickname(),22,ink);
+  const float nameSize=std::min(22.f,22.f*248.f/std::max(1.f,c.Width(hero.Nickname(),22)));
+  c.Text(925,202,hero.Nickname(),nameSize,ink);
   c.Text(925,240,"Level "+std::to_string(hero.Level()),17,gold);
   c.Text(925,270,hero.ClassName(),15,muted);
-  c.Text(842,342,saved?"SAVED JOURNEY":"NEW JOURNEY",12,gold);
-  c.Wrap(842,370,350,saved?"Return to your last saved position with your equipment, talents and quest progress.":
-    "Your first expedition begins at Dawnwatch. Meet the beacon keeper and explore the frontier.",17,ink,4);
-  c.Text(842,467,saved?"Save progress in the world with F5.":"Level 1  /  Starter equipment",13,muted);
+  c.Text(842,378,saved?"SAVED JOURNEY":"NEW JOURNEY",12,gold);
+  c.Wrap(842,407,350,saved?"Continue your saved expedition with its equipment, talents and quest progress.":
+    "Begin your first expedition at Dawnwatch. Meet the beacon keeper.",16,ink,3);
+  c.Text(842,463,hero.ClassInfo().role,12,muted);
+  c.Wrap(842,484,350,selection.Changed()?"Save changed. Review the hero before entering.":hero.ClassInfo().identity,13,gold,2);
  } else {
   c.Text(861,211,"Unable to read this character",19,ink);
   c.Text(861,252,"The saved file has been kept.",15,muted);
-  c.Wrap(842,350,350,"Restore a valid patrol.save in the saves folder, then select Refresh. Your existing progress will not be replaced.",17,ink,5);
+  c.Wrap(842,350,350,"Restore this class's save in the saves folder, then select Refresh. Your existing progress will not be replaced.",17,ink,5);
  }
- if(selection.Changed()) c.Wrap(842,490,350,"Save changed. Review the character before entering.",13,gold,2);
+
  const auto button=[&](C control,const char* label) {
   const auto a=CharacterSelection::Bounds(control);
   const bool enabled=selection.Enabled(control),focused=selection.Focus()==control,hover=selection.Hover()==control;
@@ -596,7 +670,19 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  button(C::Left,"<");button(C::Right,">");
  if(selection.Focus()==C::Hero && valid) c.Line(850,302,1184,302,1,gold);
  c.Text(72,674,"Tab  Select     Enter  Confirm     Arrow keys  Rotate     F11  Display",13,muted);
- c.Text(842,674,"1 character slot  /  Offline",13,muted);
+ c.Text(842,674,"11 class slots  /  Offline",13,muted);
+ for(int i=0;i<int(rpg::ClassId::Count);++i) {
+  const auto a=CharacterSelection::Bounds(C(int(C::Class0)+i));
+  const bool selected=int(selection.SelectedClass())==i;
+  c.Frame(a,selected?Color{.19f,.25f,.15f,1}:dark,selected?gold:border);
+  ClassSigil(c,{a.x+4,a.y+3,25,25},rpg::ClassId(i));
+  c.Text(a.x+34,a.y+8,rpg::classes[i].name,14,selected?ink:muted);
+ }
+ if(!saved && valid) {
+  const auto a=CharacterSelection::Bounds(C::Name);c.Frame(a,dark,selection.Focus()==C::Name?gold:border);
+  c.Text(a.x+10,a.y+8,selection.DraftName().empty()?"Enter a name":selection.DraftName(),16,ink);
+  c.Text(a.x,a.y+39,"Click to name / A-Z, spaces / 20 letters",11,muted);
+ }
 }
 
 void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bool debug) {
@@ -693,13 +779,13 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  }
  c.Gradient({0,704,1280,16},{.13f,.20f,.085f,1},{.035f,.06f,.03f,1}); c.Line(0,704,1280,704,2,border);
  for (float x=14;x<1280;x+=32) c.Scroll(x,706,1,.5f);
- const float xp=s.Level()==3?1.f:float(s.Experience()-s.LevelStartExperience())/(s.NextLevelExperience()-s.LevelStartExperience());
+ const float xp=s.Level()==rpg::levelCap?1.f:float(s.Experience()-s.LevelStartExperience())/(s.NextLevelExperience()-s.LevelStartExperience());
  c.Frame({439,645,403,7}); c.RectFill({442,648,397*xp,2},{.55f,.63f,.29f,1});
  c.Window({437,655,406,55}); c.Scroll(420,676,-1,1.5f); c.Scroll(860,676,1,1.5f);
  for (int i=0;i<5;++i) {
   const float x=447+i*43.f; const Rect rect{x,662,39,40};
   c.Frame(rect,{.08f,.12f,.055f,1},rect.Contains(mouseX_,mouseY_)?gold:border);
-  AbilityArtwork(c,{x+3,665,33,34},i);
+  AbilityArtwork(c,{x+3,665,33,34},i,s.Class());
   const bool ready=panel!=Panel::Merchant && (i<4?std::string(s.AbilityStatus(i))=="READY":CanUse(s,Item::Potion));
   const float cooldown=i<4?s.Cooldown(i):s.PotionCooldown();
   if (!ready) c.RectFill({x+3,665,33,34},{.02f,.025f,.01f,.36f});
@@ -714,8 +800,9 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   regions_.push_back({rect,{i<4?Action::Ability:Action::UseItem,i<4?i:static_cast<int>(Item::Potion)},ready});
  }
  c.Frame({665,662,168,40},{.035f,.07f,.065f,1});
- c.Center(668,666,162,"Strike "+std::to_string(int(s.StrikeDamage()))+"  /  Heavy "+std::to_string(int(s.HeavyDamage())),12,gold);
- c.Center(668,684,162,s.Attacking()?"Weapon committed":s.TargetActor()?"Tab changes target":"Tab selects a target",10,muted);
+ c.Center(668,666,162,"Basic "+std::to_string(int(s.StrikeDamage()))+"  /  Heavy "+std::to_string(int(s.HeavyDamage())),12,gold);
+ c.Center(668,684,162,s.Attacking()?(s.ClassInfo().range>3?"Cast in progress":"Attack in progress"):
+   s.TargetActor()?"Tab changes target":"Tab selects a target",10,muted);
  // A second row contains real navigation tools, leaving the primary bindings intact.
  if (panel==Panel::None) {
   const char* labels[]={"C Gear","I Bag","N Build","M Atlas","J Journal","Esc"};
@@ -723,10 +810,11 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   for(int i=0;i<6;++i) button({447+i*65.f,617,62,23},labels[i],actions[i]);
   if (s.Attacking()) {
    const float contact=combat::Contact(s.HeavyAttack());
-   const char* phase=s.AttackSeconds()<combat::StrokeStart(s.HeavyAttack())?"Wind-up":s.AttackSeconds()<contact?"Swing":"Recovery";
+   const char* phase=s.AttackSeconds()<combat::StrokeStart(s.HeavyAttack())?"Wind-up":
+     s.AttackSeconds()<contact?(s.ClassInfo().range>3?"Release":"Swing"):"Recovery";
    c.Frame({505,588,270,23},{.035f,.065f,.065f,.97f});
    c.Gradient({508,591,264*s.AttackProgress(),17},{.27f,.48f,.49f,1},{.10f,.22f,.26f,1});
-   c.Center(508,591,264,std::string(s.HeavyAttack()?"Heavy strike / ":"Strike / ")+phase,12);
+   c.Center(508,591,264,std::string(s.Spell(s.HeavyAttack()?1:0).name)+" / "+phase,12);
   }
  }
  if (s.TalentPoints()>0) {
@@ -752,7 +840,8 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Alcove({65,176,188,329});
   const auto p=c.P(70,181);
   if (renderer.BeginPortrait(p.x,p.y,178*c.layout.scale/renderer.Width(),316*c.layout.scale/renderer.Height())) {
-   DrawCharacter(renderer,{0,0},0,previewYaw+std::sin(time*.35f)*.05f,{.22f,.37f,.54f,1},0,0,CharacterOutfit::From(s.Items()),animation::Idle(time));
+   DrawCharacter(renderer,{0,0},0,previewYaw+std::sin(time*.35f)*.05f,
+     {s.ClassInfo().color[0],s.ClassInfo().color[1],s.ClassInfo().color[2],1},0,0,CharacterOutfit::From(s.Items()),animation::Idle(time));
    renderer.EndPortrait();
   }
   using G=rpg::GearSlot;
@@ -786,16 +875,16 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   for (int i=0;i<2;++i) {
    const float x=312+i*60.f;
    c.Frame({x,314,56,80},{.14f,.20f,.14f,1},{.36f,.39f,.24f,1});
-   c.Center(x,319,56,i?"Heavy":"Strike",11,gold);
+   c.Center(x,319,56,i?"Heavy":"Basic",11,gold);
    Icon(c,{x+13,334,30,30},i?Item::Watchguard:Item::Starter);
    c.Center(x,368,56,std::to_string(int(i?s.HeavyDamage():s.StrikeDamage())),21,ink);
   }
   c.Center(304,407,132,"PROGRESSION",11,gold);
-  const float characterXp=s.Level()==3?1.f:std::clamp(float(s.Experience()-s.LevelStartExperience())/
+  const float characterXp=s.Level()==rpg::levelCap?1.f:std::clamp(float(s.Experience()-s.LevelStartExperience())/
     float(s.NextLevelExperience()-s.LevelStartExperience()),0.f,1.f);
   c.Center(310,426,120,"Level "+std::to_string(s.Level()),19);
   c.Frame({314,453,112,10}); c.Gradient({317,456,106*characterXp,4},blue,{.13f,.25f,.42f,1});
-  c.Center(310,469,120,s.Level()==3?"Level cap reached":std::to_string(s.NextLevelExperience()-s.Experience())+" XP to next level",10,muted);
+  c.Center(310,469,120,s.Level()==rpg::levelCap?"Level cap reached":std::to_string(s.NextLevelExperience()-s.Experience())+" XP to next level",10,muted);
   c.Line(314,484,426,484,1,border);
   c.Text(316,501,"Gold",12,muted);
   const auto wealth=std::to_string(s.Gold()); c.Text(422-c.Width(wealth,14),500,wealth,14,gold);
@@ -829,7 +918,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   std::string detail=info.description;
   const auto delta=[](float value) { return (value>=0?std::string("+"):std::string())+std::to_string(int(value)); };
   if (info.slot==rpg::GearSlot::Weapon) {
-   detail="Strike "+std::to_string(int(info.strike+s.StrikeBonus()))+"  /  Heavy "+std::to_string(int(info.heavy+s.HeavyBonus()))+" damage.\n";
+   detail="Basic "+std::to_string(int(info.strike+s.StrikeBonus()+s.ClassInfo().strike))+"  /  Heavy "+std::to_string(int(info.heavy+s.HeavyBonus()+s.ClassInfo().heavy))+" damage.\n";
    const auto& current=Describe(s.Items().Worn(info.slot));
    detail+=Equipped(s,selected)?"Equipped / remove to fight unarmed":"Vs worn: "+delta(info.strike-current.strike)+" strike / "+delta(info.heavy-current.heavy)+" heavy";
   } else if (info.slot!=rpg::GearSlot::None) {
@@ -919,7 +1008,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     (id==rpg::QuestId::Anchor && s.AnchorState()>=rpg::AnchorQuest::Return?"  /  Anchor stable":""),12,gold);
   c.Wrap(46,436,390,quest.objective,14,ink,2);
   c.Frame({34,484,414,70},{.07f,.12f,.08f,1},gold);
-  if (rpg::ValidItem(quest.item)) {
+  if (quest.item!=rpg::Item::None && rpg::ValidItem(quest.item)) {
    Icon(c,{46,496,42,45},quest.item);
    c.Text(100,492,std::string(stage==rpg::QuestStage::Complete?"RECEIVED  /  ":"REWARD  /  ")+
      std::to_string(quest.gold)+" gold  /  "+std::to_string(quest.experience)+" XP",13,gold);
@@ -929,7 +1018,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
      "Base strike "+std::to_string(int(item.strike))+" / Heavy "+std::to_string(int(item.heavy))+"  -  In your bag":
      "Protection "+std::to_string(int(item.armor))+"  -  Equipped on completion";
    c.Text(100,534,stats,11,muted);
-  }
+  } else { c.Text(48,499,"FIELD EXPERIENCE",13,gold); c.Text(48,523,std::to_string(quest.experience)+" XP / class progression",18,ink); }
   const auto action=s.QuestPrimaryAction();
   const std::string status=s.QuestConfirmStatus();
   c.Wrap(40,561,400,status=="READY"?"Read the assignment and rewards before confirming.":status,13,muted,1);
@@ -969,14 +1058,15 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Center(850,109,306,std::to_string(s.TalentPoints())+" talent point"+(s.TalentPoints()==1?"":"s")+" available",15,gold);
    button({594,102,218,32},loadoutsPage?"Talents & spellbook":"Saved builds",Action::BuildPage);
    if (loadoutsPage) {
-    const auto name=[](int mask) -> std::string {
+    const auto name=[&s](int mask) -> std::string {
      if (mask<0) return "Empty slot";
      if (!mask) return "Unspent talents";
-     for (const auto& preset : rpg::buildPresets) if (unsigned(mask)==preset.mask) return preset.name;
+     for (int i=0;i<int(rpg::buildPresets.size());++i) if (unsigned(mask)==rpg::buildPresets[i].mask) return rpg::ClassPresetName(s.Class(),i);
+     if(rpg::TalentCount(unsigned(mask))>2) return std::string(s.ClassInfo().name)+" / "+std::to_string(rpg::TalentCount(unsigned(mask)))+" talents";
      std::string result;
      for (int i=0;i<int(rpg::Talent::Count);++i) if (rpg::HasTalent(unsigned(mask),rpg::Talent(i))) {
       if (!result.empty()) result+=" + ";
-      result+=rpg::talents[i].name;
+      result+=s.TalentDefinition(i).name;
      }
      return result;
     };
@@ -989,26 +1079,26 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
      c.Wrap(card.x+14,card.y+33,207,name(mask),13,mask<0?muted:ink,2);
      if (mask>=0) {
       int shown=0;
-      for (int t=0;t<int(rpg::Talent::Count);++t) if (rpg::HasTalent(unsigned(mask),rpg::Talent(t)))
-       TalentIcon(c,{card.x+237+(shown++)*39.f,card.y+34,28,31},t);
+      for (int t=0;t<int(rpg::Talent::Count) && shown<2;++t) if (rpg::HasTalent(unsigned(mask),rpg::Talent(t)))
+       TalentIcon(c,{card.x+237+(shown++)*39.f,card.y+34,28,31},t,1,s.Class());
      }
      regions_.push_back({card,{Action::SelectLoadout,i},true});
     }
     button({124,448,332,32},"Preview my active build",Action::SelectBuildPreset,-1);
     c.Text(124,482,"SPECIALIZATION PRESETS / LEVEL 3",11,gold);
     for (int i=0;i<int(rpg::buildPresets.size());++i)
-     button({124+(i%2)*172.f,502+(i/2)*34.f,160,29},rpg::buildPresets[i].name,Action::SelectBuildPreset,i);
+     button({124+(i%2)*172.f,502+(i/2)*34.f,160,29},rpg::ClassPresetName(s.Class(),i),Action::SelectBuildPreset,i);
     c.Text(124,608,"Select a slot, then store the preview.",12,muted);
     c.Frame({488,150,668,454},{.035f,.08f,.075f,1});
     c.Text(512,166,"BUILD PREVIEW",12,gold);
     c.Text(512,188,name(previewBuild),19,ink);
     const unsigned mask=previewBuild<0?s.BuildMask():unsigned(previewBuild);
-    const int cost=rpg::TalentCount(mask),earned=s.Level()-1;
+    const int cost=rpg::TalentCount(mask),earned=s.EarnedPoints();
     c.Text(512,220,cost>earned?"Requires "+std::to_string(cost)+" points / "+std::to_string(earned)+" earned":
       std::to_string(cost)+" of "+std::to_string(earned)+" earned points / "+std::to_string(earned-cost)+" unspent",12,muted);
     c.Text(796,249,"CURRENT",11,muted); c.Text(925,249,"PREVIEW",11,gold); c.Text(1060,249,"CHANGE",11,muted);
     const auto live=s.PreviewBuild(s.BuildMask()),proposed=s.PreviewBuild(mask);
-    const char* labels[]={"Maximum health","Strike damage","Heavy damage","Damage reduction","Mend healing","Dash cooldown","Mend cooldown"};
+    const char* labels[]={"Maximum health","Basic damage","Heavy damage","Damage reduction","Self healing","Dash cooldown","Healing cooldown"};
     const float current[]={live.health,live.strike,live.heavy,live.armor,live.mend,live.dashCooldown,live.mendCooldown};
     const float next[]={proposed.health,proposed.strike,proposed.heavy,proposed.armor,proposed.mend,proposed.dashCooldown,proposed.mendCooldown};
     for (int i=0;i<7;++i) {
@@ -1020,8 +1110,8 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
        delta==0?muted:((i>=5?delta<0:delta>0)?Color{.57f,.83f,.45f,1}:Color{.94f,.55f,.40f,1}));
     }
     const std::string conditional=rpg::HasTalent(mask,rpg::Talent::Executioner)?
-      "Executioner: Heavy deals "+Number(proposed.heavy*1.25f)+" at or below half enemy health.":
-      rpg::HasTalent(mask,rpg::Talent::Mercy)?"Mercy: Mend restores up to "+Number(proposed.mend+20)+" at or below 35% health.":
+      std::string(s.TalentDefinition(6).name)+": Heavy deals "+Number(proposed.heavy*1.25f)+" at or below half enemy health.":
+      rpg::HasTalent(mask,rpg::Talent::Mercy)?std::string(s.TalentDefinition(8).name)+": Healing restores up to "+Number(proposed.mend+20)+" at or below 35% health.":
       "Base spell values shown with your current level and worn equipment.";
     c.Wrap(512,449,620,conditional,13,ink,2);
     const bool confirming=pendingBuild.action!=rpg::BuildAction::None;
@@ -1049,12 +1139,12 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    for(int i=0;i<4;++i) {
     const Rect spellSlot{148+i*170.f,157,154,52};
     c.Frame(spellSlot,selectedSpell==i?Color{.12f,.23f,.20f,1}:dark,selectedSpell==i?gold:border);
-    AbilityArtwork(c,{spellSlot.x+6,spellSlot.y+6,39,39},i);
-    c.Text(spellSlot.x+52,spellSlot.y+10,rpg::spells[i].name,14,ink);
-    c.Text(spellSlot.x+52,spellSlot.y+30,std::string("Key ")+rpg::spells[i].key+" / "+Number(s.AbilityCooldown(i))+"s",11,muted);
+    AbilityArtwork(c,{spellSlot.x+6,spellSlot.y+6,39,39},i,s.Class());
+    c.Text(spellSlot.x+52,spellSlot.y+10,s.Spell(i).name,14,ink);
+    c.Text(spellSlot.x+52,spellSlot.y+30,std::string("Key ")+s.Spell(i).key+" / "+Number(s.AbilityCooldown(i))+"s",11,muted);
     regions_.push_back({spellSlot,{Action::SelectSpell,i},true});
    }
-   const char* branches[]={"ARMS","GUARD","SPIRIT"};
+   const auto& branches=s.ClassInfo().branches;
    const Color branchColors[]={{.83f,.54f,.31f,1},{.40f,.64f,.83f,1},{.45f,.77f,.57f,1}};
    for (int branch=0;branch<3;++branch) {
     const float x=248+branch*232.f;
@@ -1065,19 +1155,19 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.Line(x,346,x,353,2,wire); c.Line(x,353,x-111,353,2,wire);
     c.Line(x-111,353,x-111,512,2,wire);
     c.Line(x-111,406,x-105,406,2,wire); c.Line(x-111,512,x-105,512,2,wire);
-    c.Center(x-18,452,36,"OR",10,muted);
+    c.Center(x-45,452,90,"DISCIPLINES",10,muted);
    }
    for (int i=0;i<int(rpg::Talent::Count);++i) {
-    const auto talent=rpg::Talent(i); const auto& info=rpg::talents[i];
+    const auto talent=rpg::Talent(i); const auto& info=s.TalentDefinition(i);
     const bool learned=s.HasTalent(talent),available=std::string(s.TalentStatus(talent))=="Ready to learn";
     const Rect rect{143+(i%3)*232.f,254+(i/3)*106.f,210,92};
     const bool hovered=rect.Contains(mouseX_,mouseY_),selectedNode=selectedSpell<0 && !confirmTalentReset && i==selectedTalent;
     const Color accent=learned?Color{.57f,.83f,.45f,1}:available?gold:border;
     c.Frame(rect,selectedNode?Color{.12f,.23f,.20f,1}:Color{.035f,.085f,.075f,1},selectedNode || hovered?gold:accent);
     c.RectFill({rect.x+4,rect.y+4,3,rect.h-8},accent);
-    TalentIcon(c,{rect.x+11,rect.y+8,30,33},i,learned || available?1.f:.45f);
+    TalentIcon(c,{rect.x+11,rect.y+8,30,33},i,learned || available?1.f:.45f,s.Class());
     c.Wrap(rect.x+50,rect.y+10,150,info.name,15,learned || available?ink:muted,2);
-    c.Wrap(rect.x+12,rect.y+46,186,info.effect,12,muted,2);
+    c.Wrap(rect.x+12,rect.y+46,186,TalentEffect(s,i),12,muted,2);
     const char* state=learned?"LEARNED":available?"AVAILABLE / 1 POINT":
       s.Level()<info.level?"LOCKED":info.prerequisite!=rpg::Talent::Count && !s.HasTalent(info.prerequisite)?"PREREQUISITE":"UNAVAILABLE";
     c.Text(rect.x+12,rect.y+76,"LEVEL "+std::to_string(info.level)+" / "+state,10,accent);
@@ -1093,8 +1183,8 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     button({874,524,258,32},"Confirm reset",Action::ResetTalents,0,status=="Ready to reset");
     button({874,563,258,28},"Keep current build",Action::CancelTalentReset);
    } else if (rpg::ValidSpell(selectedSpell)) {
-    const auto& spell=rpg::spells[selectedSpell];
-    AbilityArtwork(c,{874,166,48,48},selectedSpell);
+    const auto& spell=s.Spell(selectedSpell);
+    AbilityArtwork(c,{874,166,48,48},selectedSpell,s.Class());
     c.Text(937,175,"FOUNDATION SPELL",13,gold);
     c.Text(937,198,std::string("Key ")+spell.key+" / learned at level 1",11,muted);
     c.Text(874,231,spell.name,22,ink);
@@ -1108,31 +1198,31 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.Text(874,483,"RELATED TALENTS",11,gold);
     for(int i=0;i<3;++i) if (rpg::ValidTalent(spell.upgrades[i])) {
      const auto talent=spell.upgrades[i];
-     button({874,503+i*30.f,258,26},std::string(s.HasTalent(talent)?"* ":"")+rpg::talents[int(talent)].name,
+     button({874,503+i*30.f,258,26},std::string(s.HasTalent(talent)?"* ":"")+s.TalentDefinition(int(talent)).name,
        Action::SelectTalent,int(talent));
     }
    } else {
-   const auto talent=rpg::Talent(selectedTalent); const auto& info=rpg::talents[selectedTalent];
+   const auto talent=rpg::Talent(selectedTalent); const auto& info=s.TalentDefinition(selectedTalent);
    const bool learned=s.HasTalent(talent);
    const std::string status=s.TalentStatus(talent);
-   TalentIcon(c,{874,166,48,52},selectedTalent);
+   TalentIcon(c,{874,166,48,52},selectedTalent,1,s.Class());
    c.Text(937,175,branches[selectedTalent%3],14,branchColors[selectedTalent%3]);
    c.Text(937,199,selectedTalent<3?"Foundation talent":selectedTalent<6?"Specialization / option A":"Specialization / option B",11,muted);
    c.Wrap(874,232,258,info.name,20,gold,2);
-   c.Wrap(874,288,258,info.effect,15,ink,2);
+   c.Wrap(874,288,258,TalentEffect(s,selectedTalent),15,ink,2);
    c.Wrap(874,341,258,info.description,14,muted,4);
    c.Line(874,423,1132,423,1,border);
    c.Text(874,436,"Requires level "+std::to_string(info.level),13,ink);
    c.Wrap(874,460,258,info.prerequisite==rpg::Talent::Count?"Prerequisite: Foundations":
-     std::string("Prerequisite: ")+rpg::talents[int(info.prerequisite)].name,12,muted,2);
+     std::string("Prerequisite: ")+s.TalentDefinition(int(info.prerequisite)).name,12,muted,2);
    c.Wrap(874,493,258,status,13,learned?Color{.57f,.83f,.45f,1}:gold,2);
    button({874,546,258,37},learned?"Learned":"Learn / 1 point",Action::LearnTalent,selectedTalent,status=="Ready to learn");
    }
-   c.Text(148,568,"One point at levels 2 and 3: specialize, or mix two foundations.",12,ink);
+   c.Text(148,568,"Points at levels 2, 3, 5, 7 and 9. Five choices by level 10.",12,ink);
    c.Frame({148,589,480,8}); c.RectFill({151,592,474*xp,2},gold);
    button({666,590,146,28},"Reset talents",Action::ConfirmTalentReset,0,
      std::string(s.TalentResetStatus())=="Ready to reset" && !confirmTalentReset);
-   c.Text(148,607,s.Level()==3?"Level cap reached  /  2 points earned":
+   c.Text(148,607,s.Level()==rpg::levelCap?"Level cap reached  /  "+std::to_string(s.EarnedPoints())+" points earned":
      std::to_string(s.Experience())+" XP  /  "+std::to_string(s.NextLevelExperience())+" for next level",12,muted);
    c.Text(124,628,"N or X closes. Choices are saved with F5. The world remains active.",12,muted);
    return;
@@ -1152,16 +1242,18 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    if (hasWaypoint) button({833,562,286,39},"Clear waypoint",Action::ClearWaypoint);
    c.Text(156,619,"Roads and markers follow the playable map. Island: 34 x 38 m.",13,muted);
   } else {
-   const auto& patrol=rpg::DescribeQuest(rpg::QuestId::Patrol);
-   const auto& anchor=rpg::DescribeQuest(rpg::QuestId::Anchor);
-   c.Frame({208,158,397,339}); c.Text(229,177,std::string("01   ")+patrol.title,22);
-   c.Text(229,216,s.QuestState()==rpg::Quest::Complete?"COMPLETED":"FRONTIER PATROL",13,gold);
-   c.Wrap(229,257,348,patrol.objective,17,ink,5);
-   c.Text(229,390,"REWARD",13,gold); c.Text(229,419,std::to_string(patrol.gold)+" gold  /  "+std::to_string(patrol.experience)+" XP\n"+Describe(patrol.item).name,17);
-   c.Frame({622,158,450,339}); c.Text(643,177,std::string("02   ")+anchor.title,22);
-   c.Text(643,216,s.AnchorState()==rpg::AnchorQuest::Complete?"COMPLETED":s.AnchorState()==rpg::AnchorQuest::Locked?"UNLOCKS AFTER THE PATROL":"ASTRAL ANCHOR",13,gold);
-   c.Wrap(643,257,402,anchor.objective,17,ink,5);
-   c.Text(643,390,"REWARD",13,gold); c.Text(643,419,std::to_string(anchor.gold)+" gold  /  "+std::to_string(anchor.experience)+" XP\n"+Describe(anchor.item).name,17);
+   c.Parchment({208,151,397,384});
+   for(int i=0;i<9;++i) {
+    const auto id=rpg::QuestId(int(rpg::QuestId::Patrol)+i);const auto& quest=rpg::DescribeQuest(id);
+    const bool done=i==0?s.QuestState()==rpg::Quest::Complete:i==1?s.AnchorState()==rpg::AnchorQuest::Complete:i-2<s.FrontierCompleted();
+    c.Text(227,166+i*39.f,std::to_string(i+1)+". "+quest.title,15,{.22f,.15f,.09f,1});
+    c.Text(227,184+i*39.f,done?"Completed":i>1 && s.AnchorState()!=rpg::AnchorQuest::Complete?"Locked":"Campaign assignment",10,{.32f,.22f,.13f,1});
+   }
+   const auto id=s.QuestState()!=rpg::Quest::Complete?rpg::QuestId::Patrol:s.AnchorState()!=rpg::AnchorQuest::Complete?rpg::QuestId::Anchor:rpg::QuestId(int(rpg::QuestId::Watch1)+std::min(6,s.FrontierCompleted()));
+   const auto& quest=rpg::DescribeQuest(id);
+   c.Frame({622,158,450,377});c.Wrap(643,177,402,quest.title,23,ink,2);
+   c.Wrap(643,243,402,quest.offer,16,muted,8);
+   c.Text(643,475,"REWARD / "+std::to_string(quest.experience)+" XP",15,gold);
    button({734,545,338,43},"Show objective on the atlas",Action::Map);
    c.Text(209,557,"Raiders defeated: "+std::to_string(s.DefeatedCount())+" / 3",17,muted);
    c.Text(209,606,"The world remains active while reading the journal.",14,muted);
@@ -1199,7 +1291,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    const std::string detail=potion?"Restores up to 40 health.":SpellEffect(s,ability);
    const std::string status=potion?(s.Health()<=0?"DEFEATED":s.Potions()==0?"NO POTIONS":s.Health()>=s.MaxHealth()?"FULL HEALTH":s.PotionCooldown()>0?"COOLDOWN":"READY"):s.AbilityStatus(ability);
    const float x=std::clamp(it->rect.x-30,460.f,680.f);
-   c.Window({x,470,300,149}); c.Text(x+14,480,potion?"Healing draught":rpg::spells[ability].name,19,gold);
+   c.Window({x,470,300,149}); c.Text(x+14,480,potion?"Healing draught":s.Spell(ability).name,19,gold);
    c.Wrap(x+14,512,272,detail,14,ink,2);
    const float remaining=potion?s.PotionCooldown():s.Cooldown(ability);
    c.Text(x+14,554,"Cooldown: "+Number(potion?3.f:s.AbilityCooldown(ability))+"s"+

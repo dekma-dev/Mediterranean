@@ -95,10 +95,32 @@ void Render(const std::filesystem::path& root,const std::string& veteran) {
   Check(renderer.Capture((root/"selection-first.png").wstring()) && renderer.EndFrame(false),"First-character render");
   Check(renderer.ValidateDebugMessages(),"D3D validation failed");
 }
+void ClassSlots(const std::filesystem::path& root) {
+  const auto folder=root/("roster-"+std::to_string(GetTickCount64()));std::filesystem::create_directories(folder);
+  const auto base=folder/"patrol.save";
+  for(int i=0;i<int(rpg::ClassId::Count);++i) {
+    Game game;game.Initialize();game.ChooseCharacter(base);Driver d;d.Step(game);
+    d.Click(game,Control(int(Control::Class0)+i));
+    Check(game.Selection().Hero().Class()==rpg::ClassId(i) && game.Selection().State()==Selection::Status::New,"Class choice did not create a fresh profile");
+    d.Click(game,Control::Name);d.Key(game,'A');d.Key(game,'S');d.Key(game,VK_RETURN);
+    Check(game.Selection().DraftName()=="as","Name field did not accept keyboard text");
+    d.Key(game,VK_RETURN);d.Step(game);
+    Check(!game.ChoosingCharacter() && game.State().Class()==rpg::ClassId(i) && std::string(game.State().Nickname())=="as","Created character identity lost at entry");
+    d.Key(game,VK_F5);
+    const auto file=i==0?base:folder/("hero-"+std::to_string(i)+".save");
+    rpg::Simulation saved;Check(saved.Load(Read(file)) && saved.Class()==rpg::ClassId(i),"F5 wrote the wrong class slot");
+    rpg::Simulation other;other.CreateCharacter(rpg::ClassId((i+1)%int(rpg::ClassId::Count)),"Other Hero");
+    Write(file,other.Save());d.Key(game,VK_F9);
+    Check(game.State().Class()==rpg::ClassId(i) && std::string(game.State().Nickname())=="as","F9 accepted a different class into this slot");
+    Write(file,saved.Save());d.Key(game,VK_F9);Check(game.State().Save()==saved.Save(),"Same-class F9 restore failed");
+    game.ChooseCharacter(base);d.Step(game);d.Click(game,Control(int(Control::Class0)+i));
+    Check(game.Selection().State()==Selection::Status::Saved && !game.Selection().Enabled(Control::Name),"Existing character was editable/replaced");
+  }
+}
 }
 int main() {
   const auto root=std::filesystem::current_path()/"character-selection-check";std::filesystem::create_directories(root);
   const auto veteran=Read(std::filesystem::path(RPG_TEST_FIXTURES)/"veteran-preview.save");
-  Flow(root,veteran);Render(root,veteran);
+  Flow(root,veteran);ClassSlots(root);Render(root,veteran);
   std::cout<<"PASS: character metadata, frozen world, input isolation, saved/new/error/repaired states, changed saves, resize/focus, hidden DX11 captures\n";
 }

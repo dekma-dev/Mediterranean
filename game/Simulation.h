@@ -6,16 +6,17 @@
 #include "game/Inventory.h"
 #include "game/Trade.h"
 #include "game/Talents.h"
-#include "game/Spells.h"
+#include "game/Classes.h"
 #include "game/Quests.h"
 #include "game/Motion.h"
 #include "game/AttackMotion.h"
 
 namespace rpg {
 enum class EnemyState { Idle, Pursuing, Returning, Dead };
-enum class EnemyKind { Raider, Captain,Trainer };
+enum class EnemyKind { Raider, Captain,Trainer,Reaver,Wraith };
 struct Enemy {
   Vec2 position, home;
+  int rank=0;
   float health = 80, attackCooldown = 0, hitFlash = 0;
   bool damagedThisUpdate = false; // transient event, independent of the fading tint
   EntityId id = 0;
@@ -29,11 +30,11 @@ struct Enemy {
   std::size_t waypoint = 0;
   EnemyKind kind = EnemyKind::Raider;
   float windup = 0, facing = 0;
-  float MaxHealth() const { return kind==EnemyKind::Trainer?180.f:kind==EnemyKind::Captain?120.f:80.f; }
-  float WindupDuration() const { return kind==EnemyKind::Trainer?.9f:kind==EnemyKind::Captain?1.f:.7f; }
-  float AttackInterval() const { return kind==EnemyKind::Captain?2.4f:1.4f; }
-  float Damage() const { return kind==EnemyKind::Captain?16.f:8.f; }
-  const char* Name() const { return kind==EnemyKind::Trainer?"SPARRING GUARD":kind==EnemyKind::Captain?"RAIDER CAPTAIN":"RAIDER"; }
+  float MaxHealth() const { return (kind==EnemyKind::Trainer?180.f:kind==EnemyKind::Captain?120.f:kind==EnemyKind::Reaver?105.f:80.f)+rank*18.f; }
+  float WindupDuration() const { return kind==EnemyKind::Trainer?.9f:kind==EnemyKind::Captain?1.f:kind==EnemyKind::Reaver?1.15f:kind==EnemyKind::Wraith?.55f:.7f; }
+  float AttackInterval() const { return kind==EnemyKind::Captain?2.4f:kind==EnemyKind::Reaver?2.7f:kind==EnemyKind::Wraith?1.2f:1.4f; }
+  float Damage() const { return (kind==EnemyKind::Captain?16.f:kind==EnemyKind::Reaver?20.f:8.f)+rank*2.f; }
+  const char* Name() const { if(kind==EnemyKind::Reaver) return "ASH REAVER";if(kind==EnemyKind::Wraith) return "VEIL HUNTER";return kind==EnemyKind::Trainer?"SPARRING GUARD":kind==EnemyKind::Captain?"RAIDER CAPTAIN":"RAIDER"; }
   static constexpr float attackReach = 2.4f, attackHalfAngle = 1.f;
 };
 struct Command {
@@ -65,18 +66,30 @@ struct CombatFeedback {
 };
 
 // One-update presentation events. Never serialized or used to resolve combat.
-enum class CombatVisualKind { Strike, HeavyStrike, EnemySwing, Hit, HeavyHit, Hurt, Interrupt, Mend, Potion, DashStart, DashStop, DashImpact };
+enum class CombatVisualKind { Strike, HeavyStrike, EnemySwing, Hit, HeavyHit, Hurt, Interrupt, Mend, Potion, DashStart, DashStop, DashImpact,SpellCast };
 struct CombatVisualEvent {
   CombatVisualKind kind = CombatVisualKind::Hit;
   Vec2 position;
   float height = 0, facing = 0;
   EntityId actor = 0; // zero is the player; enemies retain their stable IDs
   float elapsed = 0; // time from emission to the end of this update
+  Vec2 destination{};
+  ClassId school=ClassId::Warrior;
+  float flight=.1f;
 };
 
 class Simulation {
 public:
   Simulation();
+  bool CreateCharacter(ClassId id,const std::string& nickname);
+  ClassId Class() const { return class_; }
+  const ClassInfo& ClassInfo() const { return DescribeClass(class_); }
+  TalentInfo TalentDefinition(int index) const { return ClassTalent(class_,index); }
+  SpellInfo Spell(int index) const { return ClassSpell(class_,index); }
+  float BuildBonus(unsigned mask,float TalentInfo::*stat) const;
+  int FrontierCompleted() const { return frontierCompleted_; }
+  bool FrontierActive() const { return frontierActive_; }
+  int EarnedPoints() const { return EarnedTalentPoints(Level()); }
   void Update(float seconds, const Command& command);
   bool CanStand(Vec2 position, float radius = .4f) const;
   float CameraDistance(Vec2 origin, float originY, Vec2 direction, float slope, float desired) const;
@@ -107,11 +120,11 @@ public:
   int Experience() const;
   int Level() const;
   // Identity of the current single-character campaign, shared by all UI views.
-  const char* Nickname() const { return "Frontier guard"; }
-  const char* ClassName() const { return "Dawnwatch guard"; }
-  int LevelStartExperience() const { return Level()==1?0:Level()==2?100:250; }
-  int NextLevelExperience() const { return Level()==1?100:250; }
-  float MaxHealth() const { return 100.f+20.f*(Level()-1)+TalentBonus(build_,&TalentInfo::health); }
+  const char* Nickname() const { return nickname_.c_str(); }
+  const char* ClassName() const { return class_==ClassId::Warrior?"Dawnwatch guard":ClassInfo().name; }
+  int LevelStartExperience() const { return levelExperience[Level()-1]; }
+  int NextLevelExperience() const { return levelExperience[std::min(Level(),levelCap-1)]; }
+  float MaxHealth() const { return ClassInfo().health+20.f*(Level()-1)+BuildBonus(build_,&TalentInfo::health); }
   bool HasTalent(Talent talent) const { return rpg::HasTalent(build_,talent); }
   int TalentPoints() const;
   const char* TalentStatus(Talent talent) const;
@@ -121,16 +134,16 @@ public:
   int Loadout(int slot) const { return slot>=0 && slot<int(loadouts_.size())?loadouts_[slot]:-1; }
   BuildStats PreviewBuild(unsigned mask) const;
   const char* LoadoutStatus(const BuildCommand& command) const;
-  float StrikeBonus() const { return 3.f*(Level()-1)+TalentBonus(build_,&TalentInfo::strike); }
-  float HeavyBonus() const { return 5.f*(Level()-1)+TalentBonus(build_,&TalentInfo::heavy); }
-  float MendHealing() const { return 35.f+TalentBonus(build_,&TalentInfo::mend); }
+  float StrikeBonus() const { return 3.f*(Level()-1)+BuildBonus(build_,&TalentInfo::strike); }
+  float HeavyBonus() const { return 5.f*(Level()-1)+BuildBonus(build_,&TalentInfo::heavy); }
+  float MendHealing() const { return ClassInfo().healing+BuildBonus(build_,&TalentInfo::mend); }
   float MendHealingNow() const { return MendHealing()+(HasTalent(Talent::Mercy) && health_<=MaxHealth()*.35f?20.f:0.f); }
   float HeavyMultiplier(float health,float maximum) const {
     return HasTalent(Talent::Executioner) && maximum>0 && health>0 && health<=maximum*.5f?1.25f:1.f;
   }
   float HeavyDamageAgainst(float health,float maximum) const { return HeavyDamage()*HeavyMultiplier(health,maximum); }
   float AbilityCooldown(int index) const { return ValidSpell(index)?abilityCooldowns[index]-
-    (index==3?TalentBonus(build_,&TalentInfo::mendCooldown):index==2?TalentBonus(build_,&TalentInfo::dashCooldown):0):0; }
+    (index==3?BuildBonus(build_,&TalentInfo::mendCooldown):index==2?BuildBonus(build_,&TalentInfo::dashCooldown):0):0; }
   int DefeatedCount() const;
   bool HasWardArmor() const { return anchorQuest_==AnchorQuest::Complete; }
   bool WardArmorEquipped() const { return inventory_.Worn(GearSlot::Chest)==Item::Ward; }
@@ -162,8 +175,8 @@ public:
   int Potions() const { return inventory_.Count(Item::Potion); }
   bool HasRewardWeapon() const { return inventory_.Count(Item::Watchguard)>0; }
   bool RewardWeaponEquipped() const { return inventory_.Worn(GearSlot::Weapon)==Item::Watchguard; }
-  float StrikeDamage() const { return DescribeItem(inventory_.Worn(GearSlot::Weapon)).strike+StrikeBonus(); }
-  float HeavyDamage() const { return DescribeItem(inventory_.Worn(GearSlot::Weapon)).heavy+HeavyBonus(); }
+  float StrikeDamage() const { return DescribeItem(inventory_.Worn(GearSlot::Weapon)).strike+StrikeBonus()+ClassInfo().strike; }
+  float HeavyDamage() const { return DescribeItem(inventory_.Worn(GearSlot::Weapon)).heavy+HeavyBonus()+ClassInfo().heavy; }
   float PotionCooldown() const { return potionCooldown_; }
   const char* AbilityStatus(int index) const;
   QuestId QuestDialogue() const { return questDialogue_; }
@@ -187,6 +200,11 @@ public:
   static constexpr std::array<float,4> abilityCooldowns{spells[0].cooldown,spells[1].cooldown,spells[2].cooldown,spells[3].cooldown};
   static constexpr float channelDuration = 3.f;
 private:
+  int frontierCompleted_=0,legacyLoot_=0;
+  bool frontierActive_=false;
+  void PrepareFrontierEnemies(int rank);
+  ClassId class_=ClassId::Warrior;
+  std::string nickname_="Frontier guard";
   void Move(Vec2& position, Vec2 displacement, float radius);
   void SelectTarget();
   enum class DashCheck { Ready, NoTarget, Returning, TooClose, TooFar, Blocked };

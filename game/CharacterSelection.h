@@ -4,15 +4,17 @@
 #include <filesystem>
 
 namespace ui {
-// The campaign currently has one local character slot. This screen never writes
-// or replaces it; entering uses the same validated snapshot shown in the card.
+// One local slot per class; the legacy warrior uses patrol.save. Selection
+// never replaces a character; entering uses the same validated snapshot shown in the card.
 class CharacterSelection {
 public:
   enum class Status { New, Saved, Unreadable };
-  enum class Control { Hero, Enter, Refresh, Quit, Left, Right, None };
+  enum class Control { Hero, Enter, Refresh, Quit, Left, Right, Name, Class0,Class1,Class2,Class3,Class4,Class5,Class6,Class7,Class8,Class9,Class10, None };
   enum class Action { None, Enter, Quit };
   void Open(const std::filesystem::path& file);
   void Refresh();
+  const std::filesystem::path& SaveFile() const { return file_; }
+  rpg::ClassId SelectedClass() const { return class_; }
   Action Update(float seconds,const Input& input);
   void CancelGesture() { pressed_=Control::None; }
   static Rect Bounds(Control control);
@@ -24,9 +26,13 @@ public:
   Control Hover() const { return hover_; }
   float Time() const { return time_; }
   float Yaw() const { return yaw_; }
+  const std::string& DraftName() const { return draftName_; }
   bool Changed() const { return changed_; }
 private:
-  std::filesystem::path file_;
+  std::filesystem::path file_,base_;
+  rpg::ClassId class_=rpg::ClassId::Warrior;
+  std::string draftName_;
+  bool editingName_=false;
   rpg::Simulation hero_;
   std::string snapshot_;
   Status status_=Status::New;

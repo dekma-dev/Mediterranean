@@ -1,5 +1,7 @@
 # Fullscreen and interface
 
+Class/campaign interface pass (2026-10-21): the roster lists eleven class emblems, a new-character name field, actual saved nickname/level/class, role and passive identity. The selected class supplies spell names, offensive icons, branch labels, numeric talent effects and saved-build preset labels. The level-ten journal lists nine assignments. Shared window frames gain rubbed bronze edging, stitches and incised wear; atlas paper gains ragged dark edges, folds, stains and fibres without changing coordinate mapping. The native launcher uses matching aged metal decoration at 100/150/200% scale. See [classes and campaign](classes-and-campaign.md) and manual checks 177–180.
+
 ## Equipment presentation follow-up (2026-10-20)
 
 C opens the live outfit preview in a stone-and-curtain alcove, surrounded by the ten functional equipment slots. Armor, Strike and Heavy have separate illustrated tiles using the actual combat values; health and XP remain live. The preview uses the same continuous cloak and torso transforms as the world character. I opens the 24-slot bag with recessed leather cells, detailed wearable illustrations and a framed inspection header. Hover comparisons, right-click use/removal, drag/drop, split, sort and merchant transactions keep their existing bindings and hit regions.

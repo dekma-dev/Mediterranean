@@ -38,7 +38,7 @@ inline float TalentBonus(unsigned build,float TalentInfo::*stat) {
  return value;
 }
 inline bool ValidBuild(unsigned build,int level) {
- if (level<1 || level>3 || (build>>unsigned(Talent::Count))!=0 || TalentCount(build)>level-1) return false;
+ if (level<1 || level>10 || (build>>unsigned(Talent::Count))!=0 || TalentCount(build)>(level<=3?level-1:2+(level-3)/2)) return false;
  for (int i=0;i<int(Talent::Count);++i) if (HasTalent(build,Talent(i))) {
   const auto& info=talents[i];
   if (level<info.level || (info.prerequisite!=Talent::Count && !HasTalent(build,info.prerequisite))) return false;

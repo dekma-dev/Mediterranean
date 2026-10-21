@@ -159,7 +159,9 @@ int main() {
     // The actor moves during the five-second cooldown. Restore a valid distance
     // from its current position, not its spawn (which can now be out of range).
     const auto targetPosition=simulation.Enemies()[0].position;
-    auto expiry=simulation.Save(); const auto begin=expiry.find('\n')+1,end=expiry.find('\n',begin);
+    auto expiry=simulation.Save(); auto begin=expiry.find('\n')+1;
+    if(expiry.compare(begin,8,"PROFILE ")==0) begin=expiry.find('\n',begin)+1;
+    const auto end=expiry.find('\n',begin);
     std::ostringstream playerLine;
     playerLine<<targetPosition.x<<' '<<targetPosition.z-4.f<<" 100 3.14159 0 0";
     expiry.replace(begin,end-begin,playerLine.str());

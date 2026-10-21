@@ -21,8 +21,16 @@ Simulation::Simulation() {
     enemies_.push_back(enemy);
   }
 }
+bool Simulation::CreateCharacter(ClassId id,const std::string& name) {
+  if(!ValidClass(id) || name.empty() || name.size()>20 || name.front()==' ' || name.back()==' ') return false;
+  for(unsigned char c:name) if(!((c>='A' && c<='Z') || (c>='a' && c<='z') || c==' ' || c=='-' || c=='\'')) return false;
+  *this=Simulation{};class_=id;nickname_=name;health_=MaxHealth();return true;
+}
+float Simulation::BuildBonus(unsigned mask,float TalentInfo::*stat) const {
+  float value=0;for(int i=0;i<int(Talent::Count);++i) if(rpg::HasTalent(mask,Talent(i))) value+=TalentDefinition(i).*stat;return value;
+}
 float Simulation::DamageReduction() const {
-  float value=TalentBonus(build_,&TalentInfo::armor);
+  float value=ClassInfo().armor+BuildBonus(build_,&TalentInfo::armor);
   for (int i=0;i<Inventory::gearCount;++i) value+=DescribeItem(inventory_.Worn(GearSlot(i))).armor;
   return value;
 }
@@ -77,7 +85,7 @@ void Simulation::SelectTarget() {
     const int index=(target_+step)%count;
     if (enemies_[index].health>0 && enemies_[index].state!=EnemyState::Returning &&
       Length(Difference(enemies_[index].position,player_))<=22) {
-      target_=index; message_="Target selected. 1: Strike | 2: Heavy strike | 3: Dash | 4: Mend"; return;
+      target_=index; message_=std::string("Target selected. 1: ")+Spell(0).name+" | 2: "+Spell(1).name+" | 3: "+Spell(2).name+" | 4: "+Spell(3).name; return;
     }
   }
   target_=-1; message_="No living target nearby.";
@@ -117,7 +125,7 @@ void Simulation::UseAbility(int index,float visualElapsed) {
     const float healed=std::min(MendHealingNow(),MaxHealth()-health_);
     health_+=healed; Emit(FeedbackKind::Heal,player_,static_cast<int>(healed));
     EmitVisual(CombatVisualKind::Mend,player_,height_,facing_);
-    message_="Mend restored health.";
+    message_=std::string(Spell(index).name)+" restored health.";
   } else if (index==2) {
     switch (CheckDashTarget()) {
     case DashCheck::NoTarget: message_="Press Tab to select a living enemy."; return;
@@ -140,15 +148,15 @@ void Simulation::UseAbility(int index,float visualElapsed) {
     const bool trainingTarget=sparring_ && target_==int(enemies_.size());
     auto& enemy=trainingTarget?trainer_:enemies_[target_];
     if (enemy.state==EnemyState::Returning) { message_="That enemy is returning home."; return; }
-    if (Length(Difference(enemy.position,player_))>2.5f || height_>1.5f) {
-      message_="Target is out of melee range."; return;
+    if (Length(Difference(enemy.position,player_))>Spell(index).range || height_>1.5f) {
+      message_="Target is out of ability range."; return;
     }
     if (!HasLineOfSight(player_,enemy.position)) { message_="The target is behind an obstacle."; return; }
     const auto direction=Difference(enemy.position,player_);
     facing_=std::atan2(direction.x,direction.z);
     attackAbility_=index; attackTarget_=enemy.id; attackAge_=0;
     attackDamage_=index==0?StrikeDamage():HeavyDamage(); attackFlash_=.2f;
-    message_=index==0?"Strike committed.":"Heavy strike committed.";
+    message_=std::string(Spell(index).name)+" committed.";
   }
   cooldowns_[index]=AbilityCooldown(index);
 }
@@ -159,7 +167,7 @@ void Simulation::ResolveAttack(float elapsed) {
   const bool trainingTarget=sparring_ && trainer_.id==attackTarget_;
   if (trainingTarget) victim=&trainer_;
   if (!victim || victim->health<=0 || victim->state==EnemyState::Returning ||
-      Length(Difference(victim->position,player_))>2.5f || height_>1.5f ||
+      Length(Difference(victim->position,player_))>Spell(attackAbility_).range || height_>1.5f ||
       !HasLineOfSight(player_,victim->position)) {
     Emit(FeedbackKind::Miss,player_); message_="The committed strike missed."; return;
   }
@@ -169,7 +177,15 @@ void Simulation::ResolveAttack(float elapsed) {
   // Evaluate the finishing condition at actual contact, after earlier enemy
   // actions, while preserving the weapon damage captured when the cast began.
   const float finishing=index==1?HeavyMultiplier(enemy.health,enemy.MaxHealth()):1.f;
-  const float damage=std::min(enemy.health,attackDamage_*finishing);
+  float bonus=0;
+  if(index==1 && class_==ClassId::Scout && Length(Difference(enemy.position,player_))>4) bonus=8;
+  if(index==1 && class_==ClassId::Mage && enemy.health>enemy.MaxHealth()*.75f) bonus=10;
+  if(index==1 && class_==ClassId::Engineer && enemy.kind==EnemyKind::Captain) bonus=12;
+  if(index==1 && class_==ClassId::Demonologist) {health_-=std::min(5.f,std::max(0.f,health_-1));bonus=10;}
+  const float damage=std::min(enemy.health,attackDamage_*finishing+bonus);
+  float heal=class_==ClassId::Necromancer?damage*.15f:class_==ClassId::Bard?3.f:class_==ClassId::Priest && index==1?8.f:0.f;
+  heal=std::min(heal,MaxHealth()-health_);health_+=heal;
+  if(heal>0) Emit(FeedbackKind::Heal,player_,int(heal));
   enemy.health-=damage;
   if (trainingTarget) sparringDealt_+=int(damage);
   Emit(FeedbackKind::Damage,enemy.position,static_cast<int>(damage));
@@ -178,7 +194,7 @@ void Simulation::ResolveAttack(float elapsed) {
   message_="Hit.";
   enemy.state=EnemyState::Pursuing;
   if (index==1 && enemy.windup>0) {
-    enemy.windup=0; enemy.attackCooldown=.8f;
+    enemy.windup=0; enemy.attackCooldown=class_==ClassId::Psionic?1.5f:.8f;
     Emit(FeedbackKind::Interrupt,enemy.position);
     EmitVisual(CombatVisualKind::Interrupt,enemy.position,1.4f,facing_,enemy.id,elapsed);
     message_="Heavy strike interrupted the enemy attack.";
@@ -187,6 +203,7 @@ void Simulation::ResolveAttack(float elapsed) {
     if (TargetActor() && TargetActor()->id==enemy.id) target_=-1;
     enemy.state=EnemyState::Dead; enemy.path.clear(); enemy.windup=0;
     if (trainingTarget) { EndSparring("Victory"); return; }
+    if(frontierActive_) {enemy.looted=true;message_="Frontier enemy defeated. Complete the squad and report to the keeper.";return;}
     Emit(FeedbackKind::Experience,enemy.position,40);
     message_="Raider defeated. Press E nearby to loot.";
     if (quest_==Quest::Active) { quest_=Quest::Return; message_="Patrol complete. Return to the gold beacon and press E."; }
@@ -225,7 +242,7 @@ void Simulation::UpdateCombat(float dt,bool advanceAttack) {
   if (!Attacking()) return;
   const float stroke=combat::StrokeStart(heavy);
   if (before<stroke && after>=stroke)
-    EmitVisual(heavy?CombatVisualKind::HeavyStrike:CombatVisualKind::Strike,
+    EmitVisual(ClassInfo().range>3?CombatVisualKind::SpellCast:heavy?CombatVisualKind::HeavyStrike:CombatVisualKind::Strike,
       player_,height_,facing_,0,std::max(0.f,after-stroke));
   attackAge_=contactReached?std::max(after,contact):after;
   if (after>=combat::Duration(heavy)) CancelAttack();
@@ -250,10 +267,19 @@ const char* Simulation::AbilityStatus(int index) const {
   const auto* target=TargetActor();
   if (!target || target->health<=0) return "NO TARGET";
   if (target->state==EnemyState::Returning) return "RETURNING";
-  if (Length(Difference(target->position,player_))>2.5f || height_>1.5f) return "OUT OF RANGE";
+  if (Length(Difference(target->position,player_))>Spell(index).range || height_>1.5f) return "OUT OF RANGE";
   return HasLineOfSight(player_,target->position)?"READY":"BLOCKED";
 }
 
+void Simulation::PrepareFrontierEnemies(int rank) {
+  for(std::size_t i=0;i<enemies_.size();++i) {
+    const auto home=enemies_[i].home;const auto id=enemies_[i].id;
+    enemies_[i]=Enemy{};auto& enemy=enemies_[i];enemy.home=enemy.position=home;enemy.id=id;enemy.rank=rank;
+    enemy.kind=i==2?EnemyKind::Captain:(rank+i)%2?EnemyKind::Reaver:EnemyKind::Wraith;
+    enemy.health=enemy.MaxHealth();
+  }
+  StopMovement();target_=-1;
+}
 void Simulation::Interact() {
   if (sparring_) { EndSparring("Stopped"); return; }
   const bool nearbyLoot=std::any_of(enemies_.begin(),enemies_.end(),[&](const Enemy& e) {
@@ -299,7 +325,8 @@ void Simulation::Interact() {
   }
   if (!CanTalkToKeeper()) { message_="Stand beside the beacon keeper to speak."; return; }
   StopMovement();
-  questDialogue_=quest_!=Quest::Complete?QuestId::Patrol:QuestId::Anchor;
+  questDialogue_=quest_!=Quest::Complete?QuestId::Patrol:anchorQuest_!=AnchorQuest::Complete?QuestId::Anchor:
+    QuestId(int(QuestId::Watch1)+std::min(frontierCompleted_,6));
   message_="Beacon Keeper: read the assignment and its rewards.";
 }
 
@@ -309,6 +336,10 @@ bool Simulation::CanTalkToKeeper() const {
 }
 
 QuestStage Simulation::DialogueStage() const {
+  if(questDialogue_>=QuestId::Watch1) {
+    if(int(questDialogue_)-int(QuestId::Watch1)<frontierCompleted_) return QuestStage::Complete;
+    return !frontierActive_?QuestStage::Offer:DefeatedCount()==3?QuestStage::TurnIn:QuestStage::Progress;
+  }
   if (questDialogue_==QuestId::Patrol)
     return quest_==Quest::Available?QuestStage::Offer:quest_==Quest::Active?QuestStage::Progress:
       quest_==Quest::Return?QuestStage::TurnIn:QuestStage::Complete;
@@ -319,6 +350,10 @@ QuestStage Simulation::DialogueStage() const {
 }
 
 QuestAction Simulation::QuestPrimaryAction() const {
+  if(questDialogue_>=QuestId::Watch1 && anchorQuest_==AnchorQuest::Complete) {
+    const auto stage=DialogueStage();
+    return stage==QuestStage::Offer?QuestAction::AcceptFrontier:stage==QuestStage::TurnIn?QuestAction::CompleteFrontier:QuestAction::None;
+  }
   if (questDialogue_==QuestId::Patrol)
     return quest_==Quest::Available?QuestAction::AcceptPatrol:quest_==Quest::Return?QuestAction::CompletePatrol:QuestAction::None;
   if (questDialogue_==QuestId::Anchor)
@@ -330,7 +365,10 @@ const char* Simulation::QuestConfirmStatus() const {
   if (questDialogue_==QuestId::None || !CanTalkToKeeper()) return "Return to the beacon keeper.";
   if (QuestPrimaryAction()==QuestAction::None)
     return DialogueStage()==QuestStage::Complete?"Reward received. Thank you for your service.":"Complete the objectives, then return.";
-  if (DialogueStage()==QuestStage::TurnIn && inventory_.UsedSlots()>=Inventory::capacity)
+  if(QuestPrimaryAction()==QuestAction::AcceptFrontier && frontierCompleted_==0 &&
+      std::any_of(enemies_.begin(),enemies_.end(),[](const Enemy& enemy){return !enemy.looted;}))
+    return "Collect the remaining raider spoils before accepting a new patrol.";
+  if (questDialogue_<QuestId::Watch1 && DialogueStage()==QuestStage::TurnIn && inventory_.UsedSlots()>=Inventory::capacity)
     return "Make one free bag slot to claim your reward.";
   return "READY";
 }
@@ -339,6 +377,14 @@ void Simulation::ConfirmQuest(QuestAction action) {
   if (action==QuestAction::Close) { CloseQuestDialogue(); return; }
   if (action==QuestAction::None || action!=QuestPrimaryAction() || !CanTalkToKeeper()) return;
   if (std::string(QuestConfirmStatus())!="READY") { message_=QuestConfirmStatus(); return; }
+  if(action==QuestAction::AcceptFrontier) {
+    if(frontierCompleted_==0) legacyLoot_=int(std::count_if(enemies_.begin(),enemies_.end(),[](const Enemy& e){return e.looted;}));
+    frontierActive_=true;PrepareFrontierEnemies(frontierCompleted_+1);message_="Dispatch accepted. Clear the northern patrol ground.";return;
+  }
+  if(action==QuestAction::CompleteFrontier) {
+    const int old=Level();++frontierCompleted_;frontierActive_=false;RestoreForLevel(old);
+    Emit(FeedbackKind::Experience,player_,250);message_="Dispatch completed. Earned 250 experience.";return;
+  }
   if (action==QuestAction::AcceptPatrol) {
     quest_=DefeatedCount()>0?Quest::Return:Quest::Active;
     message_=quest_==Quest::Return?"Patrol threat already defeated. You may complete the quest.":
@@ -372,7 +418,7 @@ void Simulation::Update(float seconds,const Command& command) {
   if (!std::isfinite(seconds) || seconds<=0) return;
   const float dt=std::min(seconds,.05f);
   const bool advanceAttack=Attacking();
-  if (command.restart) { *this=Simulation{}; return; }
+  if (command.restart) { const auto name=nickname_;CreateCharacter(class_,name);return; }
   for (auto& feedback : feedback_) feedback.age+=dt;
   feedback_.erase(std::remove_if(feedback_.begin(),feedback_.end(),[](const CombatFeedback& f) { return f.age>=1.5f; }),feedback_.end());
   hurtFlash_=std::max(0.f,hurtFlash_-dt);
@@ -687,7 +733,7 @@ void Simulation::UpdateEnemy(Enemy& enemy,float dt,float frameTail) {
 
 std::string Simulation::Save() const {
   std::ostringstream out;
-  out << std::setprecision(9) << "MEDITERRANEAN 10\n" << player_.x << ' ' << player_.z << ' '
+  out << std::setprecision(9) << "MEDITERRANEAN 11\n" << "PROFILE " << int(class_) << ' ' << std::quoted(nickname_) << ' ' << frontierCompleted_ << ' ' << frontierActive_ << ' ' << legacyLoot_ << '\n' << player_.x << ' ' << player_.z << ' '
     << health_ << ' ' << facing_ << ' ' << static_cast<int>(quest_) << ' ' << gold_ << '\n';
   out << Potions() << ' ' << HasRewardWeapon() << ' ' << RewardWeaponEquipped() << ' ' << potionCooldown_ << '\n';
   out << static_cast<int>(anchorQuest_) << '\n';
@@ -710,7 +756,15 @@ bool Simulation::Load(const std::string& data) {
   std::istringstream input(data);
   std::string magic; int version=0, quest=0,potions=2,owned=0,equipped=0;
   Simulation candidate;
-  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>10) return false;
+  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>11) return false;
+  if(version>=11) {
+    std::string tag,name;int id=0,completed=0,active=0,looted=0;
+    if(!(input>>tag>>id>>std::quoted(name)>>completed>>active>>looted) || tag!="PROFILE" ||
+      !candidate.CreateCharacter(ClassId(id),name) || completed<0 || completed>7 || active<0 || active>1 ||
+      (completed==7 && active) || looted<0 || looted>3 || (completed==0 && !active && looted!=0)) return false;
+    candidate.frontierCompleted_=completed;candidate.frontierActive_=active!=0;candidate.legacyLoot_=looted;
+    if(completed || active) candidate.PrepareFrontierEnemies(completed+active);
+  }
   // The shop counter occupies formerly walkable ground. Preserve old saves by
   // moving only actors overlapping that new prop to its nearest free edge.
   const auto migrateCounter=[&](Vec2& position,float radius) {
@@ -761,7 +815,7 @@ bool Simulation::Load(const std::string& data) {
     migrateCounter(enemy.position,.45f);
     if (!valid(enemy.position.x,-17,17) || !valid(enemy.position.z,-19,19) || !candidate.CanStand(enemy.position,.45f) ||
       !valid(enemy.health,0,version<3?80.f:enemy.MaxHealth()) ||
-      !valid(enemy.attackCooldown,0,version<3?1.4f:enemy.AttackInterval())) return false;
+      !valid(enemy.attackCooldown,0,version<3?1.4f:version>=11?std::max(1.5f,enemy.AttackInterval()):enemy.AttackInterval())) return false;
     if (version<3) enemy.health=enemy.health/80.f*enemy.MaxHealth();
     if (enemy.health==0) ++defeated;
     if (version>=2) {
@@ -790,10 +844,16 @@ bool Simulation::Load(const std::string& data) {
     for (int i=0;i<savedItems;++i)
       if (!(input>>candidate.buyback_[i]) || candidate.buyback_[i]<0 || candidate.buyback_[i]>(Item(i)==Item::Potion?11:1)) return false;
   }
-  if ((quest==int(Quest::Active) && defeated>0) || (quest>=2 && defeated==0) ||
+  const bool frontier=candidate.frontierCompleted_>0 || candidate.frontierActive_;
+  if(frontier && (candidate.anchorQuest_!=AnchorQuest::Complete || quest!=3 ||
+      (!candidate.frontierActive_ && defeated!=3))) return false;
+  if(frontier && std::any_of(candidate.enemies_.begin(),candidate.enemies_.end(),
+      [](const Enemy& enemy){return enemy.health<=0 && !enemy.looted;})) return false;
+  if(frontier) looted=candidate.legacyLoot_;
+  if ((quest==int(Quest::Active) && defeated>0) || (quest>=2 && defeated==0 && !frontier) ||
     candidate.gold_!=(quest==3?25:0)+5*looted+(candidate.HasWardArmor()?50:0)-candidate.GoldSpent()+candidate.BuybackValue() ||
     potions+candidate.BuybackCount(Item::Potion)>2+looted+candidate.purchases_[0] ||
-    (candidate.anchorQuest_>=AnchorQuest::Return && defeated!=3)) return false;
+    (candidate.anchorQuest_>=AnchorQuest::Return && defeated!=3 && !frontier)) return false;
   if (version>=4) {
     if (!candidate.inventory_.Read(input,version>=7?Inventory::gearCount:version==4?4:6) ||
       !candidate.inventory_.MatchesCampaign(quest==3,candidate.HasWardArmor(),potions,candidate.purchases_[1]!=0,candidate.purchases_[2]!=0,candidate.buyback_) ||

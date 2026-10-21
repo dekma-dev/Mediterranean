@@ -1,5 +1,11 @@
 # Procedural graphics and performance budget
 
+## Class action presentation (2026-10-21)
+
+`ActionClips.h` adds original preparation/release/follow-through curves and class restoration gestures over the existing body/hand rig. Basic ranged attacks use smaller travel than heavy casts; Warrior retains its established base clips. Cancellation blends out for 160 ms, and the wrist solve avoids shortest-rotation seams. Spell traces start at the solved palm or shield face and arrive on ground-level enemy capsules when cast in flight. No meshes, textures, palettes or render passes were added. The change adds small fixed CPU pose records and a cached origin in each of the existing 32 effect slots; no heap allocation occurs during clip sampling. This pass does not claim a measured FPS improvement.
+
+The character panel now shares the class color used by world/roster previews, and ranged HUD phases use release/cast wording. `ActionClipTests` covers all eleven class motifs, both attack types and restoration, airborne/landing/dash/shield layers, fixed limb lengths, wrist continuity and four update rates. It writes 44 phase captures under `action-clip-check`. Actual class weapon/clothing assets, richer anatomical art and longer play-session acceptance remain open.
+
 ## Static authored equipment pipeline (2026-10-21)
 
 The blade now comes from `assets/weapons/frontier-blade.obj`, an original editable mesh with tapered edges, bevels and recessed centre grooves. A bounded OBJ parser and native `MeshAssetCompiler` produce a per-configuration C++ header during the build. The runtime consumes the embedded arrays through the existing `Mesh::Blade` slot. Root/tip bounds, weapon frames, handles and combat-effect paths are retained. Existing procedural metal and vertex-color treatment remain in use; authored UV textures, rigs and animation are separate milestones. See [the authoring manual](asset-authoring.md).

@@ -2,9 +2,9 @@
 
 The project uses C++17 and a custom DirectX 11 engine for Windows PC. The active tree is native-only. The original JavaScript prototype is preserved in Git history and on the local `codex/archive-js-prototype` branch.
 
-The native **Mediterranean Launcher** provides Play, fullscreen/windowed mode and window size. The game then opens character selection with the current hero's nickname, level, class and equipped 3D preview; choose **Enter World** to start playing. Build and open it with `.\scripts\build-native.ps1 -Backend Ninja -Configuration Release -Test -Launcher`, or run `MediterraneanLauncher.exe` beside `RPGNative.exe` in an existing build. See the [launcher guide](docs/launcher.md) for preferences, saves and debugging.
+The native **Mediterranean Launcher** provides Play, fullscreen/windowed mode and window size. The game opens an eleven-class character roster with nickname, level, class and equipped 3D preview. Choose a saved hero or name a new one, then **Enter World**. Each class has its own N-key talent disciplines and a separate local save. Build and open it with `.\scripts\build-native.ps1 -Backend Ninja -Configuration Release -Test -Launcher`, or run `MediterraneanLauncher.exe` beside `RPGNative.exe`. See the [launcher guide](docs/launcher.md) and [classes and level-ten campaign](docs/classes-and-campaign.md).
 
-Quest acceptance and hand-in now use a left-side dialogue with paginated story, objectives and reward descriptions. Press E at the keeper, then choose Accept quest or Complete quest. Editable story files live in [quests/](quests/README.md); rebuild to embed text changes. Native builds, automated dialogue tests and representative rendered captures have been validated; interactive playtesting remains available through the guide below.
+Quest acceptance and hand-in now use a left-side dialogue with paginated story, objectives and reward descriptions. Press E at the keeper, then choose Accept quest or Complete quest. The original story files live in [quests/](quests/README.md); seven added dispatches are in `game/Campaign.h`. Rebuild to embed text changes. Native builds, automated dialogue tests and representative rendered captures have been validated; interactive playtesting remains available through the guide below.
 
 ## Native build and launch
 
@@ -42,9 +42,9 @@ For debugging:
 
 Open `build-local/RPGNative.sln` in Visual Studio, select Debug / x64, set RPGNative as the startup project, and press F5. Generated output belongs in `build-local`; do not reuse historical caches from the C++ branch.
 
-Current validation (2026-10-21): all 30 native regression suites pass in Ninja Debug and Release. The Visual Studio Debug solution also rebuilds. Launcher process/startup/layout checks and hidden game render checks exercise launch options, save restoration, world, panels, fullscreen restoration and multiple resolutions; they do not replace interactive playtesting. See [progress](progress.md) for the current evidence and remaining acceptance checks.
+Current validation (2026-10-21): the expansion has 33 native regression suites, including all-class combat, slot persistence and the campaign through level ten. See [progress](progress.md) for configuration-specific results and evidence. Hidden captures and scripted checks do not replace interactive movement, art, sound or balance acceptance.
 
-The first map contains Dawnwatch Village, an astral dock, training grounds, and a ruined raider camp. It includes two linked quests, XP and levels 1–3, telegraphed melee attacks, a captain, loot, potions, a reward blade and ward armor, death recovery, and save/load. Procedural art includes shaped characters, pitched roofs, irregular rocks/trees, small generated materials, instancing and sun shadows. Characters now have shaped heads, fitted hair, flat-soled boots, fixed-length arm/leg poses and hand-attached weapons in both the world and portrait. It is still stylized prototype art. Geometry combines locally generated meshes with the embedded blade OBJ; map/material textures are generated locally. The interface uses the installed Windows font; no asset downloads are required. See [graphics and measured budgets](docs/graphics.md). See [gameplay rules](docs/gameplay.md) for details.
+The first map contains Dawnwatch Village, an astral dock, training grounds, and a ruined raider camp. It includes nine sequential assignments, XP and levels 1–10, telegraphed melee attacks, a captain, loot, potions, a reward blade and ward armor, death recovery, and save/load. Procedural art includes shaped characters, pitched roofs, irregular rocks/trees, small generated materials, instancing and sun shadows. Characters now have shaped heads, fitted hair, flat-soled boots, fixed-length arm/leg poses and hand-attached weapons in both the world and portrait. It is still stylized prototype art. Geometry combines locally generated meshes with the embedded blade OBJ; map/material textures are generated locally. The interface uses the installed Windows font; no asset downloads are required. See [graphics and measured budgets](docs/graphics.md). See [gameplay rules](docs/gameplay.md) for details.
 
 ## Native controls and test loop
 
@@ -70,7 +70,7 @@ The environment connects the village plaza, dock, training ground and anchor wit
 | Space | Jump |
 | Hold right mouse and drag / wheel | Orbit / zoom |
 | Tab | Cycle nearby living targets |
-| 1 / 2 | Strike / heavy strike (also interrupts enemy windups) |
+| 1 / 2 | Class basic / heavy attack (heavy contact interrupts enemy windups) |
 | 3 / 4 | Dash to selected enemy / heal |
 | E | Open/close quest dialogue, loot, stabilize the anchor, browse/close the shop, or start/stop sparring |
 | Q / G | Use a healing potion / switch owned swords |
@@ -88,7 +88,7 @@ The environment connects the village plaza, dock, training ground and anchor wit
 
 Accept the patrol at the gold beacon, defeat a raider, loot it with E, then return for 25 gold, 60 XP, and a watchguard blade. Equip it with G. Press E again to accept the anchor quest, defeat the remaining raiders and captain, then stand by the northern violet crystal and press E. Stay still for three seconds, return, and claim 50 gold, 120 XP, and automatically equipped ward armor. Quest rewards, kill XP, and loot are awarded once. The 24-slot bag supports drag swaps, Sort, item comparisons and right-click actions. C shows ten worn slots: weapon, chest, legs, feet, head, off hand, shoulders, hands, waist and back. Equipped items leave the bag. The arrow buttons rotate the dressed preview; Front resets it.
 
-Press N to inspect the champion's build map. Levels 2 and 3 each grant one point. Learn upgrades along Arms (damage), Guard (health/protection) or Spirit (Mend); a second-rank talent requires the first in its branch. Choose one complete branch or two first-rank talents. Learning is available outside combat while grounded and idle; the menu keeps the world active. Choices persist with F5/F9 and respawn. R resets the expedition and build. See [talent effects and rules](docs/gameplay.md#champion-build-n).
+Press N to inspect the selected class's spellbook, three talent branches and saved builds. Levels 2, 3, 5, 7 and 9 each grant one point, for five by level 10. Names and upgrade values follow the class; each specialization requires its foundation. Learning and resets require being grounded, idle and outside combat. Choices persist with F5/F9 and respawn. R resets the expedition and build while retaining class and name. After the original patrol and anchor quests, return to the keeper for seven new dispatches against ranked squads. See [class kits, progression and save rules](docs/classes-and-campaign.md).
 
 Visit the quartermaster at the orange village marker `(3, -12)` and press E. Buy healing draughts for 6 gold, a helm for 20, or a shield for 35; gear unlocks after handing in the frontier patrol. Purchases go into the bag. Right-click or drag them into Head / Off hand to equip. The helm adds 1 protection and the shield adds 2; with ward armor, a normal 8-point hit becomes 3. The shop, bag and character window can stay open together. Stock is limited to six draughts and one of each equipment item per expedition; saving, loading and respawning preserve purchases.
 

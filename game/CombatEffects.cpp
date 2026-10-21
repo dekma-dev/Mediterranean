@@ -152,7 +152,13 @@ void CombatEffects::Advance(float dt) {
     trail.count=std::size_t(end-trail.samples.begin());
   }
 }
-void CombatEffects::Emit(const rpg::CombatVisualEvent& event) {
+XMFLOAT3 CombatEffects::SpellTracePoint(XMFLOAT3 origin,rpg::Vec2 destination,float progress) {
+  const float u=std::isfinite(progress)?Unit(progress):0;
+  // Current enemy capsules stand on map ground, including when the caster jumps.
+  return {origin.x+(destination.x-origin.x)*u,origin.y+(1.25f-origin.y)*u+.16f*std::sin(u*3.14159265f),
+    origin.z+(destination.z-origin.z)*u};
+}
+void CombatEffects::Emit(const rpg::CombatVisualEvent& event,const XMFLOAT3* spellOrigin) {
   const float elapsed=std::isfinite(event.elapsed)?std::clamp(event.elapsed,0.f,.05f):0;
   if (event.kind==K::DashStart) {
     CancelTrail(0);
@@ -171,6 +177,8 @@ void CombatEffects::Emit(const rpg::CombatVisualEvent& event) {
     return a.age/BurstLife(a.event.kind)<b.age/BurstLife(b.event.kind);
   });
   *slot={event,elapsed,++serial_};
+  slot->spellOrigin=spellOrigin && std::isfinite(spellOrigin->x) && std::isfinite(spellOrigin->y) && std::isfinite(spellOrigin->z)?
+    *spellOrigin:XMFLOAT3{event.position.x,event.height+1.25f,event.position.z};
 }
 bool CombatEffects::Tracking(rpg::EntityId actor) const {
   for (const auto& trail : trails_) if (trail.actor==actor && trail.age<.24f) return true;
@@ -295,6 +303,16 @@ void CombatEffects::Render(Renderer& renderer) const {
   for (const auto& burst : bursts_) {
     if (burst.age>=BurstLife(burst.event.kind)) continue;
     const auto& e=burst.event;
+    if(e.kind==K::SpellCast) {
+      const auto& tint=rpg::DescribeClass(e.school).color;
+      const float t=Unit(burst.age/std::max(.01f,e.flight)),fade=1-Unit((burst.age-e.flight)/.12f);
+      const auto point=[&](float u) -> XMFLOAT3 {
+        return SpellTracePoint(burst.spellOrigin,e.destination,u);
+      };
+      const XMFLOAT4 color{std::min(1.f,tint[0]+.3f),std::min(1.f,tint[1]+.3f),std::min(1.f,tint[2]+.3f),fade*.8f};
+      renderer.DrawEffectStreak(point(std::max(0.f,t-.22f)),point(t),.055f,color);
+      renderer.DrawEffectGlow(point(t),.12f,color);continue;
+    }
     if (Healing(e.kind)) { HealingPulse(renderer,e,burst.age); continue; }
     if (Dashing(e.kind)) { DashPulse(renderer,e,burst.age); continue; }
     const bool heavy=e.kind==K::HeavyHit,interrupt=e.kind==K::Interrupt,hurt=e.kind==K::Hurt;

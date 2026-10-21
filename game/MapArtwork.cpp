@@ -173,5 +173,18 @@ std::vector<std::uint8_t> BuildMapArtwork(const rpg::WorldMap& world) {
    survey.Line({p.x+11,p.y+5},{p.x+11,p.y+11},1);
   } else survey.Building(p,o.halfX*size/42,o.halfZ*size/46,o.kind,o.role);
  }
+ // Wear is baked once into the existing atlas: no per-frame texture uploads.
+ for(unsigned y=0;y<size;++y) for(unsigned x=0;x<size;++x) {
+  const float edge=float(std::min({x,y,size-1-x,size-1-y}));
+  const float waviness=3+Noise(x*.12f,y*.12f)*5;
+  const float scorch=std::exp(-edge/12.f)*(.23f+.26f*Noise(x*.07f,y*.07f));
+  survey.Put(int(x),int(y),{.30f,.18f,.075f},scorch);
+  if(edge<waviness) survey.Put(int(x),int(y),{.23f,.16f,.08f},.55f);
+  const float fold=std::min(std::abs(float(x)-size*.48f-std::sin(y*.025f)*1.8f),std::abs(float(y)-size*.56f));
+  if(fold<2.7f) survey.Put(int(x),int(y),fold<.8f?RGB{.33f,.25f,.13f}:RGB{.98f,.88f,.65f},fold<.8f?.16f:.13f);
+  const float stain=Noise(x*.018f+14,y*.018f-8);
+  if(stain>.58f) survey.Put(int(x),int(y),{.48f,.29f,.11f},(stain-.58f)*.35f);
+  if(Hash(int(x),int(y))>.984f) survey.Put(int(x),int(y),{.42f,.32f,.18f},.17f);
+ }
  return std::move(survey.pixels);
 }

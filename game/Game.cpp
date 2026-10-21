@@ -3,6 +3,7 @@
 #include "engine/Renderer.h"
 #include "game/WorldView.h"
 #include "game/CharacterView.h"
+#include "game/HandPose.h"
 #include "game/CharacterPose.h"
 #include "game/TerrainSurface.h"
 #include <algorithm>
@@ -33,6 +34,7 @@ float EnemyAttackSeconds(const rpg::Enemy& enemy,bool active) {
 }
 
 void Game::Initialize() {
+  saveFile_=std::filesystem::path(RPG_SAVE_DIRECTORY)/"patrol.save";
   choosingCharacter_=inputBarrier_=false; quitRequested_=fullscreenRequest_=false;
   simulation_=rpg::Simulation{}; time_=0; atmosphereTime_=0;
   worldView_.Reset();
@@ -60,8 +62,8 @@ void Game::Update(double seconds,const Input& input,float wheel) {
     const auto action=selection_.Update(dt,input);
     if(action==ui::CharacterSelection::Action::Quit) quitRequested_=true;
     if(action==ui::CharacterSelection::Action::Enter) {
-      if(selection_.State()==ui::CharacterSelection::Status::New) Initialize();
-      else if(!RestoreSnapshot(selection_.Snapshot())) return;
+      if(!RestoreSnapshot(selection_.State()==ui::CharacterSelection::Status::New?selection_.Hero().Save():selection_.Snapshot())) return;
+      saveFile_=selection_.SaveFile();
       choosingCharacter_=false;inputBarrier_=true;
     }
     return;
@@ -237,7 +239,23 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   atmosphereTime_=std::fmod(atmosphereTime_+dt,1800.0);
   if (command.restart || (wasDead && simulation_.Health()>0)) { ResetMotion(); return; }
   effects_.Advance(dt);
-  for (std::size_t i=0;i<simulation_.VisualEventCount();++i) effects_.Emit(simulation_.VisualEvents()[i]);
+  for (std::size_t i=0;i<simulation_.VisualEventCount();++i) {
+    const auto& event=simulation_.VisualEvents()[i];
+    if(event.kind==rpg::CombatVisualKind::SpellCast) {
+      auto launch=playerAnimation_.pose;
+      launch.attackSeconds=-1; launch.cast=0;
+      launch.action=animation::SampleAction(event.school,simulation_.HeavyAttack()?animation::ActionClip::Heavy:animation::ActionClip::Basic,
+        combat::StrokeStart(simulation_.HeavyAttack()));
+      const bool shield=simulation_.Items().Worn(rpg::GearSlot::Offhand)!=rpg::Item::None;
+      const auto local=SpellReleasePoint(BuildCharacterPose(0,playerPose_.gait,shield,launch),shield);
+      auto actor=playerPose_;
+      actor.Update(event.facing,0,simulation_.Grounded(),true,0,std::max(0.f,dt-event.elapsed),false,42.f);
+      const float sx=std::sin(actor.facing),cx=std::cos(actor.facing);
+      const DirectX::XMFLOAT3 origin{event.position.x+cx*local.x+sx*local.z,event.height+local.y,
+        event.position.z-sx*local.x+cx*local.z};
+      effects_.Emit(event,&origin);
+    } else effects_.Emit(event);
+  }
   const auto dashPosition=simulation_.Player();
   effects_.TrackDash({dashPosition.x,simulation_.Height(),dashPosition.z},simulation_.Dashing(),dt,
     simulation_.Dashing()?motion::DashSpeed(simulation_.DashPhase()):0);
@@ -275,6 +293,12 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   applyImpacts(playerAnimation_,0,simulation_.Health()>0);
   playerAnimation_.UpdateDash(dt,simulation_.Dashing(),simulation_.DashPhase(),dashImpact,simulation_.Health()>0,dashFinished,dashEndElapsed);
   playerAnimation_.pose.attackSeconds=simulation_.AttackSeconds();
+  if(simulation_.ClassInfo().range>3 && simulation_.Attacking())
+    playerAnimation_.pose.attackSeconds=-1;
+  playerAnimation_.actions.Update(dt,simulation_.Class(),simulation_.AttackSeconds(),simulation_.HeavyAttack(),
+    playerAnimation_.castAge,simulation_.Health()>0);
+  playerAnimation_.pose.action=playerAnimation_.actions.pose;
+  if(simulation_.Class()!=rpg::ClassId::Warrior) playerAnimation_.pose.cast=0;
   playerAnimation_.pose.heavyAttack=simulation_.HeavyAttack();
   const float lateralAcceleration=command.haltMovement?0:
     ((velocity.x-previousVelocity.x)*std::cos(playerPose_.facing)-
@@ -349,7 +373,8 @@ void Game::UpdateFaces(float dt) {
     aim=facial::LookAt(npc.x-player.x,-simulation_.Height(),npc.z-player.z,playerPose_.facing);
   } else if(target && target->health>0)
     aim=facial::LookAt(target->position.x-player.x,-simulation_.Height(),target->position.z-player.z,playerPose_.facing);
-  playerFace_.Update(dt,aim,simulation_.Attacking()?.85f:target && target->health>0?.25f:playerAnimation_.pose.cast*.35f,
+  playerFace_.Update(dt,aim,simulation_.Attacking()?.85f:target && target->health>0?.25f:
+    std::max(playerAnimation_.pose.cast,playerAnimation_.pose.action.open)*.35f,
     playerAnimation_.pose.hit,talking?.18f:0,alive);
   playerAnimation_.pose.face=playerFace_.pose;
   const auto& enemies=simulation_.Enemies();
@@ -429,7 +454,7 @@ void Game::Render(Renderer& renderer,bool showInterface) {
   using M=visual::Mesh;
   using S=visual::Material;
   DrawCharacter(renderer,player,y,playerPose_.facing,simulation_.HurtFlash()>0?XMFLOAT4{1,.48f,.35f,1}:
-    XMFLOAT4{.22f,.37f,.54f,1},playerPose_.attack,playerPose_.gait,CharacterOutfit::From(simulation_.Items()),playerAnimation_.pose,1);
+    XMFLOAT4{simulation_.ClassInfo().color[0],simulation_.ClassInfo().color[1],simulation_.ClassInfo().color[2],1},simulation_.ClassInfo().range>3?0:playerPose_.attack,playerPose_.gait,CharacterOutfit::From(simulation_.Items()),playerAnimation_.pose,1);
   const auto anchor=rpg::WorldMap::astralAnchor;
   const bool stable=simulation_.AnchorState()>=rpg::AnchorQuest::Return;
   const XMFLOAT4 crystal=stable?XMFLOAT4{.3f,.95f,.65f,1}:XMFLOAT4{.72f,.4f,.95f,1};
@@ -456,7 +481,7 @@ void Game::Render(Renderer& renderer,bool showInterface) {
     CharacterOutfit enemyOutfit; enemyOutfit.armor=captain; enemyOutfit.helm=captain;
     const auto& pose=enemyPoses_[i];
     DrawCharacter(renderer,enemy.position,0,pose.facing,
-      enemy.hitFlash>0?XMFLOAT4{1,.7f,.55f,1}:enemy.kind==rpg::EnemyKind::Trainer?XMFLOAT4{.55f,.46f,.22f,1}:captain?XMFLOAT4{.36f,.19f,.48f,1}:XMFLOAT4{.65f,.2f,.25f,1},
+      enemy.hitFlash>0?XMFLOAT4{1,.7f,.55f,1}:enemy.kind==rpg::EnemyKind::Trainer?XMFLOAT4{.55f,.46f,.22f,1}:enemy.kind==rpg::EnemyKind::Wraith?XMFLOAT4{.35f,.30f,.61f,1}:enemy.kind==rpg::EnemyKind::Reaver?XMFLOAT4{.53f,.34f,.19f,1}:captain?XMFLOAT4{.36f,.19f,.48f,1}:XMFLOAT4{.65f,.2f,.25f,1},
       pose.attack,pose.gait,enemyOutfit,enemyAnimations_[i].pose,std::uint64_t(enemy.id)+16);
     if (enemy.windup>0 && simulation_.Health()>0) {
       const float progress=1-enemy.windup/enemy.WindupDuration();
@@ -517,10 +542,10 @@ std::wstring Game::WindowTitle() const {
 
 void Game::SaveProgress() {
   try {
-    const std::filesystem::path folder=RPG_SAVE_DIRECTORY;
+    const std::filesystem::path folder=saveFile_.parent_path();
     std::filesystem::create_directories(folder);
-    const auto temporary=folder / "patrol.tmp";
-    const auto destination=folder / "patrol.save";
+    const auto temporary=std::filesystem::path(saveFile_.wstring()+L".tmp");
+    const auto destination=saveFile_;
     std::ofstream output(temporary,std::ios::binary|std::ios::trunc);
     output << simulation_.Save();
     output.close();
@@ -533,12 +558,15 @@ void Game::SaveProgress() {
 
 void Game::LoadProgress() {
   try {
-    const auto file=std::filesystem::path(RPG_SAVE_DIRECTORY) / "patrol.save";
+    const auto file=saveFile_;
     std::error_code error;
     const auto length=std::filesystem::file_size(file,error);
     if (error || length>4096) { simulation_.Notify("No valid save found."); return; }
     std::ifstream input(file,std::ios::binary);
     std::ostringstream content; content << input.rdbuf();
-    if (!input || !RestoreSnapshot(content.str())) { simulation_.Notify("Save rejected. Current progress retained."); return; }
+    rpg::Simulation candidate;
+    if (!input || !candidate.Load(content.str()) || candidate.Class()!=simulation_.Class() || !RestoreSnapshot(content.str())) {
+      simulation_.Notify("Save rejected. Current progress retained."); return;
+    }
   } catch (const std::exception&) { simulation_.Notify("Load failed. Current progress retained."); }
 }

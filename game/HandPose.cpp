@@ -31,12 +31,20 @@ HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool 
     const auto x=pose.UpperDirection({0,1,0}),y=pose.UpperDirection({-1,0,0}),z=pose.UpperDirection({0,0,1});
     frame={XMLoadFloat3(&x),XMLoadFloat3(&y),XMLoadFloat3(&z),XMVectorSetW(XMLoadFloat3(&arm.end),1)};
   } else {
-    const auto upper=XMLoadFloat3(&arm.joint)-XMLoadFloat3(&arm.root);
-    const auto across=-XMVector3Normalize(XMVector3Cross(upper,forearm));
-    const XMMATRIX relaxed(across,forearm,XMVector3Cross(across,forearm),XMVectorSet(0,0,0,1));
-    const auto raised=XMMatrixRotationX(pose.upperPitch)*XMMatrixRotationZ(pose.upperRoll)*XMMatrixRotationY(pose.upperYaw);
+    const auto rightLocal=pose.UpperDirection({1,0,0}),upLocal=pose.UpperDirection({0,1,0}),forwardLocal=pose.UpperDirection({0,0,1});
+    const auto right=XMLoadFloat3(&rightLocal),up=XMLoadFloat3(&upLocal),forward=XMLoadFloat3(&forwardLocal);
     const float reach=animation::SmoothStep(cast)*(side?.45f:1.f);
-    frame=XMMatrixRotationQuaternion(XMQuaternionSlerp(XMQuaternionRotationMatrix(relaxed),XMQuaternionRotationMatrix(raised),reach));
+    // A hanging hand and upright casting palm can be almost 180 degrees
+    // apart. Shortest-arc quaternion blending switches sides at that seam.
+    // Lift through the forward hemisphere using a bounded elevation instead;
+    // the elbow plane cannot introduce a second, independent wrist twist.
+    const float vertical=XMVectorGetX(XMVector3Dot(forearm,up));
+    const float elevation=std::acos(std::clamp(vertical,-.995f,.995f))*(1-reach);
+    const float lateral=std::clamp(XMVectorGetX(XMVector3Dot(forearm,right))*(1-reach),-.98f,.98f);
+    const float radial=std::sqrt(1-lateral*lateral);
+    const auto fingerAxis=right*lateral+(up*std::cos(elevation)+forward*std::sin(elevation))*radial;
+    const auto across=XMVector3Normalize(right-fingerAxis*XMVector3Dot(right,fingerAxis));
+    frame={across,fingerAxis,XMVector3Cross(across,fingerAxis),XMVectorSet(0,0,0,1)};
     // The wrist is fixed to the solved arm even while the casting palm turns.
     const auto wrist=XMVector3TransformNormal(XMVectorSet(0,-.055f,-.043f,0),frame);
     frame.r[3]=XMVectorSetW(XMLoadFloat3(&arm.end)-wrist,1);
@@ -75,6 +83,12 @@ HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool 
     XMStoreFloat3(&thumb.joints[bone+1],XMLoadFloat3(&thumb.joints[bone])+direction*thumbLengths[bone]);
   }
   return result;
+}
+XMFLOAT3 SpellReleasePoint(const CharacterPose& pose,bool shield) {
+  if(!shield) return BuildHandPose(pose,0,false,false,pose.handCast).Point({0,.07f,.035f});
+  const auto offset=pose.UpperDirection({-.035f,0,.27f});
+  const auto wrist=pose.arms[0].end;
+  return {wrist.x+offset.x,wrist.y+offset.y,wrist.z+offset.z};
 }
 visual::HandPalette BuildHandRig(const HandPose& pose) {
   static const auto inverseBind=[] {

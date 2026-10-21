@@ -1,9 +1,9 @@
 #pragma once
 #include "game/Inventory.h"
 namespace rpg {
-enum class QuestId { None,Patrol,Anchor };
+enum class QuestId { None,Patrol,Anchor,Watch1,Watch2,Watch3,Watch4,Watch5,Watch6,Watch7 };
 enum class QuestStage { Offer,Progress,TurnIn,Complete };
-enum class QuestAction { None,Close,AcceptPatrol,CompletePatrol,AcceptAnchor,CompleteAnchor };
+enum class QuestAction { None,Close,AcceptPatrol,CompletePatrol,AcceptAnchor,CompleteAnchor,AcceptFrontier,CompleteFrontier };
 struct QuestDefinition {
   const char* title;
   const char* speaker;

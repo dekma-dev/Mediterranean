@@ -52,6 +52,7 @@ public:
   float EffectsVolume() const { return interface_.effectsVolume/100.f; }
   void SetAudioAvailable(bool value) { interface_.audioAvailable=value; }
 private:
+  std::filesystem::path saveFile_;
   ui::CharacterSelection selection_;
   bool choosingCharacter_=false,inputBarrier_=false;
   rpg::Simulation simulation_;

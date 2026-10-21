@@ -7,7 +7,7 @@
 
 namespace sound {
 constexpr unsigned sampleRate=22050;
-enum class Cue { Strike,Heavy,Enemy,Hit,HeavyHit,Hurt,Interrupt,Mend,Potion,Step,Jump,Land,Dash,Count };
+enum class Cue { Strike,Heavy,Enemy,Hit,HeavyHit,Hurt,Interrupt,Mend,Potion,Step,Jump,Land,Dash,Cast,Count };
 std::vector<std::int16_t> Generate(Cue cue);
 std::vector<std::int16_t> GenerateMusic();
 float CueLevel(Cue cue);

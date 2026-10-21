@@ -3,6 +3,7 @@
 #include "game/AttackMotion.h"
 #include "game/LocomotionClips.h"
 #include "game/FaceMotion.h"
+#include "game/ActionClips.h"
 #include <array>
 
 // Presentation-only channels; no collision, combat timing or durable save data.
@@ -26,6 +27,7 @@ struct Sample {
   float departure=0,departureSupport=0;
   MotionChannels motion;
   facial::Pose face;
+  ActionChannels action;
 };
 inline Sample Idle(float time,float offset=0) {
   const float seconds=std::isfinite(time)?std::remainder(time,motion::tau*2/1.8f):0;
@@ -52,6 +54,7 @@ inline float DashBrake(float phase) {
 struct State {
   Sample pose;
   LocomotionController locomotion;
+  ActionController actions;
   float phase=0,airBlend=0,riseBlend=0,travelBlend=0;
   float landingAge=2,landingStrength=0,hitAge=2,hitCarry=0;
   float restWeight=1;

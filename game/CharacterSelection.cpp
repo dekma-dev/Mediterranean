@@ -5,7 +5,7 @@
 
 namespace ui {
 void CharacterSelection::Open(const std::filesystem::path& file) {
-  file_=file; time_=yaw_=width_=height_=0; hover_=pressed_=Control::None;
+  base_=file;file_=file;class_=rpg::ClassId::Warrior;draftName_=rpg::DescribeClass(class_).title;editingName_=false; time_=yaw_=width_=height_=0; hover_=pressed_=Control::None;
   Refresh(); focus_=status_==Status::Unreadable?Control::Refresh:Control::Enter;
 }
 void CharacterSelection::Refresh() {
@@ -14,34 +14,50 @@ void CharacterSelection::Refresh() {
   std::error_code error;
   const bool exists=std::filesystem::exists(file_,error);
   if(error) return;
-  if(!exists) {status_=Status::New;return;}
+  if(!exists) {
+    status_=Status::New;
+    if(!hero_.CreateCharacter(class_,draftName_)) hero_.CreateCharacter(class_,rpg::DescribeClass(class_).title);
+    return;
+  }
   const auto length=std::filesystem::file_size(file_,error);
   if(error || length==0 || length>4096) return;
   std::ifstream file(file_,std::ios::binary);
   std::string content(static_cast<std::size_t>(length),'\0');
   if(!file.read(content.data(),static_cast<std::streamsize>(length)) || file.peek()!=std::char_traits<char>::eof()) return;
-  if(!hero_.Load(content)) return;
+  if(!hero_.Load(content) || hero_.Class()!=class_) {hero_=rpg::Simulation{};return;}
   snapshot_=std::move(content); status_=Status::Saved;
 }
 Rect CharacterSelection::Bounds(Control control) {
+  if(control>=Control::Class0 && control<=Control::Class10) return {84,186+35.f*(int(control)-int(Control::Class0)),180,31};
   switch(control) {
+  case Control::Name:return {842,326,350,36};
   case Control::Hero:return {842,182,350,128};
   case Control::Enter:return {842,532,350,52};
   case Control::Refresh:return {842,602,168,36};
   case Control::Quit:return {1024,602,168,36};
-  case Control::Left:return {282,604,44,32};
-  case Control::Right:return {510,604,44,32};
+  case Control::Left:return {394,604,44,32};
+  case Control::Right:return {582,604,44,32};
   default:return {};
   }
 }
 bool CharacterSelection::Enabled(Control control) const {
+  if(control==Control::Enter && status_==Status::New && (draftName_.empty() || draftName_.back()==' ')) return false;
+  if(control==Control::Name) return status_==Status::New;
+  if(control>=Control::Class0 && control<=Control::Class10) return true;
   return control!=Control::None && (status_!=Status::Unreadable || control==Control::Refresh || control==Control::Quit);
 }
 CharacterSelection::Action CharacterSelection::Activate(Control control) {
   if(!Enabled(control)) return Action::None;
+  if(control>=Control::Class0 && control<=Control::Class10) {
+    class_=rpg::ClassId(int(control)-int(Control::Class0));
+    file_=class_==rpg::ClassId::Warrior?base_:base_.parent_path()/("hero-"+std::to_string(int(class_))+".save");
+    draftName_=rpg::DescribeClass(class_).title;editingName_=false;Refresh();focus_=Control::Enter;return Action::None;
+  }
   switch(control) {
+  case Control::Name:editingName_=true;break;
   case Control::Hero:focus_=Control::Enter;break;
   case Control::Enter: {
+    editingName_=false;
     // Another build or an external editor can change this file while the screen
     // is open. Show the new state for review instead of entering a different hero.
     const auto previous=snapshot_; const auto state=status_; Refresh();
@@ -78,6 +94,16 @@ CharacterSelection::Action CharacterSelection::Update(float seconds,const Input&
   if(input.Released(VK_LBUTTON)) {
     const auto clicked=pressed_;CancelGesture();
     if(clicked==hover_) return Activate(clicked);
+  }
+  if(focus_==Control::Name && status_==Status::New) {
+    if(!editingName_) {draftName_.clear();editingName_=true;}
+    if(input.Pressed(VK_BACK) && !draftName_.empty()) draftName_.pop_back();
+    for(int key='A';key<='Z';++key) if(input.Pressed(key) && draftName_.size()<20) draftName_+=char(input.Held(VK_SHIFT)?key:key+32);
+    if(input.Pressed(VK_SPACE) && !draftName_.empty() && draftName_.back()!=' ' && draftName_.size()<19) draftName_+=' ';
+    auto name=draftName_;while(!name.empty() && name.back()==' ') name.pop_back();
+    if(!name.empty()) hero_.CreateCharacter(class_,name);
+    if(input.Pressed(VK_RETURN)) {if(!name.empty()) {draftName_=name;editingName_=false;focus_=Control::Enter;}return Action::None;}
+    return Action::None;
   }
   if(input.Pressed(VK_RETURN) || input.Pressed(VK_SPACE)) return Activate(focus_);
   if(input.Pressed('R')) return Activate(Control::Refresh);

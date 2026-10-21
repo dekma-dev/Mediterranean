@@ -11,7 +11,7 @@ public:
   static constexpr std::size_t maxBursts=32,maxTrails=8,trailSamples=32;
   void Reset();
   void Advance(float dt);
-  void Emit(const rpg::CombatVisualEvent& event);
+  void Emit(const rpg::CombatVisualEvent& event,const DirectX::XMFLOAT3* spellOrigin=nullptr);
   void TrackWeapon(rpg::EntityId actor,DirectX::XMFLOAT3 root,DirectX::XMFLOAT3 tip);
   void CancelTrail(rpg::EntityId actor);
   void CancelTrails();
@@ -22,9 +22,10 @@ public:
   bool Tracking(rpg::EntityId actor) const;
   std::size_t BurstCount() const;
   std::size_t TrailCount() const;
+  static DirectX::XMFLOAT3 SpellTracePoint(DirectX::XMFLOAT3 origin,rpg::Vec2 destination,float progress);
   void Render(Renderer& renderer) const;
 private:
-  struct Burst { rpg::CombatVisualEvent event; float age=1; unsigned seed=0; };
+  struct Burst { rpg::CombatVisualEvent event; float age=1; unsigned seed=0; DirectX::XMFLOAT3 spellOrigin{}; };
   struct Sample { DirectX::XMFLOAT3 root,tip; float age=0; };
   struct Trail {
     rpg::EntityId actor=0;

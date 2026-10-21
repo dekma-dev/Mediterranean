@@ -89,6 +89,11 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   // The shoulders counter the planted-leg transfer; descending opens the
   // chest and lowers the hips before the existing impact compression.
   pose.upperYaw+=animation::Signed((sourceFeet[0].z-sourceFeet[1].z)/.6f)*.072f*(1-swing)*contactWeight;
+  const float actionWeight=(1-burst)*(1-hit);
+  const auto action=dynamics.action*actionWeight;
+  pose.upperPitch+=action.pitch; pose.upperYaw+=action.yaw; pose.upperRoll+=action.roll;
+  pose.bodyLift+=action.hip*(1-air);
+  pose.handCast=std::max(pose.handCast,animation::Unit(action.open));
   pose.upperPitch-=air*animation::SmoothStep(-rise)*.08f;
   pose.bodyLift-=air*animation::SmoothStep(-rise)*.025f;
   if (timed) {
@@ -155,6 +160,8 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     // The free hand opens forward while the weapon arm lifts clear of the cast.
     const XMFLOAT3 spellHand{i==0?-.29f:.43f,i==0?1.39f:1.19f,i==0?.40f:.23f};
     hand.x+=(spellHand.x-hand.x)*cast; hand.y+=(spellHand.y-hand.y)*cast; hand.z+=(spellHand.z-hand.z)*cast;
+    const auto offset=i==0?action.left:action.right;
+    hand.x+=offset.x; hand.y+=offset.y; hand.z+=offset.z;
     pose.arms[i]=Solve(pose.UpperPoint({side*.305f,1.43f,0}),pose.UpperPoint(hand),
       pose.UpperDirection({side*.8f,-.2f,-1}),CharacterPose::upperArm,CharacterPose::forearm);
   }

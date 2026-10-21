@@ -12,7 +12,7 @@ namespace {
 using namespace Gdiplus;
 constexpr int Play=1001,Display=1002,Size=1003,Guide=1005,Saves=1006;
 constexpr float canvasWidth=940,canvasHeight=590;
-const Color background(255,14,22,28),panel(255,23,33,39),gold(255,211,179,111),ink(255,235,236,225),muted(255,159,178,181);
+const Color background(255,24,24,18),panel(255,32,38,29),gold(255,211,179,111),ink(255,235,236,225),muted(255,159,178,181);
 void Text(Graphics& g,const wchar_t* text,float x,float y,float width,float height,float size,Color color,const wchar_t* family=L"Segoe UI",INT style=FontStyleRegular) {
   Font font(family,size,style,UnitPixel);SolidBrush brush(color);StringFormat format;
   format.SetTrimming(StringTrimmingEllipsisCharacter);
@@ -159,14 +159,37 @@ private:
     Graphics g(dc);g.ScaleTransform(scale_,scale_);g.SetSmoothingMode(SmoothingModeAntiAlias);g.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
     SolidBrush base(background),card(panel),goldBrush(gold);g.FillRectangle(&base,0.f,0.f,canvasWidth,canvasHeight);
     Pen trim(Color(255,75,79,63),1);g.DrawLine(&trim,24.f,88.f,916.f,88.f);
+    // Incised bronze borders and leather grain drawn at logical DPI scale.
+    const auto frame=[&](float x,float y,float w,float h) {
+      Pen shadow(Color(255,8,12,9),5),metal(Color(255,117,96,53),2),light(Color(255,199,173,105),.7f);
+      g.DrawRectangle(&shadow,x,y,w,h);g.DrawRectangle(&metal,x,y,w,h);g.DrawRectangle(&light,x+4,y+4,w-8,h-8);
+      for(int n=0;n<42;++n) {
+        const float px=x+8+(w-16)*n/42,grain=std::fmod(n*1.731f,1.f);
+        g.DrawLine(&light,px,y+2,px+2+grain*4,y+3);g.DrawLine(&light,px,y+h-3,px+2,y+h-2);
+      }
+      for(float side:{0.f,1.f}) for(float bottom:{0.f,1.f}) {
+        const float cx=x+side*w,cy=y+bottom*h,sx=side?-1.f:1.f,sy=bottom?-1.f:1.f;
+        for(int n=0;n<3;++n) {
+          const float d=10+n*6.f;g.DrawLine(&metal,cx+sx*3,cy+sy*d,cx+sx*d,cy+sy*3);
+          g.DrawArc(&light,cx+(side?-25.f:1.f),cy+(bottom?-25.f:1.f),24.f,24.f,side?90.f:0.f,220.f);
+        }
+        SolidBrush stud(Color(255,154,120,63));g.FillEllipse(&stud,cx-3,cy-3,6.f,6.f);
+      }
+    };
+    for(int n=0;n<220;++n) {
+      const float x=std::fmod(n*71.7f,canvasWidth),y=std::fmod(n*43.3f,canvasHeight);
+      Pen grain(Color(18,175,145,92),.6f);g.DrawLine(&grain,x,y,x+3+float(n%7),y+1);
+    }
+    frame(9,9,922,572);
     Text(g,L"MEDITERRANEAN",30,20,650,40,31,gold,L"Georgia");Text(g,L"A S T R A L   F R O N T I E R",32,61,570,19,11,muted);
     Text(g,L"OFFLINE  /  SINGLE PLAYER",696,42,220,20,11,muted);
     g.FillRectangle(&card,24.f,108.f,558.f,404.f);g.FillRectangle(&card,610.f,108.f,306.f,404.f);
     if(art_) {g.SetInterpolationMode(InterpolationModeHighQualityBicubic);g.DrawImage(art_.get(),RectF(24,108,558,314));}
     LinearGradientBrush shade(Point(0,245),Point(0,423),Color(0,10,20,26),Color(245,10,20,26));g.FillRectangle(&shade,24,245,558,178);
+    frame(24,108,558,404);frame(610,108,306,404);
     Text(g,L"DAWNWATCH",45,331,510,46,32,ink,L"Georgia");Text(g,L"Your journey begins on the astral frontier.",47,378,495,27,15,ink);
-    Text(g,L"ONE ISLAND. YOUR JOURNEY.",43,441,515,24,12,gold,L"Segoe UI",FontStyleBold);
-    Text(g,L"Explore the outpost, build your champion and face the raiders.\nYour progress stays on this PC.",43,472,519,38,13,muted);
+    Text(g,L"ELEVEN CALLINGS. ONE FRONTIER.",43,441,515,24,12,gold,L"Segoe UI",FontStyleBold);
+    Text(g,L"Choose your class, master its disciplines and defend Dawnwatch.\nNine assignments. Ten levels. Your own chronicle.",43,472,519,38,13,muted);
     Text(g,L"START YOUR JOURNEY",635,131,255,30,18,ink,L"Georgia");
     Text(g,L"Display mode",636,185,250,22,13,muted);Text(g,L"Window size (fits desktop)",636,258,250,22,13,muted);
     Text(g,L"CHOOSE YOUR CHARACTER",636,337,255,22,12,gold);
@@ -223,7 +246,7 @@ private:
       }
       RestoreDC(memory,saved);
     }
-    const bool painted=GetPixel(memory,int(15*scale_),int(15*scale_))==RGB(14,22,28);
+    const bool painted=GetPixel(memory,2,client.bottom-2)==RGB(background.GetR(),background.GetG(),background.GetB());
     const CLSID png{0x557cf406,0x1a04,0x11d3,{0x9a,0x73,0x00,0x00,0xf8,0x1e,0xf3,0x2e}};
     bool saved=false;
     {Bitmap image(bitmap,nullptr);saved=painted && image.Save(path.c_str(),&png)==Ok;}

@@ -57,6 +57,10 @@ std::vector<std::int16_t> Generate(Cue cue) {
     const float air=noise-low;
     float value=0;
     switch(cue) {
+    case Cue::Cast:
+      value=.20f*Sweep(330,880,duration,t)*Decay(t,.025f,12.f);
+      value+=.14f*Bell(1318.51f,t-.045f)+.22f*low*Decay(t,.035f,14.f);
+      break;
     case Cue::Mend:
       // Ascending triad and quiet reflections baked into the sample.
       for(int n=0;n<3;++n) {
@@ -140,6 +144,7 @@ void Events::Update(const rpg::Simulation& state) {
     if(std::hypot(event.position.x-p.x,event.position.z-p.z)>18) continue;
     switch(event.kind) {
     case K::Strike:add(Cue::Strike);break; case K::HeavyStrike:add(Cue::Heavy);break;
+    case K::SpellCast:add(Cue::Cast);break;
     case K::EnemySwing:add(Cue::Enemy);break; case K::Hit:add(Cue::Hit);break;
     case K::HeavyHit:add(Cue::HeavyHit);break; case K::Hurt:add(Cue::Hurt);break;
     case K::Interrupt:add(Cue::Interrupt);break; case K::Mend:add(Cue::Mend);break;

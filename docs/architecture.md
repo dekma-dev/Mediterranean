@@ -1,5 +1,7 @@
 # Native architecture
 
+Expansion (2026-10-21): `Classes.h` owns durable class IDs, four action definitions and per-class nine-node talent values; simulation accessors supply the UI and combat. `Campaign.h` contains seven frontier dispatches after the original two quests. Version 11 profiles seal original loot accounting before ranked squads replace the three stable campaign actor IDs; XP derives from completed stages. `Game` retains the chosen slot path for F5/F9. Ranged casts reuse authoritative attack timing and bounded visual/audio event pools. See [classes and campaign](classes-and-campaign.md).
+
 ## Current boundaries
 
 The project is single-player today. Keep one map and its gameplay loop testable before expanding it. Allods Online is the primary design reference; the current art is a procedural stylized prototype.
@@ -7,7 +9,7 @@ The project is single-player today. Keep one map and its gameplay loop testable 
 | Component | Responsibility | Dependencies |
 | --- | --- | --- |
 | `MediterraneanLauncher` / `LaunchSupport` | Native launcher UI, local preferences, explicit-path child process, instance lifetime and validated launch arguments | Win32, GDI+, standard library; embedded project capture |
-| `CharacterSelection` | Read-only validation of the current save, character metadata/preview, keyboard and pointer routing before explicit world entry; Game blocks simulation until entry | `Simulation`, `Input`, shared UI canvas and character renderer |
+| `CharacterSelection` | Eleven local class slots, draft name entry, selected-save validation and equipped preview before explicit world entry; Game blocks simulation until entry | `Simulation`, `Input`, shared UI canvas and character renderer |
 | `WorldMap` | Map bounds, solid props, areas, traversal queries, navigation routes | C++ standard library |
 | `Inventory` | Canonical item catalog, bag stacks, worn slots, transactional item commands and serialization | C++ standard library |
 | `Trade` | Offer/sale prices and Simulation purchase, sell, buyback, range and stock rules | `Inventory`, `Simulation`, C++ standard library |
@@ -18,7 +20,7 @@ The project is single-player today. Keep one map and its gameplay loop testable 
 | `Game` | Translate local input, update simulation, camera, interface actions, save-file I/O | Simulation, input, renderer, Windows file replacement |
 | `Interface` / `InterfaceState` | Scaled layouts, hit regions, HUD/panels, validated item commands | Renderer, simulation |
 | `CharacterView` / `MapArtwork` | Shared dressed character, generated terrain/landmark illustration | Renderer, world data |
-| `CharacterPose` | Fixed-length local arm/leg joints and weapon direction for walking and strikes | DirectXMath, C++ standard library |
+| `CharacterPose` / `ActionClips` | Code-authored class action curves, bounded cancellation, fixed-length arm/leg solves and weapon direction; authoritative clocks remain in Simulation | DirectXMath, C++ standard library |
 | `Motion` | Analytic speed ramps, shortest-arc turns, travel-driven pose filters and camera boom response | C++ standard library |
 | `Animation` | Bounded breathing, air/landing, recoil and travel channels, advanced only during updates | C++ standard library, `Motion` |
 | `FootPlacement` | World-space support contacts, lifted steps, boot heading and reset lifecycle on the flat floor | `Animation`, `WorldMap`, C++ standard library |
@@ -85,7 +87,7 @@ Do not add transport code, speculative distributed services, or extra maps merel
 
 ## Validation
 
-`-Test` runs fifteen suites: foot placement, combat effects, animation, shadow, motion, interface, geometry, simulation, navigation, inventory, combat, progression, training and trade. The campaign test drives both quests; inventory/training/trade tests verify persistent equipment, purchases, armor and repeatable encounters without farming. GeometryTests checks fixed limb lengths, joint validity and clearance across walking/strike poses. `-SmokeTest` captures four scenarios at three sizes plus five interface panels, combined character/bag, inspection views, fifteen extra veteran outfit/training/shop/buyback views, eight close-up poses and seven environment views, plus six animation-layer and four live jump views, totaling 132 images per configuration. Tests load snapshots in memory without replacing player saves. Interactive input and feel still need the manual checklist. Generated captures and player saves remain ignored; small authored render fixtures live in `tests/fixtures`.
+`-Test` runs all 33 registered suites, including class actions/campaigns, character selection, launcher, asset compilation, skinning, hands, foot placement, effects, animation, shadows, input and persistent gameplay. The campaign test drives both quests; inventory/training/trade tests verify persistent equipment, purchases, armor and repeatable encounters without farming. GeometryTests checks fixed limb lengths, joint validity and clearance across walking/strike poses. `-SmokeTest` captures four scenarios at three sizes plus five interface panels, combined character/bag, inspection views, fifteen extra veteran outfit/training/shop/buyback views, eight close-up poses and seven environment views, plus six animation-layer and four live jump views, totaling 132 images per configuration. Tests load snapshots in memory without replacing player saves. Interactive input and feel still need the manual checklist. Generated captures and player saves remain ignored; small authored render fixtures live in `tests/fixtures`.
 
 The build helper supports Visual Studio and Ninja in separate output directories. Ninja bootstraps MSVC in a child process, leaving machine settings untouched. `cmake/DetectMsvcIncludes.cmake` probes raw localized `/showIncludes` output to preserve Ninja header dependencies when CMake's automatic decoding mangles the prefix. Work remains uncommitted unless explicitly requested.
 

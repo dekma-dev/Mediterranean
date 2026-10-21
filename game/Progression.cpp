@@ -13,21 +13,21 @@ int Simulation::DefeatedCount() const {
 
 int Simulation::Experience() const {
   // Each persistent objective contributes once. Loading or respawning cannot farm XP.
-  return 40*DefeatedCount()+(quest_==Quest::Complete?60:0)+(HasWardArmor()?120:0);
+  return 40*((frontierCompleted_ || frontierActive_)?3:DefeatedCount())+250*frontierCompleted_+(quest_==Quest::Complete?60:0)+(HasWardArmor()?120:0);
 }
 
 int Simulation::Level() const {
   const int xp=Experience();
-  return xp>=250?3:xp>=100?2:1;
+  int level=1;while(level<levelCap && xp>=levelExperience[level]) ++level;return level;
 }
 
-int Simulation::TalentPoints() const { return Level()-1-TalentCount(build_); }
+int Simulation::TalentPoints() const { return EarnedPoints()-TalentCount(build_); }
 
 BuildStats Simulation::PreviewBuild(unsigned mask) const {
  // Preview locked level-three presets too, using current level and equipment.
  // Derive differences from the live accessors so equipment stays authoritative.
- if (!ValidBuild(mask,3)) mask=build_;
- const auto delta=[&](float TalentInfo::*stat) { return TalentBonus(mask,stat)-TalentBonus(build_,stat); };
+ if (!ValidBuild(mask,levelCap)) mask=build_;
+ const auto delta=[&](float TalentInfo::*stat) { return BuildBonus(mask,stat)-BuildBonus(build_,stat); };
  return {MaxHealth()+delta(&TalentInfo::health),StrikeDamage()+delta(&TalentInfo::strike),
   HeavyDamage()+delta(&TalentInfo::heavy),DamageReduction()+delta(&TalentInfo::armor),
   MendHealing()+delta(&TalentInfo::mend),AbilityCooldown(2)-delta(&TalentInfo::dashCooldown),
@@ -38,7 +38,7 @@ const char* Simulation::LoadoutStatus(const BuildCommand& command) const {
  if (command.action!=BuildAction::Apply && command.action!=BuildAction::Store) return "Unknown build action";
  if (command.action==BuildAction::Store && (command.slot<0 || command.slot>=int(loadouts_.size()))) return "Choose a loadout slot";
  if (command.mask<0) return "Choose a build to preview";
- if (!ValidBuild(unsigned(command.mask),3)) return "Invalid talents or prerequisites";
+ if (!ValidBuild(unsigned(command.mask),levelCap)) return "Invalid talents or prerequisites";
  if (!ValidBuild(unsigned(command.mask),Level())) return "Earn more levels to use this build";
  if (health_<=0) return "Recover before managing builds";
  if (command.action==BuildAction::Store)
@@ -63,7 +63,7 @@ void Simulation::ChangeBuild(const BuildCommand& command) {
 const char* Simulation::TalentStatus(Talent talent) const {
  if (!ValidTalent(talent)) return "Unknown talent";
  if (HasTalent(talent)) return "Learned";
- const auto& info=talents[int(talent)];
+ const auto info=TalentDefinition(int(talent));
  if (Level()<info.level) return "Requires a higher level";
  if (info.prerequisite!=Talent::Count && !HasTalent(info.prerequisite)) return "Learn the previous talent first";
  if (TalentPoints()==0) return "No talent points available";
@@ -101,7 +101,7 @@ void Simulation::LearnTalent(int index) {
  if (std::string(status)!="Ready to learn") { message_=status; return; }
  build_|=1u<<unsigned(talent);
  // Point allocation changes future stats, never health or active cooldowns.
- message_=std::string("Learned ")+talents[index].name+".";
+ message_=std::string("Learned ")+TalentDefinition(index).name+".";
 }
 
 void Simulation::Emit(FeedbackKind kind,Vec2 position,int amount) {
@@ -110,8 +110,14 @@ void Simulation::Emit(FeedbackKind kind,Vec2 position,int amount) {
 }
 
 void Simulation::EmitVisual(CombatVisualKind kind,Vec2 position,float height,float facing,EntityId actor,float elapsed) {
-  if (visualEventCount_<visualEvents_.size())
-    visualEvents_[visualEventCount_++]={kind,position,height,facing,actor,elapsed};
+  if (visualEventCount_<visualEvents_.size()) {
+    auto& event=visualEvents_[visualEventCount_++];event={kind,position,height,facing,actor,elapsed};event.school=class_;
+    if(kind==CombatVisualKind::SpellCast) {
+      for(const auto& enemy:enemies_) if(enemy.id==attackTarget_) event.destination=enemy.position;
+      if(sparring_ && trainer_.id==attackTarget_) event.destination=trainer_.position;
+      event.flight=combat::Contact(HeavyAttack())-combat::StrokeStart(HeavyAttack());
+    }
+  }
 }
 
 void Simulation::RestoreForLevel(int previousLevel) {
@@ -168,6 +174,12 @@ void Simulation::Respawn() {
 }
 
 std::string Simulation::Objective() const {
+  if(anchorQuest_==AnchorQuest::Complete) {
+    if(frontierCompleted_==7) return "DAWNWATCH SECURED\nLevel 10 campaign complete / training remains open";
+    const auto& quest=DescribeQuest(QuestId(int(QuestId::Watch1)+frontierCompleted_));
+    return std::string(quest.title)+"\n"+(!frontierActive_?"Read the next dispatch at the beacon":DefeatedCount()==3?"Report to the beacon keeper":
+      "Enemies defeated "+std::to_string(DefeatedCount())+" / 3");
+  }
   if (quest_==Quest::Available) return "PATROL THE FRONTIER\nSpeak to the gold beacon keeper";
   if (quest_==Quest::Active) return "PATROL THE FRONTIER\nDefeat one raider north of the village";
   if (quest_==Quest::Return) return "PATROL THE FRONTIER\nReturn to the beacon keeper";
@@ -181,14 +193,14 @@ std::string Simulation::Objective() const {
 }
 
 Vec2 Simulation::ObjectivePosition() const {
-  if (quest_==Quest::Active || (anchorQuest_==AnchorQuest::Active && DefeatedCount()<3)) {
+  if ((frontierActive_ && DefeatedCount()<3) || quest_==Quest::Active || (anchorQuest_==AnchorQuest::Active && DefeatedCount()<3)) {
     Vec2 nearest=WorldMap::astralAnchor; float best=1000;
     for (const auto& enemy : enemies_) if (enemy.health>0 && Distance(player_,enemy.position)<best) {
       nearest=enemy.position; best=Distance(player_,nearest);
     }
     return nearest;
   }
-  return anchorQuest_==AnchorQuest::Complete?WorldMap::trainingPost:anchorQuest_==AnchorQuest::Active?WorldMap::astralAnchor:questGiver;
+  return frontierCompleted_==7?WorldMap::trainingPost:anchorQuest_==AnchorQuest::Active?WorldMap::astralAnchor:questGiver;
 }
 
 std::string Simulation::InteractionPrompt() const {

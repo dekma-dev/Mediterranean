@@ -17,7 +17,7 @@ void RemoveRecord(std::string& save,const char* tag) {
   const auto at=save.find(tag); Require(at!=std::string::npos,"Expected save record."); save.erase(at,save.find('\n',at)-at+1);
 }
 void LegacyVersion(std::string& save,const char* version) {
-  save.replace(14,save.find('\n')-14,version); RemoveRecord(save,"LOADOUTS "); RemoveRecord(save,"BUILD ");
+  save.replace(14,save.find('\n')-14,version); RemoveRecord(save,"LOADOUTS "); RemoveRecord(save,"BUILD "); RemoveRecord(save,"PROFILE ");
 }
 void TrimRecord(std::string& save,const char* tag,int count) {
   const auto at=save.find(tag); Require(at!=std::string::npos,"Expected legacy record.");
