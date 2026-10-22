@@ -227,7 +227,7 @@ Gameplay opens in borderless fullscreen by default. The launcher can select wind
 2. Follow the path north with **WASD**. Hold **Shift** to sprint and press **Space** to jump.
 3. Hold the **right mouse button** and drag to orbit; use the **mouse wheel** to zoom.
 4. Press **Tab** to select a raider, move into melee range, and use **1** for strike or **2** for heavy strike.
-5. Use **3** to dash and **4** to heal after taking damage.
+5. Use **3** for a melee charge or ranged backward escape and **4** to heal after taking damage. Land basic hits to fill the class reserve, then use **2** for its empowered effect. Scout/Priest/Mage/Necromancer/Psionic/Engineer heavy preparation requires standing still; N explains the kit. See [combat disciplines](docs/class-combat.md).
 6. Defeat a raider and press **E** near its bag to collect 5 gold and one healing potion.
 7. Return to the beacon and press **E** for 25 gold and the watchguard blade. Press **G** to equip it and increase melee damage.
 8. The patrol reward also grants 60 XP; together with one kill this earns level 2 and 120 maximum health. Press **E** again to accept **Secure the Astral Anchor**.

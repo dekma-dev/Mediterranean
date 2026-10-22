@@ -118,8 +118,9 @@ void Integration() {
     rpg::Command cmd;cmd.ability=1;cmd.nextTarget=true;
     game.ExecuteCommand(cmd,.01f);plain.Update(.01f,cmd);cmd={};
     float time=0;int launches=0;
-    while(time<.24f-1e-6f) {
-      const float dt=std::min(1.f/hz,.24f-time);game.ExecuteCommand(cmd,dt);plain.Update(dt,cmd);time+=dt;cmd={};
+    const float releaseEnd=combat::StrokeStart(true)/ClassAttackRate(ClassId(id),true)+.03f;
+    while(time<releaseEnd-1e-6f) {
+      const float dt=std::min(1.f/hz,releaseEnd-time);game.ExecuteCommand(cmd,dt);plain.Update(dt,cmd);time+=dt;cmd={};
       for(std::size_t i=0;i<game.State().VisualEventCount();++i)
         launches+=game.State().VisualEvents()[i].kind==rpg::CombatVisualKind::SpellCast;
     }

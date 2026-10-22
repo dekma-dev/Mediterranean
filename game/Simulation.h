@@ -32,6 +32,7 @@ struct Enemy {
   std::size_t waypoint = 0;
   EnemyKind kind = EnemyKind::Raider;
   float windup = 0, facing = 0;
+  float snared=0,rooted=0,stunned=0,exposed=0; // transient combat effects
   float MaxHealth() const { return (kind==EnemyKind::Trainer?180.f:kind==EnemyKind::Captain?120.f:kind==EnemyKind::Reaver?105.f:80.f)+rank*18.f; }
   float WindupDuration() const { return kind==EnemyKind::Trainer?.9f:kind==EnemyKind::Captain?1.f:kind==EnemyKind::Reaver?1.15f:kind==EnemyKind::Wraith?.55f:.7f; }
   float AttackInterval() const { return kind==EnemyKind::Captain?2.4f:kind==EnemyKind::Reaver?2.7f:kind==EnemyKind::Wraith?1.2f:1.4f; }
@@ -59,7 +60,7 @@ struct Command {
 };
 enum class Quest { Available, Active, Return, Complete };
 enum class AnchorQuest { Locked, Available, Active, Return, Complete };
-enum class FeedbackKind { Damage, Hurt, Heal, Experience, LevelUp, Miss, Interrupt };
+enum class FeedbackKind { Damage, Hurt, Heal, Experience, LevelUp, Miss, Interrupt, Absorb };
 struct CombatFeedback {
   Vec2 position;
   FeedbackKind kind;
@@ -89,6 +90,14 @@ public:
   const ClassInfo& ClassInfo() const { return DescribeClass(class_); }
   TalentInfo TalentDefinition(int index) const { return ClassTalent(class_,index); }
   SpellInfo Spell(int index) const { return ClassSpell(class_,index); }
+  const CombatStyle& CombatStyleInfo() const { return ClassCombat(class_); }
+  int ClassResource() const { return classResource_; }
+  bool EmpoweredReady() const { return classResource_>=CombatStyleInfo().capacity; }
+  bool EmpoweredAttack() const { return Attacking() && attackEmpowered_; }
+  float Barrier() const { return barrier_; }
+  bool RetreatMobility() const { return CombatStyleInfo().retreatDistance>0; }
+  float MobilityDuration() const { return CombatStyleInfo().retreatDuration; }
+  float AttackRate() const { return ClassAttackRate(class_,HeavyAttack()); }
   float BuildBonus(unsigned mask,float TalentInfo::*stat) const;
   int FrontierCompleted() const { return frontierCompleted_; }
   bool FrontierActive() const { return frontierActive_; }
@@ -109,7 +118,7 @@ public:
   bool JumpedThisUpdate() const { return jumpedThisUpdate_; }
   bool DashedThisUpdate() const { return dashedThisUpdate_; }
   bool Dashing() const { return dashRemaining_>0; }
-  float DashPhase() const { return Dashing()?1-dashRemaining_/motion::dashDuration:0; }
+  float DashPhase() const { return Dashing()?1-dashRemaining_/MobilityDuration():0; }
   float Facing() const { return facing_; }
   float MovementDistance() const { return movementDistance_; } // excludes dash/respawn
   Vec2 MovementVelocity() const { return movementVelocity_; }
@@ -218,7 +227,7 @@ private:
   void UseAbility(int index,float visualElapsed=0);
   void ResolveAttack(float elapsed);
   void UpdateCombat(float dt,bool advanceAttack);
-  void CancelAttack() { attackAbility_=-1; attackAge_=attackDamage_=attackFlash_=0; attackTarget_=0; }
+  void CancelAttack() { attackAbility_=-1; attackAge_=attackDamage_=attackFlash_=0; attackTarget_=0; attackEmpowered_=false; }
   void LearnTalent(int index);
   void ResetTalents();
   void ChangeBuild(const BuildCommand& command);
@@ -227,6 +236,7 @@ private:
   void ConfirmQuest(QuestAction action);
   bool HasLineOfSight(Vec2 from, Vec2 to) const;
   void UpdateEnemy(Enemy& enemy, float dt,float frameTail);
+  void AdvanceEnemy(Enemy& enemy,float dt,float frameTail);
   void SeparateEnemies(float dt);
   void Emit(FeedbackKind kind,Vec2 position,int amount = 0);
   void RestoreForLevel(int previousLevel);
@@ -247,10 +257,14 @@ private:
   float airSpeedLimit_=4;
   float jumpBuffer_=0;
   float dashRemaining_=0,dashTravelLeft_=0;
+  Vec2 retreatDirection_{};
   EntityId dashTarget_=0; // accepted target identity; selection may change during travel
   int attackAbility_=-1;
   EntityId attackTarget_=0;
   float attackAge_=0,attackDamage_=0;
+  int classResource_=0;
+  bool attackEmpowered_=false;
+  float barrier_=0;
   float movementDistance_ = 0;
   float groundMovementDistance_ = 0;
   float landingSpeed_ = 0, landingElapsed_ = 0;

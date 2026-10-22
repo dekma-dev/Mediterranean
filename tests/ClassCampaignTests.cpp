@@ -80,7 +80,8 @@ void ClassCombat(const std::string& veteran) {
     }
    };
    Command attack;attack.ability=1;s.Update(.001f,attack);observe();Check(s.Attacking(),"Class heavy rejected");
-   for(float t=.001f;t<.31f-1e-7f;) {const float dt=std::min(1.f/hz,.31f-t);s.Update(dt,{});t+=dt;observe();}
+   const float contactEnd=s.Spell(1).contact+.011f;
+   for(float t=.001f;t<contactEnd-1e-7f;) {const float dt=std::min(1.f/hz,contactEnd-t);s.Update(dt,{});t+=dt;observe();}
    const auto& enemy=s.Enemies()[target-100];
    const float extra=ClassId(id)==ClassId::Mage?10.f:ClassId(id)==ClassId::Scout?8.f:ClassId(id)==ClassId::Engineer?12.f:ClassId(id)==ClassId::Demonologist?10.f:0.f;
    Check(std::abs(enemy.health-(maximum-damage-extra))<.001f,"Class heavy damage/passive differs across rates");

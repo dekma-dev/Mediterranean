@@ -149,6 +149,11 @@ void Captures() {
     Game game;game.Initialize();Check(game.RestoreSnapshot(Fixture(id,true)),"Equipment UI fixture");
     game.OpenPanel(ui::Panel::Character);game.ShowPanel(ui::Panel::Inventory);renderer.BeginFrame();game.Render(renderer);
     Check(renderer.Capture((root/(std::to_string(i)+"-inventory.png")).wstring()) && renderer.EndFrame(false),"Class inventory/portrait capture");
+    Check(game.RestoreSnapshot(Fixture(id)),"Class HUD fixture");game.OpenPanel(ui::Panel::None);
+    Command basic;basic.nextTarget=true;basic.ability=0;game.ExecuteCommand(basic,.001f);
+    for(int tick=0;tick<30;++tick) game.ExecuteCommand({},.01f);
+    renderer.BeginFrame();game.Render(renderer);
+    Check(renderer.Capture((root/(std::to_string(i)+"-hud.png")).wstring()) && renderer.EndFrame(false),"Class resource HUD capture");
     if(PhysicalLauncher(WeaponFor(id).form)) {
       Check(game.RestoreSnapshot(Fixture(id)),"Combat capture fixture");game.OpenPanel(ui::Panel::None);
       game.SetCameraOrbit(1.4f,.25f,4.2f);
@@ -173,5 +178,5 @@ void Captures() {
 }
 int main() {
   CatalogAndPersistence();LaunchContracts();ShapesAndSockets();Captures();
-  std::cout<<"PASS: class equipment identity, migration/trade, timed launcher release, fitted geometry, grips and 46 GPU views\n";
+  std::cout<<"PASS: class equipment identity, migration/trade, timed launcher release, fitted geometry, grips and 57 GPU views\n";
 }

@@ -115,7 +115,7 @@ void Simulation::EmitVisual(CombatVisualKind kind,Vec2 position,float height,flo
     if(kind==CombatVisualKind::SpellCast) {
       for(const auto& enemy:enemies_) if(enemy.id==attackTarget_) event.destination=enemy.position;
       if(sparring_ && trainer_.id==attackTarget_) event.destination=trainer_.position;
-      event.flight=combat::Contact(HeavyAttack())-combat::StrokeStart(HeavyAttack());
+      event.flight=(combat::Contact(HeavyAttack())-combat::StrokeStart(HeavyAttack()))/AttackRate();
     }
   }
 }
@@ -128,13 +128,19 @@ void Simulation::RestoreForLevel(int previousLevel) {
 
 void Simulation::DamagePlayer(float damage,float incomingFacing,float visualElapsed) {
   if (health_<=0) return;
-  const float applied=std::min(sparring_?std::max(0.f,health_-1):health_,std::max(1.f,damage-DamageReduction()));
-  health_-=applied; hurtFlash_=std::max(0.f,.25f-visualElapsed); damagedThisUpdate_=damagedThisUpdate_ || applied>0;
+  const float incoming=std::max(1.f,damage-DamageReduction());
+  const float absorbed=std::min(barrier_,incoming);barrier_-=absorbed;
+  const float applied=std::min(sparring_?std::max(0.f,health_-1):health_,incoming-absorbed);
+  health_-=applied;
+  if(applied>0) hurtFlash_=std::max(0.f,.25f-visualElapsed);
+  damagedThisUpdate_=damagedThisUpdate_ || applied>0;
   if (sparring_) sparringTaken_+=int(applied);
-  Emit(FeedbackKind::Hurt,player_,static_cast<int>(applied));
+  if(applied>0) Emit(FeedbackKind::Hurt,player_,static_cast<int>(applied));
+  if(absorbed>0) Emit(FeedbackKind::Absorb,player_,static_cast<int>(absorbed));
   if (applied>0) EmitVisual(CombatVisualKind::Hurt,player_,height_+1.2f,incomingFacing,0,visualElapsed);
   if (Channeling()) { channelRemaining_=0; message_="Damage interrupted stabilization."; }
   if (health_==0) {
+    classResource_=0;barrier_=0;
     target_=-1; height_=0; velocityY_=0; attackFlash_=0; StopMovement();
     // Defeat suspends combat. Cancel every pending warning, including actors
     // already processed this update, before the remaining actors can advance.
@@ -159,6 +165,7 @@ void Simulation::EndSparring(const char* result) {
 }
 
 void Simulation::Respawn() {
+  classResource_=0;barrier_=0;
   player_=WorldMap::spawn; height_=velocityY_=facing_=0; health_=MaxHealth();
   StopMovement();
   target_=-1; attackFlash_=hurtFlash_=channelRemaining_=0;
@@ -167,6 +174,7 @@ void Simulation::Respawn() {
     if (enemy.health<=0) continue;
     enemy.position=enemy.home; enemy.health=enemy.MaxHealth(); enemy.state=EnemyState::Idle;
     enemy.windup=enemy.attackCooldown=enemy.hitFlash=enemy.repathTimer=0;
+    enemy.snared=enemy.rooted=enemy.stunned=enemy.exposed=0;
     enemy.movementSpeed=enemy.movementDistance=0;
     enemy.path.clear(); enemy.waypoint=0;
   }

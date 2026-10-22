@@ -297,6 +297,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   applyImpacts(playerAnimation_,0,simulation_.Health()>0);
   playerAnimation_.UpdateDash(dt,simulation_.Dashing(),simulation_.DashPhase(),dashImpact,simulation_.Health()>0,dashFinished,dashEndElapsed);
   playerAnimation_.pose.attackSeconds=simulation_.AttackSeconds();
+  playerAnimation_.pose.retreat=simulation_.RetreatMobility();
   if(simulation_.ClassInfo().range>3 && simulation_.Attacking())
     playerAnimation_.pose.attackSeconds=-1;
   playerAnimation_.actions.Update(dt,simulation_.Class(),simulation_.AttackSeconds(),simulation_.HeavyAttack(),
@@ -536,6 +537,7 @@ void Game::Render(Renderer& renderer,bool showInterface) {
     case rpg::FeedbackKind::LevelUp: text="LEVEL "+std::to_string(feedback.amount)+" / N: BUILD"; break;
     case rpg::FeedbackKind::Miss: text="MISSED"; color={.8f,.8f,.8f,1}; break;
     case rpg::FeedbackKind::Interrupt: text="INTERRUPTED"; color={.4f,.85f,1,1}; break;
+    case rpg::FeedbackKind::Absorb: text="ABSORB "+std::to_string(feedback.amount);color={.73f,.85f,1,1};break;
     }
     renderer.DrawText(screen.x,screen.y,text,color,2);
   }

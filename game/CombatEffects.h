@@ -43,6 +43,7 @@ private:
     float facing=0,pending=0,strength=0;
     DirectX::XMFLOAT3 previous{};
     bool active=false,liveEndpoint=false;
+    rpg::ClassId school=rpg::ClassId::Warrior;
   } wake_;
   std::array<Burst,maxBursts> bursts_{};
   std::array<Trail,maxTrails> trails_{};

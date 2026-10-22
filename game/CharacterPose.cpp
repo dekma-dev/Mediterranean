@@ -55,6 +55,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   const float travel=animation::Unit(dynamics.travel);
   const float dash=animation::Unit(dynamics.dash),brake=animation::Unit(dynamics.dashBrake);
   const float dashImpact=animation::Unit(dynamics.dashImpact);
+  const float driveSign=dynamics.retreat?-1.f:1.f;
   // The drive/bracing pose takes priority over an earlier attack or cast pose.
   const float burst=std::max(dash,brake);
   const auto stroke=combat::Sample(dynamics.attackSeconds,dynamics.heavyAttack);
@@ -69,7 +70,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   pose.bodyLift=gait*gait*.015f*(1-air)+breath*.006f*(1-air)-landing*.14f;
   pose.bodyLift-=dash*.09f+brake*.055f+dashImpact*.04f+animation::Unit(dynamics.dashLoad)*.035f;
   pose.upperPitch=travel*.09f+animation::Signed(dynamics.lean)*.10f+landing*.12f+air*std::max(0.f,rise)*.06f-hit*.12f+sway*.015f*(1-air);
-  pose.upperPitch+=dash*.42f-brake*.16f-dashImpact*.14f;
+  pose.upperPitch+=(dash*.42f-brake*.16f-dashImpact*.14f)*driveSign;
   pose.upperPitch-=cast*.08f;
   // Clip body motion is layered before foot/hand IK. Committed combat keeps
   // priority over locomotion, while contacts still compensate pelvis height.
@@ -119,7 +120,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   std::array<XMFLOAT3,2> targets{};
   std::array<float,2> strides{};
   for (int i=0;i<2;++i) {
-    const float side=i==0?-1.f:1.f,stride=side*(gait*(1-burst)+dash*.95f*drive-brake*.65f)*(1-air);
+    const float side=i==0?-1.f:1.f,stride=side*(gait*(1-burst)+(dash*.95f*drive-brake*.65f)*driveSign)*(1-air);
     strides[i]=stride;
     const float positiveRise=std::max(0.f,rise),step=std::max(0.f,stride);
     const float lift=air*(.17f+positiveRise*positiveRise*.15f+(i==0?.045f:0))*

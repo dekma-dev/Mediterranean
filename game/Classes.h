@@ -20,19 +20,19 @@ inline constexpr std::array<ClassInfo,int(ClassId::Count)> classes{{
  {"Smite","Judgement","Crusade","Prayer"},120,4,-2,2,38,2.5f,{.73f,.60f,.31f}},
  {"Scout","Woodland scout","Ranged / precision","Heavy shots gain damage beyond four metres.",{"Marksmanship","Survival","Medicine"},
  {"Steady aim","Trailcraft","Field dressing","Eagle eye","Bark cover","Quick dressing","Deadeye","Trail runner","Last bandage"},
- {"Quick shot","Aimed shot","Pursuit","Bandage"},90,0,-1,0,28,9,{.31f,.48f,.28f}},
+ {"Quick shot","Aimed shot","Disengage","Bandage"},90,0,-1,0,28,9,{.31f,.48f,.28f}},
  {"Priest","Dawn acolyte","Ranged / healing","Heavy contact also restores eight health to the caster.",{"Radiance","Faith","Grace"},
  {"Radiant word","Faith","Grace","Dawn sermon","Sacred ward","Revelation","Rebuke","Pilgrimage","Deliverance"},
  {"Radiance","Rebuke","Pilgrimage","Greater heal"},95,1,-2,-4,55,8,{.78f,.75f,.57f}},
  {"Druid","Grove keeper","Ranged / nature","Living bark absorbs two damage; strong self-restoration.",{"Storm","Bark","Grove"},
  {"Storm seed","Oak heart","Living sap","Tempest","Ironbark","Spring rain","Thunderhead","Wild trail","Last bloom"},
- {"Thorn","Lightning","Wild rush","Regrowth"},110,2,-2,0,48,7,{.26f,.51f,.35f}},
+ {"Thorn","Lightning","Wild step","Regrowth"},110,2,-2,0,48,7,{.26f,.51f,.35f}},
  {"Mage","Astral scholar","Ranged / burst","Heavy spells deal additional damage to healthy targets.",{"Flame","Frost","Arcana"},
  {"Kindling","Frost mantle","Arcane renewal","Inferno","Ice shell","Clear mind","Combustion","Slipstream","Second breath"},
  {"Ember","Flare","Slipstream","Renewal"},80,0,3,7,25,10,{.30f,.44f,.79f}},
  {"Necromancer","Ash binder","Ranged / life drain","Successful attacks restore health equal to 15% of damage.",{"Blood","Bone","Soul"},
  {"Blood pact","Bone mantle","Soul vessel","Crimson rite","Ossuary","Soul harvest","Wither","Grave walk","Death denied"},
- {"Wither","Soul rend","Grave rush","Blood rite"},95,0,0,1,38,8,{.48f,.27f,.56f}},
+ {"Wither","Soul rend","Grave walk","Blood rite"},95,0,0,1,38,8,{.48f,.27f,.56f}},
  {"Psionic","Veil seeker","Ranged / control","Heavy contact breaks concentration and delays the next attack.",{"Will","Mirror","Clarity"},
  {"Focused will","Mirror ward","Clarity","Mind lance","Quiet mind","Lucidity","Shatter","Thoughtstep","Awakening"},
  {"Mind spike","Shatter","Thoughtstep","Clarity"},90,1,0,1,32,9,{.64f,.35f,.69f}},
@@ -75,14 +75,52 @@ inline TalentInfo ClassTalent(ClassId id,int index) {
 inline const char* ClassPresetName(ClassId id,int index) {
  constexpr int leaves[]{3,6,4,7,5,8};return ClassTalent(id,leaves[index]).name;
 }
+// Action clocks drive both contact and authored clips. Resources are earned on
+// contact, never on input; a full reserve empowers the next committed heavy.
+struct CombatStyle {
+ const char* resource;
+ const char* payoff;
+ float basicRate,heavyRate;
+ int capacity;
+ float retreatDistance,retreatDuration;
+ bool steadyHeavy;
+};
+inline const CombatStyle& ClassCombat(ClassId id) {
+ static constexpr std::array<CombatStyle,int(ClassId::Count)> styles{{
+  {"Rage","Empowered heavy: +24 damage.",1,1,3,0,.34f,false},
+  {"Conviction","Empowered judgement: absorb the next 24 damage.",.9f,.85f,3,0,.34f,false},
+  {"Focus","Empowered aimed shot: +14 damage and a 3 s snare.",1.2f,.65f,3,3.8f,.42f,true},
+  {"Faith","Empowered rebuke: restore 24 health and absorb 12 damage.",.95f,.8f,2,2.8f,.46f,true},
+  {"Bloom","Empowered lightning: root for 2 s and restore 18 health.",1,.85f,3,3.3f,.42f,false},
+  {"Embers","Empowered flare: +36 damage.",.9f,.6f,3,4.f,.38f,true},
+  {"Souls","Empowered soul rend: +12 damage and drain 45% of damage.",.95f,.75f,3,2.8f,.46f,true},
+  {"Insight","Empowered shatter: stun for 2 s.",1.05f,.7f,3,3.6f,.40f,true},
+  {"Tempo","Empowered crescendo: heal 20 and reset basic attack cooldown.",1.15f,.95f,4,3.2f,.4f,false},
+  {"Pressure","Empowered shrapnel: expose for 5 s (+25% incoming damage).",1.05f,.7f,3,3.f,.44f,true},
+  {"Fury","Empowered ravage: +20 damage and restore 15 health.",1.15f,.9f,3,0,.34f,false}
+ }};
+ return styles[ValidClass(id)?int(id):0];
+}
+inline float ClassAttackRate(ClassId id,bool heavy) {
+ const auto& style=ClassCombat(id);return heavy?style.heavyRate:style.basicRate;
+}
 inline SpellInfo ClassSpell(ClassId id,int index) {
  auto result=spells[index];const auto& info=DescribeClass(id);result.name=info.actions[index];
  if(index<2) {
   result.range=info.range;
+  const float rate=ClassAttackRate(id,index==1);
+  result.contact/=rate; result.recovery/=rate;
   if(info.range>3) {
    result.description="Commit a ranged attack. Damage resolves at contact against the original target; range and line of sight are checked again.";
    result.targeting="Living enemy / clear line of sight";
   }
+  if(index==1 && ClassCombat(id).steadyHeavy)
+   result.description="Plant your feet to prepare this heavy attack. Moving or jumping before release interrupts it. A full class reserve empowers the hit.";
+ }
+ if(index==2 && ClassCombat(id).retreatDistance>0) {
+  result.range=ClassCombat(id).retreatDistance;result.recovery=ClassCombat(id).retreatDuration;
+  result.targeting="No target required / backward escape";
+  result.description="Step backward while facing the threat. Travel follows collision and stops at walls. No teleport or invulnerability.";
  }
  return result;
 }

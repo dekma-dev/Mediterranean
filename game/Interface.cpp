@@ -41,7 +41,7 @@ std::string SpellEffect(const rpg::Simulation& s,int ability) {
  if (ability==0) return Number(s.StrikeDamage())+" base damage";
  if (ability==1) return Number(s.HeavyDamage())+" base damage"+
    (s.HasTalent(rpg::Talent::Executioner)?" / "+Number(s.HeavyDamage()*1.25f)+" at half target HP":"");
- if (ability==2) return "5 m acquisition / 1.5 m stopping distance";
+ if (ability==2) return s.RetreatMobility()?Number(s.CombatStyleInfo().retreatDistance)+" m backward escape / no target required":"5 m acquisition / 1.5 m stopping distance";
  return "Up to "+Number(s.MendHealingNow())+" healing"+
    (s.HasTalent(rpg::Talent::Mercy)?" / "+Number(s.MendHealing()+20)+" at low HP":"");
 }
@@ -414,7 +414,7 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  } else {
   ClassSigil(c,{842,181,46,46},hero.Class());c.Text(900,182,info.name,22,ink);c.Text(900,213,info.role,12,gold);
   if(!customize) {
-   c.Wrap(842,240,350,info.identity,14,ink,3);
+   c.Wrap(842,240,350,std::string(hero.CombatStyleInfo().resource)+" / "+hero.CombatStyleInfo().payoff,14,ink,3);
    c.Text(842,292,"STARTING ARTS",11,gold);
    for(int i=0;i<4;++i) {
     const Rect r{842+180.f*(i%2),313+54.f*(i/2),170,47};
@@ -513,8 +513,33 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  c.Frame({ux+58,uy+30,189,20},{.035f,.075f,.035f,1});
  c.Gradient({ux+61,uy+33,183*std::clamp(s.Health()/s.MaxHealth(),0.f,1.f),14},
    {.49f,.76f,.22f,1},{.12f,.31f,.075f,1});
- c.Center(ux+60,uy+31,185,std::to_string(int(s.Health()))+" / "+std::to_string(int(s.MaxHealth())),12);
+ c.Center(ux+60,uy+31,185,std::to_string(int(s.Health()))+" / "+std::to_string(int(s.MaxHealth()))+
+   (s.Barrier()>0?"  [+"+Number(s.Barrier())+"]":""),12);
  c.Text(ux+62,uy+55,"Lv. "+std::to_string(s.Level())+"  /  "+s.ClassName(),11,muted);
+ // Each discipline has its own crest, resource name and instrument: melee
+ // seals, physical ammunition chambers, or arcane gems in a curved register.
+ const auto& style=s.CombatStyleInfo();const auto& tint=s.ClassInfo().color;
+ const Color classAccent{tint[0],tint[1],tint[2],1};
+ const float rx=combatLayout?610.f:328.f;
+ regions_.push_back({{rx,uy+4,132,64},{},false});
+ c.Frame({rx,uy+4,132,64},{.045f,.045f,.04f,.97f},classAccent);
+ c.Skin({rx+3,uy+7,126,58},7,{.32f,.31f,.29f,1});
+ ClassSigil(c,{rx+5,uy+8,22,22},s.Class());
+ c.Center(rx+28,uy+8,99,style.resource,13,ink);
+ for(int i=0;i<style.capacity;++i) {
+  const float px=rx+66+(i-(style.capacity-1)*.5f)*23,py=uy+37;
+  const Color fill=i<s.ClassResource()?classAccent:Color{.12f,.13f,.12f,1};
+  if(!s.RetreatMobility()) {
+   c.Diamond(px,py,9,10,gold);c.Diamond(px,py,6,7,fill);
+  } else if(rpg::PhysicalLauncher(rpg::WeaponFor(s.Class()).form)) {
+   c.Frame({px-7,py-9,14,18},fill,gold);c.Line(px-3,py-6,px-3,py+5,1,ink);
+  } else {
+   const float arc=(i-(style.capacity-1)*.5f)*(i-(style.capacity-1)*.5f)*2;
+   c.Oval(px,py-arc,7,8,fill);c.Ring(px,py-arc,8,gold);c.Oval(px-2,py-3-arc,1.5f,2,ink);
+  }
+ }
+ c.Center(rx+3,uy+51,126,s.EmpoweredAttack()?"EMPOWERED CAST":s.EmpoweredReady()?"2  /  EMPOWERED":
+   s.Barrier()>0?"Ward "+Number(s.Barrier()):"Build with basic hits",10,s.EmpoweredReady()?gold:muted);
  if (s.TargetActor()) {
   const auto& target=*s.TargetActor();
   const float tx=combatLayout?750.f:475.f,ty=combatLayout?518.f:26.f;
@@ -526,7 +551,11 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     {.76f,.35f,.16f,1},{.35f,.075f,.04f,1});
   c.Center(tx+10,ty+31,221,std::to_string(int(std::ceil(target.health)))+" / "+std::to_string(int(target.MaxHealth())),12);
   const auto distance=std::to_string(int(std::ceil(std::hypot(s.Player().x-target.position.x,s.Player().z-target.position.z))));
-  c.Center(tx+5,ty+54,228,target.windup>0?"Incoming strike  "+Seconds(target.windup)+"s":distance+" m  /  Selected target",11,target.windup>0?gold:muted);
+  const std::string condition=target.stunned>0?"Stunned  "+Seconds(target.stunned)+"s":
+    target.rooted>0?"Rooted  "+Seconds(target.rooted)+"s":target.snared>0?"Snared  "+Seconds(target.snared)+"s":
+    target.exposed>0?"Exposed +25%  "+Seconds(target.exposed)+"s":"";
+  c.Center(tx+5,ty+54,228,target.windup>0?"Incoming strike  "+Seconds(target.windup)+"s":
+    !condition.empty()?condition:distance+" m  /  Selected target",11,target.windup>0?gold:muted);
   if (target.windup>0) {
    c.RectFill({tx+10,ty+70,220,3},{.12f,.035f,.02f,1});
    c.RectFill({tx+10,ty+70,220*std::clamp(1-target.windup/target.WindupDuration(),0.f,1.f),3},{1,.57f,.16f,1});
@@ -564,7 +593,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  c.Window({437,655,406,55}); c.Scroll(420,676,-1,1.5f); c.Scroll(860,676,1,1.5f);
  for (int i=0;i<5;++i) {
   const float x=447+i*43.f; const Rect rect{x,662,39,40};
-  c.Frame(rect,{.08f,.12f,.055f,1},rect.Contains(mouseX_,mouseY_)?gold:border);
+  c.Frame(rect,{.08f,.12f,.055f,1},i==1 && s.EmpoweredReady()?classAccent:rect.Contains(mouseX_,mouseY_)?gold:border);
   AbilityArtwork(c,{x+3,665,33,34},i,s.Class());
   const bool ready=panel!=Panel::Merchant && (i<4?std::string(s.AbilityStatus(i))=="READY":CanUse(s,Item::Potion));
   const float cooldown=i<4?s.Cooldown(i):s.PotionCooldown();
@@ -580,7 +609,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   regions_.push_back({rect,{i<4?Action::Ability:Action::UseItem,i<4?i:static_cast<int>(Item::Potion)},ready});
  }
  c.Frame({665,662,168,40},{.035f,.07f,.065f,1});
- c.Center(668,666,162,"Basic "+std::to_string(int(s.StrikeDamage()))+"  /  Heavy "+std::to_string(int(s.HeavyDamage())),12,gold);
+ c.Center(668,666,162,s.RetreatMobility()?rpg::PhysicalLauncher(rpg::WeaponFor(s.Class()).form)?"MARKSMAN / "+Number(s.Spell(0).range)+" m":"SPELLCASTER / "+Number(s.Spell(0).range)+" m":"MELEE / "+Number(s.Spell(0).range)+" m",12,classAccent);
  c.Center(668,684,162,s.Attacking()?(rpg::PhysicalLauncher(rpg::WeaponFor(s.Class()).form)?"Shot in progress":s.ClassInfo().range>3?"Cast in progress":"Attack in progress"):
    s.TargetActor()?"Tab changes target":"Tab selects a target",10,muted);
  // A second row contains real navigation tools, leaving the primary bindings intact.
@@ -969,12 +998,13 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.Text(937,198,std::string("Key ")+spell.key+" / learned at level 1",11,muted);
     c.Text(874,231,spell.name,22,ink);
     c.Wrap(874,264,258,SpellEffect(s,selectedSpell),14,gold,2);
-    c.Wrap(874,311,258,spell.description,13,muted,5);
+    c.Wrap(874,311,258,selectedSpell==1?std::string(style.resource)+": "+std::to_string(style.capacity)+
+      " basic hits fill the reserve. "+style.payoff:spell.description,13,muted,5);
     c.Text(874,413,"Cooldown "+Number(s.AbilityCooldown(selectedSpell))+"s / "+
       (spell.range>0?Number(spell.range)+" m":"self"),13,ink);
     c.Text(874,435,selectedSpell<2?"Contact "+Number(spell.contact)+"s / recovery "+Number(spell.recovery)+"s":
-      selectedSpell==2?"Up to 3.5 m travel / 0.34s burst":"Instant / no mana cost",12,muted);
-    c.Text(874,457,spell.targeting,12,muted);
+      selectedSpell==2?Number(s.RetreatMobility()?style.retreatDistance:3.5f)+" m travel / "+Number(s.MobilityDuration())+"s burst":"Instant / no mana cost",12,muted);
+    c.Text(874,457,selectedSpell==1 && style.steadyHeavy?"Stand still until release":spell.targeting,12,muted);
     c.Text(874,483,"RELATED TALENTS",11,gold);
     for(int i=0;i<3;++i) if (rpg::ValidTalent(spell.upgrades[i])) {
      const auto talent=spell.upgrades[i];
@@ -1075,7 +1105,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Wrap(x+14,512,272,detail,14,ink,2);
    const float remaining=potion?s.PotionCooldown():s.Cooldown(ability);
    c.Text(x+14,554,"Cooldown: "+Number(potion?3.f:s.AbilityCooldown(ability))+"s"+
-     (potion?"  /  Stock: "+std::to_string(s.Potions()):ability<2?"  /  Range: "+Number(s.Spell(ability).range)+" m":ability==2?"  /  Range: 5 m":""),12,muted);
+     (potion?"  /  Stock: "+std::to_string(s.Potions()):ability<3?"  /  "+std::string(ability==2 && s.RetreatMobility()?"Travel: ":"Range: ")+Number(s.Spell(ability).range)+" m":""),12,muted);
    c.Line(x+14,576,x+286,576,1,border);
    c.Text(x+14,589,status+(remaining>0?"  "+Seconds(remaining)+"s":""),12,status=="READY"?Color{.57f,.84f,.40f,1}:Color{1,.64f,.40f,1});
   }

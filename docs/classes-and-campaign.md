@@ -14,7 +14,7 @@ Warrior retains `saves/patrol.save`. Other classes use `saves/hero-<id>.save`, w
 
 ## Prototype class kits
 
-Keys 1/2 are basic/heavy attacks, 3 approaches a selected enemy within 5 m, and 4 heals the caster. All heavy attacks can interrupt an unfinished enemy wind-up. Actual damage includes equipped weapon, level and class talent bonuses. Ranged attacks retain wind-up, committed target identity, and contact-time range/line-of-sight checks; rejected attacks spend no cooldown. Their gesture, spell trace and launch sound differ from the sword swing.
+Keys 1/2 are basic/heavy attacks; 3 is a targeted charge for melee classes and a backward escape for ranged classes; 4 heals the caster. Landed basics build each class's reserve, which empowers the next accepted heavy when full. Six ranged classes require stationary heavy preparation; Druid/Bard retain mobile heavies. All heavy attacks can interrupt an unfinished enemy wind-up. Actual damage includes equipped weapon, level and class talent bonuses. Ranged attacks retain wind-up, committed target identity, and contact-time range/line-of-sight checks; rejected attacks spend no cooldown. See [class combat disciplines](class-combat.md) for exact resources, timings, effects and lifecycle rules.
 
 | ID | Class | N-key branches | Attack range | Additional identity |
 | --- | --- | --- | --- | --- |

@@ -56,8 +56,11 @@ void HealingPulse(Renderer& renderer,const rpg::CombatVisualEvent& event,float a
 void DashPulse(Renderer& renderer,const rpg::CombatVisualEvent& event,float age) {
   const bool start=event.kind==K::DashStart,impact=event.kind==K::DashImpact;
   const float phase=Unit(age/.42f),fade=(1-phase)*(1-phase);
-  const float sx=std::sin(event.facing),cx=std::cos(event.facing);
-  XMFLOAT4 color=impact?XMFLOAT4{1,.64f,.28f,1}:XMFLOAT4{.24f,.78f,1,1};
+  const float heading=event.facing+(rpg::ClassCombat(event.school).retreatDistance>0?3.14159265f:0);
+  const float sx=std::sin(heading),cx=std::cos(heading);
+  const auto& tint=rpg::DescribeClass(event.school).color;
+  XMFLOAT4 color=impact?XMFLOAT4{1,.64f,.28f,1}:event.school==rpg::ClassId::Warrior?
+    XMFLOAT4{.24f,.78f,1,1}:XMFLOAT4{tint[0],tint[1],tint[2],1};
   const float radius=.32f+phase*(start?.85f:.55f);
   const bool groundStop=!start && !impact && event.height<.08f;
   const auto ringPoint=[&](float a,float width) -> XMFLOAT3 {
@@ -163,7 +166,8 @@ void CombatEffects::Emit(const rpg::CombatVisualEvent& event,const XMFLOAT3* spe
   const float elapsed=std::isfinite(event.elapsed)?std::clamp(event.elapsed,0.f,.05f):0;
   if (event.kind==K::DashStart) {
     CancelTrail(0);
-    wake_={}; wake_.facing=event.facing; wake_.active=true;
+    wake_={}; wake_.school=event.school;
+    wake_.facing=event.facing+(rpg::ClassCombat(event.school).retreatDistance>0?3.14159265f:0); wake_.active=true;
     wake_.previous={event.position.x,event.height,event.position.z};
     wake_.samples[wake_.count++]={wake_.previous,elapsed,0};
   }
@@ -252,6 +256,11 @@ std::size_t CombatEffects::TrailCount() const {
 }
 void CombatEffects::Render(Renderer& renderer) const {
   const float sx=std::sin(wake_.facing),cx=std::cos(wake_.facing);
+  const auto& wakeTint=rpg::DescribeClass(wake_.school).color;
+  const auto wakeColor=[&](XMFLOAT4 original) {
+    if(wake_.school==rpg::ClassId::Warrior) return original;
+    return XMFLOAT4{std::min(1.f,wakeTint[0]+.2f),std::min(1.f,wakeTint[1]+.2f),std::min(1.f,wakeTint[2]+.2f),original.w};
+  };
   for (std::size_t i=1;i<wake_.count;++i) {
     const auto& a=wake_.samples[i-1]; const auto& b=wake_.samples[i];
     const float dx=b.position.x-a.position.x,dz=b.position.z-a.position.z,length=std::hypot(dx,dz);
@@ -272,7 +281,7 @@ void CombatEffects::Render(Renderer& renderer) const {
         return std::pow(Unit(1-sample.age/.20f),2.f)*std::sqrt(Unit(sample.strength));
       };
       renderer.DrawEffectRibbon(edge(a,-1),edge(a,1),edge(b,1),edge(b,-1),
-        layer==0?XMFLOAT4{.12f,.48f,1,.38f}:XMFLOAT4{.66f,.95f,1,.75f},opacity(a),opacity(b));
+        wakeColor(layer==0?XMFLOAT4{.12f,.48f,1,.38f}:XMFLOAT4{.66f,.95f,1,.75f}),opacity(a),opacity(b));
     }
   }
   // A pair of open pressure arcs travels with the chest, leaving the body clear.
@@ -286,7 +295,7 @@ void CombatEffects::Render(Renderer& renderer) const {
     for (int i=0;i<14;++i) {
       const float a=float(i)/14,b=float(i+1)/14;
       renderer.DrawEffectRibbon(point(a,-.018f),point(a,.018f),point(b,.018f),point(b,-.018f),
-        {.42f,.85f,1,wake_.strength*.42f},std::sin(a*3.14159265f),std::sin(b*3.14159265f));
+        wakeColor({.42f,.85f,1,wake_.strength*.42f}),std::sin(a*3.14159265f),std::sin(b*3.14159265f));
     }
   }
   for (const auto& trail : trails_) {

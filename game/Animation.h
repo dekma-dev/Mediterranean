@@ -28,6 +28,7 @@ struct Sample {
   MotionChannels motion;
   facial::Pose face;
   ActionChannels action;
+  bool retreat=false;
 };
 inline Sample Idle(float time,float offset=0) {
   const float seconds=std::isfinite(time)?std::remainder(time,motion::tau*2/1.8f):0;

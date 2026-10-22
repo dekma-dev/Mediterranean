@@ -122,6 +122,9 @@ void Simulation::UseAbility(int index,float visualElapsed) {
   if (index<2 && PhysicalLauncher(WeaponFor(class_).form) && inventory_.Worn(GearSlot::Weapon)==Item::None) {
     message_="Equip your class weapon before firing."; return;
   }
+  if (index==1 && CombatStyleInfo().steadyHeavy && (!Grounded() || Length(movementVelocity_)>.15f)) {
+    message_="Stand still to prepare this heavy attack.";return;
+  }
   if (index==3) {
     if (health_>=MaxHealth()) { message_="Health is already full."; return; }
     const float healed=std::min(MendHealingNow(),MaxHealth()-health_);
@@ -129,6 +132,14 @@ void Simulation::UseAbility(int index,float visualElapsed) {
     EmitVisual(CombatVisualKind::Mend,player_,height_,facing_);
     message_=std::string(Spell(index).name)+" restored health.";
   } else if (index==2) {
+    if (RetreatMobility()) {
+      if (const auto* target=TargetActor(); target && target->health>0 && target->state!=EnemyState::Returning) {
+        const auto offset=Difference(target->position,player_);
+        if(Length(offset)>.001f) facing_=std::atan2(offset.x,offset.z);
+      }
+      retreatDirection_={-std::sin(facing_),-std::cos(facing_)};
+      dashTarget_=0;dashTravelLeft_=CombatStyleInfo().retreatDistance;
+    } else {
     switch (CheckDashTarget()) {
     case DashCheck::NoTarget: message_="Press Tab to select a living enemy."; return;
     case DashCheck::Returning: message_="That enemy is returning home."; return;
@@ -141,10 +152,11 @@ void Simulation::UseAbility(int index,float visualElapsed) {
     dashTarget_=target->id; dashTravelLeft_=motion::dashDistance;
     const auto direction=Difference(target->position,player_);
     facing_=std::atan2(direction.x,direction.z);
-    dashRemaining_=motion::dashDuration; movementVelocity_={}; jumpBuffer_=0;
+    }
+    dashRemaining_=MobilityDuration(); movementVelocity_={}; jumpBuffer_=0;
     dashedThisUpdate_=true;
     EmitVisual(CombatVisualKind::DashStart,player_,height_,facing_,0,visualElapsed);
-    message_="Dash to target.";
+    message_=RetreatMobility()?"Retreat while facing the threat.":"Dash to target.";
   } else {
     if (!TargetActor() || TargetActor()->health<=0) { message_="Press Tab to select an enemy."; return; }
     const bool trainingTarget=sparring_ && target_==int(enemies_.size());
@@ -157,6 +169,8 @@ void Simulation::UseAbility(int index,float visualElapsed) {
     const auto direction=Difference(enemy.position,player_);
     facing_=std::atan2(direction.x,direction.z);
     attackAbility_=index; attackTarget_=enemy.id; attackAge_=0;
+    attackEmpowered_=index==1 && EmpoweredReady();
+    if(attackEmpowered_) classResource_=0;
     attackDamage_=index==0?StrikeDamage():HeavyDamage(); attackFlash_=.2f;
     message_=std::string(Spell(index).name)+" committed.";
   }
@@ -184,8 +198,30 @@ void Simulation::ResolveAttack(float elapsed) {
   if(index==1 && class_==ClassId::Mage && enemy.health>enemy.MaxHealth()*.75f) bonus=10;
   if(index==1 && class_==ClassId::Engineer && enemy.kind==EnemyKind::Captain) bonus=12;
   if(index==1 && class_==ClassId::Demonologist) {health_-=std::min(5.f,std::max(0.f,health_-1));bonus=10;}
-  const float damage=std::min(enemy.health,attackDamage_*finishing+bonus);
+  if(attackEmpowered_) {
+    if(class_==ClassId::Warrior) bonus+=24;
+    if(class_==ClassId::Scout) bonus+=14;
+    if(class_==ClassId::Mage) bonus+=36;
+    if(class_==ClassId::Necromancer) bonus+=12;
+    if(class_==ClassId::Demonologist) bonus+=20;
+  }
+  const float damage=std::min(enemy.health,(attackDamage_*finishing+bonus)*(enemy.exposed>0?1.25f:1.f));
   float heal=class_==ClassId::Necromancer?damage*.15f:class_==ClassId::Bard?3.f:class_==ClassId::Priest && index==1?8.f:0.f;
+  if(index==0) classResource_=std::min(CombatStyleInfo().capacity,classResource_+1);
+  if(attackEmpowered_) {
+    switch(class_) {
+    case ClassId::Paladin: barrier_=std::max(barrier_,24.f);break;
+    case ClassId::Priest: heal+=24;barrier_=std::max(barrier_,12.f);break;
+    case ClassId::Scout: enemy.snared=3;break;
+    case ClassId::Druid: enemy.rooted=2;heal+=18;break;
+    case ClassId::Necromancer: heal+=damage*.45f;break;
+    case ClassId::Psionic: enemy.stunned=2;enemy.windup=0;break;
+    case ClassId::Bard: heal+=20;cooldowns_[0]=0;break;
+    case ClassId::Engineer: enemy.exposed=5;break;
+    case ClassId::Demonologist: heal+=15;break;
+    default: break;
+    }
+  }
   heal=std::min(heal,MaxHealth()-health_);health_+=heal;
   if(heal>0) Emit(FeedbackKind::Heal,player_,int(heal));
   enemy.health-=damage;
@@ -193,7 +229,7 @@ void Simulation::ResolveAttack(float elapsed) {
   Emit(FeedbackKind::Damage,enemy.position,static_cast<int>(damage));
   EmitVisual(index==0?CombatVisualKind::Hit:CombatVisualKind::HeavyHit,enemy.position,1.25f,facing_,enemy.id,elapsed);
   enemy.hitFlash=std::max(0.f,.2f-elapsed); enemy.damagedThisUpdate=true; attackFlash_=.2f;
-  message_="Hit.";
+  message_=attackEmpowered_?CombatStyleInfo().payoff:"Hit.";
   enemy.state=EnemyState::Pursuing;
   if (index==1 && enemy.windup>0) {
     enemy.windup=0; enemy.attackCooldown=class_==ClassId::Psionic?1.5f:.8f;
@@ -231,12 +267,13 @@ void Simulation::UpdateCombat(float dt,bool advanceAttack) {
   };
   if (!advanceAttack || !Attacking()) { enemies(dt); return; }
   const bool heavy=HeavyAttack();
-  const float before=attackAge_,after=before+dt,contact=combat::Contact(heavy);
+  const float rate=AttackRate();
+  const float before=attackAge_,after=before+dt*rate,contact=combat::Contact(heavy);
   // An earlier fatal counterattack cancels contact. Selection changes cannot
   // redirect an already committed stroke. Equal-time enemy contact wins.
   const bool contactReached=before<contact && after+1e-6f>=contact;
   if (contactReached) {
-    const float first=std::clamp(contact-before,0.f,dt);
+    const float first=std::clamp((contact-before)/rate,0.f,dt);
     enemies(first,dt-first);
     if (Attacking()) ResolveAttack(dt-first);
     enemies(dt-first);
@@ -245,7 +282,7 @@ void Simulation::UpdateCombat(float dt,bool advanceAttack) {
   const float stroke=combat::StrokeStart(heavy);
   if (before<stroke && after>=stroke)
     EmitVisual(ClassInfo().range>3?CombatVisualKind::SpellCast:heavy?CombatVisualKind::HeavyStrike:CombatVisualKind::Strike,
-      player_,height_,facing_,0,std::max(0.f,after-stroke));
+      player_,height_,facing_,0,std::max(0.f,(after-stroke)/rate));
   attackAge_=contactReached?std::max(after,contact):after;
   if (after>=combat::Duration(heavy)) CancelAttack();
 }
@@ -256,8 +293,10 @@ const char* Simulation::AbilityStatus(int index) const {
   if (Dashing()) return "DASHING";
   if (Attacking()) return "RECOVERING";
   if (index<2 && PhysicalLauncher(WeaponFor(class_).form) && inventory_.Worn(GearSlot::Weapon)==Item::None) return "NO WEAPON";
+  if(index==1 && CombatStyleInfo().steadyHeavy && (!Grounded() || Length(movementVelocity_)>.15f)) return "STAND STILL";
   if (index==3) return health_>=MaxHealth()?"FULL HEALTH":"READY";
   if (index==2) {
+    if(RetreatMobility()) return "READY";
     switch (CheckDashTarget()) {
     case DashCheck::NoTarget: return "NO TARGET";
     case DashCheck::Returning: return "RETURNING";
@@ -449,6 +488,10 @@ void Simulation::Update(float seconds,const Command& command) {
   const float length=Length(command.movement);
   const bool moving=std::isfinite(command.movement.x) && std::isfinite(command.movement.z) &&
     std::isfinite(length) && length>.001f;
+  if(HeavyAttack() && CombatStyleInfo().steadyHeavy && attackAge_<combat::StrokeStart(true) &&
+      (moving || command.jump || !Grounded())) {
+    CancelAttack();message_="Preparation interrupted by movement.";
+  }
   const float pace=moving && steering?motion::DirectionalPace(
     (command.movement.x*std::sin(facing_)+command.movement.z*std::cos(facing_))/length):1.f;
   const bool changingGear=command.equipWeapon || command.inventory.action==InventoryAction::Equip || command.inventory.action==InventoryAction::Unequip;
@@ -573,15 +616,15 @@ void Simulation::Update(float seconds,const Command& command) {
   if(Dashing()) {
     const float from=DashPhase(),step=std::min(dt,dashRemaining_);
     dashRemaining_=std::max(0.f,dashRemaining_-dt);
-    const float to=1-dashRemaining_/motion::dashDuration;
+    const float to=1-dashRemaining_/MobilityDuration();
     const auto* target=DashTargetActor();
     bool blocked=false,endedEarly=false;
-    if (!target || target->health<=0 || target->state==EnemyState::Returning) {
+    if (!RetreatMobility() && (!target || target->health<=0 || target->state==EnemyState::Returning)) {
       dashRemaining_=0; endedEarly=true;
     } else {
-      const auto offset=Difference(target->position,player_);
-      const float range=Length(offset),gap=std::max(0.f,range-motion::dashStandOff);
-      if (range>.00001f) facing_=std::atan2(offset.x,offset.z);
+      const auto offset=RetreatMobility()?retreatDirection_:Difference(target->position,player_);
+      const float range=Length(offset),gap=RetreatMobility()?dashTravelLeft_:std::max(0.f,range-motion::dashStandOff);
+      if (!RetreatMobility() && range>.00001f) facing_=std::atan2(offset.x,offset.z);
       // Spend the remaining eased fraction toward the original actor's current
       // position. A nearer target shortens travel; the total budget stays bounded.
       const float fraction=to>=1?1:std::clamp((motion::DashTravel(to)-motion::DashTravel(from))/
@@ -647,6 +690,21 @@ void Simulation::SeparateEnemies(float dt) {
 }
 
 void Simulation::UpdateEnemy(Enemy& enemy,float dt,float frameTail) {
+  // Split at effect expiry: a snare or stun gets exactly its advertised time
+  // at every refresh rate, including the remainder after player contact.
+  if(enemy.health<=0) {enemy.snared=enemy.rooted=enemy.stunned=enemy.exposed=0;return;}
+  while(dt>0) {
+    if(enemy.state==EnemyState::Returning) enemy.snared=enemy.rooted=enemy.stunned=enemy.exposed=0;
+    float step=dt;
+    for(float timer:{enemy.snared,enemy.rooted,enemy.stunned,enemy.exposed})
+      if(timer>0) step=std::min(step,timer);
+    const float tail=std::max(0.f,dt-step);
+    AdvanceEnemy(enemy,step,frameTail+tail);
+    for(float* timer:{&enemy.snared,&enemy.rooted,&enemy.stunned,&enemy.exposed}) *timer=std::max(0.f,*timer-step);
+    dt=tail;
+  }
+}
+void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
   if (enemy.health<=0) { enemy.state=EnemyState::Dead; enemy.windup=enemy.movementSpeed=0; return; }
   if (health_<=0) return;
   enemy.attackCooldown=std::max(0.f,enemy.attackCooldown-dt);
@@ -661,6 +719,7 @@ void Simulation::UpdateEnemy(Enemy& enemy,float dt,float frameTail) {
     enemy.position=enemy.home; enemy.health=enemy.MaxHealth(); enemy.state=EnemyState::Idle; enemy.path.clear();
   }
   if (enemy.state==EnemyState::Idle) { enemy.movementSpeed=0; return; }
+  if(enemy.stunned>0) {enemy.windup=enemy.movementSpeed=0;return;}
   // Commit facing and position during a windup. Players can step outside its cone,
   // move away, or interrupt it with heavy strike before the impact is resolved.
   if (enemy.windup>0) {
@@ -717,7 +776,9 @@ void Simulation::UpdateEnemy(Enemy& enemy,float dt,float frameTail) {
   const float alignment=std::max(0.f,std::cos(motion::AngleDelta(enemy.facing,desiredFacing)));
   // Close range alone is not arrival: a trunk/corner can still block the swing.
   const float arrival=clearSight?std::max(0.f,distance-1.6f):remaining;
-  float budget=motion::Travel(enemy.movementSpeed,navigating?std::min(2.2f,arrival*8.f)*alignment:0.f,16.f,dt);
+  if(enemy.rooted>0) enemy.movementSpeed=0;
+  float budget=motion::Travel(enemy.movementSpeed,navigating && enemy.rooted<=0?
+    std::min(2.2f,arrival*8.f)*alignment*(enemy.snared>0?.45f:1.f):0.f,16.f,dt);
   budget=std::min(budget,arrival);
   while (budget>.00001f && enemy.waypoint<enemy.path.size()) {
     const auto direction=Difference(enemy.path[enemy.waypoint],enemy.position);
