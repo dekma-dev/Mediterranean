@@ -5,7 +5,8 @@
 std::vector<std::uint8_t> BuildTerrainSurface(const rpg::WorldMap& map) {
   std::vector<std::uint8_t> pixels(terrainSurfaceSize*terrainSurfaceSize*4);
   for (unsigned row=0;row<terrainSurfaceSize;++row) for (unsigned column=0;column<terrainSurfaceSize;++column) {
-    const rpg::Vec2 p{(column+.5f)/terrainSurfaceSize*42-21,23-(row+.5f)/terrainSurfaceSize*46};
+    const rpg::Vec2 p{((column+.5f)/terrainSurfaceSize-.5f)*rpg::WorldMap::surveyWidth,
+      (.5f-(row+.5f)/terrainSurfaceSize)*rpg::WorldMap::surveyDepth};
     const auto surface=map.SurfaceAt(p);
     const auto offset=(row*terrainSurfaceSize+column)*4;
     pixels[offset+1]=static_cast<std::uint8_t>(std::lround(surface.paving*255));

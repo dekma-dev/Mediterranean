@@ -2,6 +2,7 @@
 #include "game/CharacterView.h"
 #include "game/HandPose.h"
 #include "game/WeaponVisual.h"
+#include "game/ClassClothing.h"
 #include "engine/Renderer.h"
 #include "platform/Win32Window.h"
 #include <cstdlib>
@@ -146,6 +147,19 @@ void Captures() {
       DrawCharacter(renderer,{0,0},0,0,{color[0],color[1],color[2],1},0,0,CharacterOutfit::From(hero.Items(),id),sample,1);
       Check(renderer.Capture((root/(std::to_string(i)+(action?"-action.png":"-idle.png"))).wstring()) && renderer.EndFrame(false),"Equipment world capture");
     }
+    for(int variant=0;variant<4;++variant) {
+      auto outfit=CharacterOutfit::From(hero.Items(),id);
+      animation::Sample sample;
+      if(variant==0) outfit.appearance.dye=2;
+      if(variant==1) {outfit.tunic=false;outfit.shoulders=false;outfit.belt=false;}
+      if(variant==2) {sample.air=.8f;sample.rise=.6f;}
+      if(variant==3) {sample.dash=.8f;sample.dashPhase=.4f;sample.dashBrake=.3f;}
+      const auto& color=hero.ClassInfo().color;
+      renderer.BeginFrame();renderer.SetCamera({2.2f,1.65f,3.5f},{0,1.05f,0});
+      DrawCharacter(renderer,{0,0},0,0,{color[0],color[1],color[2],1},0,.3f,outfit,sample,1);
+      Check(renderer.Capture((root/(std::to_string(i)+"-clothing-"+std::to_string(variant)+".png")).wstring()) &&
+        renderer.EndFrame(false),"Clothing dye/removal/air/dash capture");
+    }
     Game game;game.Initialize();Check(game.RestoreSnapshot(Fixture(id,true)),"Equipment UI fixture");
     game.OpenPanel(ui::Panel::Character);game.ShowPanel(ui::Panel::Inventory);renderer.BeginFrame();game.Render(renderer);
     Check(renderer.Capture((root/(std::to_string(i)+"-inventory.png")).wstring()) && renderer.EndFrame(false),"Class inventory/portrait capture");
@@ -175,8 +189,32 @@ void Captures() {
   Check(renderer.ValidateDebugMessages(),"Class weapon D3D debug errors");
   std::cout<<"Immutable GPU mesh bytes: "<<renderer.MeshBytes()<<'\n';
 }
+void ClothingContracts() {
+  std::set<std::string> silhouettes;
+  for(int i=0;i<int(ClassId::Count);++i) {
+    Simulation hero;Check(hero.CreateCharacter(ClassId(i),"Tester"),"Clothing hero");
+    auto outfit=CharacterOutfit::From(hero.Items(),ClassId(i));
+    const auto all=clothing::Build(outfit);
+    Check(all.count>0 && all.count<32,"Class fittings missing or over budget");
+    std::string signature;
+    for(unsigned n=0;n<all.count;++n) {
+      const auto& p=all.parts[n];
+      Check(p.position.y>.65f && p.position.y<1.7f && std::abs(p.position.x)<.5f &&
+        p.scale.x>0 && p.scale.y>0 && p.scale.z>0,"Clothing escaped torso envelope");
+      signature+=std::to_string(int(p.mesh))+":"+std::to_string(p.position.x)+":"+
+        std::to_string(p.position.y)+":"+std::to_string(p.scale.x)+":"+std::to_string(p.scale.y)+";";
+    }
+    silhouettes.insert(signature);
+    outfit.tunic=false;outfit.shoulders=false;outfit.belt=false;
+    Check(clothing::Build(outfit).count==0,"Unequipped fittings remain visible");
+    outfit.shoulders=true;Check(clothing::Build(outfit).count==8,"Shoulder ownership depends on chest equipment");
+    outfit.appearance.dye=2;const auto dyed=clothing::Build(outfit);
+    Check(dyed.count==8,"Dye changed garment topology");
+  }
+  Check(silhouettes.size()==std::size_t(ClassId::Count),"Class clothing shares identical geometry");
+}
 }
 int main() {
-  CatalogAndPersistence();LaunchContracts();ShapesAndSockets();Captures();
-  std::cout<<"PASS: class equipment identity, migration/trade, timed launcher release, fitted geometry, grips and 57 GPU views\n";
+  CatalogAndPersistence();LaunchContracts();ShapesAndSockets();ClothingContracts();Captures();
+  std::cout<<"PASS: class equipment identity, migration/trade, timed launcher release, fitted geometry, grips, clothing ownership and 101 GPU views\n";
 }

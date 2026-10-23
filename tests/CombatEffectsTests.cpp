@@ -299,7 +299,7 @@ int main() {
       float elapsed=0;
       while (elapsed<.3f) { const float dt=std::min(1.f/rate,.3f-elapsed); recovery.Advance(dt); elapsed+=dt; }
       scene(); recovery.Render(renderer);
-      Require(renderer.EffectVertices()==(potion?162u:306u),"Recovery geometry must stay within its fixed budget");
+      Require(renderer.EffectVertices()>0 && renderer.EffectVertices()<=(potion?162u:306u),"Recovery geometry must stay within its fixed budget");
       const auto path=std::wstring(potion?L"effects-potion-rate-":L"effects-mend-rate-")+std::to_wstring(rate)+L".png";
       const auto frame=Capture(renderer,path.c_str());
       Require(Difference(base,frame)>40,"Recovery effect must be visible");

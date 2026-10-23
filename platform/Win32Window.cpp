@@ -56,6 +56,26 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
     SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(window));
   }
   switch (msg) {
+  case WM_PAINT:
+    if(window && window->loading_) {
+      PAINTSTRUCT paint{};const HDC dc=BeginPaint(hwnd,&paint);RECT bounds{};GetClientRect(hwnd,&bounds);
+      const auto background=CreateSolidBrush(RGB(20,17,13));FillRect(dc,&bounds,background);DeleteObject(background);
+      const int margin=std::max(24,int(bounds.right-bounds.left)/12);
+      RECT frame{margin,margin,bounds.right-margin,bounds.bottom-margin};
+      const auto bronze=CreateSolidBrush(RGB(132,101,54));FrameRect(dc,&frame,bronze);
+      InflateRect(&frame,-5,-5);FrameRect(dc,&frame,bronze);DeleteObject(bronze);
+      SetBkMode(dc,TRANSPARENT);SetTextColor(dc,RGB(233,208,151));
+      const auto font=CreateFontW(-std::max(24,int(bounds.bottom)/18),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
+        DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,FF_ROMAN,L"Georgia");
+      const auto previous=SelectObject(dc,font);
+      RECT title{margin,bounds.bottom/2-60,bounds.right-margin,bounds.bottom/2};
+      DrawTextW(dc,L"MEDITERRANEAN",-1,&title,DT_CENTER|DT_SINGLELINE|DT_VCENTER);
+      SelectObject(dc,previous);DeleteObject(font);
+      title.top=bounds.bottom/2+12;title.bottom=title.top+36;
+      DrawTextW(dc,L"Opening the gates of Dawnwatch...",-1,&title,DT_CENTER|DT_SINGLELINE|DT_VCENTER);
+      EndPaint(hwnd,&paint);return 0;
+    }
+    break;
   case WM_RBUTTONDOWN:
     if (window) {
       window->rightAnchor_={GET_X_LPARAM(lparam),GET_Y_LPARAM(lparam)};

@@ -83,7 +83,7 @@ public:
   bool ValidateDebugMessages();
   int Width() const { return width_; }
   int Height() const { return height_; }
-  bool BeginPortrait(float x,float y,float width,float height);
+  bool BeginPortrait(float x,float y,float width,float height,float closeup=0);
   bool EndPortrait();
   UINT DrawCalls() const { return drawCalls_ + static_cast<UINT>((hud_.size()+16379)/16380) + UINT(!effects_.empty()); }
   void DrawHudRect(float x, float y, float width, float height, const DirectX::XMFLOAT4& color);

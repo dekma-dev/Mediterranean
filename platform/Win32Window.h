@@ -20,6 +20,7 @@ public:
   HWND GetHandle() const { return hwnd_; }
   bool SetFullscreen(bool enabled);
   bool Fullscreen() const { return fullscreen_; }
+  void SetLoading(bool enabled) { loading_=enabled;if(enabled && hwnd_) {InvalidateRect(hwnd_,nullptr,FALSE);UpdateWindow(hwnd_);} }
   float ConsumeWheel() { const float result = wheel_; wheel_ = 0; return result; }
   bool SetMouseLook(bool enabled);
   bool MouseLook() const { return mouseLook_; }
@@ -36,6 +37,7 @@ private:
   float wheel_ = 0;
   bool fullscreen_ = false;
   bool visible_ = false;
+  bool loading_=false;
   bool mouseLook_=false,inputCancelled_=false,rightPress_=false;
   POINT rightAnchor_{};
   MouseMotion mouseMotion_;

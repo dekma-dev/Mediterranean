@@ -27,6 +27,7 @@ bool Engine::Initialize(HINSTANCE instance, int width, int height, bool visible,
   }
 
   renderer_ = std::make_unique<Renderer>();
+  if(visible) window_->SetLoading(true);
   RECT client{}; GetClientRect(window_->GetHandle(),&client);
   width=client.right; height=client.bottom;
   if (!renderer_->Initialize(window_->GetHandle(), width, height)) {
@@ -34,6 +35,14 @@ bool Engine::Initialize(HINSTANCE instance, int width, int height, bool visible,
     return false;
   }
 
+  window_->SetLoading(false);
+  const auto loading=[&](ui::LoadingStage stage) {
+    if(!visible) return true;
+    renderer_->BeginFrame();ui::RenderLoading(*renderer_,stage);
+    if(!renderer_->EndFrame(false)) {error_=renderer_->Error();return false;}
+    return true;
+  };
+  if(!loading(ui::LoadingStage::World)) return false;
   game_ = std::make_unique<Game>();
   game_->Initialize();
   if(!snapshot.empty() && !game_->RestoreSnapshot(snapshot)) {
@@ -41,7 +50,9 @@ bool Engine::Initialize(HINSTANCE instance, int width, int height, bool visible,
     return false;
   }
   if(visible) {
+    if(!loading(ui::LoadingStage::Chronicles)) return false;
     game_->ChooseCharacter(std::filesystem::path(RPG_SAVE_DIRECTORY)/"patrol.save");
+    if(!loading(ui::LoadingStage::Sound)) return false;
     audio_=std::make_unique<Audio>();
     if(!audio_->Initialize()) audio_.reset();
   }
@@ -494,6 +505,7 @@ void Engine::Tick(double deltaSeconds) {
     running_ = false;
     return;
   }
+  const bool wasChoosing=game_->ChoosingCharacter();
   game_->Update(deltaSeconds, input_, window_->ConsumeWheel());
   if(audio_) {
     audio_->Suspend(game_->ChoosingCharacter());
@@ -514,6 +526,11 @@ void Engine::Tick(double deltaSeconds) {
   if (!window_->SetMouseLook(game_->WantsMouseLook())) game_->CancelUiGesture();
 
   renderer_->BeginFrame();
+  if(wasChoosing && !game_->ChoosingCharacter()) {
+    ui::RenderLoading(*renderer_,ui::LoadingStage::Entering);
+    if(!renderer_->EndFrame(false)) {error_=renderer_->Error();exitCode_=1;running_=false;}
+    return;
+  }
   game_->Render(*renderer_);
   if (!renderer_->EndFrame()) {
     window_->SetMouseLook(false);

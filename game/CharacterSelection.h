@@ -12,7 +12,9 @@ public:
   enum class Page { Roster, Class, Customize };
   enum class Control { Hero, Enter, Refresh, Quit, Left, Right, Name,
     Class0,Class1,Class2,Class3,Class4,Class5,Class6,Class7,Class8,Class9,Class10,
-    Create,Next,Back,Cancel,Confirm,SkinLeft,SkinRight,HairLeft,HairRight,DyeLeft,DyeRight,None };
+    Create,Next,Back,Cancel,Confirm,SkinLeft,SkinRight,HairLeft,HairRight,DyeLeft,DyeRight,
+    Skin0,Skin1,Skin2,Skin3,Skin4,Hair0,Hair1,Hair2,Hair3,Hair4,Dye0,Dye1,Dye2,Dye3,Dye4,
+    Closeup,Pose,ResetView,None };
   enum class Action { None, Enter, Quit };
   struct Slot { Status status=Status::New; std::string name; int level=1; };
   void Open(const std::filesystem::path& file);
@@ -32,6 +34,9 @@ public:
   Control Hover() const { return hover_; }
   float Time() const { return time_; }
   float Yaw() const { return yaw_; }
+  float PreviewZoom() const { return zoom_; }
+  bool Closeup() const { return closeup_; }
+  float PreviewAction() const { return actionTime_; }
   const std::string& DraftName() const { return draftName_; }
   const std::string& Notice() const { return notice_; }
   bool Changed() const { return changed_; }
@@ -48,6 +53,8 @@ private:
   Control focus_=Control::Enter,hover_=Control::None,pressed_=Control::None;
   float time_=0,yaw_=0,width_=0,height_=0;
   bool changed_=false;
+  bool closeup_=false;
+  float zoom_=0,actionTime_=-1;
   std::filesystem::path Path(rpg::ClassId id) const;
   void ReadSlots();
   void PreviewDraft();

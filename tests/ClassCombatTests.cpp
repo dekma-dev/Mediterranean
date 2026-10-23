@@ -7,8 +7,11 @@
 namespace {
 using namespace rpg;
 void Check(bool ok,const char* message) {if(!ok) {std::cerr<<message<<'\n';std::exit(1);}}
-void Tick(Simulation& s,float seconds,int hz=100) {
-  while(seconds>1e-6f) {const float dt=std::min(seconds,1.f/hz);s.Update(dt,{});seconds-=dt;}
+void Tick(Simulation& s,float seconds,int hz=100,std::vector<CombatVisualEvent>* events=nullptr) {
+  while(seconds>1e-6f) {
+    const float dt=std::min(seconds,1.f/hz);s.Update(dt,{});seconds-=dt;
+    if(events) for(std::size_t n=0;n<s.VisualEventCount();++n) events->push_back(s.VisualEvents()[n]);
+  }
 }
 void Profile(Simulation& s,ClassId id) {
   auto save=s.Save();const auto p=save.find("PROFILE ");
@@ -26,8 +29,18 @@ void Cadence() {
     Simulation s;Duel(s,ClassId(id));Command c;c.ability=ability;s.Update(.001f,c);
     Check(s.Attacking(),"Accepted class attack");
     const float contact=s.Spell(ability).contact;
-    Tick(s,contact-.002f,hz);Check(s.Enemies()[0].health==80,"Class attack landed early");
-    Tick(s,.004f,hz);Check(s.Enemies()[0].health<80,"Class attack missed its contact clock");
+    std::vector<CombatVisualEvent> events;
+    Tick(s,contact-.002f,hz,&events);Check(s.Enemies()[0].health==80,"Class attack landed early");
+    Tick(s,.004f,hz,&events);Check(s.Enemies()[0].health<80,"Class attack missed its contact clock");
+    int releases=0,hits=0;
+    for(const auto& event:events) {
+      if(event.kind==CombatVisualKind::SpellCast || event.kind==CombatVisualKind::Strike || event.kind==CombatVisualKind::HeavyStrike) ++releases;
+      else if(event.kind==CombatVisualKind::Hit || event.kind==CombatVisualKind::HeavyHit) ++hits;
+      else continue;
+      Check(event.school==ClassId(id) && event.heavy==(ability==1) && !event.empowered,"Action effect lost its class/weight snapshot");
+      Check(event.source.x==s.Player().x && event.source.z==s.Player().z,"Action effect lost caster position");
+    }
+    Check(releases==1 && hits==1,"Class attack emitted duplicate or missing release/contact");
     Check(s.ClassResource()==(ability==0?1:0),"Only landed basics generate a reserve");
     contactTimes.insert(int(contact*1000));
     Tick(s,s.Spell(ability).recovery,hz);Check(!s.Attacking(),"Class recovery did not finish");
@@ -62,9 +75,9 @@ void Mobility() {
   // The southern island boundary must stop, rather than teleport or slide through.
   Simulation wall;Duel(wall,ClassId::Mage);auto save=wall.Save();
   const auto p=save.find('\n',save.find("PROFILE "))+1;
-  save.replace(p,save.find('\n',p)-p,"0 -17.5 50 0 0 0");
+  save.replace(p,save.find('\n',p)-p,"0 "+std::to_string(-WorldMap::halfDepth+1.5f)+" 50 0 0 0");
   Check(wall.Load(save),"Boundary fixture");Command escape;escape.ability=2;wall.Update(.01f,escape);
-  Tick(wall,.5f);Check(wall.CanStand(wall.Player()) && wall.Player().z>-21.5f,"Escape crossed island boundary");
+  Tick(wall,.5f);Check(wall.CanStand(wall.Player()) && wall.Player().z>=-WorldMap::halfDepth+.399f,"Escape crossed island boundary");
 }
 void Preparation() {
   for(auto id:{ClassId::Scout,ClassId::Mage,ClassId::Engineer,ClassId::Priest,ClassId::Necromancer,ClassId::Psionic}) {
@@ -99,7 +112,13 @@ void Reserves() {
     const float victimBefore=s.SparringOpponent().health;
     Command heavy;heavy.ability=1;s.Update(.001f,heavy);
     Check(s.EmpoweredAttack() && s.ClassResource()==0,"Heavy did not commit/spend full reserve");
-    Tick(s,s.Spell(1).contact+.001f,hz);
+    std::vector<CombatVisualEvent> empoweredEvents;
+    Tick(s,s.Spell(1).contact+.001f,hz,&empoweredEvents);
+    bool empoweredContact=false;
+    for(const auto& event:empoweredEvents) if(event.kind==CombatVisualKind::HeavyHit) {
+      Check(event.empowered && event.heavy && event.school==id,"Payoff effect lost committed reserve");empoweredContact=true;
+    }
+    Check(empoweredContact,"Missing payoff contact event");
     const auto& target=s.SparringOpponent();Check(target.health<victimBefore,"Empowered heavy did not land");
     if(id==ClassId::Paladin) Check(s.Barrier()>0,"Paladin barrier missing");
     if(id==ClassId::Priest) Check(s.Barrier()>0 && s.Health()>40,"Priest healing/ward missing");
@@ -113,9 +132,13 @@ void Reserves() {
     if(id==ClassId::Necromancer) Check(s.Health()>65,"Necromancer empowered drain missing");
     if(id==ClassId::Demonologist) Check(s.Health()>35,"Demonologist empowered recovery missing");
     if(id==ClassId::Paladin || id==ClassId::Priest) {
+      s.StopMovement();const float stronger=s.Barrier();Command heal;heal.ability=3;s.Update(.001f,heal);
+      Check(s.Cooldown(3)>0 && s.Barrier()==stronger,"Recovery stacked or weakened an existing empowered ward");
       const float ward=s.Barrier(),health=s.Health();
       for(int tick=0;tick<hz*4 && s.Barrier()==ward;++tick) s.Update(1.f/hz,{});
       Check(s.Barrier()<ward && s.Health()==health && !s.DamagedThisUpdate(),"Barrier did not absorb a real enemy hit");
+      int wardHits=0;for(std::size_t n=0;n<s.VisualEventCount();++n) wardHits+=s.VisualEvents()[n].kind==CombatVisualKind::BarrierHit;
+      Check(wardHits==1,"Absorbed hit must produce exactly one barrier ripple");
       bool absorb=false;for(const auto& f:s.Feedback()) absorb|=f.kind==FeedbackKind::Absorb;
       Check(absorb,"Absorption feedback missing");
     }
@@ -144,4 +167,18 @@ void Reserves() {
   miss.StopMovement();Tick(miss,.5f);Check(miss.ClassResource()==0,"Cancelled basic generated resource");
 }
 }
-int main() {Cadence();Mobility();Preparation();Reserves();std::cout<<"PASS: class clocks, retreat collision, casting movement and empowered combat.\n";}
+void Recovery() {
+  constexpr float wards[]{0,18,0,10,0,14,0,12,0,8,0};
+  for(int id=0;id<int(rpg::ClassId::Count);++id) {
+    rpg::Simulation s;Duel(s,rpg::ClassId(id));
+    const float expected=std::min(s.MaxHealth(),s.Health()+s.MendHealingNow());
+    rpg::Command heal;heal.ability=3;s.Update(.001f,heal);
+    Check(std::abs(s.Health()-expected)<.001f && s.Barrier()==wards[id],"Class recovery health/ward contract");
+    const auto hp=s.Health();s.Update(.001f,heal);
+    Check(s.Health()==hp && s.Barrier()==wards[id] && s.VisualEventCount()==0,"Rejected recovery stacked a ward or replayed effects");
+    Check(s.Load(s.Save()) && s.Barrier()==0,"Recovery ward survived load");
+    Check(s.CreateCharacter(rpg::ClassId(id),"Tester"),"Fresh recovery character");
+    s.Update(.001f,heal);Check(s.Barrier()==0 && s.Cooldown(3)==0 && s.VisualEventCount()==0,"Full health farmed free wards");
+  }
+}
+int main() {Cadence();Mobility();Preparation();Reserves();Recovery();std::cout<<"PASS: class clocks, retreat collision, casting movement, empowered combat and recovery wards.\n";}

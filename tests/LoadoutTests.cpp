@@ -119,7 +119,7 @@ int main() {
  Require(game.BuildMask()==130 && game.Loadout(0)==9 && game.Loadout(2)==260,"Recovery preserves saved and active builds");
 
  // Old version-nine files have the new talent IDs, but no loadout record.
- auto legacy=Record(Record(stored,"PROFILE ",""),"LOADOUTS ",""); legacy=Record(legacy,"APPEARANCE ",""); legacy.replace(14,legacy.find('\n')-14,"9");
+ auto legacy=Record(Record(stored,"PROFILE ",""),"LOADOUTS ",""); legacy=Record(Record(legacy,"APPEARANCE ",""),"SURVEY ",""); legacy.replace(14,legacy.find('\n')-14,"9");
  Require(copy.Load(legacy) && copy.BuildMask()==130 && copy.Loadout(0)==-1 && copy.Loadout(2)==-1,
    "Version nine retains learned alternatives and migrates empty loadouts");
  Require(copy.Load(copy.Save()) && copy.TalentPoints()==0,"Migration/reload cannot grant extra points");

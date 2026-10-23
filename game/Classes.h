@@ -104,6 +104,17 @@ inline const CombatStyle& ClassCombat(ClassId id) {
 inline float ClassAttackRate(ClassId id,bool heavy) {
  const auto& style=ClassCombat(id);return heavy?style.heavyRate:style.basicRate;
 }
+// Recovery wards are capacities, not invulnerability or stackable healing.
+inline float ClassRecoveryBarrier(ClassId id) {
+ switch(id) {
+ case ClassId::Paladin:return 18;
+ case ClassId::Priest:return 10;
+ case ClassId::Mage:return 14;
+ case ClassId::Psionic:return 12;
+ case ClassId::Engineer:return 8;
+ default:return 0;
+ }
+}
 inline SpellInfo ClassSpell(ClassId id,int index) {
  auto result=spells[index];const auto& info=DescribeClass(id);result.name=info.actions[index];
  if(index<2) {
@@ -122,6 +133,8 @@ inline SpellInfo ClassSpell(ClassId id,int index) {
   result.targeting="No target required / backward escape";
   result.description="Step backward while facing the threat. Travel follows collision and stops at walls. No teleport or invulnerability.";
  }
+ if(index==3 && ClassRecoveryBarrier(id)>0)
+  result.description="Restore missing health and establish a class ward. Wards do not stack; the stronger remaining capacity wins. Full health rejects the cast.";
  return result;
 }
 inline constexpr int levelCap=10;

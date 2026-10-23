@@ -30,7 +30,7 @@ void CharacterSelection::ReadSlots() {
 }
 void CharacterSelection::Open(const std::filesystem::path& file) {
   base_=file;file_=file;class_=rpg::ClassId::Warrior;draftName_.clear();look_={};notice_.clear();
-  time_=yaw_=width_=height_=0;SetPage(Page::Roster,Control::Enter);Refresh();
+  time_=yaw_=width_=height_=zoom_=0;closeup_=false;actionTime_=-1;SetPage(Page::Roster,Control::Enter);Refresh();
   focus_=status_==Status::Saved?Control::Enter:status_==Status::New?Control::Create:Control::Refresh;
 }
 void CharacterSelection::Refresh() {
@@ -43,6 +43,10 @@ void CharacterSelection::PreviewDraft() {
   hero_.CreateCharacter(class_,rpg::ValidCharacterName(name)?name:rpg::DescribeClass(class_).title,look_);
 }
 Rect CharacterSelection::Bounds(Control control) {
+  if(control>=Control::Skin0 && control<=Control::Dye4) {
+    const int n=int(control)-int(Control::Skin0);
+    return {888+52.f*(n%5),348+58.f*(n/5),46,34};
+  }
   if(control>=Control::Class0 && control<=Control::Class10) return {84,183+36.f*(int(control)-int(Control::Class0)),180,34};
   switch(control) {
   case Control::Name:return {842,262,350,38};
@@ -53,6 +57,9 @@ Rect CharacterSelection::Bounds(Control control) {
   case Control::Cancel:case Control::Quit:return {1024,602,168,36};
   case Control::Left:return {394,604,44,32};
   case Control::Right:return {582,604,44,32};
+  case Control::Closeup:return {330,646,142,32};
+  case Control::Pose:return {480,646,142,32};
+  case Control::ResetView:return {630,646,142,32};
   case Control::SkinLeft:return {842,348,34,34};case Control::SkinRight:return {1158,348,34,34};
   case Control::HairLeft:return {842,406,34,34};case Control::HairRight:return {1158,406,34,34};
   case Control::DyeLeft:return {842,464,34,34};case Control::DyeRight:return {1158,464,34,34};
@@ -61,6 +68,9 @@ Rect CharacterSelection::Bounds(Control control) {
 }
 bool CharacterSelection::Enabled(Control control) const {
   if(control==Control::None) return false;
+  if(control==Control::Closeup || control==Control::Pose || control==Control::ResetView)
+    return page_!=Page::Roster || status_!=Status::Unreadable;
+  if(control>=Control::Skin0 && control<=Control::Dye4) return page_==Page::Customize;
   if(control==Control::Left || control==Control::Right) return page_!=Page::Roster || status_!=Status::Unreadable;
   if(control>=Control::Class0 && control<=Control::Class10) return page_!=Page::Customize;
   if(page_==Page::Roster) {
@@ -90,12 +100,16 @@ void CharacterSelection::CreateProfile() {
 CharacterSelection::Action CharacterSelection::Activate(Control control) {
   if(!Enabled(control)) return Action::None;
   if(control>=Control::Class0 && control<=Control::Class10) {
+    actionTime_=-1;
     class_=rpg::ClassId(int(control)-int(Control::Class0));Refresh();
     if(page_==Page::Class) {PreviewDraft();focus_=Enabled(Control::Next)?Control::Next:control;}
     else focus_=status_==Status::Saved?Control::Enter:status_==Status::New?Control::Create:Control::Refresh;
     return Action::None;
   }
   switch(control) {
+  case Control::Closeup:closeup_=!closeup_;break;
+  case Control::Pose:closeup_=false;actionTime_=0;break;
+  case Control::ResetView:closeup_=false;yaw_=0;actionTime_=-1;break;
   case Control::Name:break;
   case Control::Hero:focus_=Control::Enter;break;
   case Control::Enter: {
@@ -126,6 +140,10 @@ CharacterSelection::Action CharacterSelection::Activate(Control control) {
   case Control::Left:yaw_=std::remainder(yaw_-.4f,6.2831853f);break;
   case Control::Right:yaw_=std::remainder(yaw_+.4f,6.2831853f);break;
   default:
+    if(control>=Control::Skin0 && control<=Control::Dye4) {
+      const int n=int(control)-int(Control::Skin0);
+      (n<5?look_.skin:n<10?look_.hair:look_.dye)=n%5;PreviewDraft();
+    }
     if(control>=Control::SkinLeft && control<=Control::DyeRight) {
       const int offset=int(control)-int(Control::SkinLeft);
       int& choice=offset<2?look_.skin:offset<4?look_.hair:look_.dye;
@@ -138,6 +156,9 @@ CharacterSelection::Action CharacterSelection::Activate(Control control) {
 CharacterSelection::Action CharacterSelection::Update(float seconds,const Input& input) {
   if(!input.Focused()) {CancelGesture();hover_=Control::None;return Action::None;}
   time_=std::fmod(time_+std::clamp(seconds,0.f,.05f),600.f);
+  const float dt=std::clamp(seconds,0.f,.05f);
+  zoom_+=(float(closeup_)-zoom_)*-std::expm1(-12.f*dt);
+  if(actionTime_>=0) {actionTime_+=dt;if(actionTime_>1.6f) actionTime_=-1;}
   const bool resized=width_!=input.Width() || height_!=input.Height();width_=input.Width();height_=input.Height();
   if(resized || input.Pressed(VK_F11)) {CancelGesture();hover_=Control::None;return Action::None;}
   const Layout layout(width_,height_);hover_=Control::None;

@@ -192,7 +192,7 @@ private:
     Skin(g,RectF(42,390,540,132),28);
     Text(g,L"DAWNWATCH",64,408,480,42,29,gold,L"Georgia");
     Text(g,L"At the edge of the known world, your chronicle begins.",66,453,490,26,15,ink,L"Georgia");
-    Text(g,L"Eleven classes  /  Nine assignments  /  Ten levels",66,489,490,24,12,muted);
+    Text(g,L"Eleven classes  /  Twelve assignments  /  Ten levels",66,489,490,24,12,muted);
     Skin(g,RectF(29,537,882,33),12);
     const wchar_t* state=!available_?L"BUILD MISSING":busy_?L"GAME RUNNING":L"READY TO PLAY";
     const auto stateColor=!available_?Color(255,246,157,117):busy_?gold:Color(255,179,210,156);

@@ -1,4 +1,5 @@
 #include "engine/Renderer.h"
+#include "game/WorldMap.h"
 #include "SceneBytecode.generated.h"
 #include "engine/Shadow.h"
 #include "engine/InstanceTransform.h"
@@ -745,12 +746,13 @@ bool Renderer::FlushHud() {
  }
  hud_.clear(); return true;
 }
-bool Renderer::BeginPortrait(float x,float y,float width,float height) {
+bool Renderer::BeginPortrait(float x,float y,float width,float height,float closeup) {
  if (!FlushHud()) { frameFailed_=true; return false; }
  savedCamera_=viewProjection_; savedEye_=eye_; portrait_=true;
  portraitViewport_={x*width_,y*height_,width*width_,height*height_,0,1};
- eye_={0,1.1f,4.5f};
- const auto view=XMMatrixLookAtLH(XMLoadFloat3(&eye_),XMVectorSet(0,1.05f,0,1),XMVectorSet(0,1,0,0));
+ closeup=std::clamp(closeup,0.f,1.f);
+ eye_={0,1.1f+.58f*closeup,4.5f-3.15f*closeup};
+ const auto view=XMMatrixLookAtLH(XMLoadFloat3(&eye_),XMVectorSet(0,1.05f+.63f*closeup,0,1),XMVectorSet(0,1,0,0));
  XMStoreFloat4x4(&viewProjection_,view*XMMatrixPerspectiveFovLH(.57f,portraitViewport_.Width/portraitViewport_.Height,.1f,20.f));
  context_->ClearDepthStencilView(depth_.Get(),D3D11_CLEAR_DEPTH,1,0);
  return true;
@@ -878,9 +880,9 @@ void Renderer::DrawMapArtwork(float x,float y,float width,float height) {
 void Renderer::DrawRoundMapArtwork(float x,float y,float width,float height) {
  const XMFLOAT4 tint{1,1,1,1};
  const auto vertex=[&](float dx,float dy) -> Vertex {
-  // The map texture spans 42 x 46 world units; the circular survey spans 46 x 46.
+  // The circular survey keeps the same world scale on both axes.
   return {{(x+width*(.5f+dx*.5f))*2-1,1-(y+height*(.5f+dy*.5f))*2,.5f},
-    {.5f+dx*.5f*46/42,.5f+dy*.5f,2},tint};
+    {.5f+dx*.5f*rpg::WorldMap::surveyDepth/rpg::WorldMap::surveyWidth,.5f+dy*.5f,2},tint};
  };
  const auto center=vertex(0,0);
  for (int i=0;i<64;++i) {

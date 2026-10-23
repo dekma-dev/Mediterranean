@@ -3,6 +3,8 @@
 #include <vector>
 class Renderer;
 namespace ui {
+enum class LoadingStage { World,Chronicles,Sound,Entering };
+void RenderLoading(Renderer& renderer,LoadingStage stage);
 enum class Panel { None,Menu,Character,Inventory,Map,Journal,Merchant,Build,Quest };
 enum class Action { None,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview,MusicVolume,EffectsVolume,Build,SelectTalent,LearnTalent,QuestConfirm,QuestPage,SelectSpell,ConfirmTalentReset,ResetTalents,CancelTalentReset,BuildPage,SelectLoadout,SelectBuildPreset,RequestBuildApply,RequestBuildStore,ConfirmBuild,CancelBuild };
 using Item=rpg::Item;

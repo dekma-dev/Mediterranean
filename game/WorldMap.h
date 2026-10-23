@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <array>
 #include <vector>
 
 namespace rpg {
@@ -8,7 +9,8 @@ struct Vec2 { float x = 0, z = 0; };
 struct Trail { Vec2 from,to; float halfWidth; bool paved; };
 struct GroundSurface { float dirt=0,paving=0; };
 struct GroundCover { Vec2 position; float scale,yaw; bool shrub; };
-enum class PropKind { Building, Tree, Ruin,Counter };
+struct Resident { const char* name; const char* greeting; Vec2 position; };
+enum class PropKind { Building, Tree, Ruin,Counter,SurveyStone };
 enum class BuildingRole { Homestead,WatchHall,Storehouse,TrainingHall };
 struct Obstacle {
   Vec2 center;
@@ -28,11 +30,19 @@ struct Obstacle {
 class WorldMap {
 public:
   WorldMap();
-  static constexpr float halfWidth = 17, halfDepth = 19;
+  static constexpr float halfWidth = 29, halfDepth = 31;
+  static constexpr float surveyWidth=2*(halfWidth+4),surveyDepth=2*(halfDepth+4);
+  static constexpr unsigned maxCover=340,maxShrubs=28;
   static constexpr Vec2 spawn{0,-10}, questGiver{-3,-10};
   static constexpr Vec2 astralAnchor{0,12.8f};
   static constexpr Vec2 trainingPost{12,-2};
   static constexpr Vec2 quartermaster{3,-12};
+  static constexpr std::array<Resident,3> residents{{
+    {"Warden Elian","Elian: the western watch needs a veteran. Finish the keeper's seven dispatches, then return.",{-21,2}},
+    {"Surveyor Mara","Mara: the eastern coast needs a new survey. Warden Elian will send you to me when the west road is safe.",{21,3}},
+    {"Archivist Serevan","Serevan: the old northern bastion still answers the beacon. Bring Mara's survey before we open its sealed road.",{10,18}}
+  }};
+  static constexpr std::array<Vec2,3> surveySites{{{22,11},{26,22},{16,25}}};
   static constexpr Vec2 dockMin{-13.35f,-3.2f},dockMax{-9.75f,1.25f};
   const std::vector<Obstacle>& Obstacles() const { return obstacles_; }
   const std::vector<Trail>& Trails() const { return trails_; }

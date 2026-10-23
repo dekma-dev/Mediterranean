@@ -1,5 +1,7 @@
 # Mediterranean
 
+The island now spans 58 × 62 metres, with western, coastal and northern routes, three named quest residents and twelve assignments. The new chain combines two battles with a three-landmark survey. See [the frontier expansion](docs/frontier-expansion.md) for locations, unlocks and save compatibility.
+
 The launcher, character hall and game panels now share sculpted bronze frames, worn leather and painted equipment/spell icons. See [interface artwork and implementation](docs/interface.md).
 
 Class equipment: all eleven classes now carry their own weapon forms, with matching inventory icons/names and world/roster/character previews. Scout and Engineer have aiming, muzzle-based traces and distinct release sounds; keys 1/2 require their weapon to be equipped. Existing saves, item tiers and damage remain compatible. See [classes and equipment](docs/classes-and-campaign.md).
@@ -8,7 +10,7 @@ The project uses C++17 and a custom DirectX 11 engine for Windows PC. The active
 
 The native **Mediterranean Launcher** provides Play, fullscreen/windowed mode and window size. The game opens an eleven-class character roster with nickname, level, class and equipped 3D preview. Choose a saved hero, or follow **Create character → choose a class → Appearance & name → Create character → Enter World**. Creation offers a rotating preview, nickname, five skin tones, five hair colors and five tunic palettes. Each class has its own N-key talent disciplines and a separate local save. Build and open it with `.\scripts\build-native.ps1 -Backend Ninja -Configuration Release -Test -Launcher`, or run `MediterraneanLauncher.exe` beside `RPGNative.exe`. See the [launcher guide](docs/launcher.md) and [classes and level-ten campaign](docs/classes-and-campaign.md).
 
-Quest acceptance and hand-in now use a left-side dialogue with paginated story, objectives and reward descriptions. Press E at the keeper, then choose Accept quest or Complete quest. The original story files live in [quests/](quests/README.md); seven added dispatches are in `game/Campaign.h`. Rebuild to embed text changes. Native builds, automated dialogue tests and representative rendered captures have been validated; interactive playtesting remains available through the guide below.
+Quest acceptance and hand-in use a left-side dialogue with paginated story, objectives and reward descriptions. Press E at the quest speaker, then choose Accept quest or Complete quest. The original story files live in [quests/](quests/README.md); ten later assignments are in `game/Campaign.h`. Rebuild to embed text changes. See [progress](progress.md) for validation of the current source.
 
 ## Native build and launch
 
@@ -46,9 +48,9 @@ For debugging:
 
 Open `build-local/RPGNative.sln` in Visual Studio, select Debug / x64, set RPGNative as the startup project, and press F5. Generated output belongs in `build-local`; do not reuse historical caches from the C++ branch.
 
-Current validation (2026-10-22): all 34 native regression suites pass in Debug and Release, including class equipment, combat, slot persistence and the campaign through level ten. Visual Studio Debug builds and passes the five focused equipment/action/campaign/launcher checks. See [progress](progress.md) for configuration-specific results and evidence. Hidden captures and scripted checks do not replace interactive movement, art, sound or balance acceptance.
+Use the current Ninja game/launcher outputs for this pass; the existing Visual Studio `build-local` executable has not been refreshed. See [progress](progress.md) for current configuration-specific test results and the tool-session build limitation. Hidden captures and scripted checks do not replace interactive movement, art, sound or balance acceptance.
 
-The first map contains Dawnwatch Village, an astral dock, training grounds, and a ruined raider camp. It includes nine sequential assignments, XP and levels 1–10, telegraphed melee attacks, a captain, loot, potions, a class-specific reward weapon and ward armor, death recovery, and save/load. Procedural art includes shaped characters, pitched roofs, irregular rocks/trees, small generated materials, instancing and sun shadows. Characters now have shaped heads, fitted hair, flat-soled boots, fixed-length arm/leg poses and hand-attached weapons in both the world and portrait. It is still stylized prototype art. Geometry combines locally generated meshes with the embedded blade OBJ; map/material textures are generated locally. The interface uses the installed Windows font; no asset downloads are required. See [graphics and measured budgets](docs/graphics.md). See [gameplay rules](docs/gameplay.md) for details.
+The first map contains Dawnwatch Village, an astral dock, training grounds, the original raider camp, Westward Reach, Survey Coast and Sundered Bastion. It includes twelve sequential assignments, XP and levels 1–10, telegraphed melee attacks, captains, loot, potions, a class-specific reward weapon and ward armor, death recovery, and save/load. Procedural art includes shaped characters, pitched roofs, irregular rocks/trees, small generated materials, instancing and sun shadows. Characters have shaped heads, fitted hair, flat-soled boots, fixed-length arm/leg poses and hand-attached weapons in both the world and portrait. It is still stylized prototype art. Geometry combines locally generated meshes with the embedded blade OBJ; map/material textures are generated locally. The interface uses the installed Windows font; no asset downloads are required. See [graphics and measured budgets](docs/graphics.md) and [gameplay rules](docs/gameplay.md).
 
 ## Native controls and test loop
 

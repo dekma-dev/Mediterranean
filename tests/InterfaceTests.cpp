@@ -205,7 +205,8 @@ int main() {
         "Ground weights must survive quantization without negative grass weights or transparency.");
     // A vertically inverted upload would put the paved village at the enemy camp.
     const auto sample=[&](float x,float z,int channel) {
-      const auto col=unsigned((x+21)/42*terrainSurfaceSize),row=unsigned((23-z)/46*terrainSurfaceSize);
+      const auto col=unsigned((x/rpg::WorldMap::surveyWidth+.5f)*terrainSurfaceSize),
+        row=unsigned((.5f-z/rpg::WorldMap::surveyDepth)*terrainSurfaceSize);
       return pixels[(row*terrainSurfaceSize+col)*4+channel];
     };
     Require(sample(0,-10,1)==255 && sample(0,10,1)==0 && sample(0,10,0)>245 && sample(12,-2,0)==255 &&
@@ -259,6 +260,11 @@ int main() {
   // A hidden real renderer validates hit regions at multiple scales against the
   // same layout that draws the screen. No desktop input is synthesized.
   Win32Window window; Require(window.Create(GetModuleHandle(nullptr),1280,720,L"screen checks",false),"Hidden test window failed.");
+  window.SetLoading(true);
+  const auto loadingGdi=GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS);
+  for(int paint=0;paint<32;++paint) window.SetLoading(true);
+  window.SetLoading(false);
+  Require(GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS)<=loadingGdi,"Startup title card leaked GDI resources");
   Require(!window.SetMouseLook(true) && !window.MouseLook(),"Hidden windows must never capture the desktop cursor");
   // Native interruptions must reach UI gestures even without an RMB capture.
   // Focus can leave and return between two engine samples.
@@ -987,6 +993,18 @@ int main() {
       "Combat HUD diagnostic capture failed");
     Require(state.Save()==before,"HUD rendering and disabled clicks must not change combat state");
   }
+  const auto loadingRoot=std::filesystem::current_path()/"loading-check";
+  std::filesystem::create_directories(loadingRoot);
+  const auto textureBytes=renderer.InterfaceBytes();
+  for(const auto size:{std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
+    Require(renderer.Resize(size.first,size.second),"Loading layout resize");
+    for(int stage=0;stage<4;++stage) {
+      renderer.BeginFrame();ui::RenderLoading(renderer,ui::LoadingStage(stage));
+      Require(renderer.Capture((loadingRoot/(std::to_string(size.first)+"-"+std::to_string(stage)+".png")).wstring()) &&
+        renderer.EndFrame(false),"Loading stage capture failed");
+    }
+  }
+  Require(renderer.InterfaceBytes()==textureBytes,"Loading UI allocated extra art textures");
   Require(renderer.InterfaceBytes()<20*1024*1024,"Map and repeated UI draws exceed the combined texture budget.");
   Require(renderer.ValidateDebugMessages(),"Combat HUD emitted a DirectX warning/error");
   std::cout<<"PASS: live menus, item actions, persistence, scaled pointer routing and UI rendering.\n";

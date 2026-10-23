@@ -43,7 +43,8 @@ std::string SpellEffect(const rpg::Simulation& s,int ability) {
    (s.HasTalent(rpg::Talent::Executioner)?" / "+Number(s.HeavyDamage()*1.25f)+" at half target HP":"");
  if (ability==2) return s.RetreatMobility()?Number(s.CombatStyleInfo().retreatDistance)+" m backward escape / no target required":"5 m acquisition / 1.5 m stopping distance";
  return "Up to "+Number(s.MendHealingNow())+" healing"+
-   (s.HasTalent(rpg::Talent::Mercy)?" / "+Number(s.MendHealing()+20)+" at low HP":"");
+   (s.HasTalent(rpg::Talent::Mercy)?" / "+Number(s.MendHealing()+20)+" at low HP":"")+
+   (rpg::ClassRecoveryBarrier(s.Class())>0?" / "+Number(rpg::ClassRecoveryBarrier(s.Class()))+" ward":"");
 }
 std::string TalentEffect(const rpg::Simulation& s,int index) {
  const auto info=s.TalentDefinition(index);
@@ -187,6 +188,17 @@ struct Canvas {
   RectFill({a.x+4,a.y+6,a.w,a.h},{0,0,0,.55f});
   Skin(a,28);
   RectFill({a.x+11,a.y+11,a.w-22,a.h-22},{.006f,.005f,.004f,.24f});
+  // Restrained inset stitching and metal corner studs leave the content clear.
+  for(float side:{0.f,1.f}) {
+   const float x=a.x+8+side*(a.w-16);
+   for(float y=a.y+34;y<a.y+a.h-28;y+=24)
+    Line(x,y,x,y+4,1,{.52f,.40f,.23f,.65f});
+   for(float end:{0.f,1.f}) {
+    const float y=a.y+9+end*(a.h-18);
+    RectFill({x-2,y-2,4,4},{.67f,.51f,.27f,1});
+    RectFill({x-1,y-1,2,1},{.91f,.75f,.44f,1});
+   }
+  }
  }
  void Banner(Rect a,const std::string& label,float size=18) {
   Skin(a,std::min(20.f,a.h*.48f));
@@ -274,14 +286,15 @@ void TalentIcon(Canvas& c,Rect rect,int index,float alpha=1,rpg::ClassId id=rpg:
  PaintedIcon(c,rect,23,alpha);
  if(index>=3) c.Line(rect.x+4,rect.y+rect.h-3,rect.x+rect.w-4,rect.y+rect.h-3,2,{.88f,.76f,.45f,alpha});
 }
-Point MapPoint(Rect a,rpg::Vec2 p) { const float span=46*a.w/a.h; return {a.x+(p.x+span*.5f)/span*a.w,a.y+(23-p.z)/46*a.h}; }
+Point MapPoint(Rect a,rpg::Vec2 p) { const float depth=rpg::WorldMap::surveyDepth,span=depth*a.w/a.h;
+ return {a.x+(p.x+span*.5f)/span*a.w,a.y+(.5f-p.z/depth)*a.h}; }
 void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoint,rpg::Vec2 pin) {
  if (compact) {
   const auto p=c.P(a.x,a.y);
   c.r.DrawRoundMapArtwork(p.x,p.y,a.w*c.layout.scale/c.r.Width(),a.h*c.layout.scale/c.r.Height());
  } else {
  c.RectFill(a,{.88f,.80f,.63f,1});
- const float width=a.h*42/46;
+ const float width=a.h*rpg::WorldMap::surveyWidth/rpg::WorldMap::surveyDepth;
  const auto top=c.P(a.x+(a.w-width)*.5f,a.y);
  c.r.DrawMapArtwork(top.x,top.y,width*c.layout.scale/c.r.Width(),a.h*c.layout.scale/c.r.Height());
  }
@@ -306,14 +319,14 @@ void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoin
   lettering(a.x+a.w-94,a.y+a.h*.48f,"Training\ngrounds",14);
   const auto post=MapPoint(a,rpg::WorldMap::trainingPost);
   c.Line(post.x+12,post.y,a.x+a.w-103,a.y+a.h*.48f+17,.65f,{.40f,.32f,.20f,.65f});
-  const std::pair<const char*,float> labels[]={{"BROKEN WATCH",.065f},{"DAWNWATCH VILLAGE",.865f}};
+  const std::pair<const char*,float> labels[]={{"SUNDERED BASTION",.06f},{"DAWNWATCH VILLAGE",.74f}};
   for (const auto& label : labels) {
    const float width=c.Width(label.first,16),x=a.x+(a.w-width)*.5f,y=a.y+a.h*label.second;
    c.RectFill({x-7,y-2,width+14,23},{.90f,.83f,.66f,.92f});
    lettering(x,y,label.first,16);
    c.Line(x,y+20,x+width,y+20,.65f,{.40f,.32f,.20f,.45f});
   }
-  const float x=a.x+20,y=a.y+a.h-34,span=5*a.h/46;
+  const float x=a.x+20,y=a.y+a.h-34,span=5*a.h/rpg::WorldMap::surveyDepth;
   c.Line(x,y,x+span,y,1,mapInk);
   for (float t : {0.f,.5f,1.f}) c.Line(x+span*t,y-3,x+span*t,y+3,.8f,mapInk);
   lettering(x,y+5,"0",10); lettering(x+span-14,y+5,"5 m",10);
@@ -327,7 +340,13 @@ void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoin
  marker(rpg::WorldMap::astralAnchor,{.59f,.38f,.84f,1},compact?3.f:5.f);
  marker(rpg::WorldMap::trainingPost,{.35f,.72f,.76f,1},compact?3.f:5.f);
  marker(rpg::WorldMap::quartermaster,{.95f,.57f,.22f,1},compact?3.f:5.f);
- if (sim.AnchorState()!=rpg::AnchorQuest::Complete) {
+ for(const auto& npc:rpg::WorldMap::residents) {
+  marker(npc.position,{.85f,.67f,.27f,1},compact?3.f:5.f);
+  if(!compact) {const auto p=MapPoint(a,npc.position);lettering(p.x-36,p.y+9,npc.name,11);}
+ }
+ if(sim.SurveyActive()) for(unsigned i=0;i<rpg::WorldMap::surveySites.size();++i)
+  marker(rpg::WorldMap::surveySites[i],sim.SurveyMask()&(1u<<i)?Color{.4f,.58f,.34f,1}:Color{.35f,.69f,.88f,1},compact?2.f:4.f);
+ if (sim.AnchorState()!=rpg::AnchorQuest::Complete || sim.FrontierCompleted()<rpg::frontierQuestCount) {
   const auto p=MapPoint(a,sim.ObjectivePosition());
   c.Ring(p.x,p.y,compact?5.f:10.f,mapInk,compact?2.5f:3.5f);
   c.Ring(p.x,p.y,compact?5.f:10.f,{.98f,.85f,.40f,1},compact?1.f:2.f);
@@ -359,6 +378,33 @@ void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoin
 }
 }
 
+void RenderLoading(Renderer& renderer,LoadingStage stage) {
+ Canvas c(renderer);
+ renderer.DrawHudRect(0,0,1,1,{.018f,.014f,.01f,1});
+ c.Art({0,0,1280,720},Renderer::UiArt::Hall);
+ c.Gradient({0,0,1280,300},{.01f,.008f,.006f,.92f},{.01f,.008f,.006f,0});
+ c.Gradient({0,390,1280,330},{.01f,.008f,.006f,0},{.01f,.008f,.006f,.96f});
+ c.Center(0,58,1280,"MEDITERRANEAN",40,{1,.85f,.54f,1});
+ c.Center(0,115,1280,"T H E   D A W N W A T C H   C H R O N I C L E",13,ink);
+ c.Window({270,466,740,186});
+ c.Banner({390,449,500,38},"Beyond the weathered gates",22);
+ const char* titles[]={"Preparing the island","Reading your chronicles","Tuning the instruments","Entering Dawnwatch"};
+ const char* details[]={"Laying roads, raising the watch and preparing the journey.",
+  "Gathering your heroes and their saved journeys.","Preparing the music and sounds of the frontier.",
+  "Preparing the landscape and your first view of the world."};
+ const unsigned index=std::min(unsigned(stage),3u);
+ c.Center(290,503,700,titles[index],21,ink);
+ c.Center(290,540,700,details[index],14,muted);
+ for(unsigned i=0;i<4;++i) {
+  const float x=412+115.f*i;
+  if(i<3) c.Line(x+15,591,x+100,591,1,border);
+  c.Frame({x,584,15,15},i<=index?Color{.48f,.31f,.10f,1}:dark,i==index?gold:border);
+  if(i<=index) c.RectFill({x+5,589,5,5},i==index?ink:gold);
+ }
+ c.Center(290,620,700,"WASD  Travel     M  Atlas     J  Journal     Esc  Menu",12,gold);
+ c.Center(0,681,1280,"Your chronicle awaits.",13,muted);
+}
+
 void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selection) {
  Canvas c(renderer);using C=CharacterSelection::Control;using Page=CharacterSelection::Page;using Status=CharacterSelection::Status;
  const auto page=selection.Screen();const bool roster=page==Page::Roster,customize=page==Page::Customize;
@@ -376,9 +422,14 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  c.Window({814,140,400,510});c.Banner({852,129,324,36},roster?"Hero's chronicle":customize?"A name for the ages":"Choose a path",19);
  if(valid) {
   const auto p=c.P(326,112);
-  if(renderer.BeginPortrait(p.x,p.y,464*c.layout.scale/renderer.Width(),490*c.layout.scale/renderer.Height())) {
+  if(renderer.BeginPortrait(p.x,p.y,464*c.layout.scale/renderer.Width(),490*c.layout.scale/renderer.Height(),selection.PreviewZoom())) {
+   auto pose=animation::Idle(selection.Time());
+   if(selection.PreviewAction()>=0) {
+    pose.action=animation::SampleAction(hero.Class(),animation::ActionClip::Heavy,selection.PreviewAction());
+    if(!animation::RangedClass(hero.Class())) {pose.attackSeconds=selection.PreviewAction();pose.heavyAttack=true;}
+   }
    DrawCharacter(renderer,{0,0},0,selection.Yaw(),{info.color[0],info.color[1],info.color[2],1},0,0,
-     CharacterOutfit::From(hero.Items(),hero.Class(),hero.Look()),animation::Idle(selection.Time()));
+     CharacterOutfit::From(hero.Items(),hero.Class(),hero.Look()),pose);
    renderer.EndPortrait();
   }
  } else c.Center(326,353,464,"Character unavailable",22,muted);
@@ -393,6 +444,15 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
   if(focused && enabled) c.Line(a.x+8,a.y+a.h-7,a.x+a.w-8,a.y+a.h-7,1,gold);
  };
  button(C::Left,"<");button(C::Right,">");
+ button(C::Closeup,selection.Closeup()?"Full figure":"Face close-up");
+ button(C::Pose,"Class action");button(C::ResetView,"Reset view");
+ if(!roster) {
+  for(int step=0;step<2;++step) {
+   const Rect tab{330+232.f*step,104,224,30};
+   c.Frame(tab,dark,(customize?1:0)==step?gold:border);
+   c.Center(tab.x,tab.y+7,tab.w,step?"II  /  Identity":"I  /  Calling",13,(customize?1:0)==step?ink:muted);
+  }
+ }
  if(roster) {
   const auto card=CharacterSelection::Bounds(C::Hero);c.Frame(card,dark,valid?gold:border);
   if(valid) {
@@ -434,16 +494,19 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
    c.Text(a.x+10,a.y+10,name,nameSize,selection.DraftName().empty()?muted:ink);
    c.Text(842,308,"1-20 letters; spaces, apostrophe, hyphen. Ctrl+A clears.",10,muted);
    const auto& look=hero.Look();
-   const auto choice=[&](float y,const char* title,const rpg::Swatch& swatch,C left,C right) {
-    c.Text(842,y-18,title,11,gold);c.Frame({882,y,270,34},dark,border);
-    const Color color{swatch.r,swatch.g,swatch.b,1};
-    c.Frame({892,y+7,20,20},dark,gold);
-    c.RectFill({895,y+10,14,14},swatch.r==0?Color{info.color[0],info.color[1],info.color[2],1}:color);
-    c.Text(923,y+9,swatch.name,15,ink);button(left,"<");button(right,">");
+   const auto choice=[&](float y,const char* title,const auto& palette,int selected,C first,C left,C right) {
+    c.Text(842,y-18,title,11,gold);c.Text(1010,y-18,palette[selected].name,11,ink);
+    for(int index=0;index<rpg::Appearance::count;++index) {
+     const auto control=C(int(first)+index);const auto a=CharacterSelection::Bounds(control);const auto& swatch=palette[index];
+     c.Button(a,true,selection.Hover()==control || selection.Focus()==control,index==selected);
+     c.RectFill({a.x+7,a.y+6,a.w-14,a.h-12},swatch.r==0?Color{info.color[0],info.color[1],info.color[2],1}:Color{swatch.r,swatch.g,swatch.b,1});
+     if(index==selected) c.Line(a.x+6,a.y+a.h-3,a.x+a.w-6,a.y+a.h-3,2,gold);
+    }
+    button(left,"<");button(right,">");
    };
-   choice(348,"COMPLEXION",rpg::skinTones[look.skin],C::SkinLeft,C::SkinRight);
-   choice(406,"HAIR COLOR",rpg::hairColors[look.hair],C::HairLeft,C::HairRight);
-   choice(464,"TUNIC DYE",rpg::tunicDyes[look.dye],C::DyeLeft,C::DyeRight);
+   choice(348,"COMPLEXION",rpg::skinTones,look.skin,C::Skin0,C::SkinLeft,C::SkinRight);
+   choice(406,"HAIR COLOR",rpg::hairColors,look.hair,C::Hair0,C::HairLeft,C::HairRight);
+   choice(464,"TUNIC DYE",rpg::tunicDyes,look.dye,C::Dye0,C::DyeLeft,C::DyeRight);
    button(C::Confirm,"Create character");
   }
   button(C::Back,"< Back");button(C::Cancel,"Cancel");
@@ -464,7 +527,7 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  }
  c.Text(84,594,customize?"Back to change your class":"One hero per class",11,muted);
  if(!selection.Notice().empty()) c.Wrap(842,650,350,selection.Notice(),12,gold,3);
- c.Text(72,674,"Tab  Select     Enter  Confirm     Arrow keys  Rotate     F11  Display",13,muted);
+ c.Text(72,699,"Tab  Select     Enter  Confirm     Arrow keys  Rotate     F11  Display",11,muted);
 }
 
 void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bool debug) {
@@ -569,7 +632,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Line(1170+std::sin(a)*75,94+std::cos(a)*75,1170+std::sin(a)*79,94+std::cos(a)*79,1,gold);
  }
  c.Diamond(1170,17,6,9,{.39f,.51f,.16f,1}); c.Text(1164,23,"N",12);
- c.Banner({1057,3,209,25},"Dawnwatch",16);
+ c.Banner({1057,3,209,25},s.Map().AreaName(s.Player()),13);
  c.Banner({1118,158,104,23},"Atlas  [M]",12);
  regions_.push_back({{1090,13,160,168},{Action::Map},true});
  if (!inventoryOpen || panel!=Panel::None) {
@@ -577,7 +640,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Text(1013,202,"EXPEDITION",14,gold); c.Line(1010,226,1260,226,1,border);
   c.Wrap(1013,236,244,s.Objective(),15,ink,4);
   const auto objective=s.ObjectivePosition();
-  if (s.AnchorState()!=rpg::AnchorQuest::Complete)
+  if (s.AnchorState()!=rpg::AnchorQuest::Complete || s.FrontierCompleted()<rpg::frontierQuestCount)
    c.Text(1013,332,std::to_string(int(std::ceil(std::hypot(s.Player().x-objective.x,s.Player().z-objective.z))))+" m to objective",13,gold);
   if (hasWaypoint) c.Text(1013,355,"Waypoint  "+std::to_string(int(std::ceil(std::hypot(s.Player().x-waypoint.x,s.Player().z-waypoint.z))))+" m",13,{.56f,.76f,.88f,1});
  }
@@ -813,7 +876,10 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   }
   c.Frame({34,408,414,66},{.045f,.085f,.07f,1});
   const int required=id==rpg::QuestId::Patrol?1:3;
-  c.Text(46,416,"OBJECTIVES  /  Raiders "+std::to_string(std::min(required,s.DefeatedCount()))+" / "+std::to_string(required)+
+  const bool survey=id==rpg::QuestId::Watch9;
+  const int progress=stage==rpg::QuestStage::Offer && id>=rpg::QuestId::Watch1?0:stage==rpg::QuestStage::Complete?required:
+    survey?int(bool(s.SurveyMask()&1))+int(bool(s.SurveyMask()&2))+int(bool(s.SurveyMask()&4)):std::min(required,s.DefeatedCount());
+  c.Text(46,416,std::string("OBJECTIVES  /  ")+(survey?"Bearings ":"Enemies ")+std::to_string(progress)+" / "+std::to_string(required)+
     (id==rpg::QuestId::Anchor && s.AnchorState()>=rpg::AnchorQuest::Return?"  /  Anchor stable":""),12,gold);
   c.Wrap(46,436,390,quest.objective,14,ink,2);
   c.Frame({34,484,414,70},{.07f,.12f,.08f,1},gold);
@@ -1050,22 +1116,22 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    for (int i=0;i<6;++i) { c.Oval(842,320+i*27.f,4,4,legend[i].first); c.Text(858,309+i*27.f,legend[i].second,15,muted); }
    c.Wrap(833,486,286,"Click traversable ground to place a waypoint. Right-click to clear it.",15,ink,3);
    if (hasWaypoint) button({833,562,286,39},"Clear waypoint",Action::ClearWaypoint);
-   c.Text(156,619,"Roads and markers follow the playable map. Island: 34 x 38 m.",13,muted);
+   c.Text(156,619,"Roads and markers follow the playable map. Island: 58 x 62 m.",13,muted);
   } else {
    c.Parchment({208,151,397,384});
-   for(int i=0;i<9;++i) {
+   for(int i=0;i<rpg::frontierQuestCount+2;++i) {
     const auto id=rpg::QuestId(int(rpg::QuestId::Patrol)+i);const auto& quest=rpg::DescribeQuest(id);
     const bool done=i==0?s.QuestState()==rpg::Quest::Complete:i==1?s.AnchorState()==rpg::AnchorQuest::Complete:i-2<s.FrontierCompleted();
-    c.Text(227,166+i*39.f,std::to_string(i+1)+". "+quest.title,15,{.22f,.15f,.09f,1});
-    c.Text(227,184+i*39.f,done?"Completed":i>1 && s.AnchorState()!=rpg::AnchorQuest::Complete?"Locked":"Campaign assignment",10,{.32f,.22f,.13f,1});
+    c.Text(227,160+i*30.f,std::to_string(i+1)+". "+quest.title,13,{.22f,.15f,.09f,1});
+    c.Text(227,175+i*30.f,done?"Completed":id>s.CurrentQuest()?"Locked":id==s.CurrentQuest()?"Current assignment":"Campaign assignment",9,{.32f,.22f,.13f,1});
    }
-   const auto id=s.QuestState()!=rpg::Quest::Complete?rpg::QuestId::Patrol:s.AnchorState()!=rpg::AnchorQuest::Complete?rpg::QuestId::Anchor:rpg::QuestId(int(rpg::QuestId::Watch1)+std::min(6,s.FrontierCompleted()));
+   const auto id=s.CurrentQuest();
    const auto& quest=rpg::DescribeQuest(id);
    c.Frame({622,158,450,377});c.Wrap(643,177,402,quest.title,23,ink,2);
    c.Wrap(643,243,402,quest.offer,16,muted,8);
    c.Text(643,475,"REWARD / "+std::to_string(quest.experience)+" XP",15,gold);
    button({734,545,338,43},"Show objective on the atlas",Action::Map);
-   c.Text(209,557,"Raiders defeated: "+std::to_string(s.DefeatedCount())+" / 3",17,muted);
+   c.Wrap(209,552,397,s.Objective(),14,muted,2);
    c.Text(209,606,"The world remains active while reading the journal.",14,muted);
   }
  }

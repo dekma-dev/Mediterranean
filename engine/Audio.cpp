@@ -31,7 +31,7 @@ float CueLevel(Cue cue) {
 }
 float CuePitch(Cue cue,unsigned sequence) {
   constexpr float offsets[]={-.65f,.35f,-.2f,.8f,0.f,-.4f,.55f};
-  const float range=cue==Cue::Mend || cue==Cue::Potion || cue==Cue::Interrupt?.012f:
+  const float range=cue==Cue::Mend || cue==Cue::Potion || cue==Cue::Interrupt || cue==Cue::Song || cue==Cue::Holy?.012f:
     cue==Cue::Step?.085f:.045f;
   return 1+offsets[sequence%7]*range;
 }
@@ -44,8 +44,9 @@ float MixGain(float previous,float peakLoad,float seconds) {
 }
 std::vector<std::int16_t> Generate(Cue cue) {
   const bool healing=cue==Cue::Mend || cue==Cue::Potion;
+  const bool mystical=(cue>=Cue::Holy && cue<=Cue::Ward) || cue==Cue::Cast || cue==Cue::Mend || cue==Cue::Interrupt;
   const float duration=cue==Cue::Mend?1.65f:healing?.95f:cue==Cue::Interrupt?.85f:
-    cue==Cue::HeavyHit?.7f:cue==Cue::Step?.18f:cue==Cue::Land?.38f:cue==Cue::Jump?.3f:.48f;
+    mystical?1.05f:cue==Cue::HeavyHit?.7f:cue==Cue::Step?.18f:cue==Cue::Land?.38f:cue==Cue::Jump?.3f:cue==Cue::SpellHit?.28f:.48f;
   std::vector<std::int16_t> result(size_t(duration*sampleRate));
   std::uint32_t seed=12345+unsigned(cue)*713;
   float low=0,body=0;
@@ -57,6 +58,39 @@ std::vector<std::int16_t> Generate(Cue cue) {
     const float air=noise-low;
     float value=0;
     switch(cue) {
+    case Cue::Holy:
+      value=.18f*Bell(783.99f,t)+.11f*Bell(1174.66f,t-.024f)+.09f*low*Decay(t,.018f,18.f);
+      break;
+    case Cue::Fire:
+      value=.55f*low*Decay(t,.012f,11.f)+.18f*air*Decay(t,.008f,18.f);
+      value+=.17f*Sweep(180,55,duration,t)*Decay(t,.012f,12.f);
+      break;
+    case Cue::Thorn:
+      value=.36f*air*Decay(t,.002f,45.f)+.18f*Sweep(920,160,duration,t)*Decay(t,.005f,25.f);
+      value+=.10f*Bell(587.33f,t-.065f);
+      break;
+    case Cue::Soul:
+      value=.16f*Sweep(240,420,duration,t)*Decay(t,.035f,8.f)+.12f*Sweep(244,414,duration,t)*Decay(t,.045f,9.f);
+      value+=.16f*low*Decay(t,.04f,12.f);
+      break;
+    case Cue::Mind:
+      value=.15f*Sweep(740,300,duration,t)*Decay(t,.015f,13.f)+.12f*Sweep(375,690,duration,t)*Decay(t,.02f,12.f);
+      value+=.06f*Bell(1567.98f,t-.04f);
+      break;
+    case Cue::Song:
+      for(int n=0;n<3;++n) value+=.14f*Bell(n==0?659.25f:n==1?783.99f:987.77f,t-n*.035f);
+      break;
+    case Cue::Rend:
+      value=.35f*air*Decay(t,.012f,15.f)+.22f*Sweep(210,65,duration,t)*Decay(t,.015f,12.f);
+      value+=.075f*Metal(370,t-.025f);
+      break;
+    case Cue::Ward:
+      value=.16f*Bell(1046.5f,t)+.10f*Bell(1396.91f,t-.02f)+.14f*body*Decay(t,.002f,25.f);
+      break;
+    case Cue::SpellHit:
+      value=.26f*Sweep(140,50,duration,t)*Decay(t,.003f,26.f)+.28f*low*Decay(t,.003f,30.f);
+      value+=.12f*air*Decay(t,.002f,45.f);
+      break;
     case Cue::Bow:
       value=.22f*Sweep(460,140,duration,t)*Decay(t,.002f,22.f);
       value+=.14f*Tone(840,t)*Decay(t,.003f,38.f)+.27f*air*Decay(t,.002f,65.f);
@@ -112,9 +146,26 @@ std::vector<std::int16_t> Generate(Cue cue) {
       break;
     }
     case Cue::Jump:
-      value=.45f*low*Decay(t,.013f,22.f)+.16f*Sweep(120,280,duration,t)*Decay(t,.01f,18.f);
+      // Cloth and boot push-off, rather than a rising electronic jump tone.
+      value=.48f*low*Decay(t,.013f,22.f)+.12f*body*Decay(t,.025f,15.f);
+      value+=.065f*Sweep(95,48,duration,t)*Decay(t,.008f,24.f);
       break;
     default:break;
+    }
+    if(mystical) {
+      // Dark fundamental below the readable attack, with a slower resonant
+      // bloom. Pitch families retain holy/nature/arcane identity.
+      const float root=cue==Cue::Holy || cue==Cue::Ward?146.83f:cue==Cue::Thorn?130.81f:
+        cue==Cue::Song?164.81f:cue==Cue::Fire || cue==Cue::Rend?73.42f:110.f;
+      value=.78f*value+.07f*Decay(t,.07f,4.8f)*(Tone(root,t)+.35f*Tone(root*1.5f,t));
+      value+=.10f*body*Decay(t,.05f,5.f);
+      // Quiet, dark reflections are baked once, never processed in the mixer.
+      for(const auto tap:{std::pair<float,float>{.097f,.13f},{.173f,.09f},{.271f,.06f}}) {
+        const size_t delay=size_t(tap.first*sampleRate);
+        if(i>=delay) value+=float(result[i-delay])/32767.f*tap.second;
+      }
+    } else if(cue==Cue::Hit || cue==Cue::HeavyHit || cue==Cue::Enemy) {
+      value=.86f*value+.13f*Sweep(cue==Cue::HeavyHit?88.f:125.f,42.f,duration,t)*Decay(t,.004f,18.f);
     }
     const float edge=std::min({1.f,t/.002f,(duration-t)/.055f});
     result[i]=Pcm(value*edge);
@@ -123,24 +174,79 @@ std::vector<std::int16_t> Generate(Cue cue) {
   return result;
 }
 std::vector<std::int16_t> GenerateMusic() {
-  // Original 32-second ambient phrase: soft minor pads and plucked melody.
-  constexpr float roots[]={110,87.307f,130.813f,97.999f};
-  constexpr float melody[]={440,523.25f,659.25f,587.33f,523.25f,440,392,329.63f,
-    523.25f,659.25f,783.99f,659.25f,587.33f,493.88f,392,440};
-  std::vector<std::int16_t> result(sampleRate*32);
+  // Original eight-bar, 80 BPM chronicle in D minor. Layered bowed partials,
+  // breath-like choir, distant horns, harp and sparse frame drums. Every note
+  // is evaluated in local time; releases overlap the next harmony naturally.
+  constexpr float roots[]={146.832f,116.541f,174.614f,130.813f,146.832f,116.541f,110.f,146.832f};
+  constexpr float melody[]={293.665f,349.228f,440.f,391.995f,349.228f,293.665f,261.626f,220.f,
+    349.228f,440.f,523.251f,440.f,391.995f,329.628f,277.183f,293.665f};
+  const auto envelope=[](float t,float attack,float sustain,float release) {
+    if(t<0 || t>=sustain+release) return 0.f;
+    const float rise=std::clamp(t/attack,0.f,1.f),fall=std::clamp((sustain+release-t)/release,0.f,1.f);
+    return rise*rise*(3-2*rise)*fall*fall*(3-2*fall);
+  };
+  const auto bowed=[](float hz,float t) {
+    const float phase=t+.00032f*Tone(4.7f,t);
+    return Tone(hz,phase)+.27f*Tone(hz*2,phase)+.12f*Tone(hz*3,phase)+.055f*Tone(hz*4,phase);
+  };
+  std::vector<std::int16_t> result(sampleRate*musicSeconds);
+  std::uint32_t seed=0x41535452;float breath=0;
   for (size_t i=0;i<result.size();++i) {
-    const float t=float(i)/sampleRate,local=std::fmod(t,8.f),noteTime=std::fmod(t,2.f);
-    const int chord=std::min(3,int(t/8)); const float root=roots[chord];
-    const float pad=std::pow(std::sin(pi*local/8),2.f);
-    const float third=chord==0?1.189207f:1.259921f;
-    float value=.075f*pad*(Tone(root,t)+.65f*Tone(root*third,t)+.45f*Tone(root*1.498307f,t));
-    value+=.13f*std::min(noteTime/.025f,1.f)*std::exp(-2.7f*noteTime)*
-      (Tone(melody[std::min(15,int(t/2))],noteTime)+.2f*Tone(melody[std::min(15,int(t/2))]*2,noteTime));
-    value*=std::min({1.f,t/.15f,(32-t)/.35f});
+    const float t=float(i)/sampleRate;
+    seed^=seed<<13;seed^=seed>>17;seed^=seed<<5;
+    breath+=.04f*(float(seed&65535)/32767.5f-1-breath);
+    float value=0;
+    const int bar=std::min(7,int(t/6));
+    for(int b=std::max(0,bar-1);b<=bar;++b) {
+      const float local=t-b*6.f,root=roots[b],third=(b==0 || b==4 || b==7)?1.189207f:1.259921f;
+      const float swell=envelope(local,1.3f,5.4f,1.6f);
+      value+=.043f*swell*(bowed(root,local)+.65f*bowed(root*third,local)+.55f*bowed(root*1.498307f,local));
+      value+=.026f*swell*(Tone(root*.5f,local)+.55f*Tone(root*2,local)+breath*.6f);
+      if(b>=4) value+=.038f*envelope(local,.32f,2.5f,1.5f)*
+        (Tone(root*.5f,local)+.4f*Tone(root,local)+.18f*Tone(root*1.5f,local));
+    }
+    const int note=std::min(15,int(t/3));
+    for(int n=std::max(0,note-1);n<=note;++n) {
+      const float local=t-n*3.f,hz=melody[n];
+      value+=.047f*envelope(local,.24f,1.9f,1.5f)*(Tone(hz,local+.0004f*Tone(5.f,local))+.18f*Tone(hz*2,local));
+      value+=.024f*Bell(hz*2,local-.42f);
+    }
+    // Sparse low percussion enters in the second half and leaves room for SFX.
+    if(t>=24 && t<44) {
+      const float beat=std::fmod(t,1.5f);
+      value+=.068f*Sweep(78,38,.6f,beat)*Decay(beat,.008f,9.f)+.06f*breath*Decay(beat,.008f,18.f);
+    }
+    // Long, quiet chamber reflections, bounded to the generated buffer.
+    for(const auto tap:{std::pair<float,float>{.337f,.12f},{.593f,.08f}}) {
+      const size_t delay=size_t(tap.first*sampleRate);
+      if(i>=delay) value+=float(result[i-delay])/32767.f*tap.second;
+    }
+    value*=std::min({1.f,t/1.5f,(musicSeconds-t)/2.8f});
     result[i]=Pcm(value);
   }
   result.front()=result.back()=0;
   return result;
+}
+Cue ClassRecoveryCue(rpg::ClassId school) {
+  using C=rpg::ClassId;
+  switch(school) {
+    case C::Paladin:case C::Priest:return Cue::Holy;
+    case C::Mage:case C::Engineer:return Cue::Ward;
+    case C::Psionic:return Cue::Mind;
+    case C::Bard:return Cue::Song;
+    case C::Necromancer:case C::Demonologist:return Cue::Soul;
+    default:return Cue::Mend;
+  }
+}
+Cue ClassReleaseCue(rpg::ClassId school) {
+  using C=rpg::ClassId;
+  switch(school) {
+    case C::Scout:return Cue::Bow;case C::Engineer:return Cue::Pistol;
+    case C::Paladin:case C::Priest:return Cue::Holy;case C::Mage:return Cue::Fire;
+    case C::Druid:return Cue::Thorn;case C::Necromancer:return Cue::Soul;
+    case C::Psionic:return Cue::Mind;case C::Bard:return Cue::Song;
+    case C::Demonologist:return Cue::Rend;default:return Cue::Cast;
+  }
 }
 void Events::Update(const rpg::Simulation& state) {
   count=0;
@@ -151,11 +257,16 @@ void Events::Update(const rpg::Simulation& state) {
     const auto p=state.Player();
     if(std::hypot(event.position.x-p.x,event.position.z-p.z)>18) continue;
     switch(event.kind) {
-    case K::Strike:add(Cue::Strike);break; case K::HeavyStrike:add(Cue::Heavy);break;
-    case K::SpellCast:add(event.school==rpg::ClassId::Scout?Cue::Bow:event.school==rpg::ClassId::Engineer?Cue::Pistol:Cue::Cast);break;
-    case K::EnemySwing:add(Cue::Enemy);break; case K::Hit:add(Cue::Hit);break;
-    case K::HeavyHit:add(Cue::HeavyHit);break; case K::Hurt:add(Cue::Hurt);break;
-    case K::Interrupt:add(Cue::Interrupt);break; case K::Mend:add(Cue::Mend);break;
+    case K::Strike:add(event.school==rpg::ClassId::Demonologist?Cue::Rend:Cue::Strike);break;
+    case K::HeavyStrike:add(event.school==rpg::ClassId::Warrior?Cue::Heavy:ClassReleaseCue(event.school));break;
+    case K::SpellCast:add(ClassReleaseCue(event.school));break;
+    case K::EnemySwing:add(Cue::Enemy);break;
+    case K::Hit:case K::HeavyHit:
+      add(rpg::DescribeClass(event.school).range>3 && event.school!=rpg::ClassId::Scout && event.school!=rpg::ClassId::Engineer?
+        Cue::SpellHit:event.kind==K::HeavyHit?Cue::HeavyHit:Cue::Hit);break;
+    case K::Hurt:add(Cue::Hurt);break;
+    case K::BarrierHit:add(Cue::Ward);break;
+    case K::Interrupt:add(Cue::Interrupt);break; case K::Mend:add(ClassRecoveryCue(event.school));break;
     case K::Potion:add(Cue::Potion);break;
     // Dash activation already has its authoritative one-shot cue below.
     case K::DashStart: case K::DashStop: case K::DashImpact: break;

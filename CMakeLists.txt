@@ -84,6 +84,7 @@ add_library(MediterraneanClient STATIC
   game/HandPose.cpp
   game/CharacterRig.cpp
   game/CombatEffects.cpp
+  game/ClassEffects.cpp
   game/Interface.cpp
   game/InterfaceState.cpp
   game/MapArtwork.cpp
@@ -185,6 +186,14 @@ if (BUILD_TESTING)
   add_executable(CombatEffectsTests tests/CombatEffectsTests.cpp)
   target_link_libraries(CombatEffectsTests PRIVATE MediterraneanClient)
   add_test(NAME CombatEffectsTests COMMAND CombatEffectsTests)
+  add_executable(ClassEffectsTests tests/ClassEffectsTests.cpp)
+  target_link_libraries(ClassEffectsTests PRIVATE MediterraneanClient)
+  add_test(NAME ClassEffectsTests COMMAND ClassEffectsTests)
+  add_executable(FrontierExpansionTests tests/FrontierExpansionTests.cpp)
+  target_link_libraries(FrontierExpansionTests PRIVATE MediterraneanClient)
+  target_compile_definitions(FrontierExpansionTests PRIVATE RPG_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
+  add_test(NAME FrontierExpansionTests COMMAND FrontierExpansionTests)
+  set_tests_properties(FrontierExpansionTests PROPERTIES TIMEOUT 90)
   add_executable(AnimationTests tests/AnimationTests.cpp)
   target_link_libraries(AnimationTests PRIVATE MediterraneanClient)
   add_test(NAME AnimationTests COMMAND AnimationTests)

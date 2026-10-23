@@ -69,7 +69,7 @@ struct CombatFeedback {
 };
 
 // One-update presentation events. Never serialized or used to resolve combat.
-enum class CombatVisualKind { Strike, HeavyStrike, EnemySwing, Hit, HeavyHit, Hurt, Interrupt, Mend, Potion, DashStart, DashStop, DashImpact,SpellCast };
+enum class CombatVisualKind { Strike, HeavyStrike, EnemySwing, Hit, HeavyHit, Hurt, Interrupt, Mend, Potion, DashStart, DashStop, DashImpact,SpellCast,BarrierHit };
 struct CombatVisualEvent {
   CombatVisualKind kind = CombatVisualKind::Hit;
   Vec2 position;
@@ -79,6 +79,10 @@ struct CombatVisualEvent {
   Vec2 destination{};
   ClassId school=ClassId::Warrior;
   float flight=.1f;
+  // Snapshot the accepted action: presentation can outlive recovery/selection.
+  Vec2 source{};
+  float sourceHeight=0;
+  bool heavy=false,empowered=false;
 };
 
 class Simulation {
@@ -193,6 +197,11 @@ public:
   float PotionCooldown() const { return potionCooldown_; }
   const char* AbilityStatus(int index) const;
   QuestId QuestDialogue() const { return questDialogue_; }
+  QuestId CurrentQuest() const;
+  Vec2 DialoguePosition() const { return QuestLocation(questDialogue_); }
+  bool SurveyActive() const { return frontierActive_ && frontierCompleted_==8; }
+  unsigned SurveyMask() const { return surveyMask_; }
+  bool FrontierReady() const { return SurveyActive()?surveyMask_==7:DefeatedCount()==3; }
   QuestStage DialogueStage() const;
   QuestAction QuestPrimaryAction() const;
   const char* QuestConfirmStatus() const;
@@ -215,6 +224,7 @@ public:
 private:
   int frontierCompleted_=0,legacyLoot_=0;
   bool frontierActive_=false;
+  unsigned surveyMask_=0;
   void PrepareFrontierEnemies(int rank);
   ClassId class_=ClassId::Warrior;
   std::string nickname_="Frontier guard";
@@ -233,6 +243,7 @@ private:
   void ChangeBuild(const BuildCommand& command);
   void Interact();
   bool CanTalkToKeeper() const;
+  bool CanReadSurvey(Vec2 site) const;
   void ConfirmQuest(QuestAction action);
   bool HasLineOfSight(Vec2 from, Vec2 to) const;
   void UpdateEnemy(Enemy& enemy, float dt,float frameTail);

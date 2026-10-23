@@ -112,6 +112,10 @@ void Simulation::Emit(FeedbackKind kind,Vec2 position,int amount) {
 void Simulation::EmitVisual(CombatVisualKind kind,Vec2 position,float height,float facing,EntityId actor,float elapsed) {
   if (visualEventCount_<visualEvents_.size()) {
     auto& event=visualEvents_[visualEventCount_++];event={kind,position,height,facing,actor,elapsed};event.school=class_;
+    event.source=player_;event.sourceHeight=height_;
+    const bool attack=kind==CombatVisualKind::SpellCast || kind==CombatVisualKind::Strike ||
+      kind==CombatVisualKind::HeavyStrike || kind==CombatVisualKind::Hit || kind==CombatVisualKind::HeavyHit;
+    event.heavy=attack && HeavyAttack();event.empowered=attack && attackEmpowered_;
     if(kind==CombatVisualKind::SpellCast) {
       for(const auto& enemy:enemies_) if(enemy.id==attackTarget_) event.destination=enemy.position;
       if(sparring_ && trainer_.id==attackTarget_) event.destination=trainer_.position;
@@ -137,6 +141,7 @@ void Simulation::DamagePlayer(float damage,float incomingFacing,float visualElap
   if (sparring_) sparringTaken_+=int(applied);
   if(applied>0) Emit(FeedbackKind::Hurt,player_,static_cast<int>(applied));
   if(absorbed>0) Emit(FeedbackKind::Absorb,player_,static_cast<int>(absorbed));
+  if(absorbed>0) EmitVisual(CombatVisualKind::BarrierHit,player_,height_+1.2f,incomingFacing,0,visualElapsed);
   if (applied>0) EmitVisual(CombatVisualKind::Hurt,player_,height_+1.2f,incomingFacing,0,visualElapsed);
   if (Channeling()) { channelRemaining_=0; message_="Damage interrupted stabilization."; }
   if (health_==0) {
@@ -183,10 +188,11 @@ void Simulation::Respawn() {
 
 std::string Simulation::Objective() const {
   if(anchorQuest_==AnchorQuest::Complete) {
-    if(frontierCompleted_==7) return "DAWNWATCH SECURED\nLevel 10 campaign complete / training remains open";
+    if(frontierCompleted_==frontierQuestCount) return "THE FRONTIER RECONNECTED\nTwelve assignments complete / level cap 10";
     const auto& quest=DescribeQuest(QuestId(int(QuestId::Watch1)+frontierCompleted_));
-    return std::string(quest.title)+"\n"+(!frontierActive_?"Read the next dispatch at the beacon":DefeatedCount()==3?"Report to the beacon keeper":
-      "Enemies defeated "+std::to_string(DefeatedCount())+" / 3");
+    const int bearings=int(bool(surveyMask_&1))+int(bool(surveyMask_&2))+int(bool(surveyMask_&4));
+    return std::string(quest.title)+"\n"+(!frontierActive_?std::string("Speak to ")+quest.speaker:FrontierReady()?std::string("Report to ")+quest.speaker:
+      SurveyActive()?"Bearings recorded "+std::to_string(bearings)+" / 3":"Enemies defeated "+std::to_string(DefeatedCount())+" / 3");
   }
   if (quest_==Quest::Available) return "PATROL THE FRONTIER\nSpeak to the gold beacon keeper";
   if (quest_==Quest::Active) return "PATROL THE FRONTIER\nDefeat one raider north of the village";
@@ -201,20 +207,33 @@ std::string Simulation::Objective() const {
 }
 
 Vec2 Simulation::ObjectivePosition() const {
-  if ((frontierActive_ && DefeatedCount()<3) || quest_==Quest::Active || (anchorQuest_==AnchorQuest::Active && DefeatedCount()<3)) {
+  if(SurveyActive() && surveyMask_!=7) {
+    Vec2 nearest=WorldMap::surveySites[0];float best=1000;
+    for(unsigned i=0;i<WorldMap::surveySites.size();++i) if(!(surveyMask_&(1u<<i))) {
+      const auto p=WorldMap::surveySites[i];const float d=Distance(player_,p);
+      if(d<best) {nearest=p;best=d;}
+    }
+    return nearest;
+  }
+  if ((frontierActive_ && !SurveyActive() && DefeatedCount()<3) || quest_==Quest::Active || (anchorQuest_==AnchorQuest::Active && DefeatedCount()<3)) {
     Vec2 nearest=WorldMap::astralAnchor; float best=1000;
     for (const auto& enemy : enemies_) if (enemy.health>0 && Distance(player_,enemy.position)<best) {
       nearest=enemy.position; best=Distance(player_,nearest);
     }
     return nearest;
   }
-  return frontierCompleted_==7?WorldMap::trainingPost:anchorQuest_==AnchorQuest::Active?WorldMap::astralAnchor:questGiver;
+  return frontierCompleted_==frontierQuestCount?WorldMap::trainingPost:anchorQuest_==AnchorQuest::Active?WorldMap::astralAnchor:QuestLocation(CurrentQuest());
 }
 
 std::string Simulation::InteractionPrompt() const {
   if (health_<=0) return "ENTER RETURN TO DAWNWATCH";
   if (sparring_) return "E END SPARRING ROUND";
   if (Channeling()) return "STABILIZING - STAND STILL";
+  if(SurveyActive()) for(unsigned i=0;i<WorldMap::surveySites.size();++i)
+    if(CanReadSurvey(WorldMap::surveySites[i]))
+      return surveyMask_&(1u<<i)?"SURVEY BEARING ALREADY RECORDED":"E RECORD SURVEY BEARING";
+  for(const auto& npc:WorldMap::residents)
+    if(Distance(player_,npc.position)<=3 && HasLineOfSight(player_,npc.position)) return std::string("E SPEAK TO ")+npc.name;
   if (Distance(player_,questGiver)<=3) {
     if (quest_==Quest::Available) return "E READ FRONTIER PATROL";
     if (quest_==Quest::Return || anchorQuest_==AnchorQuest::Return) return "E DISCUSS QUEST REWARD";

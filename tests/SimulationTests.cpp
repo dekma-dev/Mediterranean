@@ -14,7 +14,7 @@ float Distance(rpg::Vec2 a,rpg::Vec2 b) {
 int main() {
   rpg::Simulation game;
   Require(!game.CanStand({-8,-8}),"Building interior must block movement");
-  Require(!game.CanStand({18,0}),"Island edge must block movement");
+  Require(!game.CanStand({rpg::WorldMap::halfWidth+1,0}),"Island edge must block movement");
   Require(game.CanStand({0,0}),"Main path must remain walkable");
   Require(game.CameraDistance({0,-8},1.4f,{-1,0},0,10)<6,"Camera must pull forward before entering a building");
   Require(game.CameraDistance({0,-8},5.7f,{-1,0},0,10)<5,"Camera must avoid the pitched roof above the wall bounds");

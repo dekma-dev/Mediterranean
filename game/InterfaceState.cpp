@@ -114,8 +114,9 @@ Event Interface::Pointer(float x,float y,float width,float height,bool clicked,b
     dragBag_=hit->bag; dragGear_=hit->gear; dragItem_=Item(hit->event.value); pressX_=mouseX_; pressY_=mouseY_;
   }
   if (hit->event.action==Action::PlaceWaypoint) {
-    const float spanX=46*hit->rect.w/hit->rect.h;
-    pendingWaypoint={(mouseX_-hit->rect.x)/hit->rect.w*spanX-spanX*.5f,23-(mouseY_-hit->rect.y)/hit->rect.h*46};
+    const float spanX=rpg::WorldMap::surveyDepth*hit->rect.w/hit->rect.h;
+    pendingWaypoint={(mouseX_-hit->rect.x)/hit->rect.w*spanX-spanX*.5f,
+      (.5f-(mouseY_-hit->rect.y)/hit->rect.h)*rpg::WorldMap::surveyDepth};
   }
   return hit->event;
 }

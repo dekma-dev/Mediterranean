@@ -70,7 +70,8 @@ void ClassCombat(const std::string& veteran) {
    const auto target=s.TargetActor()->id;const auto maximum=s.TargetActor()->health;
    const float damage=s.HeavyDamage();int cast=0,hit=0,castSound=0;
    const auto observe=[&] {
-    sound::Events audio;audio.Update(s);for(unsigned n=0;n<audio.count;++n) castSound+=audio.cues[n]==(ClassId(id)==ClassId::Scout?sound::Cue::Bow:ClassId(id)==ClassId::Engineer?sound::Cue::Pistol:sound::Cue::Cast);
+    const auto releaseCue=ClassId(id)==ClassId::Warrior?sound::Cue::Heavy:sound::ClassReleaseCue(ClassId(id));
+    sound::Events audio;audio.Update(s);for(unsigned n=0;n<audio.count;++n) castSound+=audio.cues[n]==releaseCue;
     for(std::size_t n=0;n<s.VisualEventCount();++n) {
      const auto& event=s.VisualEvents()[n];
      if(event.kind==CombatVisualKind::SpellCast) {
@@ -87,7 +88,7 @@ void ClassCombat(const std::string& veteran) {
    Check(std::abs(enemy.health-(maximum-damage-extra))<.001f,"Class heavy damage/passive differs across rates");
    const float healing=ClassId(id)==ClassId::Necromancer?(damage+extra)*.15f:ClassId(id)==ClassId::Bard?3.f:ClassId(id)==ClassId::Priest?8.f:ClassId(id)==ClassId::Demonologist?-5.f:0.f;
    Check(std::abs(s.Health()-(50+healing))<.001f,"Class sustain/sacrifice passive");
-   Check(hit==1 && cast==int(ranged) && castSound==int(ranged),"Cast and contact must each occur once");
+   Check(hit==1 && cast==int(ranged) && castSound==1,"Release sound and contact must each occur once");
    if(ClassId(id)==ClassId::Psionic) Check(enemy.windup==0 && enemy.attackCooldown>1.4f,"Psionic interruption duration");
    Roundtrip(s);
   }
@@ -168,7 +169,8 @@ std::string Campaign(const std::string& veteran) {
   const auto xp=s.Experience();s.Update(.01f,finish);Check(s.Experience()==xp,"Repeated reward farming");Roundtrip(s);
  }
  Check(s.Level()==10 && s.Gold()==originalGold && s.EarnedPoints()==5,"Level cap and rewards");
- Check(s.ObjectivePosition().x==WorldMap::trainingPost.x && s.ObjectivePosition().z==WorldMap::trainingPost.z,"Completed campaign must point to training");
+ Check(s.ObjectivePosition().x==WorldMap::residents[0].position.x && s.ObjectivePosition().z==WorldMap::residents[0].position.z,
+   "Completed original campaign must point to the western expansion");
  for(auto talent:{Talent::WeaponTraining,Talent::Vitality,Talent::Restoration,Talent::WeaponMastery,Talent::Bulwark}) {
   Command learn;learn.learnTalent=int(talent);s.Update(.01f,learn);
  }

@@ -10,6 +10,27 @@ void Require(bool value,const char* message) {
   if (!value) { std::cerr<<message<<'\n'; std::exit(1); }
 }
 float Distance(rpg::Vec2 a,rpg::Vec2 b) { return std::hypot(a.x-b.x,a.z-b.z); }
+void PivotTraction() {
+  rpg::Vec2 reference{};
+  for(int hz:{1000,144,60,30,22}) {
+    rpg::Simulation s;rpg::Command run;run.movement={0,-1};
+    const auto advance=[&](float duration) {
+      for(float elapsed=0;elapsed<duration-1e-6f;) {
+        const float dt=std::min(1.f/hz,duration-elapsed);s.Update(dt,run);elapsed+=dt;
+        Require(s.CanStand(s.Player()),"Pivot movement escaped collision bounds");
+      }
+    };
+    advance(.5f);const auto before=s.Player();run.movement={0,1};
+    float overshoot=0;
+    for(int tick=0;tick<100;++tick) {
+      s.Update(.001f,run);overshoot=std::max(overshoot,before.z-s.Player().z);
+    }
+    Require(overshoot>.02f && overshoot<.072f,"Planted reversal must preserve momentum while shortening the skid");
+    advance(.4f);
+    if(hz==1000) reference=s.Player();
+    else Require(Distance(reference,s.Player())<.003f,"Pivot traction changed with frame rate");
+  }
+}
 const char* pursuit="MEDITERRANEAN 3\n-4 3 100 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
   "100 -4 7 80 1 0 1 0 3.14159265\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
 void SkyCameraClearance() {
@@ -234,6 +255,7 @@ void TransitionRegressions() {
 }
 }
 int main() {
+  PivotTraction();
   RmbBodySteering();
   SkyCameraClearance();
   {

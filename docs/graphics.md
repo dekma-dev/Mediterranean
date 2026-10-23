@@ -855,3 +855,15 @@ One before/after Release pair uses the same hidden 1280x720 workload, fixed 1/60
 | Merchant/character/bag | 0.900 / 1.070 → 0.892 / 1.059 | 0.509 / 0.544 → 0.510 / 0.549 | 600 / 600 |
 
 Peak submissions/triangles remain 58/296,828, 58/301,078, 57/309,582 and 68/285,640. Combat has 265 effect frames of 600 and 534 peak effect vertices, unchanged; other workloads submit no effects. Walking distance remains 31.908 units, with 270 windup frames and six received hits. Fixed mesh/material-terrain-shadow/interface storage remains 224,320/9,699,312/1,529,172 bytes. End working set/private bytes changes from 60.871/89.012 to 61.031/90.879 MiB. These short measurements include run variation and are not a speedup claim, fullscreen FPS estimate or long-session memory bound. Reports: `foot-placement-baseline-benchmark.txt` and `foot-placement-final-benchmark.txt` in the Release build directory. No assets were downloaded or player saves written.
+## Expanded-island navigation CPU pass (2026-10-22)
+
+`WorldMap::CanTravel` now rejects obstacles whose expanded bounds cannot overlap the route before sampling their rounded-rectangle clearance. It retains the original 0.1 m sampling lattice, endpoint validation and actor radius. Valid endpoints already bound the convex map rectangle. There is no occupancy cache to invalidate, no new allocation, and no reduced collision resolution. This accelerates both A* edge checks and line-of-sight/smoothing queries; rendering geometry, textures and GPU work were not changed by this pass.
+
+Three sequential Release runs of `NavigationTests.exe --benchmark` on the same machine used 32,768 deterministic travel queries with four clearance radii and 400 paths from the spawn to the expanded quest regions. These are isolated CPU microbenchmarks, not interactive FPS or frame-time claims.
+
+| Workload | Before, three runs (ms) | After, three runs (ms) | Median reduction |
+|---|---|---|---|
+| 32,768 travel checks | 233.876 / 223.729 / 225.233 | 38.750 / 39.633 / 38.005 | 82.8% |
+| 400 paths | 2524.600 / 2520.740 / 2556.140 | 322.240 / 302.198 / 321.591 | 87.3% |
+
+All six runs report checksum 11528. Regression checks compare 4,096 routes against the original sampled implementation, plus forward/reverse tangent probes at every obstacle across four radii. Existing path-segment clearance, 13,440 swept-collision cases and every authored road check remain in place. Baseline/final reports are `build-ninja-release/navigation-before.txt` and `navigation-after.txt`; broader validation is recorded in progress.md. Test construction and map generation are outside these benchmark timers.

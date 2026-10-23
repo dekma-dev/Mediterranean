@@ -29,6 +29,8 @@ These effects add to existing class passives and talent damage. Healing cannot e
 
 ## Presentation
 
+The follow-up [class combat effects pass](class-combat-effects.md) adds distinct preparation, projectile/contact shapes and release sounds, empowered layers, live barrier/control decorations and contact-only absorption ripples. It also fixes the shared shader's tendency to bleach school colors toward white. Existing combat rules below remain unchanged.
+
 The combat HUD has class crests, named reserves and three instrument styles: melee seals, ammunition chambers, and curved arcane gems. Heavy slots highlight when empowered. Health text includes the remaining barrier, absorbed hits show `ABSORB`, and the target frame names control/exposure effects with remaining seconds (incoming attack warnings take priority).
 
 Class attack rates advance the shared authored animation clock and authoritative contact together. Projectile flight uses the same rate conversion, so slower preparation does not detach the launch pose from impact. Retreat poses reverse the body's drive/bracing and leg sweep while keeping the champion's face toward the threat. Escape wakes and launch pulses use class colors and the actual travel direction.

@@ -13,10 +13,28 @@ WorldMap::WorldMap() {
     {{3,-13.3f},1.1f,.4f,.85f,PropKind::Counter}};
   for (float x : {-14.f,14.f}) for (float z : {-14.f,-2.f,10.f})
     obstacles_.push_back({{x,z},.35f,.35f,3.9f,PropKind::Tree});
+  // Expansion props stay outside the legacy playable rectangle, preserving saves.
+  obstacles_.push_back({{-24,6},2,2,3.4f,PropKind::Building,BuildingRole::WatchHall});
+  obstacles_.push_back({{25,-1},2,2,3.1f,PropKind::Building,BuildingRole::Storehouse});
+  obstacles_.push_back({{12,22},1.5f,1.5f,3.5f,PropKind::Building,BuildingRole::Homestead});
+  obstacles_.push_back({{0,29},2,1,2.8f,PropKind::Ruin});
+  for(const auto p:{Vec2{-26,-10},Vec2{-23,-15},Vec2{-25,11},Vec2{-17,24},
+      Vec2{24,-13},Vec2{19,-17},Vec2{26,9},Vec2{18,18},Vec2{-11,26}})
+    obstacles_.push_back({p,.35f,.35f,4.4f,PropKind::Tree});
+  for(const auto p:surveySites) obstacles_.push_back({p,.35f,.25f,.7f,PropKind::SurveyStone});
   trails_={{{0,-17},{0,-10},1.3f,true},{{0,-10},{0,-3},1.25f,true},
     {{-4.7f,-11},{4.7f,-11},1.f,true},{{0,-3},{-1,3},1.1f,false},{{-1,3},{0,10.8f},1.1f,false},
     {{0,10.8f},astralAnchor,1.f,false},{{-.5f,0},{-8.8f,0},.85f,false},{{-8.8f,0},{-12.5f,-1},.85f,false},
-    {{-.5f,0},{6,-2},.85f,false},{{6,-2},trainingPost,.9f,false}};
+    {{-.5f,0},{6,-2},.85f,false},{{6,-2},trainingPost,.9f,false},
+    {{-12.5f,-1},{-20,-1},.9f,false},{{-20,-1},{-21,2},.9f,false},{{-21,2},{-20,12},.85f,false},
+    {{-20,12},{-21,23},.85f,false},{{12,-2},{12.5f,0},.9f,false},{{12.5f,0},{19,0},.9f,false},{{19,0},{21,3},.9f,false},
+    {{21,3},{20.5f,11},.85f,false},{{20.5f,11},{23,20},.85f,false},{{23,20},{16,23.5f},.85f,false},
+    {{0,12.8f},{4,12.8f},.9f,false},{{4,12.8f},{8,16},.9f,false},{{8,16},{10,18},.9f,false},{{8,16},{3,22},.85f,false},
+    {{3,22},{0,27},.9f,false},
+    {{0,-17},{0,-22},.85f,false},{{0,-22},{-10,-25},.8f,false},
+    {{-10,-25},{-19,-21},.8f,false},{{-19,-21},{-19,-16},.8f,false},
+    {{0,-22},{10,-25},.8f,false},{{10,-25},{16,-22},.8f,false},
+    {{16,-22},{16,-16},.8f,false}};
   // Stable decoration, generated once. Keep routes, services and the arena clear.
   const auto hash=[](int x,int z) {
     std::uint32_t h=std::uint32_t(x)*374761393u+std::uint32_t(z)*668265263u;
@@ -37,6 +55,18 @@ WorldMap::WorldMap() {
     const bool shrub=seed>.94f && shrubs<18;
     if (shrub) ++shrubs;
     cover_.push_back({p,.7f+hash(x+17,z-3)*.5f,seed*6.2831853f,shrub});
+  }
+  // A separately bounded scatter keeps the original village cover intact.
+  for(int z=-27;z<=27;z+=2) for(int x=-25;x<=25;x+=2) {
+    if(std::abs(x)<17 && std::abs(z)<19) continue;
+    const float seed=hash(x+91,z-53);if(seed<.48f || cover_.size()>=maxCover) continue;
+    const Vec2 p{float(x)+(seed-.5f)*.5f,float(z)};
+    bool service=false;
+    for(const auto& npc:residents) service|=std::hypot(p.x-npc.position.x,p.z-npc.position.z)<2;
+    for(const auto site:surveySites) service|=std::hypot(p.x-site.x,p.z-site.z)<1.5f;
+    if(service || !CanStand(p,.8f) || SurfaceAt(p).dirt+SurfaceAt(p).paving>.06f) continue;
+    const bool shrub=seed>.94f && shrubs<maxShrubs;if(shrub) ++shrubs;
+    cover_.push_back({p,.7f+seed*.4f,seed*6.2831853f,shrub});
   }
 }
 
@@ -134,9 +164,22 @@ bool WorldMap::CanTravel(Vec2 from,Vec2 to,float radius) const {
   if (!CanStand(from,radius) || !CanStand(to,radius)) return false;
   const float distance=std::hypot(to.x-from.x,to.z-from.z);
   const int steps=std::max(1,static_cast<int>(std::ceil(distance/.1f)));
-  for (int i=1;i<steps;++i) {
-    const float t=static_cast<float>(i)/steps;
-    if (!CanStand({from.x+(to.x-from.x)*t,from.z+(to.z-from.z)*t},radius)) return false;
+  // The boundary is convex and both endpoints are valid. Only props near the
+  // segment can block an interior sample. Preserve the original sample lattice
+  // and rounded-rectangle clearance; this is rejection, not coarser collision.
+  const float minX=std::min(from.x,to.x),maxX=std::max(from.x,to.x);
+  const float minZ=std::min(from.z,to.z),maxZ=std::max(from.z,to.z);
+  for(const auto& o:obstacles_) {
+    const float margin=radius+.0001f;
+    if(maxX<o.center.x-o.halfX-margin || minX>o.center.x+o.halfX+margin ||
+       maxZ<o.center.z-o.halfZ-margin || minZ>o.center.z+o.halfZ+margin) continue;
+    for (int i=1;i<steps;++i) {
+      const float t=static_cast<float>(i)/steps;
+      const Vec2 p{from.x+(to.x-from.x)*t,from.z+(to.z-from.z)*t};
+      const float dx=p.x-std::clamp(p.x,o.center.x-o.halfX,o.center.x+o.halfX);
+      const float dz=p.z-std::clamp(p.z,o.center.z-o.halfZ,o.center.z+o.halfZ);
+      if(dx*dx+dz*dz<radius*radius) return false;
+    }
   }
   return true;
 }
@@ -144,8 +187,8 @@ bool WorldMap::CanTravel(Vec2 from,Vec2 to,float radius) const {
 std::vector<Vec2> WorldMap::FindPath(Vec2 from,Vec2 to,float radius) const {
   if (!CanStand(from,radius) || !CanStand(to,radius)) return {};
   if (CanTravel(from,to,radius)) return {to};
-  constexpr int columns=33, rows=37, total=columns*rows;
-  const auto point=[=](int index) { return Vec2{float(index%columns-16),float(index/columns-18)}; };
+  constexpr int columns=int(halfWidth)*2-1,rows=int(halfDepth)*2-1,total=columns*rows;
+  const auto point=[=](int index) { return Vec2{float(index%columns)-(halfWidth-1),float(index/columns)-(halfDepth-1)}; };
   // Anchor to a visible free grid point rather than rounding into an obstacle.
   const auto anchor=[&](Vec2 p) {
     int best=-1; float nearest=std::numeric_limits<float>::max();
@@ -201,6 +244,10 @@ std::vector<Vec2> WorldMap::FindPath(Vec2 from,Vec2 to,float radius) const {
 }
 
 const char* WorldMap::AreaName(Vec2 p) const {
+  if(p.z<-19) return "THE WINDWORN MEADOW";
+  if(p.x<-17) return "WESTWARD REACH";
+  if(p.x>17) return "THE SURVEY COAST";
+  if(p.z>19) return "THE SUNDERED BASTION";
   if (p.z<-4) return "DAWNWATCH VILLAGE";
   if (p.z>5) return "BROKEN WATCH CAMP";
   if (p.x<-5) return "ASTRAL DOCK";

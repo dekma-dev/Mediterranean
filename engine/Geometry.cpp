@@ -1,4 +1,5 @@
 #include "engine/Geometry.h"
+#include "game/WorldMap.h"
 #include "engine/Skinning.h"
 #include "engine/HandSkinning.h"
 #include "Blade.generated.h"
@@ -206,13 +207,14 @@ Geometry Equipment(Mesh mesh) {
 std::vector<float> BoundaryAngles() {
   std::vector<float> angles;
   for (int i=0;i<64;++i) angles.push_back(2*pi*i/64);
-  const float corner=std::atan2(17.3f,19.3f);
+  const float corner=std::atan2(rpg::WorldMap::halfWidth+.3f,rpg::WorldMap::halfDepth+.3f);
   for (auto angle : {corner,pi-corner,pi+corner,2*pi-corner}) angles.push_back(angle);
   std::sort(angles.begin(),angles.end()); return angles;
 }
 XMFLOAT3 Edge(float angle,float scale,float height) {
   const float x=std::sin(angle),z=std::cos(angle);
-  const float edge=std::min(17.3f/std::max(.0001f,std::abs(x)),19.3f/std::max(.0001f,std::abs(z)));
+  const float edge=std::min((rpg::WorldMap::halfWidth+.3f)/std::max(.0001f,std::abs(x)),
+    (rpg::WorldMap::halfDepth+.3f)/std::max(.0001f,std::abs(z)));
   const float bump=.35f+.35f*(1+std::sin(angle*11))* .5f;
   return {x*(edge+bump)*scale,height,z*(edge+bump)*scale};
 }

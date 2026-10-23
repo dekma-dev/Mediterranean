@@ -201,6 +201,29 @@ void Render(const std::filesystem::path& root,const std::string& veteran) {
   Check(game.Selection().DraftName()==std::string(20,'W'),"Name input did not enforce maximum length");
   renderer.BeginFrame();game.Render(renderer);
   Check(renderer.Capture((root/"creation-long-name.png").wstring()) && renderer.EndFrame(false),"Long-name render");
+  const auto draftName=game.Selection().DraftName();
+  for(int n=0;n<5;++n) {
+    d.Click(game,Control(int(Control::Skin0)+n));
+    d.Click(game,Control(int(Control::Hair0)+n));
+    d.Click(game,Control(int(Control::Dye0)+n));
+    Check(game.Selection().Hero().Look().skin==n && game.Selection().Hero().Look().hair==n &&
+      game.Selection().Hero().Look().dye==n,"Direct swatches do not select the displayed palette");
+  }
+  const auto draft=game.Selection().Hero().Save();
+  d.Click(game,Control::Closeup);
+  for(int n=0;n<90;++n) d.Step(game);
+  Check(game.Selection().PreviewZoom()>.99f,"Face inspection did not converge");
+  renderer.BeginFrame();game.Render(renderer);
+  Check(renderer.Capture((root/"creation-face-closeup.png").wstring()) && renderer.EndFrame(false),"Face closeup capture");
+  d.Click(game,Control::Pose);
+  Check(!game.Selection().Closeup() && game.Selection().PreviewAction()>=0,"Action preview failed to return to full figure");
+  for(int n=0;n<12;++n) d.Step(game);
+  renderer.BeginFrame();game.Render(renderer);
+  Check(renderer.Capture((root/"creation-action.png").wstring()) && renderer.EndFrame(false),"Action preview capture");
+  d.Click(game,Control::Right);d.Click(game,Control::ResetView);
+  Check(game.Selection().Yaw()==0 && game.Selection().PreviewAction()<0 && !game.Selection().Closeup() &&
+    game.Selection().Hero().Save()==draft && game.Selection().DraftName()==draftName,"Preview controls changed the draft or failed reset");
+  d.Click(game,Control::Name);
   d.frame.down[VK_CONTROL]=true;d.Key(game,'A');d.frame.down[VK_CONTROL]=false;d.Step(game);
   Check(game.Selection().DraftName().empty() && !game.Selection().Enabled(Control::Confirm),"Ctrl+A did not clear and disable creation");
   d.Key(game,VK_OEM_MINUS);Check(!game.Selection().Enabled(Control::Confirm),"Punctuation-only name was accepted");

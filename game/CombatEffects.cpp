@@ -1,4 +1,5 @@
 #include "game/CombatEffects.h"
+#include "game/ClassEffects.h"
 #include "engine/Renderer.h"
 #include <algorithm>
 #include <cmath>
@@ -100,7 +101,7 @@ void DashPulse(Renderer& renderer,const rpg::CombatVisualEvent& event,float age)
 }
 // A tapered, curved slash envelope. Its two ribbons share the normal effect
 // batch: a colored halo around a thin bright edge, without a bloom render target.
-void Crescent(Renderer& renderer,XMFLOAT3 origin,float facing,float age,bool heavy,bool enemy,bool echo) {
+void Crescent(Renderer& renderer,XMFLOAT3 origin,float facing,float age,bool heavy,bool enemy,bool echo,rpg::ClassId school) {
   const float delay=echo?.045f:0,phase=(age-delay)/(sweepLife-delay);
   if (phase<=0 || phase>=1) return;
   constexpr int segments=28;
@@ -119,6 +120,7 @@ void Crescent(Renderer& renderer,XMFLOAT3 origin,float facing,float age,bool hea
     return {origin.x+cx*x+sx*z,origin.y+1.1f+y,origin.z-sx*x+cx*z};
   };
   auto color=echo?XMFLOAT4{.62f,.22f,1,1}:Tint(heavy?K::HeavyStrike:enemy?K::EnemySwing:K::Strike);
+  if(!enemy && school!=rpg::ClassId::Warrior) color=classfx::Color(school);
   for (int layer=0;layer<2;++layer) {
     const float thickness=width*(layer==0?2.6f:.55f);
     color.w=envelope*(layer==0?.24f:.92f)*(enemy?.65f:1)*(echo?.7f:1);
@@ -176,6 +178,7 @@ void CombatEffects::Emit(const rpg::CombatVisualEvent& event,const XMFLOAT3* spe
     if (slot==trails_.end()) slot=std::max_element(trails_.begin(),trails_.end(),[](const Trail& a,const Trail& b) { return a.age<b.age; });
     *slot={}; slot->actor=event.actor; slot->kind=event.kind; slot->age=elapsed;
     slot->origin={event.position.x,event.height,event.position.z}; slot->facing=event.facing;
+    slot->school=event.school;
     return;
   }
   auto slot=std::max_element(bursts_.begin(),bursts_.end(),[](const Burst& a,const Burst& b) {
@@ -300,10 +303,11 @@ void CombatEffects::Render(Renderer& renderer) const {
   }
   for (const auto& trail : trails_) {
     if (trail.age<sweepLife) {
-      Crescent(renderer,trail.origin,trail.facing,trail.age,trail.kind==K::HeavyStrike,trail.kind==K::EnemySwing,false);
-      if (trail.kind==K::HeavyStrike) Crescent(renderer,trail.origin,trail.facing,trail.age,true,false,true);
+      Crescent(renderer,trail.origin,trail.facing,trail.age,trail.kind==K::HeavyStrike,trail.kind==K::EnemySwing,false,trail.school);
+      if (trail.kind==K::HeavyStrike) Crescent(renderer,trail.origin,trail.facing,trail.age,true,false,true,trail.school);
     }
     auto color=Tint(trail.kind); color.w=trail.kind==K::HeavyStrike?.8f:.48f;
+    if(trail.kind!=K::EnemySwing && trail.school!=rpg::ClassId::Warrior) color=classfx::Color(trail.school,color.w);
     for (std::size_t i=1;i<trail.count;++i) {
       const auto& a=trail.samples[i-1]; const auto& b=trail.samples[i];
       renderer.DrawEffectRibbon(a.root,a.tip,b.tip,b.root,color,
@@ -314,28 +318,15 @@ void CombatEffects::Render(Renderer& renderer) const {
     if (burst.age>=BurstLife(burst.event.kind)) continue;
     const auto& e=burst.event;
     if(e.kind==K::SpellCast) {
-      const auto& tint=rpg::DescribeClass(e.school).color;
-      const auto form=rpg::WeaponFor(e.school).form;const bool physical=rpg::PhysicalLauncher(form);
-      const float t=Unit(burst.age/std::max(.01f,e.flight)),fade=1-Unit((burst.age-e.flight)/(physical?.045f:.12f));
-      if(fade<=0) continue;
-      const auto point=[&](float u) -> XMFLOAT3 {
-        return SpellTracePoint(burst.spellOrigin,e.destination,u,physical?0.f:.16f);
-      };
-      const XMFLOAT4 color{std::min(1.f,tint[0]+.3f),std::min(1.f,tint[1]+.3f),std::min(1.f,tint[2]+.3f),fade*.8f};
-      if(physical) {
-        renderer.DrawEffectStreak(point(std::max(0.f,t-.08f)),point(t),.014f,{.95f,.85f,.59f,fade});
-        if(form==rpg::WeaponForm::Pistol) {
-          const float flash=1-Unit(burst.age/.055f);
-          renderer.DrawEffectGlow(burst.spellOrigin,.13f,{1,.72f,.34f,flash*.8f});
-          renderer.DrawEffectGlow(point(t),.035f,{1,.82f,.54f,fade*.45f});
-        }
-      } else {
-        renderer.DrawEffectStreak(point(std::max(0.f,t-.22f)),point(t),.055f,color);
-        renderer.DrawEffectGlow(point(t),.12f,color);
-      }
+      classfx::Projectile(renderer,e,burst.spellOrigin,burst.age);
       continue;
     }
-    if (Healing(e.kind)) { HealingPulse(renderer,e,burst.age); continue; }
+    if(e.kind==K::BarrierHit) { classfx::BarrierContact(renderer,e,burst.age);continue; }
+    if(e.kind==K::Hit || e.kind==K::HeavyHit) {
+      classfx::Impact(renderer,e,burst.age);continue;
+    }
+    if (e.kind==K::Mend) { classfx::Recovery(renderer,e,burst.age); continue; }
+    if (e.kind==K::Potion) { HealingPulse(renderer,e,burst.age); continue; }
     if (Dashing(e.kind)) { DashPulse(renderer,e,burst.age); continue; }
     const bool heavy=e.kind==K::HeavyHit,interrupt=e.kind==K::Interrupt,hurt=e.kind==K::Hurt;
     const float t=burst.age,fade=std::pow(Unit(1-t/burstLife),2.f);

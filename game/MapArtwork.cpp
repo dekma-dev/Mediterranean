@@ -18,7 +18,7 @@ float Noise(float x,float y) {
  return (Hash(ix,iy)*(1-u)+Hash(ix+1,iy)*u)*(1-v)+(Hash(ix,iy+1)*(1-u)+Hash(ix+1,iy+1)*u)*v;
 }
 RGB Mix(RGB a,RGB b,float t) { return {a.r+(b.r-a.r)*t,a.g+(b.g-a.g)*t,a.b+(b.b-a.b)*t}; }
-Point Map(float x,float z) { return {(x+21)*size/42,(23-z)*size/46}; }
+Point Map(float x,float z) { return {(x/rpg::WorldMap::surveyWidth+.5f)*size,(.5f-z/rpg::WorldMap::surveyDepth)*size}; }
 bool Inside(const std::vector<Point>& points,float x,float y) {
  bool inside=false;
  for (std::size_t i=0,j=points.size()-1;i<points.size();j=i++) {
@@ -120,7 +120,7 @@ std::vector<std::uint8_t> BuildMapArtwork(const rpg::WorldMap& world) {
  }
  Survey survey;
  for (unsigned row=0;row<size;++row) for (unsigned column=0;column<size;++column) {
-  const float x=(column+.5f)/size*42-21,z=23-(row+.5f)/size*46;
+  const float x=((column+.5f)/size-.5f)*rpg::WorldMap::surveyWidth,z=(.5f-(row+.5f)/size)*rpg::WorldMap::surveyDepth;
   const float n=Noise(x*.24f,z*.24f),fine=Hash(int(column),int(row));
   // Match the atlas's paper gutters at the texture edges.
   const float edge=std::clamp(float(std::min({column,row,size-1-column,size-1-row}))/16,0.f,1.f);
@@ -171,7 +171,9 @@ std::vector<std::uint8_t> BuildMapArtwork(const rpg::WorldMap& world) {
    for (int i=-2;i<=2;++i) survey.Line({p.x+i*4,p.y-4},{p.x+i*5,p.y+4},.7f,ink,.6f);
    survey.Line({p.x-11,p.y+5},{p.x-11,p.y+11},1);
    survey.Line({p.x+11,p.y+5},{p.x+11,p.y+11},1);
-  } else survey.Building(p,o.halfX*size/42,o.halfZ*size/46,o.kind,o.role);
+  } else if(o.kind==rpg::PropKind::SurveyStone) {
+   survey.Line({p.x-2,p.y+2},{p.x,p.y-3},1,ink,.8f);survey.Line({p.x,p.y-3},{p.x+2,p.y+2},1,ink,.8f);
+  } else survey.Building(p,o.halfX*size/rpg::WorldMap::surveyWidth,o.halfZ*size/rpg::WorldMap::surveyDepth,o.kind,o.role);
  }
  // Wear is baked once into the existing atlas: no per-frame texture uploads.
  for(unsigned y=0;y<size;++y) for(unsigned x=0;x<size;++x) {

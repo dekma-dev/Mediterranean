@@ -129,8 +129,9 @@ void Simulation::UseAbility(int index,float visualElapsed) {
     if (health_>=MaxHealth()) { message_="Health is already full."; return; }
     const float healed=std::min(MendHealingNow(),MaxHealth()-health_);
     health_+=healed; Emit(FeedbackKind::Heal,player_,static_cast<int>(healed));
+    barrier_=std::max(barrier_,ClassRecoveryBarrier(class_));
     EmitVisual(CombatVisualKind::Mend,player_,height_,facing_);
-    message_=std::string(Spell(index).name)+" restored health.";
+    message_=std::string(Spell(index).name)+(ClassRecoveryBarrier(class_)>0?" restored health and raised a ward.":" restored health.");
   } else if (index==2) {
     if (RetreatMobility()) {
       if (const auto* target=TargetActor(); target && target->health>0 && target->state!=EnemyState::Returning) {
@@ -241,7 +242,12 @@ void Simulation::ResolveAttack(float elapsed) {
     if (TargetActor() && TargetActor()->id==enemy.id) target_=-1;
     enemy.state=EnemyState::Dead; enemy.path.clear(); enemy.windup=0;
     if (trainingTarget) { EndSparring("Victory"); return; }
-    if(frontierActive_) {enemy.looted=true;message_="Frontier enemy defeated. Complete the squad and report to the keeper.";return;}
+    if(frontierActive_) {
+      enemy.looted=true;
+      message_=DefeatedCount()==3?std::string("Squad defeated. Report to ")+DescribeQuest(CurrentQuest()).speaker+".":
+        "Frontier enemy defeated. Clear the remaining positions.";
+      return;
+    }
     Emit(FeedbackKind::Experience,enemy.position,40);
     message_="Raider defeated. Press E nearby to loot.";
     if (quest_==Quest::Active) { quest_=Quest::Return; message_="Patrol complete. Return to the gold beacon and press E."; }
@@ -314,16 +320,28 @@ const char* Simulation::AbilityStatus(int index) const {
 }
 
 void Simulation::PrepareFrontierEnemies(int rank) {
+  constexpr Vec2 west[]={{-23,15},{-19,19},{-24,23}};
+  constexpr Vec2 north[]={{-6,25},{0,27},{6,25}};
   for(std::size_t i=0;i<enemies_.size();++i) {
-    const auto home=enemies_[i].home;const auto id=enemies_[i].id;
+    const auto home=rank==8?west[i]:rank>=9?north[i]:enemies_[i].home;const auto id=enemies_[i].id;
     enemies_[i]=Enemy{};auto& enemy=enemies_[i];enemy.home=enemy.position=home;enemy.id=id;enemy.rank=rank;
     enemy.kind=i==2?EnemyKind::Captain:(rank+i)%2?EnemyKind::Reaver:EnemyKind::Wraith;
     enemy.health=enemy.MaxHealth();
+    if(rank==9) {enemy.health=0;enemy.looted=true;enemy.state=EnemyState::Dead;}
   }
   StopMovement();target_=-1;
 }
 void Simulation::Interact() {
   if (sparring_) { EndSparring("Stopped"); return; }
+  if(SurveyActive()) for(unsigned i=0;i<WorldMap::surveySites.size();++i) {
+    const auto site=WorldMap::surveySites[i];
+    if(!CanReadSurvey(site)) continue;
+    if(!Grounded() || Dashing()) {message_="Land beside the survey stone to read its bearing.";return;}
+    const auto bit=1u<<i;
+    if(surveyMask_&bit) message_="This bearing is already recorded.";
+    else {surveyMask_|=bit;StopMovement();message_=surveyMask_==7?"All three bearings recorded. Return to Surveyor Mara.":"Bearing recorded. The atlas marks the next unread stone.";}
+    return;
+  }
   const bool nearbyLoot=std::any_of(enemies_.begin(),enemies_.end(),[&](const Enemy& e) {
     return e.health<=0 && !e.looted && Length(Difference(player_,e.position))<=2.5f && HasLineOfSight(player_,e.position);
   });
@@ -349,7 +367,16 @@ void Simulation::Interact() {
     // Loot still takes precedence over an unavailable/already stable anchor.
     if (Channeling()) return;
   }
-  if (Length(Difference(player_,questGiver))>3) {
+  QuestId speakerQuest=QuestId::None;
+  if(Length(Difference(player_,questGiver))<=3) speakerQuest=std::min(CurrentQuest(),QuestId::Watch7);
+  for(unsigned i=0;i<WorldMap::residents.size();++i) {
+    const auto& npc=WorldMap::residents[i];
+    if(Length(Difference(player_,npc.position))>3 || !HasLineOfSight(player_,npc.position)) continue;
+    const auto id=QuestId(int(QuestId::Watch8)+i);
+    if(id>CurrentQuest()) {message_=npc.greeting;return;}
+    speakerQuest=id;break;
+  }
+  if (speakerQuest==QuestId::None) {
     Enemy* nearest=nullptr; float best=2.5f;
     for (auto& enemy : enemies_) {
       const float distance=Length(Difference(player_,enemy.position));
@@ -362,25 +389,37 @@ void Simulation::Interact() {
       nearest->looted=true; gold_+=5;
       message_="Looted 5 gold and one healing potion. Q uses a potion.";
     } else if (Length(Difference(player_,WorldMap::astralAnchor))>2.5f)
-      message_="Move near the gold beacon, astral anchor, or loot bag and press E.";
+      message_="Move near a resident, survey stone, astral anchor or loot bag and press E.";
     return;
   }
-  if (!CanTalkToKeeper()) { message_="Stand beside the beacon keeper to speak."; return; }
+  const auto speaker=QuestLocation(speakerQuest);
+  if(health_<=0 || !Grounded() || Dashing() || !HasLineOfSight(player_,speaker)) {message_="Stand beside the quest speaker to talk.";return;}
   StopMovement();
-  questDialogue_=quest_!=Quest::Complete?QuestId::Patrol:anchorQuest_!=AnchorQuest::Complete?QuestId::Anchor:
-    QuestId(int(QuestId::Watch1)+std::min(frontierCompleted_,6));
-  message_="Beacon Keeper: read the assignment and its rewards.";
+  questDialogue_=speakerQuest;
+  message_=std::string(DescribeQuest(speakerQuest).speaker)+": read the assignment and its rewards.";
 }
 
+bool Simulation::CanReadSurvey(Vec2 site) const {
+  const auto delta=Difference(player_,site);const float distance=Length(delta);
+  if(distance<.55f || distance>2.3f) return false;
+  // The marker is solid. Test sight to its near face, not into its stone core.
+  return HasLineOfSight(player_,{site.x+delta.x*.55f/distance,site.z+delta.z*.55f/distance});
+}
+
+QuestId Simulation::CurrentQuest() const {
+  return quest_!=Quest::Complete?QuestId::Patrol:anchorQuest_!=AnchorQuest::Complete?QuestId::Anchor:
+    QuestId(int(QuestId::Watch1)+std::min(frontierCompleted_,frontierQuestCount-1));
+}
 bool Simulation::CanTalkToKeeper() const {
+  const auto speaker=questDialogue_==QuestId::None?QuestLocation(CurrentQuest()):DialoguePosition();
   return health_>0 && Grounded() && !Dashing() && !sparring_ &&
-    Length(Difference(player_,questGiver))<=3 && HasLineOfSight(player_,questGiver);
+    Length(Difference(player_,speaker))<=3 && HasLineOfSight(player_,speaker);
 }
 
 QuestStage Simulation::DialogueStage() const {
   if(questDialogue_>=QuestId::Watch1) {
     if(int(questDialogue_)-int(QuestId::Watch1)<frontierCompleted_) return QuestStage::Complete;
-    return !frontierActive_?QuestStage::Offer:DefeatedCount()==3?QuestStage::TurnIn:QuestStage::Progress;
+    return !frontierActive_?QuestStage::Offer:FrontierReady()?QuestStage::TurnIn:QuestStage::Progress;
   }
   if (questDialogue_==QuestId::Patrol)
     return quest_==Quest::Available?QuestStage::Offer:quest_==Quest::Active?QuestStage::Progress:
@@ -404,7 +443,7 @@ QuestAction Simulation::QuestPrimaryAction() const {
 }
 
 const char* Simulation::QuestConfirmStatus() const {
-  if (questDialogue_==QuestId::None || !CanTalkToKeeper()) return "Return to the beacon keeper.";
+  if (questDialogue_==QuestId::None || !CanTalkToKeeper()) return "Return to the quest speaker.";
   if (QuestPrimaryAction()==QuestAction::None)
     return DialogueStage()==QuestStage::Complete?"Reward received. Thank you for your service.":"Complete the objectives, then return.";
   if(QuestPrimaryAction()==QuestAction::AcceptFrontier && frontierCompleted_==0 &&
@@ -421,7 +460,8 @@ void Simulation::ConfirmQuest(QuestAction action) {
   if (std::string(QuestConfirmStatus())!="READY") { message_=QuestConfirmStatus(); return; }
   if(action==QuestAction::AcceptFrontier) {
     if(frontierCompleted_==0) legacyLoot_=int(std::count_if(enemies_.begin(),enemies_.end(),[](const Enemy& e){return e.looted;}));
-    frontierActive_=true;PrepareFrontierEnemies(frontierCompleted_+1);message_="Dispatch accepted. Clear the northern patrol ground.";return;
+    frontierActive_=true;PrepareFrontierEnemies(frontierCompleted_+1);
+    message_=DescribeQuest(questDialogue_).objective;return;
   }
   if(action==QuestAction::CompleteFrontier) {
     const int old=Level();++frontierCompleted_;frontierActive_=false;RestoreForLevel(old);
@@ -527,20 +567,27 @@ void Simulation::Update(float seconds,const Command& command) {
   }
   const auto integrateHorizontal=[&](float interval,bool airborne) {
     if (interval<=0) return;
+    const auto intervalStart=player_;
+    const int steps=std::max(1,int(std::ceil(interval*120.f)));
+    const float step=interval/steps;
+    for(int slice=0;slice<steps;++slice) {
     Vec2 target{};
     if (moving) {
       const float speed=(airborne?airSpeedLimit_:(command.sprint?7.f:4.f)*pace)*std::min(1.f,length);
       target={command.movement.x/length*speed,command.movement.z/length*speed};
     } else if (airborne) target=movementVelocity_; // Keep takeoff momentum without input.
-    const float response=airborne?3.f:moving?motion::groundAcceleration:motion::groundBraking;
-    const Vec2 travel{motion::IntegrateVelocity(movementVelocity_.x,target.x,response,interval),
-      motion::IntegrateVelocity(movementVelocity_.z,target.z,response,interval)};
+    // Extra planted traction opposes an existing stride during a reversal,
+    // tapering away as momentum changes direction. Air control stays limited.
+    const float opposition=std::clamp(-(movementVelocity_.x*target.x+movementVelocity_.z*target.z)/
+      std::max(.01f,target.x*target.x+target.z*target.z),0.f,1.f);
+    const float response=airborne?3.f:moving?motion::groundAcceleration+8.f*opposition:motion::groundBraking;
+    const Vec2 travel{motion::IntegrateVelocity(movementVelocity_.x,target.x,response,step),
+      motion::IntegrateVelocity(movementVelocity_.z,target.z,response,step)};
     const auto before=player_;
     Move(player_,travel,.4f);
     const auto actual=Difference(player_,before);
     // Ordinary locomotion follows actual travel. RMB keeps the camera heading
     // while strafing or backing up; accepted combat below can commit a new heading.
-    if (!steering && !Attacking() && Length(actual)>.00001f) facing_=std::atan2(actual.x,actual.z);
     movementDistance_+=Length(actual);
     if (!airborne) groundMovementDistance_+=Length(actual);
     // Remove velocity into the contact, preserving motion along the wall.
@@ -552,6 +599,9 @@ void Simulation::Update(float seconds,const Command& command) {
       movementVelocity_.x-=normal.x*into; movementVelocity_.z-=normal.z*into;
     }
     if (!airborne && !moving && Length(movementVelocity_)<.01f) movementVelocity_={};
+    }
+    const auto netTravel=Difference(player_,intervalStart);
+    if (!steering && !Attacking() && Length(netTravel)>.00001f) facing_=std::atan2(netTravel.x,netTravel.z);
   };
   // Selection is resolved before availability and activation, including Tab+3.
   if (command.nextTarget) SelectTarget();
@@ -802,7 +852,7 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
 
 std::string Simulation::Save() const {
   std::ostringstream out;
-  out << std::setprecision(9) << "MEDITERRANEAN 12\n" << "PROFILE " << int(class_) << ' ' << std::quoted(nickname_) << ' ' << frontierCompleted_ << ' ' << frontierActive_ << ' ' << legacyLoot_ << '\n' << player_.x << ' ' << player_.z << ' '
+  out << std::setprecision(9) << "MEDITERRANEAN 13\n" << "PROFILE " << int(class_) << ' ' << std::quoted(nickname_) << ' ' << frontierCompleted_ << ' ' << frontierActive_ << ' ' << legacyLoot_ << '\n' << player_.x << ' ' << player_.z << ' '
     << health_ << ' ' << facing_ << ' ' << static_cast<int>(quest_) << ' ' << gold_ << '\n';
   out << Potions() << ' ' << HasRewardWeapon() << ' ' << RewardWeaponEquipped() << ' ' << potionCooldown_ << '\n';
   out << static_cast<int>(anchorQuest_) << '\n';
@@ -818,6 +868,7 @@ std::string Simulation::Save() const {
   out<<"BUILD "<<build_<<'\n';
   out<<"LOADOUTS "<<loadouts_[0]<<' '<<loadouts_[1]<<' '<<loadouts_[2]<<'\n';
   out<<"APPEARANCE "<<appearance_.skin<<' '<<appearance_.hair<<' '<<appearance_.dye<<'\n';
+  out<<"SURVEY "<<surveyMask_<<'\n';
   return out.str();
 }
 
@@ -826,12 +877,12 @@ bool Simulation::Load(const std::string& data) {
   std::istringstream input(data);
   std::string magic; int version=0, quest=0,potions=2,owned=0,equipped=0;
   Simulation candidate;
-  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>12) return false;
+  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>13) return false;
   if(version>=11) {
     std::string tag,name;int id=0,completed=0,active=0,looted=0;
     if(!(input>>tag>>id>>std::quoted(name)>>completed>>active>>looted) || tag!="PROFILE" ||
-      !candidate.CreateCharacter(ClassId(id),name) || completed<0 || completed>7 || active<0 || active>1 ||
-      (completed==7 && active) || looted<0 || looted>3 || (completed==0 && !active && looted!=0)) return false;
+      !candidate.CreateCharacter(ClassId(id),name) || completed<0 || completed>(version>=13?frontierQuestCount:7) || active<0 || active>1 ||
+      (completed==(version>=13?frontierQuestCount:7) && active) || looted<0 || looted>3 || (completed==0 && !active && looted!=0)) return false;
     candidate.frontierCompleted_=completed;candidate.frontierActive_=active!=0;candidate.legacyLoot_=looted;
     if(completed || active) candidate.PrepareFrontierEnemies(completed+active);
   }
@@ -858,7 +909,7 @@ bool Simulation::Load(const std::string& data) {
   if (!(input >> candidate.player_.x >> candidate.player_.z >> candidate.health_ >> candidate.facing_ >> quest >> candidate.gold_)) return false;
   migrateCounter(candidate.player_,.4f);
   auto valid=[](float value,float min,float max) { return std::isfinite(value) && value>=min && value<=max; };
-  if (!valid(candidate.player_.x,-17,17) || !valid(candidate.player_.z,-19,19) ||
+  if (!valid(candidate.player_.x,-WorldMap::halfWidth,WorldMap::halfWidth) || !valid(candidate.player_.z,-WorldMap::halfDepth,WorldMap::halfDepth) ||
     !candidate.CanStand(candidate.player_) || !std::isfinite(candidate.health_) || candidate.health_<0 ||
     (version<3 && candidate.health_>100) ||
     !valid(candidate.facing_,-3.142f,3.142f) || quest<0 || quest>3 || candidate.gold_<0 || (version<6 && candidate.gold_>90)) return false;
@@ -883,7 +934,7 @@ bool Simulation::Load(const std::string& data) {
     }
     if (!(input >> enemy.position.x >> enemy.position.z >> enemy.health >> enemy.attackCooldown)) return false;
     migrateCounter(enemy.position,.45f);
-    if (!valid(enemy.position.x,-17,17) || !valid(enemy.position.z,-19,19) || !candidate.CanStand(enemy.position,.45f) ||
+    if (!valid(enemy.position.x,-WorldMap::halfWidth,WorldMap::halfWidth) || !valid(enemy.position.z,-WorldMap::halfDepth,WorldMap::halfDepth) || !candidate.CanStand(enemy.position,.45f) ||
       !valid(enemy.health,0,version<3?80.f:enemy.MaxHealth()) ||
       !valid(enemy.attackCooldown,0,version<3?1.4f:version>=11?std::max(1.5f,enemy.AttackInterval()):enemy.AttackInterval())) return false;
     if (version<3) enemy.health=enemy.health/80.f*enemy.MaxHealth();
@@ -947,6 +998,13 @@ bool Simulation::Load(const std::string& data) {
   if(version>=12) {
     std::string tag;auto& look=candidate.appearance_;
     if(!(input>>tag>>look.skin>>look.hair>>look.dye) || tag!="APPEARANCE" || !look.Valid()) return false;
+  }
+  if(version>=13) {
+    std::string tag;
+    if(!(input>>tag>>candidate.surveyMask_) || tag!="SURVEY" || candidate.surveyMask_>7 ||
+      (candidate.surveyMask_ && !candidate.SurveyActive() && candidate.frontierCompleted_<9) ||
+      (candidate.frontierCompleted_>=9 && candidate.surveyMask_!=7) ||
+      (candidate.SurveyActive() && defeated!=3)) return false;
   }
   input >> std::ws;
   if (!input.eof()) return false;

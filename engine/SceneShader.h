@@ -348,7 +348,8 @@ float4 PSMain(VOut i) : SV_TARGET {
   float broad=Noise(i.wp.xz*.16),fine=Noise(i.wp.xz*1.7);
   albedo=lerp(float3(.22,.32,.12),float3(.39,.43,.20),broad)*detail;
   // The 256-square weight map shares authored routes with the atlas and cover.
-  float2 groundUV=float2((i.wp.x+21)/42,(23-i.wp.z)/46);
+  // WorldMap survey bounds: 58 x 62 m playable land, plus a 4 m paper gutter.
+  float2 groundUV=float2((i.wp.x+33)/66,(35-i.wp.z)/70);
   float2 routes=terrainSurface.Sample(fontSampler,groundUV).rg;
   routes*=all(groundUV>=0) && all(groundUV<=1);
   float3 soil=float3(.43,.34,.23)*(.83+fine*.2)*detail;
@@ -446,7 +447,11 @@ float4 PSEffect(EffectOut i) : SV_TARGET {
   float ends=pow(saturate(1-p.x*p.x),2);
   core=pow(edge,8)*ends; mask=(.28*edge*edge+.72*pow(edge,4))*ends;
  }
- float3 luminous=lerp(i.tint.rgb,float3(1,.98,.92),core*(i.uv.z<.5?.42:.72));
+ // Preserve the school hue in thin cores. A forced ivory core made fire,
+ // nature and mind effects converge to the same white wire in daylight.
+ // Contact flashes can still request a pale tint explicitly.
+ float3 hot=min(float3(1,1,1),i.tint.rgb*1.25+.04);
+ float3 luminous=lerp(i.tint.rgb,hot,core*(i.uv.z<.5?.30:.55));
  return float4(luminous,saturate(i.tint.a)*mask*i.fog);
 }
 struct SkyOut { float4 p : SV_POSITION; float2 uv : TEXCOORD0; };

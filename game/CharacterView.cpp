@@ -3,6 +3,7 @@
 #include "game/CharacterRig.h"
 #include "game/HandPose.h"
 #include "game/WeaponVisual.h"
+#include "game/ClassClothing.h"
 #include "engine/Renderer.h"
 #include <cmath>
 #include <algorithm>
@@ -41,6 +42,12 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
     };
     const auto body=renderer.DrawBody({p.x,base,p.z},yaw,BuildCharacterRig(pose,outfit,color),actor);
     const auto attachments=renderer.AttachToBody(body);
+    const auto fittings=clothing::Build(outfit);
+    for(unsigned n=0;n<fittings.count;++n) {
+      const auto& fitting=fittings.parts[n];
+      part(fitting.mesh,fitting.position.x,fitting.position.y,fitting.position.z,
+        fitting.scale,fitting.color,fitting.material,2);
+    }
     if (outfit.belt) {
       part(M::Limb,0,.95f,0,{.55f,.085f,.37f},leather,S::Cloth);
       part(M::Box,0,.95f,.19f,{.10f,.075f,.025f},{.67f,.49f,.22f,1},S::Metal);
@@ -169,7 +176,7 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
           {.16f,.16f,.09f},steel,S::Metal,yaw+pose.upperYaw,pose.upperPitch,visual::ShadowMode::Cast,pose.upperRoll);
       }
     }
-    if (outfit.armor || outfit.shoulders) {
+    if (outfit.armor && !outfit.shoulders) {
       const auto guardColor=outfit.shoulders?leather:steel;
       const auto guardMaterial=outfit.shoulders?S::Cloth:S::Metal;
       for (float side : {-1.f,1.f}) {

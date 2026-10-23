@@ -6,6 +6,7 @@
 #include "game/CharacterView.h"
 #include "game/HandPose.h"
 #include "game/CharacterPose.h"
+#include "game/ClassEffects.h"
 #include "game/TerrainSurface.h"
 #include <algorithm>
 #include <cmath>
@@ -246,8 +247,8 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
     if(event.kind==rpg::CombatVisualKind::SpellCast) {
       auto launch=playerAnimation_.pose;
       launch.attackSeconds=-1; launch.cast=0;
-      launch.action=animation::SampleAction(event.school,simulation_.HeavyAttack()?animation::ActionClip::Heavy:animation::ActionClip::Basic,
-        combat::StrokeStart(simulation_.HeavyAttack()));
+      launch.action=animation::SampleAction(event.school,event.heavy?animation::ActionClip::Heavy:animation::ActionClip::Basic,
+        combat::StrokeStart(event.heavy));
       const bool shield=simulation_.Items().Worn(rpg::GearSlot::Offhand)!=rpg::Item::None;
       const auto form=rpg::WeaponFor(event.school).form;
       const auto releasePose=BuildCharacterPose(0,playerPose_.gait,shield,launch,form);
@@ -376,7 +377,7 @@ void Game::UpdateFaces(float dt) {
   const bool alive=simulation_.Health()>0;
   facial::Aim aim;
   if(talking || shopping) {
-    const auto npc=talking?rpg::WorldMap::questGiver:rpg::WorldMap::quartermaster;
+    const auto npc=talking?simulation_.DialoguePosition():rpg::WorldMap::quartermaster;
     aim=facial::LookAt(npc.x-player.x,-simulation_.Height(),npc.z-player.z,playerPose_.facing);
   } else if(target && target->health>0)
     aim=facial::LookAt(target->position.x-player.x,-simulation_.Height(),target->position.z-player.z,playerPose_.facing);
@@ -399,7 +400,7 @@ void Game::UpdateFaces(float dt) {
     const auto gaze=alive && distance<4?facial::LookAt(player.x-position.x,simulation_.Height(),player.z-position.z,facing):facial::Aim{};
     state.Update(dt,gaze,0,0,interaction?.5f:distance<3?.12f:0);
   };
-  npc(keeperFace_,rpg::WorldMap::questGiver,1.25f,talking);
+  npc(keeperFace_,rpg::WorldMap::questGiver,1.25f,talking && simulation_.QuestDialogue()<rpg::QuestId::Watch8);
   npc(merchantFace_,rpg::WorldMap::quartermaster,0,shopping);
 }
 void Game::SetCameraOrbit(float yaw,float pitch,float distance) {
@@ -521,8 +522,24 @@ void Game::Render(Renderer& renderer,bool showInterface) {
       }
     }
   }
+  if(simulation_.Attacking() && simulation_.ClassInfo().range>3 &&
+     simulation_.AttackSeconds()<combat::StrokeStart(simulation_.HeavyAttack())) {
+    const bool shield=simulation_.Items().Worn(rpg::GearSlot::Offhand)!=rpg::Item::None;
+    const auto form=rpg::WeaponFor(simulation_.Class()).form;
+    const auto pose=BuildCharacterPose(0,playerPose_.gait,shield,playerAnimation_.pose,form);
+    const auto local=rpg::PhysicalLauncher(form)?WeaponReleasePoint(pose,form):SpellReleasePoint(pose,shield);
+    const float sx=std::sin(playerPose_.facing),cx=std::cos(playerPose_.facing);
+    classfx::Prepare(renderer,simulation_,{player.x+cx*local.x+sx*local.z,y+local.y,player.z-sx*local.x+cx*local.z});
+  }
+  classfx::States(renderer,simulation_,time_);
   effects_.Render(renderer);
   const bool drawInterface=showInterface && (hudVisible_ || interface_.HasPanels() || simulation_.Health()<=0);
+  if(drawInterface) for(const auto& npc:rpg::WorldMap::residents) {
+    DirectX::XMFLOAT2 screen;
+    if(std::hypot(npc.position.x-player.x,npc.position.z-player.z)<9 &&
+      renderer.Project({npc.position.x,2.5f,npc.position.z},screen) && screen.x>.1f && screen.x<.78f && screen.y>.12f && screen.y<.8f)
+      renderer.DrawText(screen.x-.055f,screen.y,npc.name,{.95f,.81f,.43f,1},1.1f);
+  }
   for (std::size_t i=0;drawInterface && i<simulation_.Feedback().size();++i) {
     const auto& feedback=simulation_.Feedback()[i];
     DirectX::XMFLOAT2 screen;

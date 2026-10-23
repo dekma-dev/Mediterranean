@@ -33,6 +33,7 @@ private:
     float age=1;
     DirectX::XMFLOAT3 origin{};
     float facing=0;
+    rpg::ClassId school=rpg::ClassId::Warrior;
     std::array<Sample,trailSamples> samples{};
     std::size_t count=0;
   };

@@ -3,6 +3,11 @@
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <chrono>
+#include <string>
+#include <array>
+#include <algorithm>
+#include <vector>
 
 void Require(bool value,const char* message) {
   if (!value) { std::cerr << message << '\n'; std::exit(1); }
@@ -20,8 +25,47 @@ void CheckRoute(const rpg::WorldMap& map,rpg::Vec2 start,rpg::Vec2 goal) {
   Require(std::hypot(previous.x-goal.x,previous.z-goal.z)<.001f,"Route must reach requested goal");
   Require(length<100,"Route must not wander indefinitely");
 }
-int main() {
+// Original sampled implementation retained as an independent equivalence oracle.
+bool ReferenceTravel(const rpg::WorldMap& map,rpg::Vec2 from,rpg::Vec2 to,float radius) {
+  if(!map.CanStand(from,radius) || !map.CanStand(to,radius)) return false;
+  const int steps=std::max(1,int(std::ceil(std::hypot(to.x-from.x,to.z-from.z)/.1f)));
+  for(int i=1;i<steps;++i) {
+    const float t=float(i)/steps;
+    if(!map.CanStand({from.x+(to.x-from.x)*t,from.z+(to.z-from.z)*t},radius)) return false;
+  }
+  return true;
+}
+void TravelChecks(const rpg::WorldMap& map,bool benchmark) {
+  struct Query {rpg::Vec2 from,to;float radius;};std::vector<Query> queries;
+  unsigned seed=12345;
+  const auto coordinate=[&]() {seed=seed*1664525u+1013904223u;return float((seed>>8)%6200)/100-31;};
+  for(int i=0;i<4096;++i) queries.push_back({{coordinate(),coordinate()},{coordinate(),coordinate()},std::array<float,4>{.05f,.4f,.45f,1.f}[i%4]});
+  if(!benchmark) {
+    for(const auto& q:queries) Require(map.CanTravel(q.from,q.to,q.radius)==ReferenceTravel(map,q.from,q.to,q.radius),"Travel optimization changed clearance");
+    for(const auto& o:map.Obstacles()) for(float radius:{.05f,.4f,.45f,1.f}) for(float epsilon:{-.0001f,0.f,.0001f}) {
+      const float x=o.center.x-o.halfX-radius+epsilon;
+      const rpg::Vec2 from{x,o.center.z-o.halfZ-1},to{x,o.center.z+o.halfZ+1};
+      Require(map.CanTravel(from,to,radius)==ReferenceTravel(map,from,to,radius),"Broad-phase rejection changed tangential clearance");
+      Require(map.CanTravel(to,from,radius)==ReferenceTravel(map,to,from,radius),"Reverse travel changed tangential clearance");
+    }
+    return;
+  }
+  unsigned checksum=0;const auto start=std::chrono::steady_clock::now();
+  for(int repeat=0;repeat<8;++repeat) for(const auto& q:queries) checksum+=map.CanTravel(q.from,q.to,q.radius);
+  const auto travel=std::chrono::steady_clock::now();
+  for(int repeat=0;repeat<100;++repeat) for(const auto goal:{rpg::Vec2{-21,2},rpg::Vec2{21,3},rpg::Vec2{10,18},rpg::Vec2{0,27}})
+    checksum+=unsigned(map.FindPath({0,-10},goal).size());
+  const auto end=std::chrono::steady_clock::now();
+  std::cout<<"32768 travel queries ms: "<<std::chrono::duration<double,std::milli>(travel-start).count()
+    <<"; 400 paths ms: "<<std::chrono::duration<double,std::milli>(end-travel).count()<<"; checksum: "<<checksum<<'\n';
+}
+int main(int argc,char** argv) {
   rpg::WorldMap map;
+  if(argc==2 && std::string(argv[1])=="--benchmark") {TravelChecks(map,true);return 0;}
+  TravelChecks(map,false);
+  Require(std::string(map.AreaName({-21,23}))=="WESTWARD REACH" &&
+    std::string(map.AreaName({26,22}))=="THE SURVEY COAST" &&
+    std::string(map.AreaName({0,27}))=="THE SUNDERED BASTION","Expanded encounters must retain their region names.");
   const auto wall=map.MoveAndSlide({4,-8},{3,1},.4f);
   Require(std::abs(wall.x-4.8f)<.0002f && std::abs(wall.z+7)<.0002f,
     "Swept collision must reach the wall and preserve tangential movement");
@@ -29,8 +73,8 @@ int main() {
   Require(std::abs(dash.x-4.8f)<.0002f,"Long displacement must not tunnel through a building");
   const auto trunk=map.MoveAndSlide({12,-2},{4,0},.4f);
   Require(std::abs(trunk.x-13.25f)<.0002f,"Long displacement must not tunnel through a thin trunk");
-  const auto edge=map.MoveAndSlide({16,17},{4,4},.4f);
-  Require(map.CanStand(edge,.4f) && std::abs(edge.x-16.6f)<.0002f && std::abs(edge.z-18.6f)<.0002f,
+  const auto edge=map.MoveAndSlide({rpg::WorldMap::halfWidth-1,rpg::WorldMap::halfDepth-2},{4,4},.4f);
+  Require(map.CanStand(edge,.4f) && std::abs(edge.x-(rpg::WorldMap::halfWidth-.4f))<.0002f && std::abs(edge.z-(rpg::WorldMap::halfDepth-.4f))<.0002f,
     "Simultaneous map-edge contacts must slide safely into the corner");
   for (int hz : {30,60,144}) {
     rpg::Vec2 p{4,-8};
@@ -49,7 +93,8 @@ int main() {
   const auto invalid=map.MoveAndSlide({0,-10},{std::numeric_limits<float>::quiet_NaN(),1},.4f);
   Require(invalid.x==0 && invalid.z==-10,"Invalid displacement must leave the actor in place");
   unsigned sweeps=0;
-  for (int x=-16;x<=16;x+=2) for (int z=-18;z<=18;z+=2) {
+  for (int x=1-int(rpg::WorldMap::halfWidth);x<rpg::WorldMap::halfWidth;x+=2)
+    for (int z=1-int(rpg::WorldMap::halfDepth);z<rpg::WorldMap::halfDepth;z+=2) {
     const rpg::Vec2 start{float(x),float(z)};
     if (!map.CanStand(start,.4f)) continue;
     for (int angle=0;angle<16;++angle) {
@@ -74,8 +119,16 @@ int main() {
   Require(!map.CanTravel({3,-15},{3,-11},.45f),"The visible shop counter must block a direct route.");
   CheckRoute(map,{3,-15},{3,-11});
 
-  for (const auto& trail : map.Trails())
-    Require(map.CanTravel(trail.from,trail.to,.45f),"A visible route must be traversable by the player.");
+  for (const auto& trail : map.Trails()) {
+    if(!map.CanTravel(trail.from,trail.to,.45f)) {
+      std::cerr<<"Blocked trail: "<<trail.from.x<<','<<trail.from.z<<" -> "<<trail.to.x<<','<<trail.to.z<<'\n';
+      Require(false,"A visible route must be traversable by the player.");
+    }
+  }
+  Require(std::string(map.AreaName({0,-24}))=="THE WINDWORN MEADOW","Southern landscape lost its region label");
+  CheckRoute(map,rpg::WorldMap::spawn,{-19,-21});
+  CheckRoute(map,rpg::WorldMap::spawn,{16,-22});
+  Require(map.SurfaceAt({0,-22}).dirt>.9f,"Southern route does not reach the landscape surface");
   for (float z=rpg::WorldMap::dockMin.z;z<=rpg::WorldMap::dockMax.z;z+=.1f)
     for (float x=rpg::WorldMap::dockMin.x;x<=rpg::WorldMap::dockMax.x;x+=.1f)
       Require(map.CanStand({x,z},.1f),"The dock must not overlap a tree trunk or building footprint.");
@@ -94,7 +147,7 @@ int main() {
     Require(surface.dirt==0 && surface.paving==0,"Invalid positions must not poison the ground texture.");
   }
   const rpg::WorldMap repeat;
-  Require(!map.Cover().empty() && map.Cover().size()<=180 && map.Cover().size()==repeat.Cover().size(),
+  Require(!map.Cover().empty() && map.Cover().size()<=rpg::WorldMap::maxCover && map.Cover().size()==repeat.Cover().size(),
     "Ground cover must have a bounded, repeatable allocation.");
   unsigned shrubs=0;
   for (std::size_t i=0;i<map.Cover().size();++i) {
@@ -111,7 +164,7 @@ int main() {
       "The sparring arena must stay clear.");
     if (cover.shrub) ++shrubs;
   }
-  Require(shrubs>0 && shrubs<=18,"Shrub population must stay inside the environment budget.");
+  Require(shrubs>0 && shrubs<=rpg::WorldMap::maxShrubs,"Shrub population must stay inside the environment budget.");
   std::cout << "Ground cover: " << map.Cover().size()-shrubs << " grass clumps, " << shrubs << " shrubs.\n";
 
   rpg::Simulation simulation;

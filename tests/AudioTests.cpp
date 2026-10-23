@@ -60,6 +60,12 @@ int main() {
     sound::Generate(sound::Cue::Bow)!=sound::Generate(sound::Cue::Cast),"Physical weapons must have distinct release sounds");
   WriteWave("handbow-release.wav",sound::Generate(sound::Cue::Bow));
   WriteWave("pistol-release.wav",sound::Generate(sound::Cue::Pistol));
+  for(int i=int(rpg::ClassId::Scout);i<=int(rpg::ClassId::Engineer);++i) {
+    const auto cue=sound::ClassReleaseCue(rpg::ClassId(i));
+    Require(cue!=sound::Cue::Cast,"A ranged class still uses the generic cast cue");
+    for(int j=i+1;j<=int(rpg::ClassId::Engineer);++j)
+      Require(sound::Generate(cue)!=sound::Generate(sound::ClassReleaseCue(rpg::ClassId(j))),"Ranged class sound identities collapsed");
+  }
   const auto music=sound::GenerateMusic(); bytes+=music.size()*2;
   const auto mend=sound::Generate(sound::Cue::Mend);
   double tailEnergy=0;
@@ -67,11 +73,23 @@ int main() {
   Require(tailEnergy/(mend.size()-sound::sampleRate/2)>100,"Healing reflections must retain an audible tail");
   Require(mend!=sound::Generate(sound::Cue::Potion),"Potion and healing spell must have distinct sounds");
   Require(sound::Generate(sound::Cue::Strike)!=sound::Generate(sound::Cue::Enemy),"Enemy windup must differ from player swing");
-  Require(music.size()==sound::sampleRate*32 && music.front()==0 && music.back()==0,"Music loop must have bounded duration and seamless silent endpoints");
+  Require(music.size()==sound::sampleRate*sound::musicSeconds && music.front()==0 && music.back()==0,"Music loop must have bounded duration and seamless silent endpoints");
+  Require(music==sound::GenerateMusic(),"The original score must render deterministically");
+  for(unsigned bar=0;bar<8;++bar) {
+    double phraseEnergy=0;
+    for(size_t i=bar*6*sound::sampleRate;i<(bar+1)*6*sound::sampleRate;++i)
+      phraseEnergy+=double(music[i])*music[i];
+    Require(phraseEnergy/(6*sound::sampleRate)>10000,"A score phrase unexpectedly became silent");
+  }
+  for(const auto cue:{sound::Cue::Holy,sound::Cue::Soul,sound::Cue::Ward,sound::Cue::Song}) {
+    const auto pcm=sound::Generate(cue);double resonance=0;
+    for(size_t i=sound::sampleRate*7/10;i<pcm.size();++i) resonance+=double(pcm[i])*pcm[i];
+    Require(resonance/(pcm.size()-sound::sampleRate*7/10)>10,"Mystical resonance was cut off early");
+  }
   int peak=0; double energy=0;
   for(auto s:music) { peak=std::max(peak,std::abs(int(s))); energy+=double(s)*s; }
   Require(peak>1000 && peak<16000 && energy/music.size()>10000,"Music mix needs headroom and non-silent content");
-  Require(bytes<2*1024*1024,"Resident PCM must stay below 2 MiB");
+  Require(bytes<4*1024*1024,"Resident PCM must stay below 4 MiB");
   WriteWave("dawnwatch-music.wav",music); WriteWave("effects-preview.wav",preview);
   // Offline audition of repeated steps, combat and recovery using the same
   // cue levels, pitch choices and peak-budget gain as runtime (without music).

@@ -1,6 +1,6 @@
 # Classes, character creation and the level-ten campaign
 
-The local prototype now supports eleven playable class profiles, one saved hero per class, class-specific N-key builds and nine campaign assignments on the existing Dawnwatch island. The implementation uses the custom C++/DirectX 11 engine. No assets or dependencies were downloaded.
+The local prototype supports eleven playable class profiles, one saved hero per class, class-specific N-key builds and twelve campaign assignments on the expanded Dawnwatch island. The implementation uses the custom C++/DirectX 11 engine. No assets or dependencies were downloaded.
 
 ## Choose or create a hero
 
@@ -34,7 +34,7 @@ The class catalog is `game/Classes.h`. Each class has nine named talents and fou
 
 The underlying talent topology is shared: three foundations and two specializations below each. Both specializations require the foundation; they are not mutually exclusive. Each node costs one point. Points arrive at levels 2, 3, 5, 7 and 9, for five total at level 10. Resets and loadout application retain the existing out-of-combat restrictions and never refill health or active cooldowns.
 
-## Nine assignments on one island
+## Twelve assignments on one island
 
 The original patrol and astral-anchor quests remain intact. After handing in the anchor, collect any remaining original raider spoils and speak to the keeper again. The first dispatch stays disabled until those bags are collected, so replacing the squad cannot discard unclaimed loot. Seven sequential dispatches each introduce a fresh three-enemy squad on the northern patrol ground. Clear the squad, return to the keeper and explicitly complete the assignment. The next offer becomes available on the following conversation.
 
@@ -46,9 +46,11 @@ The original patrol and astral-anchor quests remain intact. After handing in the
 6. The last oath
 7. Keeper of the frontier
 
-Each new assignment awards 250 XP once. Their enemies do not provide additional gold, potions or kill XP; existing loot/merchant accounting stays bounded. The journal lists all nine assignments and the tracker/map point to the current objective. The new stories and rewards live in `game/Campaign.h`; the first two retain their authored text files in `quests/`.
+After these seven dispatches, three named residents continue the campaign: Warden Elian's **The west road opens**, Surveyor Mara's **An honest map**, and Archivist Serevan's **The bastion remembers**. The middle assignment records three coastal survey bearings with E; the others introduce three-enemy squads in the western and far-northern regions. See [frontier expansion](frontier-expansion.md) for routes and exact locations.
 
-The squads mix ash reavers, faster-windup veil hunters and captains. Rank adds 18 maximum health and 2 attack damage per chapter; reavers have slower, heavier blows. They reuse the existing enemy model and navigation ground. This is a sequence of encounters on the current map, not seven additional zones. Death recovery preserves completed assignments and already defeated squad members; sparring remains independent and grants no campaign credit.
+Each assignment after the original two awards 250 XP once. Its enemies do not provide additional gold, potions or kill XP; existing loot/merchant accounting stays bounded. The journal lists all twelve assignments and the tracker/map point to the current objective or nearest unread survey stone. The stories and rewards live in `game/Campaign.h`; the first two retain their authored text files in `quests/`.
+
+The squads mix ash reavers, faster-windup veil hunters and captains. Rank adds 18 maximum health and 2 attack damage per chapter; reavers have slower, heavier blows. They reuse the existing enemy models; only the active squad is simulated. The first seven dispatches share the original patrol ground; the last two battles use the expanded regions. Death recovery preserves completed assignments, survey notes and already defeated squad members; sparring remains independent and grants no campaign credit.
 
 | Level | Total XP | Earned talent points |
 | --- | --- | --- |
@@ -63,7 +65,7 @@ The squads mix ash reavers, faster-windup veil hunters and captains. Rank adds 1
 | 9 | 1750 | 5 |
 | 10 | 2000 | 5 |
 
-The complete campaign yields 2050 XP. Maximum health gains 20 per level above the class's starting health, plus talents; level-up restores health. Level 10 is the current cap. XP is derived from persistent progress rather than a repeatable reward counter.
+The complete campaign yields 2800 XP (2050 before the three expansion assignments). Maximum health gains 20 per level above the class's starting health, plus talents; level-up restores health. Level 10 and five earned talent points remain the caps. XP is derived from persistent progress rather than a repeatable reward counter.
 
 ## Class equipment
 
@@ -89,7 +91,7 @@ Scout/Engineer use weapon-aware aiming, a muzzle-origin straight trace and their
 
 Save I/O is shared by the roster, creator and game in `game/ProfileStorage.cpp`: bounded 4 KiB reads, per-path nonblocking writer mutex, exclusive temporary files, flushed writes and publication after comparison. Mutexes coordinate updated builds; an unrelated editor that ignores them is not covered by a filesystem compare-and-swap guarantee. Failed writes preserve the draft and its retry button. The Windows contracts are documented in [WaitForSingleObject](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject) and [MoveFileExW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw).
 
-Save version 12 appends a validated `APPEARANCE` record (skin, hair, tunic palette indices). Versions 1–11 migrate to the original appearance; reset retains the chosen look. Save version 11 adds a `PROFILE` record containing class, quoted name, completed frontier count, active-dispatch flag and the sealed original-loot count. Enemy kinds/ranks derive from the chapter. Versions 1–10 migrate to Warrior / Frontier guard, retaining original progress, equipment, builds and loadouts. A v11 profile is validated before replacing live state. Invalid classes/names, inconsistent quest stages, impossible enemy state, repeat-loot corpses and overspent builds are rejected. Transient animations and unfinished player attacks remain unsaved.
+Save version 13 adds the validated `SURVEY` three-bit record and extends the frontier count to ten. Versions 1–12 migrate with empty survey notes; a finished old campaign continues at Elian. Version 12 introduced `APPEARANCE` (skin, hair, tunic palette indices); earlier versions migrate to the original appearance. Version 11 introduced `PROFILE` with class, quoted name, completed frontier count, active-dispatch flag and sealed original-loot count. Enemy kinds/ranks derive from the chapter. Versions 1–10 retain original progress, equipment, builds and loadouts as Warrior / Frontier guard. Validation completes before replacing live state. Invalid classes/names, inconsistent quest/survey stages, impossible enemy state, repeat-loot corpses and overspent builds are rejected. Transient animations and unfinished player attacks remain unsaved.
 
 `ClassCampaignTests` checks all eleven profiles, class combat/passives at 30/60/144/1000 Hz, real talent effects, cast/contact audio events, save round-trips, invalid-profile rejection, independent sparring, all seven added assignments through actual combat, level ten and duplicate-reward protection. Recovery is allowed in that campaign test; it is not a difficulty-balance certification. It also captures every class build plus ranged cast/recovery, atlas and journal. `ActionClipTests` checks clip endpoints, hand/weapon continuity, fixed limb lengths, casting sockets, airborne trace arrival, cancellation across four update rates, game integration and 44 class-pose GPU captures. `CharacterSelectionTests` checks all eleven save slots, naming, F5 routing, reopening, file safety and display/input transitions. `ClassEquipmentTests` covers both weapon tiers for all eleven classes, persistent equipment/trade accounting, physical-release rules, socket/ground/grip checks and 46 GPU world/action/inventory/roster/combat views. Existing motion, foot-placement, animation, skinning, hands, effects, audio and interface suites continue to run.
 
