@@ -74,3 +74,5 @@ The original six-vertex/four-triangle `hinge-mesh.glb` exercises fixed, mixed an
 UVs, tangents, textures/materials, additional influence sets, byte/32-bit indices, normalized integer weights and general editor exports remain unsupported. No fixture geometry is connected to the player or GPU yet.
 
 Schema reference: [Khronos mesh primitive schema](https://github.com/KhronosGroup/glTF/blob/main/specification/2.0/schema/mesh.primitive.schema.json).
+
+Palette validation regression: the public CPU reference rejects non-affine skin matrices and nonpositive/near-zero determinants (threshold 1e-12), in addition to non-finite or over-budget values. Affine homogeneous components permit the same 1e-6 rounding tolerance as inverse binds; point deformation never divides by W per influence. Tests cover projective/singular/reflected palettes and accepted rounding without position drift.

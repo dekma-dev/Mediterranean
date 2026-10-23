@@ -315,6 +315,12 @@ std::vector<DeformedVertex> DeformMesh(const SkinMesh& mesh,const animation::Pos
   Need(!pose.skin.empty() && pose.skin.size()<=64 && pose.normal.size()==pose.skin.size(),"invalid deformation palette");
   for(const auto* palette:{&pose.skin,&pose.normal}) for(const auto& matrix:*palette)
     for(const auto& row:matrix.m) for(float v:row) Need(std::isfinite(v) && std::abs(v)<=1e8f,"invalid deformation matrix");
+  for(const auto& matrix:pose.skin) {
+    Need(std::abs(matrix._14)<1e-6f && std::abs(matrix._24)<1e-6f && std::abs(matrix._34)<1e-6f && std::abs(matrix._44-1)<1e-6f,
+      "skin matrix must be affine");
+    const float determinant=XMVectorGetX(XMMatrixDeterminant(XMLoadFloat4x4(&matrix)));
+    Need(std::isfinite(determinant) && determinant>1e-12f,"singular or reflected skin matrix");
+  }
   std::vector<DeformedVertex> output;output.reserve(mesh.vertices.size());
   for(const auto& vertex:mesh.vertices) {
     for(float v:{vertex.position.x,vertex.position.y,vertex.position.z}) Need(std::isfinite(v) && std::abs(v)<=1000,"invalid mesh position");
@@ -331,7 +337,8 @@ std::vector<DeformedVertex> DeformMesh(const SkinMesh& mesh,const animation::Pos
     auto p=XMVectorZero(),n=XMVectorZero();
     for(unsigned c=0;c<4;++c) {
       const auto joint=vertex.joints[c];const float weight=vertex.weights[c]/sum;
-      p=XMVectorAdd(p,XMVectorScale(XMVector3TransformCoord(XMLoadFloat3(&vertex.position),XMLoadFloat4x4(&pose.skin[joint])),weight));
+      // Affine skinning must not perform a perspective divide per influence.
+      p=XMVectorAdd(p,XMVectorScale(XMVector3Transform(XMLoadFloat3(&vertex.position),XMLoadFloat4x4(&pose.skin[joint])),weight));
       n=XMVectorAdd(n,XMVectorScale(XMVector3TransformNormal(normal,XMLoadFloat4x4(&pose.normal[joint])),weight));
     }
     const float norm=XMVectorGetX(XMVector3LengthSq(n));

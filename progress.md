@@ -1,5 +1,7 @@
 # Mediterranean Progress
 
+Skin-palette validation fix (2026-10-23): reproduced acceptance of a projective CPU skin palette. DeformMesh now rejects non-affine, singular and reflected skin matrices, and uses affine point transforms without per-influence perspective division. Regression cases cover malformed palettes and tolerated homogeneous rounding without position drift. Five relevant checks pass in Debug and Release. This fixes the offline reference; the active procedural renderer is unchanged.
+
 Skinned mesh import (2026-10-23): extended the bounded GLB importer with one identity mesh node, one indexed triangle primitive, FLOAT positions/normals/weights and UNSIGNED_SHORT joints/indices. Added coordinate/winding conversion, weight/index/count/degeneracy checks and an allocating CPU deformation reference. Original deterministic hinge-mesh fixture exercises fixed/mixed/animated rows with exact position and normal regressions. Five relevant suites pass in Debug and Release; generator output is reproducible and existing motion fixture bytes are preserved. No downloads, GPU integration or visible player changes. Next: renderer adapter and CPU/GPU comparison before authoring a hero.
 
 

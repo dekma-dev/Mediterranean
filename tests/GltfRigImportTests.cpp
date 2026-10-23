@@ -106,6 +106,22 @@ int main() {
     Require(std::abs(neutral[i].normal.z+1)<1e-5f,"Normal handedness conversion");
   }
   const auto meshPose=skinned.skeleton.Sample(skinned.clips[0].clip,.5,false);
+  // Pose is public: malformed finite palettes must not pass the CPU reference.
+  const auto rejectsPose=[&](const animation::Pose& candidate) {
+    try { (void)assets::DeformMesh(mesh,candidate); }
+    catch(const std::runtime_error&) { return true; }
+    return false;
+  };
+  auto projective=skinned.skeleton.RestPose();projective.skin[0]._14=.1f;
+  Require(rejectsPose(projective),"Projective skin matrix must reject instead of dividing each influence by W");
+  auto singular=skinned.skeleton.RestPose();singular.skin[0]._11=0;
+  Require(rejectsPose(singular),"Singular skin matrix must reject instead of collapsing geometry with stale normals");
+  auto reflected=skinned.skeleton.RestPose();reflected.skin[0]._11=-1;
+  Require(rejectsPose(reflected),"Reflected palette must obey the skeleton's positive-determinant contract");
+  auto rounded=skinned.skeleton.RestPose();rounded.skin[0]._44+=5e-7f;
+  auto distant=mesh;distant.vertices[5].position.x=1000;
+  const auto affine=assets::DeformMesh(distant,rounded);
+  Require(affine[5].position.x==1000,"Accepted affine rounding must not produce perspective drift");
   const auto deformed=assets::DeformMesh(mesh,meshPose);
   Require(std::abs(deformed[1].position.x-.25f)<1e-5f && std::abs(deformed[1].position.z+2)<1e-5f,"Root-weighted row stays fixed");
   const float offset=std::sqrt(.125f);

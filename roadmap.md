@@ -16,6 +16,8 @@ Completion requires implementation, relevant regressions and visual/listening ac
 
 ## Implementation history
 
+Skin-palette validation fix (2026-10-23): reproduced acceptance of a projective CPU skin palette. DeformMesh now rejects non-affine, singular and reflected skin matrices, and uses affine point transforms without per-influence perspective division. Regression cases cover malformed palettes and tolerated homogeneous rounding without position drift. Five relevant checks pass in Debug and Release. This fixes the offline reference; the active procedural renderer is unchanged.
+
 R2 mesh import (2026-10-23): added a single indexed skinned-mesh subset with four joint influences, validated geometry/weights, explicit skin-order IDs and reflected positions/normals/winding. Original animated strip and CPU deformation regressions cover neutral, fixed, mixed and fully weighted vertices plus nonuniform-scale normals. Inspector reports mesh counts and sampled deformation. DirectX integration, authored hero art and gameplay replacement remain open.
 
 R2 animation-channel import (2026-10-23): GLB assets now carry named LINEAR translation/rotation/scale clips, with validated embedded FLOAT accessors and per-joint merging of independent timelines. Added original reproducible hinge-motion fixture, numerical pose regressions and inspector clip summaries. Static-only callers reject animated files rather than discarding motion. Mesh/weight import, GPU deformation and playable-character integration remain open; the current player is unchanged. See docs/skeletal-assets.md for budgets and unsupported interpolation modes.
