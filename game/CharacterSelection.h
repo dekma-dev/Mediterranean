@@ -17,7 +17,7 @@ public:
     Closeup,Pose,ResetView,None };
   enum class Action { None, Enter, Quit };
   struct Slot { Status status=Status::New; std::string name; int level=1; };
-  void Open(const std::filesystem::path& file);
+  void Open(const std::filesystem::path& file,rpg::ClassId selected=rpg::ClassId::Warrior);
   void Refresh();
   const std::filesystem::path& SaveFile() const { return file_; }
   rpg::ClassId SelectedClass() const { return class_; }

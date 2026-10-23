@@ -580,7 +580,8 @@ void Simulation::Update(float seconds,const Command& command) {
     // tapering away as momentum changes direction. Air control stays limited.
     const float opposition=std::clamp(-(movementVelocity_.x*target.x+movementVelocity_.z*target.z)/
       std::max(.01f,target.x*target.x+target.z*target.z),0.f,1.f);
-    const float response=airborne?3.f:moving?motion::groundAcceleration+8.f*opposition:motion::groundBraking;
+    const float response=airborne?3.f:map_.GroundTraction(player_)*
+      (moving?motion::groundAcceleration+8.f*opposition:motion::groundBraking);
     const Vec2 travel{motion::IntegrateVelocity(movementVelocity_.x,target.x,response,step),
       motion::IntegrateVelocity(movementVelocity_.z,target.z,response,step)};
     const auto before=player_;

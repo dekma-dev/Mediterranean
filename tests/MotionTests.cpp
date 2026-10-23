@@ -4,12 +4,49 @@
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <sstream>
 
 namespace {
 void Require(bool value,const char* message) {
   if (!value) { std::cerr<<message<<'\n'; std::exit(1); }
 }
 float Distance(rpg::Vec2 a,rpg::Vec2 b) { return std::hypot(a.x-b.x,a.z-b.z); }
+void TerrainTraction() {
+  rpg::WorldMap map;
+  Require(std::abs(map.GroundTraction({0,-10})-1)<.00001f &&
+    std::abs(map.GroundTraction({25,-27})-.8f)<.00001f &&
+    std::abs(map.GroundTraction(rpg::WorldMap::trainingPost)-.9f)<.00001f &&
+    std::abs(map.GroundTraction({-11.5f,-1})-.95f)<.00001f,"Material traction assignments");
+  for(float x=-28;x<28;x+=.2f) for(float z=-30;z<30;z+=.2f) {
+    const float value=map.GroundTraction({x,z});
+    Require(value>=.7999f && value<=1.0001f,"Traction escaped safe response range");
+    Require(std::abs(value-map.GroundTraction({x+.001f,z}))<.002f,"Traction seam is discontinuous");
+  }
+  float stopping[2]{};
+  const rpg::Vec2 starts[]={{0,-10},{25,-27},{12,-2},{-11.5f,-2.8f},{12,-5.1f},{-11.5f,-3.5f}};
+  for(int surface=0;surface<6;++surface) {
+    const auto start=starts[surface];
+    rpg::Vec2 reference{};
+    for(int hz:{1000,144,60,30,22}) {
+      rpg::Simulation s;auto data=s.Save();auto begin=data.find('\n')+1;
+      if(data.compare(begin,8,"PROFILE ")==0) begin=data.find('\n',begin)+1;
+      const auto end=data.find('\n',begin);std::ostringstream line;line<<start.x<<' '<<start.z<<" 100 0 0 0";
+      data.replace(begin,end-begin,line.str());Require(s.Load(data),"Traction fixture load");
+      const auto advance=[&](float duration,rpg::Command command) {
+        for(float elapsed=0;elapsed<duration-1e-6f;) {
+          const float dt=std::min(1.f/hz,duration-elapsed);s.Update(dt,command);elapsed+=dt;
+          Require(s.CanStand(s.Player()),"Surface movement penetrated geometry");
+        }
+      };
+      rpg::Command run;run.movement={0,1};advance(.35f,run);const auto before=s.Player();advance(.5f,{});
+      if(hz==1000) {reference=s.Player();if(surface<2) stopping[surface]=s.Player().z-before.z;}
+      else Require(Distance(reference,s.Player())<.003f,"Surface braking depends on frame rate");
+      const auto settled=s.Player();advance(.5f,{});
+      Require(Distance(settled,s.Player())<.001f,"Soft ground keeps drifting after stopping");
+    }
+  }
+  Require(stopping[1]>stopping[0]*1.15f && stopping[1]<.23f,"Grass needs a subtle bounded increase in stopping distance");
+}
 void PivotTraction() {
   rpg::Vec2 reference{};
   for(int hz:{1000,144,60,30,22}) {
@@ -255,6 +292,7 @@ void TransitionRegressions() {
 }
 }
 int main() {
+  TerrainTraction();
   PivotTraction();
   RmbBodySteering();
   SkyCameraClearance();

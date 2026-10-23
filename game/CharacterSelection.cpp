@@ -28,8 +28,9 @@ void CharacterSelection::ReadSlots() {
     slot.name=slot.status==Status::Saved?hero.Nickname():"";slot.level=hero.Level();
   }
 }
-void CharacterSelection::Open(const std::filesystem::path& file) {
-  base_=file;file_=file;class_=rpg::ClassId::Warrior;draftName_.clear();look_={};notice_.clear();
+void CharacterSelection::Open(const std::filesystem::path& file,rpg::ClassId selected) {
+  base_=file;file_=file;class_=int(selected)>=0 && selected<rpg::ClassId::Count?selected:rpg::ClassId::Warrior;
+  draftName_.clear();look_={};notice_.clear();
   time_=yaw_=width_=height_=zoom_=0;closeup_=false;actionTime_=-1;SetPage(Page::Roster,Control::Enter);Refresh();
   focus_=status_==Status::Saved?Control::Enter:status_==Status::New?Control::Create:Control::Refresh;
 }

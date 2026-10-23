@@ -1,5 +1,11 @@
 # Starting and Debugging Mediterranean
 
+Roster repair (2026-10-23): Save & choose character now keeps the hero you just played selected. Other classes remain available in their original slots. Successful F9 loads clear old menu save errors; F5 refreshes the menu's save result. See manual check 218.
+
+Ground traction (2026-10-23): compare starts, reversals and releasing WASD on village paving, off-path meadow grass, dirt routes and the dock. Grass has a slightly longer stop; full running speed remains unchanged. Cross edges while steering and jumping. Air steering and targeted dash behavior retain their existing rules. See manual check 217.
+
+Surface footsteps (2026-10-23): enable Effects and compare the village paving, southern dirt routes, off-path grass and western wooden dock. Walk, sprint, jump and dash across their boundaries. Stone should sound firm, grass soft, dirt grainy and timber hollow. AudioTests exports ground-contacts-preview.wav with one step/landing pair for each material, in that order. See manual check 216.
+
 Return to character selection (2026-10-23): press Esc and choose **Save & choose character**. The current hero is saved before the roster opens; select another hero or choose Create character to use the existing class/appearance/name wizard. Release held keys/buttons before using the roster. If saving fails or another session changed the profile, the game stays open and explains the failure. F9 explicitly loads the external save; it discards unsaved local changes. Exit to desktop remains a separate button.
 
 Regional ambience (2026-10-23): restart the rebuilt game and enable Effects. Walk from the village south into the meadow, then visit the astral anchor and northern bastion. Backgrounds should blend gradually; combat quiets them. Music can be muted to inspect ambience separately. AudioTests exports ambience-0.wav (wind), ambience-1.wav (village) and ambience-2.wav (astral). Check repeated loop boundaries, Effects mute and Alt-Tab; see manual check 214.

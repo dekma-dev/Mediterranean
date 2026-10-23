@@ -1,5 +1,11 @@
 # Mediterranean Roadmap
 
+Roster return repair (2026-10-23): returning to character selection retains the active class instead of resetting to Warrior. Shared roster paths remain independent of the selected profile. Successful snapshot loads clear stale menu notices, and keyboard saves update their result. Manual check 218 covers the repair.
+
+Ground traction (2026-10-23): player acceleration, reversal and stopping now sample shared terrain coverage. Stone retains the existing response; dirt/grass use 90%/80% and the dock 95%, with continuous coverage/deck-edge blending. Top speed, jump trajectory, air steering and dash rules remain unchanged. This is a bounded locomotion-response model, not rigid-body friction or sloped terrain. Manual check 217 covers feel and transitions.
+
+Surface movement audio (2026-10-23): stone, dirt, grass and timber footsteps/landings now use shared terrain coverage and dock bounds. Distance-driven cadence and accepted landing events select the current surface; six new samples keep total PCM under 4 MiB. See docs/sound-design.md and manual check 216. Per-boot contacts, recorded-quality foley and material-specific physical friction remain future work.
+
 Character-menu return (2026-10-23): the live Esc menu now saves and returns to the existing character roster/creation wizard. Save failures keep the current session active; held input is isolated across both transition directions. Gameplay audio suspends in the roster using the existing engine lifecycle. Manual check 215 covers the round trip.
 
 Regional ambience checkpoint (2026-10-23): village creaks/bell, open-ground wind/birds and astral harmonics now blend by position, with smooth transitions and combat ducking. Effects controls their volume. Total PCM is 3.81 MiB under the 4 MiB budget; three additional looping voices use startup-generated samples. See docs/sound-design.md and manual check 214. Listening acceptance, longer/less repetitive environmental variation, spatial emitters, occlusion and adaptive harmonic arrangements remain open.

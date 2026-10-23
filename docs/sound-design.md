@@ -1,5 +1,13 @@
 # Dawnwatch sound direction
 
+## Ground contacts — 2026-10-23
+
+Footsteps and landing impacts now select stone, dirt, grass or timber from the shared WorldMap surface weights and dock footprint. Paving/dirt use a 0.5 coverage threshold; the timber deck takes precedence. Existing stone contacts retain their sound; grass adds a softer rustle, dirt a grainy crunch and timber a short hollow resonance. All are original procedural samples, generated once at startup. Their audible realism still needs listening acceptance.
+
+Material selection occurs only on accepted travel/landing events, using the current player position. Distance-based cadence, silent airborne travel/dashes and deterministic pitch variation remain intact. Ground feedback stays centered and behind combat impacts. There are no new voices or runtime synthesis. Six short samples add 74,088 bytes, bringing the bank to 4,068,654 bytes (3.88 MiB), below 4 MiB.
+
+AudioTests exports ground-contacts-preview.wav: stone step/landing, grass step/landing, dirt step/landing, then timber step/landing. Tests cover walkable surface fixtures, distinct deterministic PCM, walking/jumping at 30/60/144 Hz, event routing, false footsteps, levels and total memory. Manual check 216 covers surface boundaries, repeats and in-game balance. Contacts use the character centre rather than individual boot positions; terrain heights and physical material friction are unchanged.
+
 ## Regional ambience — 2026-10-23
 
 Three original six-second mono beds distinguish open ground (wind and short bird calls), the village (quiet creaks and a distant bell), and the anchor/northern bastion (airy low harmonics and bell tones). Smooth spatial weights blend into a 1.5-second gain response. Combat intensity reduces ambience by up to half, leaving more room for warnings. The Effects slider controls all three beds; Music remains independent. Load/profile changes and suspension reset the blend.

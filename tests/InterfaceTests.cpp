@@ -232,6 +232,16 @@ int main() {
   }
   rpg::Simulation simulation; rpg::Command command;
   const auto upgrade=ui::SummarizeItem(simulation,ui::Item::Watchguard);
+  for(int id=0;id<int(rpg::ClassId::Count);++id) {
+    rpg::Simulation hero;Require(hero.CreateCharacter(rpg::ClassId(id),"Inspector"),"Tooltip class fixture");
+    const auto summary=ui::SummarizeItem(hero,hero.Items().Worn(rpg::GearSlot::Weapon));
+    Require(summary.stats=="Strike "+std::to_string(int(hero.StrikeDamage()))+"  /  Heavy "+std::to_string(int(hero.HeavyDamage())),
+      "Weapon tooltip omits class damage and disagrees with actual attacks");
+    const auto candidate=ui::SummarizeItem(hero,rpg::Item::Watchguard);
+    const auto weapon=hero.ItemDefinition(rpg::Item::Watchguard);
+    Require(candidate.stats=="Strike "+std::to_string(int(weapon.strike+hero.StrikeBonus()+hero.ClassInfo().strike))+
+      "  /  Heavy "+std::to_string(int(weapon.heavy+hero.HeavyBonus()+hero.ClassInfo().heavy)),"Shop weapon preview omits class damage");
+  }
   Require(upgrade.difference==7 && upgrade.comparison.find("+10")!=std::string::npos,
     "Hover comparison must use actual worn weapon stats");
   Require(ui::SummarizeItem(simulation,ui::Item::Starter).comparison=="Currently equipped",
@@ -944,6 +954,16 @@ int main() {
       Require(renderer.Capture(path) && renderer.EndFrame(false),"Tooltip capture failed");
       Require(state.Save()==before,"Hovering must not change gameplay or purchase items");
     }
+  }
+  for(const auto size:{std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
+    Require(renderer.Resize(size.first,size.second),"Long-label UI resize");
+    rpg::Simulation hero;Require(hero.CreateCharacter(rpg::ClassId::Engineer,"WWWWWWWWWWWWWWWWWWWW"),"Long-name UI fixture");
+    ui::Interface screen;screen.Show(ui::Panel::Character);screen.Show(ui::Panel::Inventory);
+    renderer.BeginFrame();screen.Render(renderer,hero,0,false);Require(renderer.EndFrame(false),"Long-label layout");
+    const ui::Layout layout(float(size.first),float(size.second));
+    screen.Pointer(layout.x+360*layout.scale,layout.y+197*layout.scale,float(size.first),float(size.second),false,false);
+    renderer.BeginFrame();screen.Render(renderer,hero,0,false);
+    Require(renderer.Capture(L"long-labels-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),"Long-label capture");
   }
   Require(renderer.ValidateDebugMessages(),"DirectX reported an screen validation issue.");
   {

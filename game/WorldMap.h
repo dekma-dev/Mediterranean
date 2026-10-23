@@ -48,6 +48,7 @@ public:
   const std::vector<Trail>& Trails() const { return trails_; }
   const std::vector<GroundCover>& Cover() const { return cover_; }
   GroundSurface SurfaceAt(Vec2 position) const;
+  float GroundTraction(Vec2 position) const;
   bool CanStand(Vec2 position, float radius) const;
   bool CanTravel(Vec2 from, Vec2 to, float radius) const;
   Vec2 MoveAndSlide(Vec2 from,Vec2 displacement,float radius) const;

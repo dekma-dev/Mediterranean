@@ -57,6 +57,7 @@ bool Game::RestoreSnapshot(const std::string& snapshot) {
   CancelUiGesture();
   interface_.SetOnly(ui::Panel::None);
   interface_.previewYaw=0;
+  interface_.menuNotice.clear();
   yaw_=0; pitch_=.45f; distance_=10; time_=0; atmosphereTime_=0; ResetMotion();
   return true;
 }
@@ -84,7 +85,7 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   if (input.Pressed(VK_F11)) { CancelUiGesture(); interface_.InvalidateHitRegions(); }
   if (input.Pressed(VK_F2)) { hudVisible_=!hudVisible_; interface_.InvalidateHitRegions(); }
   if (input.Pressed(VK_F3)) debugOverlay_=!debugOverlay_;
-  if (input.Pressed(VK_F5)) SaveProgress();
+  if (input.Pressed(VK_F5)) {SaveProgress();interface_.menuNotice=simulation_.Message();}
   if (input.Pressed(VK_F9)) LoadProgress();
   if (input.Pressed(VK_ESCAPE)) interface_.Escape();
   if (input.Pressed('C')) interface_.Toggle(ui::Panel::Character);
@@ -166,7 +167,8 @@ void Game::Update(double seconds,const Input& input,float wheel) {
     interface_.SetOnly(ui::Panel::None);
     interface_.menuNotice.clear();
     ResetMotion();
-    ChooseCharacter(rosterFile_);
+    selection_.Open(rosterFile_,simulation_.Class());
+    choosingCharacter_=true;
     inputBarrier_=true;
     return;
   case ui::Action::SelectItem:

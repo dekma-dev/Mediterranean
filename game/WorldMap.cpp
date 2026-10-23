@@ -87,6 +87,17 @@ GroundSurface WorldMap::SurfaceAt(Vec2 p) const {
   return {dirt*(1-paving),paving};
 }
 
+float WorldMap::GroundTraction(Vec2 p) const {
+  if(!std::isfinite(p.x) || !std::isfinite(p.z)) return 1.f;
+  const auto surface=SurfaceAt(p);
+  const float ground=.80f+.10f*surface.dirt+.20f*surface.paving;
+  // Blend the deck edge over a boot width so response cannot jump on a seam.
+  const float outside=std::max({dockMin.x-p.x,p.x-dockMax.x,dockMin.z-p.z,p.z-dockMax.z});
+  const float blend=std::clamp((.2f-outside)/.4f,0.f,1.f);
+  const float weight=blend*blend*(3-2*blend);
+  return ground+(.95f-ground)*weight;
+}
+
 bool WorldMap::CanStand(Vec2 p,float radius) const {
   if (!std::isfinite(p.x) || !std::isfinite(p.z) || !std::isfinite(radius) || radius<=0 ||
     std::abs(p.x)>halfWidth-radius || std::abs(p.z)>halfDepth-radius) return false;

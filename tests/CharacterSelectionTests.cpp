@@ -194,7 +194,9 @@ void Render(const std::filesystem::path& root,const std::string& veteran) {
     for(int i=0;i<5;++i) driver.Step(returning);
     Check(returning.ChoosingCharacter() && returning.State().Save()==frozen,"Held input entered world or advanced simulation");
     driver.frame.down[VK_RETURN]=driver.frame.down[VK_LBUTTON]=false;driver.Step(returning);driver.Step(returning);
-    Check(returning.Selection().Screen()==Selection::Page::Roster && std::string(returning.Selection().Hero().Nickname())=="Guard","Return used class save as roster base");
+    Check(returning.Selection().Screen()==Selection::Page::Roster && std::string(returning.Selection().Hero().Nickname())=="Scholar","Returning to roster lost the active hero selection");
+    driver.Click(returning,Control::Class0);
+    Check(std::string(returning.Selection().Hero().Nickname())=="Guard","Return used class save as roster base");
     driver.Click(returning,mageControl);driver.Click(returning,Control::Enter);driver.Step(returning);
     Check(returning.State().Save()==expected,"Saved hero failed to re-enter unchanged");
     hero.CreateCharacter(rpg::ClassId::Mage,"External");Write(mageFile,hero.Save());

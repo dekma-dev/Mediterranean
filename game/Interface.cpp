@@ -107,7 +107,12 @@ struct Canvas {
   const auto p=P(x,y); r.DrawText(p.x,p.y,s,c,size*layout.scale/12);
  }
  float Width(const std::string& s,float size=18) const { return r.TextWidth(s,size*layout.scale/12)/layout.scale; }
- void Center(float x,float y,float width,const std::string& s,float size=18,Color c=ink) { Text(x+(width-Width(s,size))*.5f,y,s,size,c); }
+ void FitText(float x,float y,float width,const std::string& s,float size=18,Color c=ink) {
+  size*=std::min(1.f,width/std::max(1.f,Width(s,size)));Text(x,y,s,size,c);
+ }
+ void Center(float x,float y,float width,const std::string& s,float size=18,Color c=ink) {
+  size*=std::min(1.f,width/std::max(1.f,Width(s,size)));Text(x+(width-Width(s,size))*.5f,y,s,size,c);
+ }
  void Wrap(float x,float y,float width,const std::string& text,float size=16,Color c=muted,int maxLines=3) {
   std::istringstream paragraphs(text); std::string paragraph; int row=0;
   while (row<maxLines && std::getline(paragraphs,paragraph)) {
@@ -784,7 +789,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Frame({1008,464,248,104},{.065f,.105f,.09f,1});
   c.Gradient({1012,468,240,40},{.28f,.20f,.09f,.5f},{.08f,.05f,.025f,.3f});
   if(selected!=Item::None) Icon(c,{1017,473,30,30},selected,1,s.Class());
-  c.Text(1056,475,selected==Item::None?"Select an item":info.name,13,selected==Item::Watchguard || selected==Item::Ward?Color{.63f,.85f,.43f,1}:ink);
+  c.FitText(1056,475,190,selected==Item::None?"Select an item":info.name,13,selected==Item::Watchguard || selected==Item::Ward?Color{.63f,.85f,.43f,1}:ink);
   c.Text(1056,494,selected==Item::None?"Inspect your belongings":ItemTypeLabel(info),10,muted);
   c.Line(1017,510,1247,510,1,{.37f,.40f,.24f,1});
   std::string detail=info.description;
@@ -1145,7 +1150,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    const auto info=s.ItemDefinition(item); const auto summary=SummarizeItem(s,item);
    const float x=std::clamp(mouseX_>640?mouseX_-329:mouseX_+21,8.f,963.f),y=std::clamp(mouseY_-42,8.f,466.f);
    c.Window({x,y,309,246}); Icon(c,{x+13,y+12,34,38},item,1,s.Class());
-   c.Text(x+57,y+11,info.name,16,gold); c.Text(x+57,y+37,ItemTypeLabel(info),11,muted);
+   c.FitText(x+57,y+11,238,info.name,16,gold); c.FitText(x+57,y+37,238,ItemTypeLabel(info),11,muted);
    c.RectFill({x+14,y+62,281,1},border);
    c.Text(x+14,y+73,summary.stats,14,ink);
    const Color comparison=summary.difference>0?Color{.48f,.86f,.37f,1}:summary.difference<0?Color{1,.43f,.32f,1}:muted;
@@ -1156,10 +1161,10 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    const std::string action=purchase?(it->enabled?"Click Buy to purchase one":s.PurchaseStatus(it->event.value)):
      s.Health()<=0?"Recover before using equipment/items":item==Item::Potion?(s.Health()>=s.MaxHealth()?"Health is full":s.PotionCooldown()>0?"Potion is cooling down":"Right-click: drink  /  Drag: move"):
      Equipped(s,item)?"Right-click: remove  /  Drag: move":"Right-click: equip  /  Drag: move";
-   c.Text(x+14,y+221,action,12,ink);
+   c.FitText(x+14,y+221,281,action,12,ink);
   } else if (it->event.action==Action::Buyback) {
    const auto item=Item(it->event.value); const float x=std::clamp(mouseX_-140,475.f,659.f);
-   c.Window({x,312,309,116}); c.Text(x+14,322,s.ItemDefinition(item).name,17,gold);
+   c.Window({x,312,309,116}); c.FitText(x+14,322,281,s.ItemDefinition(item).name,17,gold);
    c.Text(x+14,351,"Held: "+std::to_string(s.BuybackCount(item))+"  /  "+std::to_string(rpg::SellPrice(item))+" gold each",13,ink);
    const auto status=s.TradeStatus({rpg::TradeAction::Buyback,item});
    c.Text(x+14,390,std::string(status)=="Available"?"Click to reclaim one into your bag":status,12,muted);
@@ -1168,13 +1173,13 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    const std::string detail=potion?"Restores up to 40 health.":SpellEffect(s,ability);
    const std::string status=potion?(s.Health()<=0?"DEFEATED":s.Potions()==0?"NO POTIONS":s.Health()>=s.MaxHealth()?"FULL HEALTH":s.PotionCooldown()>0?"COOLDOWN":"READY"):s.AbilityStatus(ability);
    const float x=std::clamp(it->rect.x-30,460.f,680.f);
-   c.Window({x,470,300,149}); c.Text(x+14,480,potion?"Healing draught":s.Spell(ability).name,19,gold);
+   c.Window({x,470,300,149}); c.FitText(x+14,480,272,potion?"Healing draught":s.Spell(ability).name,19,gold);
    c.Wrap(x+14,512,272,detail,14,ink,2);
    const float remaining=potion?s.PotionCooldown():s.Cooldown(ability);
    c.Text(x+14,554,"Cooldown: "+Number(potion?3.f:s.AbilityCooldown(ability))+"s"+
      (potion?"  /  Stock: "+std::to_string(s.Potions()):ability<3?"  /  "+std::string(ability==2 && s.RetreatMobility()?"Travel: ":"Range: ")+Number(s.Spell(ability).range)+" m":""),12,muted);
    c.Line(x+14,576,x+286,576,1,border);
-   c.Text(x+14,589,status+(remaining>0?"  "+Seconds(remaining)+"s":""),12,status=="READY"?Color{.57f,.84f,.40f,1}:Color{1,.64f,.40f,1});
+   c.FitText(x+14,589,272,status+(remaining>0?"  "+Seconds(remaining)+"s":""),12,status=="READY"?Color{.57f,.84f,.40f,1}:Color{1,.64f,.40f,1});
   }
   break;
  }
