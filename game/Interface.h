@@ -6,7 +6,7 @@ namespace ui {
 enum class LoadingStage { World,Chronicles,Sound,Entering };
 void RenderLoading(Renderer& renderer,LoadingStage stage);
 enum class Panel { None,Menu,Character,Inventory,Map,Journal,Merchant,Build,Quest };
-enum class Action { None,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview,MusicVolume,EffectsVolume,Build,SelectTalent,LearnTalent,QuestConfirm,QuestPage,SelectSpell,ConfirmTalentReset,ResetTalents,CancelTalentReset,BuildPage,SelectLoadout,SelectBuildPreset,RequestBuildApply,RequestBuildStore,ConfirmBuild,CancelBuild,CharacterSelection };
+enum class Action { None,Hotbar,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview,MusicVolume,EffectsVolume,Build,SelectTalent,LearnTalent,QuestConfirm,QuestPage,SelectSpell,ConfirmTalentReset,ResetTalents,CancelTalentReset,BuildPage,SelectLoadout,SelectBuildPreset,RequestBuildApply,RequestBuildStore,ConfirmBuild,CancelBuild,CharacterSelection };
 using Item=rpg::Item;
 struct Rect { float x,y,w,h; bool Contains(float px,float py) const { return px>=x && py>=y && px<x+w && py<y+h; } };
 struct Layout {
@@ -47,12 +47,26 @@ public:
   bool PointerOverWindow() const;
   bool PointerOverUi() const;
   Event Pointer(float x,float y,float width,float height,bool clicked,bool rightClicked,bool held=false,bool released=false);
-  void CancelDrag() { dragBag_=dragGear_=-1; dragItem_=Item::None; dragging_=false; }
+  void CancelDrag() { dragSpell_=dragHotbar_=-1; dragBag_=dragGear_=-1; dragItem_=Item::None; dragging_=false; }
   void InvalidateHitRegions() { regions_.clear(); renderedState_=~0u; }
   bool Dragging() const { return dragging_; }
   void Render(Renderer& renderer,const rpg::Simulation& simulation,float time,bool debug);
-  bool CapturesMovement() const { return panel!=Panel::None; }
-  // Central overlays are modal; character and bag are independent side windows.
+  bool CapturesMovement() const { return panel==Panel::Menu; }
+  // Layouts are independent per class and saved with expedition settings.
+  std::string SaveHotbars() const;
+  bool LoadHotbars(const std::string& data);
+  int HotbarSpell(int slot,rpg::ClassId id) const {
+    return slot>=0 && slot<10?hotbars_[rpg::ValidClass(id)?int(id):0][slot]:-1;
+  }
+  void MoveHotbar(int from,int to,rpg::ClassId id) {
+    if(from<0 || from>=10 || to<0 || to>=10 || !rpg::ValidClass(id)) return;
+    std::swap(hotbars_[int(id)][from],hotbars_[int(id)][to]);
+  }
+  void AssignHotbar(int spell,int to,rpg::ClassId id) {
+    if(spell<0 || spell>4 || to<0 || to>=10 || !rpg::ValidClass(id)) return;
+    hotbars_[int(id)][to]=spell;
+  }
+  // Central panels share one window; only the Esc menu captures movement.
   Panel panel=Panel::None;
   bool characterOpen=false,inventoryOpen=false;
   int selectedTalent=0;
@@ -74,6 +88,15 @@ public:
   bool audioAvailable=false;
   rpg::Vec2 waypoint{},pendingWaypoint{};
 private:
+  std::array<std::array<int,10>,int(rpg::ClassId::Count)> hotbars_=[] {
+    std::array<std::array<int,10>,int(rpg::ClassId::Count)> bars{};
+    for(auto& bar:bars) bar={0,1,2,3,4,-1,-1,-1,-1,-1}; return bars;
+  }();
+  rpg::ClassId renderedClass_=rpg::ClassId::Warrior;
+  int dragSpell_=-1,dragHotbar_=-1;
+  bool pointerHeld_=false;
+  float hoverTime_=0,lastRenderTime_=0;
+  float hoverX_=-1,hoverY_=-1;
   std::vector<Region> regions_;
   unsigned renderedState_=~0u;
   int questTextKey_=-1;

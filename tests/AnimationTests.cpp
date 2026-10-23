@@ -338,7 +338,7 @@ int main() {
     Require(caster.RestoreSnapshot("MEDITERRANEAN 3\n3 -10 50 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
       "100 -4 7 80 0 0 0 0 0\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n"),"Cast fixture must load");
     rpg::Command mend; mend.ability=3; caster.ExecuteCommand(mend,.01f);
-    Require(caster.State().Health()==85,"Spell pose must not delay authoritative healing");
+    Require(caster.State().Health()==50 && caster.State().Barrier()==30,"Defensive gesture must not heal the warrior");
     float elapsed=0;
     while(elapsed<.36f-1e-6f) {
       const float dt=std::min(1.f/hz,.36f-elapsed); caster.ExecuteCommand(mend,dt); elapsed+=dt;

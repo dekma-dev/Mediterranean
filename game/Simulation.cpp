@@ -118,6 +118,7 @@ void Simulation::UseAbility(int index,float visualElapsed) {
   if (index<0 || index>=4 || health_<=0) return;
   if (cooldowns_[index]>0) { message_="That ability is cooling down."; return; }
   if (Dashing()) { message_="Finish the dash before using another ability."; return; }
+  if (CastingRecovery()) {message_="Finish or interrupt the current cast.";return;}
   if (Attacking()) { message_="Finish the weapon recovery before using another ability."; return; }
   if (index<2 && PhysicalLauncher(WeaponFor(class_).form) && inventory_.Worn(GearSlot::Weapon)==Item::None) {
     message_="Equip your class weapon before firing."; return;
@@ -126,12 +127,14 @@ void Simulation::UseAbility(int index,float visualElapsed) {
     message_="Stand still to prepare this heavy attack.";return;
   }
   if (index==3) {
-    if (health_>=MaxHealth()) { message_="Health is already full."; return; }
-    const float healed=std::min(MendHealingNow(),MaxHealth()-health_);
-    health_+=healed; Emit(FeedbackKind::Heal,player_,static_cast<int>(healed));
-    barrier_=std::max(barrier_,ClassRecoveryBarrier(class_));
-    EmitVisual(CombatVisualKind::Mend,player_,height_,facing_);
-    message_=std::string(Spell(index).name)+(ClassRecoveryBarrier(class_)>0?" restored health and raised a ward.":" restored health.");
+    if (ClassHealer(class_) && health_>=MaxHealth()) { message_="Health is already full."; return; }
+    if(health_<=ClassRecoveryCost(class_)) {message_="Not enough health for the pact.";return;}
+    if(ClassRecoveryCast(class_)>0) {
+      if(!Grounded() || Length(movementVelocity_)>.15f) {message_="Stand still to prepare this ability.";return;}
+      recoveryCast_=ClassRecoveryCast(class_);
+      EmitVisual(CombatVisualKind::CastStart,player_,height_,facing_);
+      message_=std::string(Spell(3).name)+" casting.";
+    } else CompleteRecovery();
   } else if (index==2) {
     if (RetreatMobility()) {
       if (const auto* target=TargetActor(); target && target->health>0 && target->state!=EnemyState::Returning) {
@@ -173,9 +176,28 @@ void Simulation::UseAbility(int index,float visualElapsed) {
     attackEmpowered_=index==1 && EmpoweredReady();
     if(attackEmpowered_) classResource_=0;
     attackDamage_=index==0?StrikeDamage():HeavyDamage(); attackFlash_=.2f;
+    if(ClassInfo().range>3 && !PhysicalLauncher(WeaponFor(class_).form))
+      EmitVisual(CombatVisualKind::CastStart,player_,height_,facing_);
     message_=std::string(Spell(index).name)+" committed.";
   }
   cooldowns_[index]=AbilityCooldown(index);
+}
+
+void Simulation::CompleteRecovery() {
+  recoveryCast_=0;
+  if(health_<=ClassRecoveryCost(class_)) {message_="Not enough health for the pact.";return;}
+  health_-=ClassRecoveryCost(class_);
+  if(ClassHealer(class_)) {
+    const float healed=std::min(MendHealingNow(),MaxHealth()-health_);health_+=healed;
+    if(healed>0) Emit(FeedbackKind::Heal,player_,int(healed));
+  }
+  const float ward=RecoveryWard();
+  barrier_=std::max(barrier_,ward);
+  if(class_==ClassId::Scout) evasion_=3;
+  if(class_==ClassId::Demonologist) cooldowns_[1]=std::max(0.f,cooldowns_[1]-2);
+  if(class_==ClassId::Psionic) classResource_=CombatStyleInfo().capacity;
+  EmitVisual(CombatVisualKind::Mend,player_,height_,facing_);
+  message_=std::string(Spell(3).name)+(ClassHealer(class_)?" completed.":" raised protection.");
 }
 
 void Simulation::ResolveAttack(float elapsed) {
@@ -209,6 +231,13 @@ void Simulation::ResolveAttack(float elapsed) {
   const float damage=std::min(enemy.health,(attackDamage_*finishing+bonus)*(enemy.exposed>0?1.25f:1.f));
   float heal=class_==ClassId::Necromancer?damage*.15f:class_==ClassId::Bard?3.f:class_==ClassId::Priest && index==1?8.f:0.f;
   if(index==0) classResource_=std::min(CombatStyleInfo().capacity,classResource_+1);
+  if(index==1) {
+    if(class_==ClassId::Scout) enemy.snared=std::max(enemy.snared,1.5f);
+    if(class_==ClassId::Druid) enemy.rooted=std::max(enemy.rooted,.8f);
+    if(class_==ClassId::Psionic) {enemy.stunned=std::max(enemy.stunned,.6f);}
+    if(class_==ClassId::Engineer) enemy.exposed=std::max(enemy.exposed,2.f);
+    if(class_==ClassId::Paladin) barrier_=std::max(barrier_,6.f);
+  }
   if(attackEmpowered_) {
     switch(class_) {
     case ClassId::Paladin: barrier_=std::max(barrier_,24.f);break;
@@ -297,10 +326,16 @@ const char* Simulation::AbilityStatus(int index) const {
   if (index<0 || index>=4 || health_<=0) return "DISABLED";
   if (cooldowns_[index]>0) return "COOLDOWN";
   if (Dashing()) return "DASHING";
+  if (CastingRecovery()) return "CASTING";
   if (Attacking()) return "RECOVERING";
   if (index<2 && PhysicalLauncher(WeaponFor(class_).form) && inventory_.Worn(GearSlot::Weapon)==Item::None) return "NO WEAPON";
   if(index==1 && CombatStyleInfo().steadyHeavy && (!Grounded() || Length(movementVelocity_)>.15f)) return "STAND STILL";
-  if (index==3) return health_>=MaxHealth()?"FULL HEALTH":"READY";
+  if (index==3) {
+    if(ClassHealer(class_) && health_>=MaxHealth()) return "FULL HEALTH";
+    if(health_<=ClassRecoveryCost(class_)) return "LOW HEALTH";
+    if(ClassRecoveryCast(class_)>0 && (!Grounded() || Length(movementVelocity_)>.15f)) return "STAND STILL";
+    return "READY";
+  }
   if (index==2) {
     if(RetreatMobility()) return "READY";
     switch (CheckDashTarget()) {
@@ -499,7 +534,8 @@ void Simulation::Update(float seconds,const Command& command) {
   trainer_.movementDistance=0; trainer_.damagedThisUpdate=false;
   if (!std::isfinite(seconds) || seconds<=0) return;
   const float dt=std::min(seconds,.05f);
-  const bool advanceAttack=Attacking();
+  if(command.uiClick) EmitVisual(CombatVisualKind::UiClick,player_,height_,facing_);
+  const bool advanceAttack=Attacking(),advanceRecovery=CastingRecovery();
   if (command.restart) { const auto name=nickname_;const auto look=appearance_;CreateCharacter(class_,name,look);return; }
   for (auto& feedback : feedback_) feedback.age+=dt;
   feedback_.erase(std::remove_if(feedback_.begin(),feedback_.end(),[](const CombatFeedback& f) { return f.age>=1.5f; }),feedback_.end());
@@ -516,6 +552,7 @@ void Simulation::Update(float seconds,const Command& command) {
   }
   for (auto& cooldown : cooldowns_) cooldown=std::max(0.f,cooldown-dt);
   potionCooldown_=std::max(0.f,potionCooldown_-dt);
+  evasion_=std::max(0.f,evasion_-dt);
   // A build command has one meaning, even for malformed/replayed input.
   if (command.build.action!=BuildAction::None) ChangeBuild(command.build);
   else if (command.resetTalents) ResetTalents();
@@ -528,6 +565,9 @@ void Simulation::Update(float seconds,const Command& command) {
   const float length=Length(command.movement);
   const bool moving=std::isfinite(command.movement.x) && std::isfinite(command.movement.z) &&
     std::isfinite(length) && length>.001f;
+  if(CastingRecovery() && (moving || command.jump || command.haltMovement || !Grounded())) {
+    recoveryCast_=0;message_="Cast interrupted by movement.";
+  }
   if(HeavyAttack() && CombatStyleInfo().steadyHeavy && attackAge_<combat::StrokeStart(true) &&
       (moving || command.jump || !Grounded())) {
     CancelAttack();message_="Preparation interrupted by movement.";
@@ -703,6 +743,10 @@ void Simulation::Update(float seconds,const Command& command) {
     else if (sparringRemaining_==0) EndSparring("Time complete");
   }
   UpdateCombat(dt,advanceAttack);
+  if(CastingRecovery()) {
+    if(damagedThisUpdate_ || health_<=0) {recoveryCast_=0;message_="Cast interrupted by damage.";}
+    else if(advanceRecovery) {recoveryCast_=std::max(0.f,recoveryCast_-dt);if(recoveryCast_==0) CompleteRecovery();}
+  }
   if (health_>0) SeparateEnemies(dt);
   if (Channeling()) {
     if (moving || !Grounded() || Dashing() || command.ability>=0 || command.usePotion || changingGear ||
@@ -783,7 +827,11 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
       const auto delta=Difference(player_,enemy.position);
       const float dot=distance<.001f?1.f:(std::sin(enemy.facing)*delta.x+std::cos(enemy.facing)*delta.z)/distance;
       if (distance<=Enemy::attackReach && dot>=std::cos(Enemy::attackHalfAngle) && height_<1.5f &&
-        health_>0 && HasLineOfSight(enemy.position,player_)) DamagePlayer(enemy.Damage(),enemy.facing,elapsed);
+        health_>0 && HasLineOfSight(enemy.position,player_)) {
+        const bool frost=class_==ClassId::Mage && barrier_>0;
+        DamagePlayer(enemy.Damage(),enemy.facing,elapsed);
+        if(frost) enemy.snared=std::max(enemy.snared,2.f);
+      }
       else Emit(FeedbackKind::Miss,enemy.position);
       enemy.attackCooldown=std::max(0.f,enemy.AttackInterval()-afterContact);
     }

@@ -282,6 +282,8 @@ Gameplay opens in borderless fullscreen by default. The launcher can select wind
 
 Additional controls:
 
+Combat/UI update (2026-10-23): rebuild the game to use the ten-slot **1–9, 0** action bar. Drag slots to swap, or drag spell cards from **N** onto the bar. **F5** saves per-class layouts; **F9** reloads them. Only **Esc** blocks local movement/combat; other windows remain live, so enemies can still attack while you inspect equipment or talents. The fourth action is now class-specific healing, defense or sacrifice. See [combat controls](docs/combat-controls.md) for cast times and interruption rules. Existing historical checkpoints above describe their original builds.
+
 | Key | Action |
 | --- | --- |
 | C / I or B / J / M | Character equipment / item bag / journal / atlas |

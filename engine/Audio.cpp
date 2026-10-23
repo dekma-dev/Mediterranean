@@ -39,7 +39,7 @@ Cue GroundCue(const rpg::WorldMap& map,rpg::Vec2 p,bool landing) {
   return landing?Cue::LandGrass:Cue::StepGrass;
 }
 float CueLevel(Cue cue) {
-  return IsStep(cue)?.35f:cue==Cue::Jump?.55f:IsLanding(cue)?.75f:1.f;
+  return cue==Cue::UiClick?.35f:IsStep(cue)?.35f:cue==Cue::Jump?.55f:IsLanding(cue)?.75f:1.f;
 }
 float CuePitch(Cue cue,unsigned sequence) {
   constexpr float offsets[]={-.65f,.35f,-.2f,.8f,0.f,-.4f,.55f};
@@ -67,7 +67,7 @@ Placement Place(rpg::Vec2 offset,float cameraYaw) {
 std::vector<std::int16_t> Generate(Cue cue) {
   const bool healing=cue==Cue::Mend || cue==Cue::Potion;
   const bool mystical=(cue>=Cue::Holy && cue<=Cue::Ward) || cue==Cue::Cast || cue==Cue::Mend || cue==Cue::Interrupt;
-  const float duration=cue==Cue::Mend?1.65f:healing?.95f:cue==Cue::Interrupt?.85f:
+  const float duration=cue==Cue::UiClick?.12f:cue==Cue::Mend?1.65f:healing?.95f:cue==Cue::Interrupt?.85f:
     mystical?1.05f:cue==Cue::HeavyHit?.7f:IsStep(cue)?.18f:IsLanding(cue)?.38f:cue==Cue::Jump?.3f:cue==Cue::SpellHit?.28f:.48f;
   std::vector<std::int16_t> result(size_t(duration*sampleRate));
   std::uint32_t seed=12345+unsigned(cue)*713;
@@ -80,6 +80,9 @@ std::vector<std::int16_t> Generate(Cue cue) {
     const float air=noise-low;
     float value=0;
     switch(cue) {
+    case Cue::UiClick:
+      value=.20f*body*Decay(t,.001f,60.f)+.12f*Metal(430,t)+.055f*air*Decay(t,.002f,95.f);
+      break;
     case Cue::Holy:
       value=.18f*Bell(783.99f,t)+.11f*Bell(1174.66f,t-.024f)+.09f*low*Decay(t,.018f,18.f);
       break;
@@ -122,8 +125,8 @@ std::vector<std::int16_t> Generate(Cue cue) {
       value+=.22f*Sweep(155,55,duration,t)*Decay(t,.003f,24.f)+.065f*Metal(1150,t-.035f);
       break;
     case Cue::Cast:
-      value=.20f*Sweep(330,880,duration,t)*Decay(t,.025f,12.f);
-      value+=.14f*Bell(1318.51f,t-.045f)+.22f*low*Decay(t,.035f,14.f);
+      value=.10f*Sweep(165,440,duration,t)*Decay(t,.08f,6.f);
+      value+=.08f*Bell(659.25f,t-.09f)+.18f*body*Decay(t,.08f,6.f);
       break;
     case Cue::Mend:
       // Ascending triad and quiet reflections baked into the sample.
@@ -199,8 +202,12 @@ std::vector<std::int16_t> Generate(Cue cue) {
       // bloom. Pitch families retain holy/nature/arcane identity.
       const float root=cue==Cue::Holy || cue==Cue::Ward?146.83f:cue==Cue::Thorn?130.81f:
         cue==Cue::Song?164.81f:cue==Cue::Fire || cue==Cue::Rend?73.42f:110.f;
-      value=.78f*value+.07f*Decay(t,.07f,4.8f)*(Tone(root,t)+.35f*Tone(root*1.5f,t));
-      value+=.10f*body*Decay(t,.05f,5.f);
+      value=.70f*value+.09f*Decay(t,.07f,4.8f)*(Tone(root,t)+.35f*Tone(root*1.5f,t));
+      value+=.13f*body*Decay(t,.04f,6.f);
+      // Inharmonic low resonances and a soft airy onset replace a pure-tone beep.
+      value+=.035f*Tone(root*2.013f,t)*Decay(t,.035f,7.f);
+      value+=.035f*Tone(root*3.927f,t)*Decay(t,.02f,12.f);
+      value+=.055f*air*Decay(t,.012f,28.f);
       // Quiet, dark reflections are baked once, never processed in the mixer.
       for(const auto tap:{std::pair<float,float>{.097f,.13f},{.173f,.09f},{.271f,.06f}}) {
         const size_t delay=size_t(tap.first*sampleRate);
@@ -273,7 +280,7 @@ Cue ClassRecoveryCue(rpg::ClassId school) {
   using C=rpg::ClassId;
   switch(school) {
     case C::Paladin:case C::Priest:return Cue::Holy;
-    case C::Mage:case C::Engineer:return Cue::Ward;
+    case C::Warrior:case C::Scout:case C::Mage:case C::Engineer:return Cue::Ward;
     case C::Psionic:return Cue::Mind;
     case C::Bard:return Cue::Song;
     case C::Necromancer:case C::Demonologist:return Cue::Soul;
@@ -390,6 +397,8 @@ void Events::Update(const rpg::Simulation& state) {
     switch(event.kind) {
     case K::Strike:add(event.school==rpg::ClassId::Demonologist?Cue::Rend:Cue::Strike);break;
     case K::HeavyStrike:add(event.school==rpg::ClassId::Warrior?Cue::Heavy:ClassReleaseCue(event.school));break;
+    case K::UiClick:add(Cue::UiClick);break;
+    case K::CastStart:add(Cue::Cast);break;
     case K::SpellCast:add(ClassReleaseCue(event.school));break;
     case K::EnemySwing:add(Cue::Enemy);break;
     case K::Hit:case K::HeavyHit:

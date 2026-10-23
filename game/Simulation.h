@@ -51,6 +51,7 @@ struct Command {
   bool usePotion = false, equipWeapon = false;
   int potionSource=-1;
   bool respawn = false;
+  bool uiClick=false;
   bool haltMovement = false; // Explicit UI control capture, not ordinary key release.
   InventoryCommand inventory;
   int purchase=-1;
@@ -69,7 +70,7 @@ struct CombatFeedback {
 };
 
 // One-update presentation events. Never serialized or used to resolve combat.
-enum class CombatVisualKind { Strike, HeavyStrike, EnemySwing, Hit, HeavyHit, Hurt, Interrupt, Mend, Potion, DashStart, DashStop, DashImpact,SpellCast,BarrierHit };
+enum class CombatVisualKind { Strike, HeavyStrike, EnemySwing, Hit, HeavyHit, Hurt, Interrupt, Mend, Potion, DashStart, DashStop, DashImpact,SpellCast,BarrierHit,CastStart,UiClick };
 struct CombatVisualEvent {
   CombatVisualKind kind = CombatVisualKind::Hit;
   Vec2 position;
@@ -98,6 +99,7 @@ public:
   int ClassResource() const { return classResource_; }
   bool EmpoweredReady() const { return classResource_>=CombatStyleInfo().capacity; }
   bool EmpoweredAttack() const { return Attacking() && attackEmpowered_; }
+  float EvasionSeconds() const { return evasion_; }
   float Barrier() const { return barrier_; }
   bool RetreatMobility() const { return CombatStyleInfo().retreatDistance>0; }
   float MobilityDuration() const { return CombatStyleInfo().retreatDuration; }
@@ -127,7 +129,9 @@ public:
   float MovementDistance() const { return movementDistance_; } // excludes dash/respawn
   Vec2 MovementVelocity() const { return movementVelocity_; }
   float GroundMovementDistance() const { return groundMovementDistance_; }
-  void StopMovement() { movementVelocity_={}; movementDistance_=groundMovementDistance_=0; jumpBuffer_=0; dashRemaining_=dashTravelLeft_=0; dashTarget_=0; CancelAttack(); }
+  void StopMovement() { recoveryCast_=0; movementVelocity_={}; movementDistance_=groundMovementDistance_=0; jumpBuffer_=0; dashRemaining_=dashTravelLeft_=0; dashTarget_=0; CancelAttack(); }
+  bool CastingRecovery() const { return recoveryCast_>0; }
+  float RecoveryProgress() const { return CastingRecovery()?1-recoveryCast_/ClassRecoveryCast(class_):0; }
   bool Attacking() const { return attackAbility_>=0; }
   bool HeavyAttack() const { return attackAbility_==1; }
   float AttackSeconds() const { return Attacking()?attackAge_:-1.f; }
@@ -153,7 +157,8 @@ public:
   float StrikeBonus() const { return 3.f*(Level()-1)+BuildBonus(build_,&TalentInfo::strike); }
   float HeavyBonus() const { return 5.f*(Level()-1)+BuildBonus(build_,&TalentInfo::heavy); }
   float MendHealing() const { return ClassInfo().healing+BuildBonus(build_,&TalentInfo::mend); }
-  float MendHealingNow() const { return MendHealing()+(HasTalent(Talent::Mercy) && health_<=MaxHealth()*.35f?20.f:0.f); }
+  float RecoveryWard() const { return ClassRecoveryBarrier(class_)+(ClassHealer(class_)?0:BuildBonus(build_,&TalentInfo::mend)*.5f+(HasTalent(Talent::Mercy) && health_<=MaxHealth()*.35f?10.f:0.f)); }
+  float MendHealingNow() const { return MendHealing()+(ClassHealer(class_) && HasTalent(Talent::Mercy) && health_<=MaxHealth()*.35f?20.f:0.f); }
   float HeavyMultiplier(float health,float maximum) const {
     return HasTalent(Talent::Executioner) && maximum>0 && health>0 && health<=maximum*.5f?1.25f:1.f;
   }
@@ -275,7 +280,8 @@ private:
   float attackAge_=0,attackDamage_=0;
   int classResource_=0;
   bool attackEmpowered_=false;
-  float barrier_=0;
+  float barrier_=0,recoveryCast_=0,evasion_=0;
+  void CompleteRecovery();
   float movementDistance_ = 0;
   float groundMovementDistance_ = 0;
   float landingSpeed_ = 0, landingElapsed_ = 0;

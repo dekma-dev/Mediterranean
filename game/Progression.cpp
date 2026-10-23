@@ -74,7 +74,7 @@ const char* Simulation::TalentStatus(Talent talent) const {
 
 const char* Simulation::BuildChangeStatus() const {
  if (health_<=0) return "Recover before changing talents";
- if (!Grounded() || Dashing() || Channeling() || Attacking()) return "Finish your current action";
+ if (!Grounded() || Dashing() || Channeling() || Attacking() || CastingRecovery()) return "Finish your current action";
  if (sparring_ || attackFlash_>0 || hurtFlash_>0 ||
    std::any_of(enemies_.begin(),enemies_.end(),[](const Enemy& e) { return e.health>0 && e.state==EnemyState::Pursuing; }))
   return "Finish combat before changing talents";
@@ -132,8 +132,14 @@ void Simulation::RestoreForLevel(int previousLevel) {
 
 void Simulation::DamagePlayer(float damage,float incomingFacing,float visualElapsed) {
   if (health_<=0) return;
+  if(class_==ClassId::Scout && evasion_>0) {
+    evasion_=0;Emit(FeedbackKind::Miss,player_);
+    EmitVisual(CombatVisualKind::BarrierHit,player_,height_+1.2f,incomingFacing,0,visualElapsed);
+    message_="Evaded the incoming attack.";return;
+  }
   const float incoming=std::max(1.f,damage-DamageReduction());
   const float absorbed=std::min(barrier_,incoming);barrier_-=absorbed;
+  if(absorbed>0 && class_==ClassId::Warrior) classResource_=std::min(CombatStyleInfo().capacity,classResource_+1);
   const float applied=std::min(sparring_?std::max(0.f,health_-1):health_,incoming-absorbed);
   health_-=applied;
   if(applied>0) hurtFlash_=std::max(0.f,.25f-visualElapsed);
@@ -145,7 +151,7 @@ void Simulation::DamagePlayer(float damage,float incomingFacing,float visualElap
   if (applied>0) EmitVisual(CombatVisualKind::Hurt,player_,height_+1.2f,incomingFacing,0,visualElapsed);
   if (Channeling()) { channelRemaining_=0; message_="Damage interrupted stabilization."; }
   if (health_==0) {
-    classResource_=0;barrier_=0;
+    classResource_=0;barrier_=0;evasion_=0;
     target_=-1; height_=0; velocityY_=0; attackFlash_=0; StopMovement();
     // Defeat suspends combat. Cancel every pending warning, including actors
     // already processed this update, before the remaining actors can advance.
@@ -170,7 +176,7 @@ void Simulation::EndSparring(const char* result) {
 }
 
 void Simulation::Respawn() {
-  classResource_=0;barrier_=0;
+  classResource_=0;barrier_=0;evasion_=0;
   player_=WorldMap::spawn; height_=velocityY_=facing_=0; health_=MaxHealth();
   StopMovement();
   target_=-1; attackFlash_=hurtFlash_=channelRemaining_=0;

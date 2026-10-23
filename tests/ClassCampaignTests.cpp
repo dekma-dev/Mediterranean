@@ -67,6 +67,7 @@ void ClassCombat(const std::string& veteran) {
    Check(s.Load(WithProfile(fixture,ClassId(id))),"Class attack fixture");
    Command select;select.nextTarget=true;s.Update(.001f,select);
    if(ClassId(id)==ClassId::Engineer) {s.Update(.001f,select);s.Update(.001f,select);}
+   for(auto& e:const_cast<std::vector<Enemy>&>(s.Enemies())) {if(e.windup>0) e.windup=2;e.attackCooldown=10;}
    const auto target=s.TargetActor()->id;const auto maximum=s.TargetActor()->health;
    const float damage=s.HeavyDamage();int cast=0,hit=0,castSound=0;
    const auto observe=[&] {
@@ -90,6 +91,7 @@ void ClassCombat(const std::string& veteran) {
    Check(std::abs(s.Health()-(50+healing))<.001f,"Class sustain/sacrifice passive");
    Check(hit==1 && cast==int(ranged) && castSound==1,"Release sound and contact must each occur once");
    if(ClassId(id)==ClassId::Psionic) Check(enemy.windup==0 && enemy.attackCooldown>1.4f,"Psionic interruption duration");
+   for(auto& e:const_cast<std::vector<Enemy>&>(s.Enemies())) {e.windup=std::min(e.windup,e.WindupDuration());e.attackCooldown=e.windup>0?0:std::min(e.attackCooldown,e.AttackInterval());}
    Roundtrip(s);
   }
  }

@@ -42,13 +42,13 @@ void Game::Initialize() {
   choosingCharacter_=inputBarrier_=false; quitRequested_=fullscreenRequest_=false;
   simulation_=rpg::Simulation{}; time_=0; atmosphereTime_=0;
   worldView_.Reset();
-  interface_.SetOnly(ui::Panel::None); orbiting_=false;
+  interface_.SetOnly(ui::Panel::None); LoadHotbarSettings(); orbiting_=false;
   yaw_=0; pitch_=.45f; distance_=10;
   ResetMotion();
 }
 
 void Game::ChooseCharacter(const std::filesystem::path& save) {
-  rosterFile_=save;
+  rosterFile_=save;LoadHotbarSettings();
   CancelUiGesture(); selection_.Open(save); choosingCharacter_=true; inputBarrier_=false;
 }
 
@@ -90,6 +90,7 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   if (input.Pressed(VK_F3)) debugOverlay_=!debugOverlay_;
   if (input.Pressed(VK_F5)) {SaveProgress();interface_.menuNotice=simulation_.Message();}
   if (input.Pressed(VK_F9)) LoadProgress();
+  const auto previousUi=interface_.StateKey();
   if (input.Pressed(VK_ESCAPE)) interface_.Escape();
   if (input.Pressed('C')) interface_.Toggle(ui::Panel::Character);
   if (input.Pressed('I') || input.Pressed('B')) interface_.Toggle(ui::Panel::Inventory);
@@ -107,6 +108,7 @@ void Game::Update(double seconds,const Input& input,float wheel) {
     event=interface_.Pointer(input.ClientX(),input.ClientY(),input.Width(),input.Height(),
       input.Pressed(VK_LBUTTON),input.Pressed(VK_RBUTTON),input.Held(VK_LBUTTON),input.Released(VK_LBUTTON));
   rpg::Command command;
+  command.uiClick=event.action!=ui::Action::None || previousUi!=interface_.StateKey();
   switch (event.action) {
   case ui::Action::MusicVolume: interface_.musicVolume=std::clamp(interface_.musicVolume+event.value,0,100); break;
   case ui::Action::EffectsVolume: interface_.effectsVolume=std::clamp(interface_.effectsVolume+event.value,0,100); break;
@@ -215,7 +217,11 @@ void Game::Update(double seconds,const Input& input,float wheel) {
     command.nextTarget=input.Pressed(VK_TAB); command.interact=input.Pressed('E') && !closingMerchant && !closingQuest;
     command.restart=input.Pressed('R');
     command.usePotion=command.usePotion || input.Pressed('Q'); command.equipWeapon=command.equipWeapon || input.Pressed('G');
-    for (int i=0;i<4;++i) if (input.Pressed('1'+i)) { command.ability=i; break; }
+    for (int i=0;i<10;++i) if (input.Pressed(i==9?'0':'1'+i)) {
+      const int spell=interface_.HotbarSpell(i,simulation_.Class());
+      if(spell==4) command.usePotion=true; else if(spell>=0) command.ability=spell;
+      break;
+    }
   }
   // Recovery stays reachable even if the player opens a central panel after death.
   command.respawn=simulation_.Health()<=0 && input.Pressed(VK_RETURN);
@@ -318,7 +324,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   if(simulation_.ClassInfo().range>3 && simulation_.Attacking())
     playerAnimation_.pose.attackSeconds=-1;
   playerAnimation_.actions.Update(dt,simulation_.Class(),simulation_.AttackSeconds(),simulation_.HeavyAttack(),
-    playerAnimation_.castAge,simulation_.Health()>0);
+    simulation_.CastingRecovery()?std::min(.30f,simulation_.RecoveryProgress()*1.5f):playerAnimation_.castAge,simulation_.Health()>0);
   playerAnimation_.pose.action=playerAnimation_.actions.pose;
   if(simulation_.Class()!=rpg::ClassId::Warrior) playerAnimation_.pose.cast=0;
   playerAnimation_.pose.heavyAttack=simulation_.HeavyAttack();
@@ -538,8 +544,8 @@ void Game::Render(Renderer& renderer,bool showInterface) {
       }
     }
   }
-  if(simulation_.Attacking() && simulation_.ClassInfo().range>3 &&
-     simulation_.AttackSeconds()<combat::StrokeStart(simulation_.HeavyAttack())) {
+  if(simulation_.CastingRecovery() || (simulation_.Attacking() && simulation_.ClassInfo().range>3 &&
+     simulation_.AttackSeconds()<combat::StrokeStart(simulation_.HeavyAttack()))) {
     const bool shield=simulation_.Items().Worn(rpg::GearSlot::Offhand)!=rpg::Item::None;
     const auto form=rpg::WeaponFor(simulation_.Class()).form;
     const auto pose=BuildCharacterPose(0,playerPose_.gait,shield,playerAnimation_.pose,form);
@@ -581,6 +587,12 @@ std::wstring Game::WindowTitle() const {
   return L"Mediterranean - Astral Frontier | Native prototype";
 }
 
+void Game::LoadHotbarSettings() {
+  savedHotbars_.reset();std::string content;
+  ui::Interface defaults;interface_.LoadHotbars(defaults.SaveHotbars());
+  auto file=rosterFile_;file+=L".hotbars";
+  if(profile::Read(file,content)==profile::ReadResult::Ready && interface_.LoadHotbars(content)) savedHotbars_=content;
+}
 bool Game::SaveProgress() {
   const auto content=simulation_.Save();
   const auto result=profile::Write(saveFile_,content,savedSnapshot_?&*savedSnapshot_:nullptr);
@@ -589,6 +601,14 @@ bool Game::SaveProgress() {
   case profile::WriteResult::Conflict:simulation_.Notify("Save changed outside this game. F9 loads it; current progress was not written.");break;
   case profile::WriteResult::Busy:simulation_.Notify("Another game is saving this character. Try again.");break;
   case profile::WriteResult::Error:simulation_.Notify("Save failed. Previous save retained. Check project folder access.");break;
+  }
+  if(result==profile::WriteResult::Saved) {
+    auto file=rosterFile_;file+=L".hotbars";
+    const auto bars=interface_.SaveHotbars();
+    if(!savedHotbars_ || *savedHotbars_!=bars) {
+      if(profile::Write(file,bars,savedHotbars_?&*savedHotbars_:nullptr)==profile::WriteResult::Saved) savedHotbars_=bars;
+      else simulation_.Notify("Progress saved; action-bar settings could not be saved (external change or file access).");
+    }
   }
   return result==profile::WriteResult::Saved;
 }
@@ -601,4 +621,5 @@ void Game::LoadProgress() {
     simulation_.Notify("Save rejected. Current progress retained.");return;
   }
   savedSnapshot_=std::move(content);
+  LoadHotbarSettings();
 }

@@ -213,6 +213,17 @@ int main() {
       sample(-15,16,0)==0 && sample(-15,16,1)==0,"Ground texture orientation must match world and atlas coordinates.");
   }
   ui::Interface screen;
+  for(auto panel:{ui::Panel::Character,ui::Panel::Inventory,ui::Panel::Map,ui::Panel::Journal,ui::Panel::Build,ui::Panel::Quest,ui::Panel::Merchant}) {
+    screen.SetOnly(panel);Require(!screen.CapturesMovement(),"Only Escape/menu may capture movement");
+  }
+  screen.SetOnly(ui::Panel::None);
+  screen.MoveHotbar(0,9,rpg::ClassId::Warrior);
+  Require(screen.HotbarSpell(9,rpg::ClassId::Warrior)==0 && screen.HotbarSpell(9,rpg::ClassId::Mage)==-1,"Hotbar layouts are class-specific");
+  const auto bindings=screen.SaveHotbars();ui::Interface copied;
+  Require(copied.LoadHotbars(bindings) && copied.SaveHotbars()==bindings,"Hotbar bindings round trip");
+  Require(!copied.LoadHotbars(bindings+"junk") && copied.SaveHotbars()==bindings,"Malformed settings must preserve bindings");
+  screen.MoveHotbar(9,0,rpg::ClassId::Warrior);
+
   screen.Escape(); Require(screen.panel==ui::Panel::Menu && screen.CapturesMovement(),"Escape must open the menu and capture commands.");
   screen.Escape(); Require(screen.panel==ui::Panel::None,"Escape must close the menu.");
   screen.Toggle(ui::Panel::Inventory); screen.Escape();
@@ -324,8 +335,8 @@ int main() {
         Require(renderer.Capture(path) && renderer.EndFrame(false),"Quest dialogue capture");
       };
       render(L"preview");
-      Require(state.Save()==snapshot && dialogue.CapturesMovement(),"Reading must preserve progress and capture local movement");
-      Require(click(700,300).action==ui::Action::None && click(550,681).action==ui::Action::None,
+      Require(state.Save()==snapshot && !dialogue.CapturesMovement(),"Reading must preserve progress without capturing movement");
+      Require(click(700,300).action==ui::Action::None && click(493,681).action==ui::Action::None,
         "Quest dialogue must prevent clicks reaching the world and action bar");
       Require(click(60,380).action==ui::Action::None,"Previous page is disabled on the first page");
       auto next=click(400,385);
@@ -357,11 +368,12 @@ int main() {
     frame.down['E']=true; step();
     Require(game.State().QuestDialogue()==rpg::QuestId::Patrol && !game.WantsMouseLook() &&
       game.State().QuestState()==rpg::Quest::Available,"E must open the offer and release RMB without accepting");
-    const auto standing=game.State().Player(); frame.down['W']=frame.down['3']=true; step();
-    Require(game.State().Player().x==standing.x && game.State().Player().z==standing.z &&
-      game.State().Cooldown(2)==0,"Reading or holding E must not move, cast, or accept");
-    frame.down['W']=frame.down['3']=frame.down[VK_RBUTTON]=false;
+    const auto standing=game.State().Player(); frame.down['A']=frame.down['3']=true; step();
+    Require((game.State().Player().x!=standing.x || game.State().Player().z!=standing.z) &&
+      game.State().QuestState()==rpg::Quest::Available,"Reading must allow movement without accepting a quest");
+    frame.down['A']=frame.down['3']=frame.down[VK_RBUTTON]=false;
     frame.client={340,608}; frame.down[VK_LBUTTON]=true; step();
+    if(game.State().QuestState()!=rpg::Quest::Active) std::cerr<<"Quest input: "<<game.State().Message()<<" dialogue="<<int(game.State().QuestDialogue())<<" position="<<game.State().Player().x<<","<<game.State().Player().z<<'\n';
     Require(game.State().QuestState()==rpg::Quest::Active && game.State().Gold()==0,
       "Clicking Accept must dispatch a real quest action");
     frame.down[VK_LBUTTON]=false; frame.down['E']=false; step();
@@ -535,7 +547,7 @@ int main() {
     };
     step(); frame.down['E']=true; step(); frame.down['E']=false; step();
     const auto before=game.State().Player(); frame.down['W']=true; step(); frame.down['W']=false;
-    Require(game.State().Player().x==before.x && game.State().Player().z==before.z,"Trade must capture movement without pausing simulation.");
+    Require((game.State().Player().x!=before.x || game.State().Player().z!=before.z),"Trade must leave movement live.");
     frame.down[VK_LBUTTON]=true; step(); frame.down[VK_LBUTTON]=false; step();
     Require(game.State().Items().Count(rpg::Item::Helm)==1 && game.State().Gold()==70,"Merchant Buy must reach the authoritative purchase command.");
     const auto clickAt=[&](LONG x,LONG y) {
@@ -570,10 +582,10 @@ int main() {
     Require(game.WantsMouseLook(),"Build input test must begin with an active orbit");
     const auto position=game.State().Player();
     frame.down['N']=true; frame.down['W']=true; frame.down['3']=true; step();
-    Require(!game.WantsMouseLook() && game.State().Player().z==position.z && game.State().Cooldown(2)==0,
-      "N must cancel orbit and block movement/abilities on the opening frame");
+    Require(game.State().Player().z!=position.z && game.State().Cooldown(2)==0,
+      "N must preserve movement; a targetless dash remains unavailable");
     for (int i=0;i<3;++i) step();
-    Require(game.State().Player().z==position.z,"Holding N must not repeatedly toggle the build menu");
+    Require(game.State().Player().z!=position.z,"Holding N must preserve movement without toggling repeatedly");
     frame.down['N']=frame.down['W']=frame.down['3']=frame.down[VK_RBUTTON]=false; step();
     const auto clickAt=[&](LONG x,LONG y) {
       frame.client={x,y}; frame.screen=frame.client; frame.down[VK_LBUTTON]=true; step();
@@ -639,7 +651,7 @@ int main() {
     Require(simulation.Load(Fixture("veteran-preview.save")),"Reset pointer fixture.");
     Require(renderer.Resize(size.first,size.second),"screen resize failed.");
     const ui::Layout layout(float(size.first),float(size.second));
-    const auto click=[&](float x,float y) { return screen.Pointer(layout.x+x*layout.scale,layout.y+y*layout.scale,float(size.first),float(size.second),true,false); };
+    const auto click=[&](float x,float y) { auto e=screen.Pointer(layout.x+x*layout.scale,layout.y+y*layout.scale,float(size.first),float(size.second),true,false); if(e.action==ui::Action::None) e=screen.Pointer(layout.x+x*layout.scale,layout.y+y*layout.scale,float(size.first),float(size.second),false,false,false,true);return e; };
     screen.SetOnly(ui::Panel::Inventory); screen.selected=ui::Item::Starter;
     renderer.BeginFrame(); screen.Render(renderer,simulation,0,false); Require(renderer.EndFrame(false),"Inventory render failed.");
     Require(click(1028,274).action==ui::Action::SelectItem,"Item slot did not receive a scaled click.");
@@ -661,12 +673,21 @@ int main() {
     Require(closeBag.action==ui::Action::Close && closeBag.value==int(ui::Panel::Inventory),"Bag close must identify only the bag.");
     Require(click(1040,580).action==ui::Action::None && screen.PointerOverWindow(),"Blank bag surface must capture its pointer.");
     Require(click(680,380).action==ui::Action::None && !screen.PointerOverWindow(),"World gap must remain available for camera orbit.");
-    Require(click(550,681).action==ui::Action::None,"Dash requires an available target with side windows open.");
+    Require(click(493,681).action==ui::Action::None,"Dash requires an available target with side windows open.");
     const auto beforeDash=simulation.Save();
     Require(simulation.Load(test::dashFixture),"Interface target dash fixture");
     rpg::Command selectDash; selectDash.nextTarget=true; simulation.Update(.001f,selectDash);
     renderer.BeginFrame(); screen.Render(renderer,simulation,0,false); Require(renderer.EndFrame(false),"Target dash render");
-    Require(click(550,681).action==ui::Action::Ability,"Available Dash must remain usable with both side windows open.");
+    Require(click(493,681).action==ui::Action::Ability,"Available Dash must remain usable with both side windows open.");
+    const auto gesture=[&](float x,bool press,bool held,bool release) {
+      return screen.Pointer(layout.x+x*layout.scale,layout.y+681*layout.scale,float(size.first),float(size.second),press,false,held,release);
+    };
+    Require(gesture(493,true,true,false).action==ui::Action::None,"Hotbar press must not cast before a potential drag");
+    gesture(898,false,true,false);const auto drop=gesture(898,false,false,true);
+    Require(drop.action==ui::Action::None && screen.HotbarSpell(9,simulation.Class())==2 && screen.HotbarSpell(2,simulation.Class())==-1,"Drag must move spell to key zero without casting");
+    renderer.BeginFrame();screen.Render(renderer,simulation,0,false);Require(renderer.EndFrame(false),"Moved hotbar render");
+    Require(click(898,681).action==ui::Action::Ability && click(493,681).action==ui::Action::None,"Moved action uses its new slot; old slot is empty");
+    screen.MoveHotbar(9,2,simulation.Class());
     Require(simulation.Load(beforeDash),"Restore interface state after target dash check");
     screen.SetOnly(ui::Panel::None);
     renderer.BeginFrame();screen.Render(renderer,simulation,0,false);Require(renderer.EndFrame(false),"Tracker layout render");
@@ -716,8 +737,8 @@ int main() {
         renderer.BeginFrame(); screen.Render(renderer,buildState,0,false); Require(renderer.EndFrame(false),"Scaled build render");
       };
       drawBuild();
-      Require(screen.CapturesMovement() && click(550,681).action==ui::Action::None,
-        "Build menu must capture movement and block the underlying action bar");
+      Require(!screen.CapturesMovement(),
+        "Build menu must leave movement live");
       for (int i=0;i<int(rpg::Talent::Count);++i) {
         const auto node=click(248+(i%3)*232.f,320+(i/3)*106.f);
         Require(node.action==ui::Action::SelectTalent && node.value==i,"Every connected talent node must accept scaled inspection");
@@ -875,7 +896,7 @@ int main() {
     const int shieldCell=simulation.Items().Find(rpg::Item::Shield); Require(shieldCell>=0,"Shield purchase must reach the bag.");
     apply(drag(1028+float(shieldCell%6)*40,274+float(shieldCell/6)*42,277,274));
     Require(simulation.Items().Worn(rpg::GearSlot::Offhand)==rpg::Item::Shield && simulation.DamageReduction()==5,"Off-hand drag must update actual defense.");
-    render(); Require(click(550,681).action==ui::Action::None,"Trade must block the underlying action bar.");
+    render(); Require(click(493,681).action==ui::Action::None,"Trade must block the underlying action bar.");
     const auto rotate=click(147,593); Require(rotate.action==ui::Action::RotatePreview && rotate.value==1,"Portrait turn control must be clickable at every scale.");
     for (auto item : {rpg::Item::Shoulders,rpg::Item::Gloves,rpg::Item::Belt,rpg::Item::Cloak}) {
       const auto gear=ui::Describe(item).slot;
@@ -948,10 +969,10 @@ int main() {
     Require(game.WantsMouseLook(),"Build input test must begin with an active orbit");
     const auto position=game.State().Player();
     frame.down['N']=true; frame.down['W']=true; frame.down['3']=true; step();
-    Require(!game.WantsMouseLook() && game.State().Player().z==position.z && game.State().Cooldown(2)==0,
-      "N must cancel orbit and block movement/abilities on the opening frame");
+    Require(game.State().Player().z!=position.z && game.State().Cooldown(2)==0,
+      "N must preserve movement; a targetless dash remains unavailable");
     for (int i=0;i<3;++i) step();
-    Require(game.State().Player().z==position.z,"Holding N must not repeatedly toggle the build menu");
+    Require(game.State().Player().z!=position.z,"Holding N must preserve movement without toggling repeatedly");
     frame.down['N']=frame.down['W']=frame.down['3']=frame.down[VK_RBUTTON]=false; step();
     const auto clickAt=[&](LONG x,LONG y) {
       frame.client={x,y}; frame.screen=frame.client; frame.down[VK_LBUTTON]=true; step();
@@ -1005,10 +1026,10 @@ int main() {
     Require(game.WantsMouseLook(),"Build input test must begin with an active orbit");
     const auto position=game.State().Player();
     frame.down['N']=true; frame.down['W']=true; frame.down['3']=true; step();
-    Require(!game.WantsMouseLook() && game.State().Player().z==position.z && game.State().Cooldown(2)==0,
-      "N must cancel orbit and block movement/abilities on the opening frame");
+    Require(game.State().Player().z!=position.z && game.State().Cooldown(2)==0,
+      "N must preserve movement; a targetless dash remains unavailable");
     for (int i=0;i<3;++i) step();
-    Require(game.State().Player().z==position.z,"Holding N must not repeatedly toggle the build menu");
+    Require(game.State().Player().z!=position.z,"Holding N must preserve movement without toggling repeatedly");
     frame.down['N']=frame.down['W']=frame.down['3']=frame.down[VK_RBUTTON]=false; step();
     const auto clickAt=[&](LONG x,LONG y) {
       frame.client={x,y}; frame.screen=frame.client; frame.down[VK_LBUTTON]=true; step();

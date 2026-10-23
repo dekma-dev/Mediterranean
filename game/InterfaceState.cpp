@@ -1,7 +1,22 @@
 #include "game/Interface.h"
 #include <algorithm>
 #include <cmath>
+#include <sstream>
 namespace ui {
+std::string Interface::SaveHotbars() const {
+  std::ostringstream out;out<<"HOTBARS 1\n";
+  for(const auto& bar:hotbars_) {for(int spell:bar) out<<spell<<' ';out<<'\n';}
+  return out.str();
+}
+bool Interface::LoadHotbars(const std::string& data) {
+  if(data.size()>4096) return false;
+  std::istringstream in(data);std::string tag;int version=0;
+  if(!(in>>tag>>version) || tag!="HOTBARS" || version!=1) return false;
+  auto candidate=hotbars_;
+  for(auto& bar:candidate) for(auto& spell:bar) if(!(in>>spell) || spell < -1 || spell>4) return false;
+  in>>std::ws;if(!in.eof()) return false;
+  hotbars_=candidate;CancelDrag();InvalidateHitRegions();return true;
+}
 void Interface::Show(Panel next) {
   CancelBuildConfirmation();
   if (next==Panel::Build && panel!=Panel::Build) loadoutsPage=false;
@@ -31,7 +46,7 @@ bool Interface::IsOpen(Panel next) const {
   return next==Panel::Character?characterOpen:next==Panel::Inventory?inventoryOpen:panel==next;
 }
 bool Interface::PointerOverWindow() const {
-  return panel!=Panel::None || (characterOpen && Rect{12,106,438,510}.Contains(mouseX_,mouseY_)) ||
+  return panel==Panel::Menu || (characterOpen && Rect{12,106,438,510}.Contains(mouseX_,mouseY_)) ||
     (inventoryOpen && Rect{994,186,276,462}.Contains(mouseX_,mouseY_));
 }
 bool Interface::PointerOverUi() const {
@@ -78,6 +93,7 @@ void ApplyItem(rpg::Command& command,const rpg::Simulation& s,Item item,int bagS
   else command.inventory={rpg::InventoryAction::Equip,bagSlot==-1?s.Items().Find(item):bagSlot,int(Describe(item).slot),item};
 }
 Event Interface::Pointer(float x,float y,float width,float height,bool clicked,bool rightClicked,bool held,bool released) {
+  pointerHeld_=held;
   const Layout layout(width,height); mouseX_=layout.LocalX(x); mouseY_=layout.LocalY(y);
   // Hit regions describe the last drawn layout, not a panel opened this frame.
   if (renderedState_!=StateKey() || width!=renderedWidth_ || height!=renderedHeight_) {
@@ -88,6 +104,25 @@ Event Interface::Pointer(float x,float y,float width,float height,bool clicked,b
   if (panel==Panel::Map && rightClicked) {
     if (hit && hit->event.action==Action::PlaceWaypoint) hasWaypoint=false;
     CancelDrag(); return {};
+  }
+  if(dragSpell_>=0 && (held || released) && std::hypot(mouseX_-pressX_,mouseY_-pressY_)>6) dragging_=true;
+  if(released && dragSpell_>=0) {
+    Event result;
+    if(hit && hit->event.action==Action::Hotbar) {
+      if(dragging_) {
+        if(dragHotbar_>=0) MoveHotbar(dragHotbar_,hit->event.value,renderedClass_);
+        else AssignHotbar(dragSpell_,hit->event.value,renderedClass_);
+      } else if(dragHotbar_==hit->event.value && hit->enabled) {
+        result=dragSpell_==4?Event{Action::UseItem,int(Item::Potion)}:Event{Action::Ability,dragSpell_};
+      }
+    }
+    CancelDrag();return result;
+  }
+  if(clicked && hit && (hit->event.action==Action::Hotbar || hit->event.action==Action::SelectSpell)) {
+    CancelDrag();dragHotbar_=hit->event.action==Action::Hotbar?hit->event.value:-1;
+    dragSpell_=dragHotbar_>=0?HotbarSpell(dragHotbar_,renderedClass_):hit->event.value;
+    pressX_=mouseX_;pressY_=mouseY_;
+    return hit->event.action==Action::SelectSpell?hit->event:Event{};
   }
   if (rightClicked) {
     CancelDrag();

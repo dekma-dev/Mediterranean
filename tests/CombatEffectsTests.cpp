@@ -86,7 +86,7 @@ int main() {
       "An active dash must reject another spell without consuming its cooldown");
     for (int i=0;i<7;++i) burst.ExecuteCommand({},.05f);
     burst.ExecuteCommand(mend,.01f);
-    Require(burst.State().Health()==75 && Has(burst.State(),K::Mend),"Normal casting must resume after the stop");
+    Require(burst.State().Health()==40 && burst.State().Barrier()>0 && Has(burst.State(),K::Mend),"Normal casting must resume after the stop");
   }
   for (int rate : {30,60,144,1000}) {
     CombatEffects wake; wake.Emit({K::DashStart,{0,0},0,0});
@@ -113,14 +113,14 @@ int main() {
     recovery.ExecuteCommand(command,.01f); recoveryReference.Update(.01f,command);
     Require(Has(recovery.State(),potion?K::Potion:K::Mend) && recovery.State().VisualEventCount()==1,
       "Accepted recovery must emit exactly its own visual event");
-    Require(recovery.State().Health()==(potion?60.f:55.f) && recovery.State().Save()==recoveryReference.Save(),
+    Require(recovery.State().Health()==(potion?60.f:20.f) && recovery.State().Save()==recoveryReference.Save(),
       "Recovery cosmetics must preserve healing, inventory and save behavior");
     recovery.ExecuteCommand(command,.01f);
     Require(recovery.State().VisualEventCount()==0 && recovery.Effects().BurstCount()==1,"Recovery cooldown must not duplicate effects");
     for (int i=0;i<17;++i) recovery.ExecuteCommand({},.05f);
     Require(recovery.Effects().BurstCount()==0,"Recovery residue must expire");
     recovery.Initialize(); recovery.ExecuteCommand(command,.01f);
-    Require(recovery.State().VisualEventCount()==0 && recovery.Effects().BurstCount()==0,"Full health must not emit recovery effects");
+    Require(recovery.State().VisualEventCount()==(potion?0:1) && recovery.Effects().BurstCount()==(potion?0:1),"Only healing potions reject at full health; guard still activates");
   }
   Game game; rpg::Simulation reference; rpg::Command strike; strike.nextTarget=true; strike.ability=0;
   Require(game.RestoreSnapshot(duel) && reference.Load(duel),"Duel fixture rejected");

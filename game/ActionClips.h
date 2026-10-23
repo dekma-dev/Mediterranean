@@ -29,7 +29,9 @@ struct ClassActionClip {
 // Authored class gestures share the arm solve and the equipped right-hand
 // socket. Physical launchers add a continuous aim channel at accepted release.
 inline const std::array<ClassActionClip,int(rpg::ClassId::Count)> classActionClips={{
-  {"Guarded cut",{},{},{}}, // Warrior retains the established contact stroke.
+  {"Guarded cut",{{0,.02f,0},{0,0,0},-.03f,-.06f,.015f,-.015f},
+    {{0,.015f,.01f},{0,0,0},.04f,.05f,-.02f,-.025f},
+    {{0,.01f,0},{0,0,0},.015f,.025f,-.01f,-.01f}},
   {"Templar weight",{{0,.03f,-.025f},{.025f,.04f,-.02f},-.025f,-.035f,0,-.012f},
     {{0,.025f,.025f},{-.015f,-.02f,.025f},.025f,.025f,0,-.018f},
     {{0,.01f,.015f},{0,-.01f,.01f},.012f,.01f,0,-.008f}},

@@ -54,7 +54,8 @@ public:
   void SetAudioAvailable(bool value) { interface_.audioAvailable=value; }
 private:
   std::filesystem::path saveFile_,rosterFile_;
-  std::optional<std::string> savedSnapshot_;
+  std::optional<std::string> savedSnapshot_,savedHotbars_;
+  void LoadHotbarSettings();
   ui::CharacterSelection selection_;
   bool choosingCharacter_=false,inputBarrier_=false;
   rpg::Simulation simulation_;

@@ -255,12 +255,13 @@ int main() {
     Require(jumps==2 && lands==1 && steps==0,"Buffered landing/takeoff must emit both physical cues once without footsteps");
   }
   command.ability=3; simulation.Update(.01f,command); events.Update(simulation);
-  Require(events.count==0,"Rejected full-health Mend must be silent");
+  Require(events.count==1,"Full-health defensive guard must emit its sound");
+  simulation.CreateCharacter(rpg::ClassId::Warrior,"Tester");
   auto injured=simulation.Save(); const auto health=injured.find(" 100 ");
   Require(health!=std::string::npos,"Healing fixture missing"); injured.replace(health,5," 20 ");
   Require(simulation.Load(injured),"Injured audio fixture rejected");
   simulation.Update(.01f,command); events.Update(simulation);
-  Require(events.count==1 && Has(events,sound::Cue::Mend),"Accepted healing must emit one sound");
+  Require(events.count==1 && Has(events,sound::Cue::Ward),"Accepted defensive recovery must emit one sound");
   simulation.Update(.01f,command); events.Update(simulation);
   Require(events.count==0,"Cooldown rejection must not replay healing");
   const char* duel="MEDITERRANEAN 3\n-4 5.2 100 0 1 0\n2 0 0 0\n0\n0 0 0 0\n"

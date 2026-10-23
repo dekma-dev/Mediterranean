@@ -165,6 +165,7 @@ XMFLOAT3 CombatEffects::SpellTracePoint(XMFLOAT3 origin,rpg::Vec2 destination,fl
     origin.z+(destination.z-origin.z)*u};
 }
 void CombatEffects::Emit(const rpg::CombatVisualEvent& event,const XMFLOAT3* spellOrigin) {
+  if(event.kind==K::UiClick || event.kind==K::CastStart) return;
   const float elapsed=std::isfinite(event.elapsed)?std::clamp(event.elapsed,0.f,.05f):0;
   if (event.kind==K::DashStart) {
     CancelTrail(0);
@@ -317,6 +318,7 @@ void CombatEffects::Render(Renderer& renderer) const {
   for (const auto& burst : bursts_) {
     if (burst.age>=BurstLife(burst.event.kind)) continue;
     const auto& e=burst.event;
+    if(e.kind==K::CastStart) continue;
     if(e.kind==K::SpellCast) {
       classfx::Projectile(renderer,e,burst.spellOrigin,burst.age);
       continue;

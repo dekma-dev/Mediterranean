@@ -135,6 +135,15 @@ void Impact(Renderer& r,const rpg::CombatVisualEvent& e,float age) {
   const float size=(e.heavy?1.1f:.72f)*(e.empowered?1.2f:1);
   const XMFLOAT3 p{e.position.x-std::sin(e.facing)*.34f,e.height,e.position.z-std::cos(e.facing)*.34f};
   auto c=Color(e.school,fade*.8f);
+  const float bloom=std::sin(phase*pi);
+  const int facets=3+int(e.school)%4;
+  for(int i=0;i<facets;++i) {
+    const float a=i*tau/facets+e.facing+int(e.school)*.31f;
+    const float radius=(.15f+phase*.65f)*size;
+    const auto tip=Add(p,{std::cos(a)*radius,(.3f+std::sin(a)*.4f)*phase,std::sin(a)*radius});
+    auto accent=Color(e.school,bloom*.38f);
+    r.DrawEffectStreak(Lerp(p,tip,.64f),tip,.012f+flash*.015f,accent);
+  }
   r.DrawEffectGlow(p,.12f*size,{1,.95f,.83f,flash*.9f});
   r.DrawEffectGlow(p,.40f*size,Color(e.school,flash*.32f));
   switch(e.school) {
@@ -331,17 +340,26 @@ void Recovery(Renderer& r,const rpg::CombatVisualEvent& e,float age) {
   color.w=fade*.1f;r.DrawEffectGlow(p,.4f,color);
 }
 void Prepare(Renderer& r,const rpg::Simulation& state,XMFLOAT3 p) {
-  if(state.Health()<=0 || !state.Attacking() || state.ClassInfo().range<=3) return;
-  const float progress=state.AttackSeconds()/combat::StrokeStart(state.HeavyAttack());
+  if(state.Health()<=0 || (!state.CastingRecovery() && (!state.Attacking() || state.ClassInfo().range<=3))) return;
+  const float progress=state.CastingRecovery()?state.RecoveryProgress():state.AttackSeconds()/combat::StrokeStart(state.HeavyAttack());
   if(progress<=0 || progress>=1) return;
   const float alpha=std::sin(progress*pi*.5f)*.55f;
   const auto id=state.Class();const auto c=Color(id,alpha);
-  if(id==C::Scout || id==C::Engineer) {
+  if((id==C::Scout || id==C::Engineer) && !state.CastingRecovery()) {
     if(!state.HeavyAttack()) return;
     // Compact sight brackets at the weapon; no premature muzzle flash.
     for(float side:{-1.f,1.f}) r.DrawEffectStreak(Add(p,{side*(.10f-.04f*progress),-.05f,0}),
       Add(p,{side*(.10f-.04f*progress),.05f,0}),.008f,c);
     return;
+  }
+  if(state.CastingRecovery()) {
+    const XMFLOAT3 base{state.Player().x,state.Height()+.06f,state.Player().z};
+    Arc(r,base,.45f+progress*.12f,progress*4,pi*1.7f,.012f,c,true);
+    for(int i=0;i<4;++i) {
+      const float a=i*tau/4+progress*5;
+      const auto mote=Add(base,{std::cos(a)*.5f,progress*1.1f,std::sin(a)*.5f});
+      r.DrawEffectStreak(mote,Lerp(mote,p,.25f),.014f,c);
+    }
   }
   const float radius=.08f+progress*(state.HeavyAttack()?.18f:.08f);
   Arc(r,p,radius,progress*4,pi*1.6f,.013f,c,false,.45f);

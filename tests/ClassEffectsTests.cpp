@@ -109,7 +109,12 @@ void Captures(Renderer& r,const std::filesystem::path& root) {
 }
 void Recoveries(Renderer& r,const std::filesystem::path& root) {
   for(int i=0;i<int(ClassId::Count);++i) {
-    const auto id=ClassId(i);auto s=Training(id);Command heal;heal.ability=3;s.Update(.001f,heal);
+    const auto id=ClassId(i);auto s=Training(id);const_cast<rpg::Enemy&>(s.SparringOpponent()).attackCooldown=100;const_cast<rpg::Enemy&>(s.SparringOpponent()).windup=0;Command heal;heal.ability=3;s.Update(.001f,heal);
+    if(s.CastingRecovery()) {
+      // Keep the fixture stationary and actors distant during cast validation.
+      for(auto& e:const_cast<std::vector<rpg::Enemy>&>(s.Enemies())) {e.position=e.home={25,25};e.windup=0;e.state=rpg::EnemyState::Idle;}
+      while(s.CastingRecovery()) s.Update(.01f,{});
+    }
     Check(s.VisualEventCount()==1 && s.VisualEvents()[0].kind==K::Mend && s.VisualEvents()[0].school==id,"Recovery event identity");
     sound::Events audio;audio.Update(s);
     Check(audio.count==1 && audio.cues[0]==sound::ClassRecoveryCue(id),"Recovery sound identity");

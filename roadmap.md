@@ -1,5 +1,7 @@
 # Mediterranean Roadmap
 
+Combat/live-interface checkpoint (2026-10-23): implemented Esc-only local movement capture, ten draggable per-class action slots with conflict-safe persistence, timed recovery casting, differentiated defenses and baseline heavy control effects, hover/press/tooltip feedback, slower class action clocks, gathering/impact effects and revised synthesized cues. See [combat controls](docs/combat-controls.md). R3/R5/R6 are advanced but not complete: four actions per class, existing icon art/procedural rig and subjective animation/audio acceptance remain limitations.
+
 ## Current research-led priorities — 2026-10-23
 
 See [RPG development research](docs/rpg-development-research.md) for the source register, current gaps, dependencies and acceptance criteria. These are planned milestones, not completed features. This ordered section guides upcoming work; the entries below remain the chronological implementation history.

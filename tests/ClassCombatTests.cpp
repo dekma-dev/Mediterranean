@@ -102,7 +102,7 @@ void Reserves() {
     Profile(s,id);Command equip;equip.inventory={InventoryAction::Equip,s.Items().Find(Item::Starter),int(GearSlot::Weapon),Item::Starter};s.Update(.001f,equip);
     Command train;train.interact=true;s.Update(.001f,train);Check(s.Sparring(),"Reserve trainer");
     for(int hit=0;hit<s.CombatStyleInfo().capacity;++hit) {
-      Command basic;basic.ability=0;s.Update(.001f,basic);Tick(s,1.f,hz);
+      Command basic;basic.ability=0;s.Update(.001f,basic);Tick(s,std::max(1.f,s.Spell(0).recovery+.01f),hz);
       Check(s.ClassResource()==hit+1,"Landed basic did not build resource exactly once");
     }
     Check(s.EmpoweredReady(),"Full reserve not advertised");
@@ -136,7 +136,7 @@ void Reserves() {
       Check(s.Cooldown(3)>0 && s.Barrier()==stronger,"Recovery stacked or weakened an existing empowered ward");
       const float ward=s.Barrier(),health=s.Health();
       for(int tick=0;tick<hz*4 && s.Barrier()==ward;++tick) s.Update(1.f/hz,{});
-      Check(s.Barrier()<ward && s.Health()==health && !s.DamagedThisUpdate(),"Barrier did not absorb a real enemy hit");
+      Check(s.Barrier()<ward && s.Health()>=health && !s.DamagedThisUpdate(),"Barrier did not absorb a real enemy hit");
       int wardHits=0;for(std::size_t n=0;n<s.VisualEventCount();++n) wardHits+=s.VisualEvents()[n].kind==CombatVisualKind::BarrierHit;
       Check(wardHits==1,"Absorbed hit must produce exactly one barrier ripple");
       bool absorb=false;for(const auto& f:s.Feedback()) absorb|=f.kind==FeedbackKind::Absorb;
@@ -168,17 +168,48 @@ void Reserves() {
 }
 }
 void Recovery() {
-  constexpr float wards[]{0,18,0,10,0,14,0,12,0,8,0};
-  for(int id=0;id<int(rpg::ClassId::Count);++id) {
+  for(int id=0;id<int(rpg::ClassId::Count);++id) for(int hz:{30,60,144}) {
     rpg::Simulation s;Duel(s,rpg::ClassId(id));
-    const float expected=std::min(s.MaxHealth(),s.Health()+s.MendHealingNow());
+    auto save=s.Save();const auto line=save.find('\n',save.find('\n')+1)+1;
+    save.replace(line,save.find('\n',line)-line,"0 -10 50 0 0 0");
+    Check(s.Load(save),"Safe recovery fixture");
+    const float initial=s.Health(),cast=ClassRecoveryCast(s.Class());
+    const float expected=ClassHealer(s.Class())?std::min(s.MaxHealth(),initial+s.MendHealingNow()):initial-ClassRecoveryCost(s.Class());
     rpg::Command heal;heal.ability=3;s.Update(.001f,heal);
-    Check(std::abs(s.Health()-expected)<.001f && s.Barrier()==wards[id],"Class recovery health/ward contract");
-    const auto hp=s.Health();s.Update(.001f,heal);
-    Check(s.Health()==hp && s.Barrier()==wards[id] && s.VisualEventCount()==0,"Rejected recovery stacked a ward or replayed effects");
-    Check(s.Load(s.Save()) && s.Barrier()==0,"Recovery ward survived load");
-    Check(s.CreateCharacter(rpg::ClassId(id),"Tester"),"Fresh recovery character");
-    s.Update(.001f,heal);Check(s.Barrier()==0 && s.Cooldown(3)==0 && s.VisualEventCount()==0,"Full health farmed free wards");
+    if(cast>0) {
+      Check(s.CastingRecovery() && s.Health()==initial,"Healing must wait for cast completion");
+      Tick(s,cast-.01f,hz);Check(s.CastingRecovery() && s.Health()==initial,"Cast completed early");
+      Tick(s,.02f,hz);
+    }
+    Check(std::abs(s.Health()-expected)<.001f && s.Barrier()==ClassRecoveryBarrier(s.Class()),"Class recovery health/ward contract");
+    Check(s.Load(save),"Interruption fixture");
+    s.Update(.001f,heal);const float before=s.Health();
+    Command move;move.movement={1,0};s.Update(.01f,move);Tick(s,cast+.1f,hz);
+    if(cast>0) Check(!s.CastingRecovery() && s.Health()==before && s.Barrier()==0,"Movement must cancel unfinished recovery");
+    Check(s.Load(save),"Menu interruption fixture");s.Update(.001f,heal);
+    Command menu;menu.haltMovement=true;s.Update(.01f,menu);Tick(s,cast+.1f,hz);
+    if(cast>0) Check(!s.CastingRecovery() && s.Health()==initial,"Escape cannot complete a pending heal");
+    Check(s.Load(s.Save()) && !s.CastingRecovery() && s.Barrier()==0,"Transient recovery state survived load");
   }
 }
-int main() {Cadence();Mobility();Preparation();Reserves();Recovery();std::cout<<"PASS: class clocks, retreat collision, casting movement, empowered combat and recovery wards.\n";}
+void DefensiveIdentity() {
+  {
+    Simulation s;Duel(s,ClassId::Priest);
+    auto& attacker=const_cast<Enemy&>(s.Enemies()[0]);attacker.windup=.001f;
+    Command heal;heal.ability=3;s.Update(.01f,heal);
+    Check(s.DamagedThisUpdate() && !s.CastingRecovery(),"Damage on the starting frame must interrupt healing");
+  }
+  for(int hz:{30,60,144}) for(auto id:{ClassId::Warrior,ClassId::Scout,ClassId::Mage,ClassId::Priest}) {
+    Simulation s;Duel(s,id);const float health=s.Health();Command guard;guard.ability=3;s.Update(.001f,guard);
+    Tick(s,.7f,hz);
+    if(id==ClassId::Priest) Check(!s.CastingRecovery() && s.Health()<health,"Enemy damage must interrupt healing before completion");
+    else Check(s.Health()==health,"Class defense must prevent the first attack");
+    if(id==ClassId::Warrior) Check(s.ClassResource()==1,"Blocking must generate Rage");
+    if(id==ClassId::Mage) Check(s.Enemies()[0].snared>1.8f,"Frost ward must slow the attacker");
+    if(id==ClassId::Scout) {
+      Check(s.EvasionSeconds()==0 && s.Barrier()==0,"Scout evasion is consumed by one hit, not a barrier");
+      Tick(s,2.5f,hz);Check(s.Health()<health,"Evasion cannot suppress later hits");
+    }
+  }
+}
+int main() {Cadence();Mobility();Preparation();Reserves();Recovery();DefensiveIdentity();std::cout<<"PASS: class clocks, retreat collision, casting movement, empowered combat and recovery wards.\n";}

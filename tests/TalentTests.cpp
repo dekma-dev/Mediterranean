@@ -74,7 +74,7 @@ void ExpandedBuildChecks(const std::string& veteranSave) {
  for(float health : {49.f,49.01f,139.f}) {
   Require(game.Load(Player(veteranSave,0,-10,health)),"Mercy fixture");
   Learn(game,Talent::Restoration); Learn(game,Talent::Mercy);
-  const float expected=std::min(140.f,health+(health<=49?65.f:45.f));
+  const float expected=health;
   Command mend; mend.ability=3; game.Update(.01f,mend);
   Require(std::abs(game.Health()-expected)<.0001f && game.Cooldown(3)==10,
     "Mercy must check pre-cast health, include its exact threshold, and cap real healing");
@@ -166,28 +166,29 @@ int main() {
  Learn(guard,Talent::Vitality); Learn(guard,Talent::Bulwark);
  Require(guard.DamageReduction()==4,"Bulwark must add to the two points of worn ward protection");
  Command mend; mend.ability=3; guard.Update(.01f,mend);
- Require(guard.Health()==160,"Mend must fill the newly increased maximum health");
+ Require(guard.Health()==140 && guard.Barrier()==30,"Iron guard must protect without healing");
  Simulation restored;
- Require(restored.Load(guard.Save()) && restored.Health()==160 && restored.MaxHealth()==160 &&
+ Require(restored.Load(guard.Save()) && restored.Health()==140 && restored.MaxHealth()==160 &&
    restored.HasTalent(Talent::Bulwark),"Talent-dependent health must round-trip");
  auto fallen=Player(guard.Save(),0,-10,0);
  Require(restored.Load(fallen),"Fallen talented champion must load");
  Command recover; recover.respawn=true; restored.Update(.01f,recover);
  Require(restored.Health()==160 && restored.HasTalent(Talent::Bulwark) && restored.TalentPoints()==0,
    "Respawn must retain the build and restore its actual maximum health");
+ Require(guard.Load(guard.Save()),"Clear transient ward before armor check");
  Training(guard);
  for (int i=0;i<100 && guard.SparringDamageTaken()==0;++i) guard.Update(.05f,{});
  Require(guard.SparringDamageTaken()==4,"An actual eight-damage training hit must respect Bulwark plus armor");
  Simulation healer; Require(healer.Load(Player(veteranSave,0,-10,60)),"Injured healer fixture");
  Learn(healer,Talent::Restoration); healer.Update(.01f,mend);
- Require(healer.Health()==105 && healer.Cooldown(3)==10,"Restoration must increase a real Mend cast to 45 health");
+ Require(healer.Health()==60 && healer.Barrier()==35 && healer.Cooldown(3)==10,"Restoration must increase a real Mend cast to 45 health");
  Learn(healer,Talent::Renewal);
  Require(healer.AbilityCooldown(3)==8 && healer.Cooldown(3)>9.9f,
    "Renewal must shorten future casts without resetting an existing cooldown");
  Require(restored.Load(healer.Save()) && restored.Save()==healer.Save(),"An inherited ten-second cooldown must remain loadable");
  for (int i=0;i<201;++i) healer.Update(.05f,{});
  healer.Update(.01f,mend);
- Require(healer.Health()==140 && healer.Cooldown(3)==8,"Improved Mend must cap healing and start the reduced cooldown");
+ Require(healer.Health()==60 && healer.Barrier()==35 && healer.Cooldown(3)==8,"Improved Mend must cap healing and start the reduced cooldown");
  Require(restored.Load(veteranSave),"Reset learning guard fixture");
  Training(restored); Learn(restored,Talent::WeaponTraining);
  Require(restored.TalentPoints()==2 && !restored.HasTalent(Talent::WeaponTraining),"Learning must be blocked during sparring");
