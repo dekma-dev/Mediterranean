@@ -1,5 +1,11 @@
 # Starting and Debugging Mediterranean
 
+Regional ambience (2026-10-23): restart the rebuilt game and enable Effects. Walk from the village south into the meadow, then visit the astral anchor and northern bastion. Backgrounds should blend gradually; combat quiets them. Music can be muted to inspect ambience separately. AudioTests exports ambience-0.wav (wind), ambience-1.wav (village) and ambience-2.wav (astral). Check repeated loop boundaries, Effects mute and Alt-Tab; see manual check 214.
+
+Adaptive music (2026-10-23): restart the rebuilt game, enable Music, then enter and leave combat. A restrained percussion layer fades in; it holds three seconds after danger passes and fades back out. Effects volume does not control this layer. AudioTests exports adaptive-score-preview.wav for a 20-second transition audition. See manual check 213.
+
+Spatial combat audio (2026-10-23): use headphones or stereo speakers with the rebuilt game. Orbit the camera around an attacking enemy and compare nearby versus distant spell impacts. Your own movement/release feedback stays centered. AudioTests exports spatial-combat-preview.wav into the build directory for left-to-right audition. Mono/surround devices receive distance attenuation with default channel routing; directional stereo is the implemented scope. See manual check 212.
+
 Mystic chronicle audio (2026-10-22): restart the rebuilt game to generate the replacement soundtrack/effects bank. Esc exposes independent Music and Effects sliders. The full score is 48 seconds; listen through its quieter opening, horn/drum section and ending. AudioTests also exports dawnwatch-music.wav, effects-preview.wav and combat-mix-preview.wav into the build directory for audition without gameplay. See docs/sound-design.md and manual check 211.
 
 Loading presentation (2026-10-22): start the rebuilt launcher/game to see the native title card during graphics initialization, followed by the hall-style preparation screens. Enter World presents a matching screen before the first world render. Stages can pass quickly; no minimum wait is imposed. Hidden startup/benchmark modes retain their existing flow. Manual check 210 covers visible startup, window behavior and the entry transition.

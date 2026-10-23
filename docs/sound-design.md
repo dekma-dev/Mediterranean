@@ -1,5 +1,29 @@
 # Dawnwatch sound direction
 
+## Regional ambience — 2026-10-23
+
+Three original six-second mono beds distinguish open ground (wind and short bird calls), the village (quiet creaks and a distant bell), and the anchor/northern bastion (airy low harmonics and bell tones). Smooth spatial weights blend into a 1.5-second gain response. Combat intensity reduces ambience by up to half, leaving more room for warnings. The Effects slider controls all three beds; Music remains independent. Load/profile changes and suspension reset the blend.
+
+All samples are synthesized once at startup. Three additional looping voices and 793,800 PCM bytes bring the total bank to 3,994,566 bytes (3.81 MiB), below the 4 MiB ceiling. These are quiet procedural backgrounds with faded loop endpoints, not recorded environmental audio or spatial emitters. Their six-second repetition and perceived balance still need listening acceptance; occlusion and surround placement remain open.
+
+AudioTests covers region coverage, normalized weights, crossfade/duck agreement at 30/60/144/1000 Hz, reset, deterministic synthesis, endpoints, signal bounds and the total memory ceiling. It exports ambience-0.wav (wind), ambience-1.wav (village) and ambience-2.wav (astral). Manual check 214 covers live listening.
+
+## Adaptive percussion — 2026-10-23
+
+A six-second percussion stem now shares the main score's 80 BPM beat. Both sources start in one XAudio2 operation set; the 48-second score and six-second stem loop continuously without restarting when combat changes. Accepted attacks or living pursuing enemies within 18 m raise tension. Gain rises with a 1.2-second response, holds for three seconds after the last threat, then decays with a three-second response. Short breaks therefore do not repeatedly switch the soundtrack on and off.
+
+The stem follows the Music slider independently of Effects. Death, profile generation changes and audio suspension clear its intensity. The score remains uninterrupted during normal transitions. This is one adaptive percussion layer, not a separate combat composition or a full adaptive orchestration system.
+
+Resident PCM is now 3,200,766 bytes (about 3.05 MiB), still below the 4 MiB ceiling. One additional looping source voice is used; the twelve effect voices are unchanged. AudioTests exports combat-music-layer.wav and adaptive-score-preview.wav; the latter demonstrates exploration, tension from seconds 4–10, then release. Tests cover frame-rate-independent fades, hold/reset behavior, threat detection, layer determinism/limits and mix headroom. Manual check 213 covers listening acceptance.
+
+## Combat placement — 2026-10-23
+
+Enemy swings, target impacts and interruptions now retain their world positions. Stereo output uses equal-power left/right placement relative to the player's position and camera heading. Playing tails are updated as the listener moves or turns. Distance gain decreases smoothly and fades to zero between 14 and 18 metres. Player releases, movement, healing and damage feedback remain centered, so turning away does not hide the player's own feedback.
+
+The existing twelve effect voices retain fixed source metadata; no extra PCM is allocated. Gain budgeting includes attenuation before voice changes are committed together. Mono and multichannel endpoints retain XAudio2's default channel routing with distance attenuation; directional panning in this pass is specifically for stereo. There is no wall occlusion, elevation/HRTF processing, Doppler or moving-source tracking after emission. Long tails stay at the original event location.
+
+AudioTests checks left/right orientation, camera rotation, equal-power coefficients, distance falloff, invalid inputs and event-origin ownership. It exports `spatial-combat-preview.wav`, seven impacts moving from left to right, for headphone audition. Manual check 212 covers live perception.
+
 ## Mystic chronicle — 2026-10-22
 
 The previous 32-second pad/pluck loop is replaced by an original 48-second, 80 BPM D-minor phrase. Eight six-second harmonic sections layer synthesized bowed-string partials, breath-like choir tones, a sustained melody and sparse harp notes. Lower horns and restrained drums enter in the second half, followed by a quiet resolution. Overlapping releases and baked chamber reflections give the score depth; faded endpoints avoid a sample discontinuity when looping.

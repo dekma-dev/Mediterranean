@@ -11,16 +11,57 @@ void Require(bool condition,const char* message) { if(!condition) { std::cerr<<m
 bool Has(const sound::Events& events,sound::Cue cue) {
   return std::find(events.cues.begin(),events.cues.begin()+events.count,cue)!=events.cues.begin()+events.count;
 }
-void WriteWave(const char* path,const std::vector<std::int16_t>& samples) {
+void WriteWave(const char* path,const std::vector<std::int16_t>& samples,unsigned channels=1) {
   std::ofstream out(path,std::ios::binary);
   const auto word=[&](unsigned value,int bytes) { for(int i=0;i<bytes;++i) out.put(char((value>>(8*i))&255)); };
   out.write("RIFF",4); word(36+unsigned(samples.size()*2),4); out.write("WAVEfmt ",8);
-  word(16,4); word(1,2); word(1,2); word(sound::sampleRate,4); word(sound::sampleRate*2,4); word(2,2); word(16,2);
+  word(16,4); word(1,2); word(channels,2); word(sound::sampleRate,4); word(sound::sampleRate*2*channels,4); word(2*channels,2); word(16,2);
   out.write("data",4); word(unsigned(samples.size()*2),4);
   out.write(reinterpret_cast<const char*>(samples.data()),std::streamsize(samples.size()*2));
   Require(bool(out),"Audio preview write failed");
 }
 int main() {
+  const auto village=sound::AmbientWeights({0,-10}),meadow=sound::AmbientWeights({0,-24}),astral=sound::AmbientWeights(rpg::WorldMap::astralAnchor);
+  Require(village[1]>.99f && meadow[0]>.99f && astral[2]>.99f,"Regional ambience is assigned to the wrong place");
+  for(int x=-29;x<=29;++x) for(int z=-31;z<=31;++z) {
+    const auto weights=sound::AmbientWeights({float(x),float(z)});
+    Require(weights[0]>=0 && weights[1]>=0 && weights[2]>=0 && std::abs(weights[0]+weights[1]+weights[2]-1)<.00001f,"Ambient regions must share a bounded mix");
+  }
+  float ambientReference=-1;
+  for(int hz:{30,60,144,1000}) {
+    sound::AmbientMix mix;
+    for(int n=0;n<hz*3;++n) mix.Update({0,-10},0,1.f/hz);
+    for(int n=0;n<hz*3;++n) mix.Update({0,-24},1,1.f/hz);
+    Require(mix.levels[0]>0 && mix.levels[1]>0 && mix.levels[0]+mix.levels[1]<.6f,"Ambient region change must crossfade and duck during combat");
+    if(ambientReference>=0) Require(std::abs(mix.levels[0]-ambientReference)<.0001f,"Ambient transition depends on frame rate");
+    ambientReference=mix.levels[0];mix.Reset();Require(mix.levels==std::array<float,3>{},"Ambient gain survived reset");
+  }
+  float intensityReference=-1;
+  for(int hz:{30,60,144,1000}) {
+    sound::MusicIntensity intensity;
+    for(int n=0;n<hz*2;++n) intensity.Update(true,1.f/hz);
+    Require(intensity.value>.8f && intensity.value<.9f,"Combat music must fade in gradually");
+    for(int n=0;n<hz*2;++n) intensity.Update(false,1.f/hz);
+    Require(intensity.value>.9f,"Brief combat gaps must not pump the music");
+    for(int n=0;n<hz*5;++n) intensity.Update(false,1.f/hz);
+    if(intensityReference>=0) Require(std::abs(intensity.value-intensityReference)<.0001f,"Music fade depends on frame rate");
+    intensityReference=intensity.value;
+    intensity.Update(true,NAN);Require(std::isfinite(intensity.value),"Invalid time poisoned music gain");
+    intensity.Reset();Require(intensity.value==0 && intensity.hold==0,"Music state survived reset");
+  }
+  Require(!sound::CombatThreat(rpg::Simulation{}),"Idle exploration must not start combat music");
+  const auto center=sound::Place({0,0},0),left=sound::Place({-5,0},0),right=sound::Place({5,0},0);
+  Require(center.gain==1 && std::abs(center.left-center.right)<.00001f,"Local sounds must remain centered");
+  Require(left.left>.999f && left.right<.001f && right.right>.999f && right.left<.001f,"Stereo placement reversed left/right");
+  const auto turned=sound::Place({5,0},3.14159265f);
+  Require(turned.left>.999f,"Camera orbit must rotate the sound field");
+  float previous=1;
+  for(float distance=0;distance<=20;distance+=.125f) {
+    const auto p=sound::Place({distance,0},.7f);
+    Require(p.gain<=previous && p.gain>=0,"Distance attenuation must be monotone and bounded");previous=p.gain;
+    Require(std::abs(p.left*p.left+p.right*p.right-1)<.00001f,"Panning must preserve constant power");
+  }
+  Require(sound::Place({18,0},0).gain==0 && sound::Place({0,0},NAN).gain==0,"Spatial range/invalid input must be silent");
   Require(sound::CueLevel(sound::Cue::Step)<sound::CueLevel(sound::Cue::HeavyHit),"Footsteps must sit behind combat impacts");
   for(unsigned cue=0;cue<unsigned(sound::Cue::Count);++cue) {
     for(unsigned n=0;n<21;++n) {
@@ -43,6 +84,14 @@ int main() {
     recovery=gain;
   }
   size_t bytes=0; std::vector<std::int16_t> preview;
+  for(int region=0;region<3;++region) {
+    const auto pcm=sound::GenerateAmbience(sound::Ambience(region));bytes+=pcm.size()*2;
+    Require(pcm.size()==sound::sampleRate*6 && pcm.front()==0 && pcm.back()==0 &&
+      pcm==sound::GenerateAmbience(sound::Ambience(region)),"Ambient loop length, endpoints or determinism failed");
+    int peak=0;double energy=0;for(auto sample:pcm) {peak=std::max(peak,std::abs(int(sample)));energy+=double(sample)*sample;}
+    Require(peak>100 && peak<6000 && energy/pcm.size()>100,"Ambience must be audible with room for combat");
+    const auto path="ambience-"+std::to_string(region)+".wav";WriteWave(path.c_str(),pcm);
+  }
   for(unsigned i=0;i<unsigned(sound::Cue::Count);++i) {
     const auto samples=sound::Generate(sound::Cue(i)); bytes+=samples.size()*2;
     Require(samples==sound::Generate(sound::Cue(i)),"Procedural effects must be deterministic");
@@ -67,6 +116,22 @@ int main() {
       Require(sound::Generate(cue)!=sound::Generate(sound::ClassReleaseCue(rpg::ClassId(j))),"Ranged class sound identities collapsed");
   }
   const auto music=sound::GenerateMusic(); bytes+=music.size()*2;
+  const auto combatMusic=sound::GenerateCombatLayer();bytes+=combatMusic.size()*2;
+  Require(combatMusic.size()==sound::sampleRate*6 && combatMusic.front()==0 && combatMusic.back()==0 &&
+    combatMusic==sound::GenerateCombatLayer(),"Combat layer duration, edges or determinism failed");
+  int combatPeak=0;for(auto sample:combatMusic) combatPeak=std::max(combatPeak,std::abs(int(sample)));
+  Require(combatPeak>1000 && combatPeak<10000,"Combat percussion lacks headroom or is silent");
+  WriteWave("combat-music-layer.wav",combatMusic);
+  std::vector<std::int16_t> adaptive(sound::sampleRate*20);sound::MusicIntensity audition;
+  for(size_t n=0;n<adaptive.size();++n) {
+    const float t=float(n)/sound::sampleRate;audition.Update(t>=4 && t<10,1.f/sound::sampleRate);
+    const float value=music[n]+combatMusic[n%combatMusic.size()]*audition.value;
+    Require(std::abs(value)<30000,"Adaptive music sum clips");
+    adaptive[n]=std::int16_t(value);
+  }
+  // Audition ends partway through the composition, so soften its file boundary.
+  for(size_t n=0;n<sound::sampleRate;++n) adaptive[adaptive.size()-1-n]=std::int16_t(adaptive[adaptive.size()-1-n]*float(n)/sound::sampleRate);
+  WriteWave("adaptive-score-preview.wav",adaptive);
   const auto mend=sound::Generate(sound::Cue::Mend);
   double tailEnergy=0;
   for(size_t i=sound::sampleRate/2;i<mend.size();++i) tailEnergy+=double(mend[i])*mend[i];
@@ -91,6 +156,17 @@ int main() {
   Require(peak>1000 && peak<16000 && energy/music.size()>10000,"Music mix needs headroom and non-silent content");
   Require(bytes<4*1024*1024,"Resident PCM must stay below 4 MiB");
   WriteWave("dawnwatch-music.wav",music); WriteWave("effects-preview.wav",preview);
+  const auto impact=sound::Generate(sound::Cue::HeavyHit);
+  std::vector<std::int16_t> stereo(sound::sampleRate*7*2);
+  for(unsigned hit=0;hit<7;++hit) {
+    const auto placement=sound::Place({-6.f+hit*2.f,2},0);
+    for(size_t n=0;n<impact.size();++n) {
+      const size_t at=(hit*sound::sampleRate+n)*2;
+      stereo[at]=std::int16_t(impact[n]*placement.gain*placement.left);
+      stereo[at+1]=std::int16_t(impact[n]*placement.gain*placement.right);
+    }
+  }
+  WriteWave("spatial-combat-preview.wav",stereo,2);
   // Offline audition of repeated steps, combat and recovery using the same
   // cue levels, pitch choices and peak-budget gain as runtime (without music).
   struct PreviewCue { sound::Cue cue; float start; unsigned variant; };
@@ -145,6 +221,7 @@ int main() {
   const char* duel="MEDITERRANEAN 3\n-4 5.2 100 0 1 0\n2 0 0 0\n0\n0 0 0 0\n"
     "100 -4 7 80 0 0 1 0.5 3.14159\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
   Require(simulation.Load(duel),"Combat audio fixture rejected"); events.Reset();
+  Require(sound::CombatThreat(simulation),"Pursuing enemy must raise musical tension");
   command={}; command.nextTarget=true; command.ability=1;
   simulation.Update(.01f,command); events.Update(simulation);
   Require(events.count==0,"Wind-up must not play a premature impact or swing");
@@ -157,9 +234,13 @@ int main() {
   }
   const auto save=simulation.Save();
   Require(swing && Has(events,sound::Cue::HeavyHit) && Has(events,sound::Cue::Interrupt),"Contact and interruption need distinct cues after the swing");
+  for(unsigned i=0;i<events.count;++i) if(events.cues[i]==sound::Cue::HeavyHit)
+    Require(events.spatial[i] && std::hypot(events.origins[i].x-simulation.Player().x,events.origins[i].z-simulation.Player().z)>1,
+      "Impact sound must retain its target location");
   Require(simulation.Save()==save,"Audio must not change gameplay/save state");
   simulation=rpg::Simulation{}; events.Reset(); command={}; command.jump=true;
   simulation.Update(1.f/60,command); events.Update(simulation); Require(Has(events,sound::Cue::Jump),"Jump cue missing");
+  for(unsigned i=0;i<events.count;++i) if(events.cues[i]==sound::Cue::Jump) Require(!events.spatial[i],"Player jump must follow the listener");
   events.Reset(); events.Update(simulation);
   Require(Has(events,sound::Cue::Jump),"Resetting audio on an accepted jump frame must retain the cue");
   simulation.Update(1.f/60,{}); events.Reset(); events.Update(simulation);
