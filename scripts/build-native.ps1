@@ -9,12 +9,14 @@ param(
   [switch]$SmokeTest,
   [switch]$Benchmark,
   [switch]$BenchmarkSuite,
+  [switch]$Benchmark1080p,
   [Parameter(DontShow)]
   [switch]$DeveloperEnvironment
 )
 
 $ErrorActionPreference = 'Stop'
 if ($Run -and $Launcher) { throw 'Choose -Run for the game or -Launcher for its launcher.' }
+if ($Benchmark1080p -and !$BenchmarkSuite) { throw '-Benchmark1080p requires -BenchmarkSuite.' }
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $buildPath = if ($Backend -eq 'Ninja') {
   Join-Path $projectRoot ('build-ninja-' + $Configuration.ToLowerInvariant())
@@ -39,6 +41,7 @@ if ($Backend -eq 'Ninja' -and -not $DeveloperEnvironment) {
   if ($SmokeTest) { $switches += '-SmokeTest' }
   if ($Benchmark) { $switches += '-Benchmark' }
   if ($BenchmarkSuite) { $switches += '-BenchmarkSuite' }
+  if ($Benchmark1080p) { $switches += '-Benchmark1080p' }
   $childCommand = 'call "' + $developerCommand + '" -no_logo -arch=x64 -host_arch=x64 && "' +
     $shellPath + '" -NoProfile -File "' + $PSCommandPath + '" -Backend Ninja -Configuration ' + $Configuration + ' ' + ($switches -join ' ')
   & $env:ComSpec /d /s /c $childCommand
@@ -120,8 +123,9 @@ if ($Benchmark) {
 }
 
 if ($BenchmarkSuite) {
-  $reportPath = Join-Path $buildPath "$Configuration-benchmark-suite.txt"
-  $measurement = Start-Process -FilePath $executablePath -ArgumentList @('--benchmark-suite', ('"' + $reportPath + '"')) -WindowStyle Hidden -PassThru
+  $suiteSuffix = if ($Benchmark1080p) { '-1080p' } else { '' }
+  $reportPath = Join-Path $buildPath "$Configuration-benchmark-suite$suiteSuffix.txt"
+  $measurement = Start-Process -FilePath $executablePath -ArgumentList @("--benchmark-suite$suiteSuffix", ('"' + $reportPath + '"')) -WindowStyle Hidden -PassThru
   if (-not $measurement.WaitForExit(45000)) { $measurement.Kill(); throw 'Workload benchmark timed out.' }
   if ($measurement.ExitCode -ne 0) {
     if (Test-Path -LiteralPath "$reportPath.log") { Get-Content -LiteralPath "$reportPath.log" }

@@ -1,5 +1,11 @@
 # Starting and Debugging Mediterranean
 
+Load-notification repair (2026-10-23): successful F9/character loads now clear inventory and merchant notices, including the inventory toast timer and its mouse blocker. After sorting/equipping, load immediately and check camera orbit over the former notice area. Failed loads retain the current session. See manual check 221.
+
+Terrain performance check (2026-10-23): run `build-ninja-release/NavigationTests.exe --surface-benchmark` to compare the current surface-query workload. It also checks exact equivalence against the original calculation and writes no player saves. This measures CPU sampling cost rather than game FPS; walk over path/dock edges to check unchanged traction and footsteps.
+
+HUD input repair (2026-10-23): the expedition tracker (including its waypoint row), sparring report and inventory notification now block mouse gestures through their visible panels. Camera orbit remains available in the world gaps after notifications expire. Journal quest titles fit their column. See manual check 220.
+
 UI repairs (2026-10-23): weapon hover stats now include class damage bonuses, matching equipped attacks and the bag inspector. Long centered labels and item/spell tooltip titles fit their frames without overflowing. Check at 960x600 and your normal fullscreen size; manual check 219 covers comparisons and long labels.
 
 Roster repair (2026-10-23): Save & choose character now keeps the hero you just played selected. Other classes remain available in their original slots. Successful F9 loads clear old menu save errors; F5 refreshes the menu's save result. See manual check 218.
@@ -347,3 +353,8 @@ Skill 3 (Dash) now moves continuously for 0.28 seconds across 3.5 m with a dedic
 
 
 Class action inspection: compare keys 1 and 2 on different classes, then use 4 while injured. Quick casts should be compact; heavy casts should show preparation, release and follow-through. Open Esc or N during a cast and watch the arms settle; F9 must clear the pose. Jump and cast at a grounded enemy: the trace should leave the left palm and end on the target. C must show the same cloth color as the selected class. See manual checks 181–182 and `docs/classes-and-campaign.md`. `ActionClipTests` writes 44 `action-clip-check/<class>-<phase>.png` views (class IDs 0–10; phases preparation/release/follow-through/restoration).
+## Performance baseline reports
+
+Add `-Benchmark1080p` alongside `-BenchmarkSuite` to measure exact 1920x1080 render buffers and save four reference PNGs. This remains a hidden diagnostic run. The report is `Release-benchmark-suite-1080p.txt`; capture filenames append `.scene-0.png` through `.scene-3.png`. Capture encoding is excluded from the measured frames.
+
+Run `scripts/build-native.ps1 -Backend Ninja -Configuration Release -BenchmarkSuite` for the reproducible four-workload report. See [performance baseline and clock audit](docs/performance-baseline.md) for interpretation, first measurements and limitations. Reports distinguish missing GPU observations from zero cost and include tail timings and adapter metadata.

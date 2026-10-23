@@ -77,6 +77,12 @@ GroundSurface WorldMap::SurfaceAt(Vec2 p) const {
   };
   float dirt=0,paving=edge((std::hypot(p.x/4.f,(p.z+10)/2.2f)-1)*2.2f);
   for (const auto& trail : trails_) {
+    // Coverage is exactly zero beyond halfWidth + 0.5 m. Reject distant
+    // segments before projection/hypot; retain a small conservative margin.
+    if((trail.paved?paving:dirt)==1.f) continue;
+    const float reach=trail.halfWidth+.5001f;
+    if(p.x<std::min(trail.from.x,trail.to.x)-reach || p.x>std::max(trail.from.x,trail.to.x)+reach ||
+       p.z<std::min(trail.from.z,trail.to.z)-reach || p.z>std::max(trail.from.z,trail.to.z)+reach) continue;
     const float dx=trail.to.x-trail.from.x,dz=trail.to.z-trail.from.z;
     const float t=std::clamp(((p.x-trail.from.x)*dx+(p.z-trail.from.z)*dz)/(dx*dx+dz*dz),0.f,1.f);
     const float weight=edge(std::hypot(p.x-trail.from.x-t*dx,p.z-trail.from.z-t*dz)-trail.halfWidth);

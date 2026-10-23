@@ -20,6 +20,10 @@ public:
   bool EndFrame(bool vsync = true);
   double GpuMilliseconds() const { return gpuTimer_.Milliseconds(); }
   std::uint64_t GpuSamples() const { return gpuTimer_.Samples(); }
+  std::uint64_t GpuFrame() const { return gpuTimer_.Frame(); }
+  const std::array<GpuObservation,4>& GpuReady() const { return gpuTimer_.Ready(); }
+  std::size_t GpuReadyCount() const { return gpuTimer_.ReadyCount(); }
+  std::string AdapterDiagnostics() const;
   UINT Triangles() const { return triangles_; }
   std::size_t MeshBytes() const { return meshBytes_; }
   std::size_t MaterialBytes() const { return materialBytes_+terrainBytes_; }

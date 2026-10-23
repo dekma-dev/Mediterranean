@@ -486,6 +486,16 @@ int main() {
       "Loading must invalidate old gear hit regions before input is routed.");
   }
   {
+    Game game;game.Initialize();game.OpenPanel(ui::Panel::Inventory);
+    Input input;Input::Frame frame;frame.focused=true;frame.client={1216,237};
+    const auto draw=[&]() {renderer.BeginFrame();game.Render(renderer);Require(renderer.EndFrame(false),"Load notice regression render");};
+    const auto step=[&]() {input.Update(frame);game.Update(.01,input,0);draw();};
+    step();frame.down[VK_LBUTTON]=true;step();frame.down[VK_LBUTTON]=false;step();
+    const auto snapshot=game.State().Save();Require(game.RestoreSnapshot(snapshot),"Notice reload fixture");draw();
+    frame.client={700,140};frame.down[VK_RBUTTON]=true;step();
+    Require(game.WantsMouseLook(),"Loaded character retained the previous inventory notification and its input blocker");
+  }
+  {
     Game game; game.Initialize(); Input input; Input::Frame frame;
     frame.focused=true; frame.client={802,628}; frame.screen=frame.client;
     const auto step=[&]() {

@@ -59,8 +59,42 @@ void TravelChecks(const rpg::WorldMap& map,bool benchmark) {
   std::cout<<"32768 travel queries ms: "<<std::chrono::duration<double,std::milli>(travel-start).count()
     <<"; 400 paths ms: "<<std::chrono::duration<double,std::milli>(end-travel).count()<<"; checksum: "<<checksum<<'\n';
 }
+rpg::GroundSurface ReferenceSurface(const rpg::WorldMap& map,rpg::Vec2 p) {
+  if(!std::isfinite(p.x) || !std::isfinite(p.z)) return {};
+  const auto edge=[](float distance) {const float t=std::clamp((distance+.15f)/.65f,0.f,1.f);return 1-t*t*(3-2*t);};
+  float dirt=0,paving=edge((std::hypot(p.x/4.f,(p.z+10)/2.2f)-1)*2.2f);
+  for(const auto& trail:map.Trails()) {
+    const float dx=trail.to.x-trail.from.x,dz=trail.to.z-trail.from.z;
+    const float t=std::clamp(((p.x-trail.from.x)*dx+(p.z-trail.from.z)*dz)/(dx*dx+dz*dz),0.f,1.f);
+    const float weight=edge(std::hypot(p.x-trail.from.x-t*dx,p.z-trail.from.z-t*dz)-trail.halfWidth);
+    if(trail.paved) paving=std::max(paving,weight);else dirt=std::max(dirt,weight);
+  }
+  dirt=std::max(dirt,edge(std::hypot(p.x-rpg::WorldMap::trainingPost.x,p.z-rpg::WorldMap::trainingPost.z)-2.8f));
+  dirt=std::max(dirt,edge(std::hypot(p.x-rpg::WorldMap::astralAnchor.x,p.z-rpg::WorldMap::astralAnchor.z)-2.2f));
+  return {dirt*(1-paving),paving};
+}
+void SurfaceChecks(const rpg::WorldMap& map,bool benchmark) {
+  std::vector<rpg::Vec2> points;
+  for(int z=0;z<256;++z) for(int x=0;x<256;++x)
+    points.push_back({((x+.5f)/256-.5f)*rpg::WorldMap::surveyWidth,(.5f-(z+.5f)/256)*rpg::WorldMap::surveyDepth});
+  for(const auto& trail:map.Trails()) for(auto p:{trail.from,trail.to})
+    for(float offset:{-1.f,1.f}) for(float epsilon:{-.0001f,0.f,.0001f}) {
+      points.push_back({p.x+offset*(trail.halfWidth+.5f+epsilon),p.z});
+      points.push_back({p.x,p.z+offset*(trail.halfWidth+.5f+epsilon)});
+    }
+  for(auto p:points) {
+    const auto expected=ReferenceSurface(map,p),actual=map.SurfaceAt(p);
+    Require(expected.dirt==actual.dirt && expected.paving==actual.paving,"Surface optimization changed terrain weights");
+  }
+  if(!benchmark) return;
+  double checksum=0;const auto start=std::chrono::steady_clock::now();
+  for(int repeat=0;repeat<16;++repeat) for(auto p:points) {const auto s=map.SurfaceAt(p);checksum+=s.dirt+s.paving;}
+  std::cout<<"Surface queries: "<<points.size()*16<<"; ms: "<<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()<<"; checksum: "<<checksum<<'\n';
+}
 int main(int argc,char** argv) {
   rpg::WorldMap map;
+  if(argc==2 && std::string(argv[1])=="--surface-benchmark") {SurfaceChecks(map,true);return 0;}
+  SurfaceChecks(map,false);
   if(argc==2 && std::string(argv[1])=="--benchmark") {TravelChecks(map,true);return 0;}
   TravelChecks(map,false);
   Require(std::string(map.AreaName({-21,23}))=="WESTWARD REACH" &&

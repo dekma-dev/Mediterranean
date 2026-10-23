@@ -11,13 +11,17 @@ bool GpuTimer::Initialize(ID3D11Device* device) {
   return true;
 }
 void GpuTimer::Begin(ID3D11DeviceContext* context) {
+  readyCount_=0; ++frame_;
   for (auto& slot : slots_) if (slot.pending) {
     D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjoint{}; UINT64 start=0,end=0;
     if (context->GetData(slot.disjoint.Get(),&disjoint,sizeof(disjoint),D3D11_ASYNC_GETDATA_DONOTFLUSH)==S_OK &&
       context->GetData(slot.begin.Get(),&start,sizeof(start),D3D11_ASYNC_GETDATA_DONOTFLUSH)==S_OK &&
       context->GetData(slot.end.Get(),&end,sizeof(end),D3D11_ASYNC_GETDATA_DONOTFLUSH)==S_OK) {
       if (!disjoint.Disjoint && disjoint.Frequency && end>=start) {
-        milliseconds_=1000.0*double(end-start)/double(disjoint.Frequency); ++samples_;
+        const double milliseconds=1000.0*double(end-start)/double(disjoint.Frequency);
+        ready_[readyCount_++]={slot.frame,milliseconds}; ++samples_;
+        // Slots are visited in storage order, which wraps independently of age.
+        if(slot.frame>latestFrame_) { latestFrame_=slot.frame; milliseconds_=milliseconds; }
       }
       slot.pending=false;
     }
@@ -25,6 +29,7 @@ void GpuTimer::Begin(ID3D11DeviceContext* context) {
   active_=-1;
   auto& slot=slots_[current_];
   if (!slot.pending && slot.disjoint) {
+    slot.frame=frame_;
     active_=current_; context->Begin(slot.disjoint.Get()); context->End(slot.begin.Get());
   }
 }

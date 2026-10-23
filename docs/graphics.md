@@ -1,5 +1,21 @@
 # Procedural graphics and performance budget
 
+## Terrain surface queries (2026-10-23)
+
+SurfaceAt supplies terrain textures, placement, movement traction and ground-contact audio. It formerly projected every point onto all 32 trail segments and calculated every distance. Conservative bounds now reject segments outside their nonzero coverage; material channels already at full coverage skip further work. The accepted-segment calculation and final blend are unchanged. No persistent cache, added allocation, reduced mesh detail or changed texture resolution is involved.
+
+Three sequential Release runs, same machine and workload (1,060,864 queries per run):
+
+| Run | Before (ms) | After (ms) |
+| --- | ---: | ---: |
+| 1 | 244.116 | 70.8564 |
+| 2 | 249.718 | 67.9255 |
+| 3 | 249.075 | 67.7023 |
+
+Median query time falls 72.7%, from 249.075 to 67.9255 ms. All runs report checksum 117507. These are isolated CPU measurements, not interactive FPS or whole-frame improvements. Map construction and equivalence checks are outside the timed section.
+
+NavigationTests compares exact dirt/paving weights against the original formula at all 256-square terrain texel centres and trail endpoint/falloff boundaries (66,304 points), then optionally runs `--surface-benchmark`. Existing motion and audio regressions pass in Debug/Release. Reports: build-ninja-release/surface-before.txt and surface-after.txt; validation logs are surface-tests.log in both build directories.
+
 ## Shared cloud lighting (2026-10-22)
 
 World vertices previously repeated twelve cloud-volume samples each. The renderer now evaluates that same function into a 64-by-64 R32_FLOAT field, then samples it for rigid meshes, bodies and hands. Texel centres are two metres apart across the central 128 metres; vertices beyond the last centres use the original analytic function. The sky volume, shadow maps/filter, materials, meshes, animation, effects and UI quality settings are unchanged.

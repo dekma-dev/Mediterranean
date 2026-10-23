@@ -1,4 +1,5 @@
 #include "engine/Engine.h"
+#include "engine/BenchmarkStats.h"
 
 #include <Windows.h>
 #include <algorithm>
@@ -307,34 +308,30 @@ bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapsh
 bool Engine::Benchmark(const std::wstring& reportPath) {
   LARGE_INTEGER frequency{},start{},finish{}; QueryPerformanceFrequency(&frequency);
   std::vector<double> cpu,gpu;
+  std::uint64_t firstMeasuredGpuFrame=0;
   // Same stationary spawn camera, 90 warmup + 240 measured frames, no captures.
   for (int frame=0;frame<330;++frame) {
     QueryPerformanceCounter(&start);
-    const auto samples=renderer_->GpuSamples();
+    if(frame==90) firstMeasuredGpuFrame=renderer_->GpuFrame()+1;
     game_->Update(1.0/60.0,input_,0);
     renderer_->BeginFrame(); game_->Render(*renderer_);
     if (!renderer_->EndFrame(false)) { error_=renderer_->Error(); return false; }
     QueryPerformanceCounter(&finish);
     if (frame>=90) {
       cpu.push_back(1000.0*double(finish.QuadPart-start.QuadPart)/double(frequency.QuadPart));
-      if (renderer_->GpuSamples()!=samples) gpu.push_back(renderer_->GpuMilliseconds());
+      AppendGpuObservations(gpu,renderer_->GpuReady(),renderer_->GpuReadyCount(),firstMeasuredGpuFrame);
     }
   }
-  const auto percentile=[](std::vector<double> values,double p) {
-    if (values.empty()) return 0.0;
-    std::sort(values.begin(),values.end()); return values[static_cast<std::size_t>((values.size()-1)*p)];
-  };
   PROCESS_MEMORY_COUNTERS_EX memory{}; memory.cb=sizeof(memory);
   const bool memoryAvailable=GetProcessMemoryInfo(GetCurrentProcess(),reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&memory),sizeof(memory))!=FALSE;
   std::ofstream report{std::filesystem::path(reportPath)};
   report << std::fixed << std::setprecision(3)
-    << "Scene: stationary spawn, 1280x720, hidden window, present interval 0\n"
-    << "Warmup frames: 90\nMeasured frames: " << cpu.size() << "\nGPU samples: " << gpu.size()
-    << "\nCPU frame median ms (includes submission/present): " << percentile(cpu,.5)
-    << "\nCPU frame p95 ms: " << percentile(cpu,.95)
-    << "\nGPU measured median ms: " << percentile(gpu,.5)
-    << "\nGPU measured p95 ms: " << percentile(gpu,.95)
-    << "\nDraw submissions including HUD: " << renderer_->DrawCalls()
+    <<renderer_->AdapterDiagnostics()
+    << "Scene: stationary spawn, "<<renderer_->Width()<<'x'<<renderer_->Height()<<", hidden window, present interval 0\n"
+    << "Warmup frames: 90; CPU includes submission/present. GPU observations are asynchronous.\n";
+  diagnostics::WriteDistribution(report,"CPU frame",cpu);
+  diagnostics::WriteDistribution(report,"GPU observation",gpu);
+  report << "\nDraw submissions including HUD: " << renderer_->DrawCalls()
     << "\nSubmitted triangles including HUD: " << renderer_->Triangles()
     << "\nImmutable mesh bytes: " << renderer_->MeshBytes()
     << "\nMaterial and shadow texture bytes: " << renderer_->MaterialBytes();
@@ -346,7 +343,10 @@ bool Engine::Benchmark(const std::wstring& reportPath) {
   return true;
 }
 
-bool Engine::BenchmarkSuite(const std::wstring& reportPath) {
+bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
+  // Explicit render-buffer size: a hidden window may be fitted to a smaller
+  // desktop work area. Diagnostic resolution must not depend on that fitting.
+  if(fullHd && !renderer_->Resize(1920,1080)) { error_=renderer_->Error(); return false; }
   // Authored in-memory scenarios. No player save or desktop input is touched.
   const std::string combat="MEDITERRANEAN 3\n-4 5.2 100 0 1 0\n2 0 0 0\n0\n0 0 0 0\n"
     "100 -4 7 80 0 0 1 0.5 3.14159\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
@@ -354,16 +354,23 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath) {
     "100 -4 7 0 0 1 3 0 0\n101 4 9 0 0 1 3 0 0\n102 0 12 0 0 1 3 0 0\n";
   const auto original=game_->State().Save();
   const char* names[]={"Stationary spawn HUD","Village walking and orbit","Repeated combat and orbit","Merchant, character and bag"};
-  const auto percentile=[](std::vector<double> values,double p) {
-    if (values.empty()) return 0.0;
-    std::sort(values.begin(),values.end()); return values[std::size_t((values.size()-1)*p)];
-  };
   LARGE_INTEGER frequency{},start{},updated{},rendered{},finish{}; QueryPerformanceFrequency(&frequency);
   std::ofstream report{std::filesystem::path(reportPath)};
   report<<std::fixed<<std::setprecision(3)
-    <<"Hidden 1280x720 workload suite; present interval 0; fixed simulation step 1/60 s\n"
+    <<"Workload report version: 3\nBuild stamp: "<<__DATE__<<' '<<__TIME__
+#ifdef NDEBUG
+    <<"\nConfiguration: Release-like (NDEBUG)\n"
+#else
+    <<"\nConfiguration: Debug-like\n"
+#endif
+    <<renderer_->AdapterDiagnostics()
+    <<"Hidden "<<renderer_->Width()<<'x'<<renderer_->Height()<<" workload suite; present interval 0; benchmark simulation step 1/60 s\n"
+    <<"Resolution describes render buffers, not desktop/window dimensions.\n"
+    <<"Interactive gameplay uses variable dt capped at 50 ms, not a fixed 60 Hz clock.\n"
     <<"Each workload: 90 warmup + 600 measured frames. Setup/save loads excluded.\n"
-    <<"Combat replays a 3-second window; GPU observations are asynchronous (latest ready sample per frame).\n"
+    <<"1080p mode captures each final workload frame after measurement; PNG readback/encoding excluded.\n"
+    <<"Combat replays a 3-second window; GPU observations retain every ready sample from measured frames.\n"
+    <<"GPU warmup samples excluded by origin frame; outstanding queries at workload end are not waited on.\n"
     <<"CPU phases: simulation/camera; scene/HUD preparation (may flush portraits); final submission/present.\n"
     <<"Not interactive FPS, a long-session test or a GPU trace. No player saves written.\n";
   for (int scene=0;scene<4;++scene) {
@@ -385,6 +392,7 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath) {
     std::array<unsigned,visual::bodyLodCount> bodyPeak{};
     std::array<unsigned,2> attachmentPeak{};
     const rpg::Vec2 route[]={{3,-10},{3,-6},{0,-6},{0,-10}}; unsigned waypoint=0;
+    std::uint64_t firstMeasuredGpuFrame=0;
     for (int frame=0;frame<690;++frame) {
       if (scene==2 && frame%180==0 && !game_->RestoreSnapshot(combat)) return false;
       rpg::Command command;
@@ -394,7 +402,8 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath) {
         command.movement={route[waypoint].x-before.x,route[waypoint].z-before.z};
       }
       if (scene==2) { command.nextTarget=frame%180==0; if (frame%180==80) command.ability=0; }
-      QueryPerformanceCounter(&start); const auto samples=renderer_->GpuSamples();
+      QueryPerformanceCounter(&start);
+      if(frame==90) firstMeasuredGpuFrame=renderer_->GpuFrame()+1;
       game_->ExecuteCommand(command,1.f/60);
       if (scene==1 || scene==2) game_->SetCameraOrbit(frame*.012f,.4f+.18f*std::sin(frame*.021f),7.5f+1.5f*std::sin(frame*.017f));
       QueryPerformanceCounter(&updated);
@@ -407,7 +416,7 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath) {
       updateCpu.push_back(1000.0*double(updated.QuadPart-start.QuadPart)/double(frequency.QuadPart));
       renderCpu.push_back(1000.0*double(rendered.QuadPart-updated.QuadPart)/double(frequency.QuadPart));
       submitCpu.push_back(1000.0*double(finish.QuadPart-rendered.QuadPart)/double(frequency.QuadPart));
-      if (renderer_->GpuSamples()!=samples) gpu.push_back(renderer_->GpuMilliseconds());
+      AppendGpuObservations(gpu,renderer_->GpuReady(),renderer_->GpuReadyCount(),firstMeasuredGpuFrame);
       drawPeak=std::max(drawPeak,renderer_->DrawCalls()); trianglePeak=std::max(trianglePeak,renderer_->Triangles());
       for(unsigned level=0;level<visual::bodyLodCount;++level) bodyPeak[level]=std::max(bodyPeak[level],renderer_->BodyLodCounts()[level]);
       for(unsigned i=0;i<2;++i) attachmentPeak[i]=std::max(attachmentPeak[i],renderer_->AttachmentLodCounts()[i]);
@@ -420,17 +429,22 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath) {
     if ((scene==1 && distance<10) || (scene==2 && (windups==0 || hits==0 || effectFrames==0)) || (scene!=2 && effectFrames>0)) {
       error_=L"Benchmark workload did not exercise movement or combat."; return false;
     }
-    report<<"\n"<<names[scene]<<"\nCPU samples: "<<cpu.size()<<"; GPU observations: "<<gpu.size()
-      <<"\nCPU median / p95 / max ms: "<<percentile(cpu,.5)<<" / "<<percentile(cpu,.95)<<" / "<<percentile(cpu,1)
-      <<"\nCPU update median / p95 ms: "<<percentile(updateCpu,.5)<<" / "<<percentile(updateCpu,.95)
-      <<"\nCPU prepare median / p95 ms: "<<percentile(renderCpu,.5)<<" / "<<percentile(renderCpu,.95)
-      <<"\nCPU submit/present median / p95 ms: "<<percentile(submitCpu,.5)<<" / "<<percentile(submitCpu,.95)
-      <<"\nGPU median / p95 ms: "<<percentile(gpu,.5)<<" / "<<percentile(gpu,.95)
-      <<"\nPeak submissions / triangles: "<<drawPeak<<" / "<<trianglePeak
+    report<<"\n"<<names[scene];
+    diagnostics::WriteDistribution(report,"CPU frame",cpu);
+    diagnostics::WriteDistribution(report,"CPU update",updateCpu);
+    diagnostics::WriteDistribution(report,"CPU prepare",renderCpu);
+    diagnostics::WriteDistribution(report,"CPU submit/present",submitCpu);
+    diagnostics::WriteDistribution(report,"GPU observation",gpu);
+    report<<"\nPeak submissions / triangles: "<<drawPeak<<" / "<<trianglePeak
       <<"\nPeak queued bodies near / mid / far: "<<bodyPeak[0]<<" / "<<bodyPeak[1]<<" / "<<bodyPeak[2]
       <<"\nPeak simplified / omitted attachments: "<<attachmentPeak[0]<<" / "<<attachmentPeak[1]
       <<"\nCombat effect frames / peak vertices: "<<effectFrames<<" / "<<effectPeak
       <<"\nWalked distance / windup frames / received hits: "<<distance<<" / "<<windups<<" / "<<hits<<'\n';
+    if(fullHd) {
+      const auto capture=reportPath+L".scene-"+std::to_wstring(scene)+L".png";
+      if(!renderer_->Capture(capture)) { error_=renderer_->Error(); return false; }
+      report<<"Capture suffix: .scene-"<<scene<<".png\n";
+    }
   }
   report<<"\nImmutable mesh bytes: "<<renderer_->MeshBytes()<<"\nMaterial/shadow bytes: "<<renderer_->MaterialBytes()
     <<"\nInterface bytes: "<<renderer_->InterfaceBytes()

@@ -15,7 +15,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
   wchar_t** args=CommandLineToArgvW(GetCommandLineW(),&count);
   const bool smoke=args && count>=2 && std::wstring(args[1])==L"--smoke-test";
   const bool benchmark=args && count>=2 && std::wstring(args[1])==L"--benchmark";
-  const bool suite=args && count>=2 && std::wstring(args[1])==L"--benchmark-suite";
+  const bool fullHd=args && count>=2 && std::wstring(args[1])==L"--benchmark-suite-1080p";
+  const bool suite=fullHd || (args && count>=2 && std::wstring(args[1])==L"--benchmark-suite");
   const std::wstring report=(benchmark || suite) && count==3?args[2]:L"";
   const std::wstring capture=smoke && (count==3 || count==4)?args[2]:L"";
   const std::wstring snapshotPath=smoke && count==4?args[3]:L"";
@@ -54,7 +55,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     return -1;
   }
   if (benchmark || suite) {
-    if (suite?engine.BenchmarkSuite(report):engine.Benchmark(report)) return 0;
+    if (suite?engine.BenchmarkSuite(report,fullHd):engine.Benchmark(report)) return 0;
     std::wofstream log(std::filesystem::path(report+L".log")); log << engine.Error(); return 1;
   }
   if (smoke) {

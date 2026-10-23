@@ -12,6 +12,23 @@
 #include <algorithm>
 using namespace DirectX;
 using Microsoft::WRL::ComPtr;
+std::string Renderer::AdapterDiagnostics() const {
+ ComPtr<IDXGIDevice> dxgi; ComPtr<IDXGIAdapter> adapter; DXGI_ADAPTER_DESC desc{};
+ if(!device_ || FAILED(device_.As(&dxgi)) || FAILED(dxgi->GetAdapter(&adapter)) || FAILED(adapter->GetDesc(&desc)))
+  return "Adapter: unavailable\n";
+ char name[512]{};
+ WideCharToMultiByte(CP_UTF8,0,desc.Description,-1,name,sizeof(name),nullptr,nullptr);
+ std::ostringstream report;
+ report<<"Adapter: "<<name<<"\nVendor / device ID: "<<desc.VendorId<<" / "<<desc.DeviceId
+       <<"\nDedicated video memory bytes: "<<desc.DedicatedVideoMemory;
+ LARGE_INTEGER version{};
+ if(SUCCEEDED(adapter->CheckInterfaceSupport(__uuidof(IDXGIDevice),&version)))
+  report<<"\nDriver version: "<<HIWORD(version.HighPart)<<'.'<<LOWORD(version.HighPart)<<'.'
+        <<HIWORD(version.LowPart)<<'.'<<LOWORD(version.LowPart);
+ else report<<"\nDriver version: unavailable";
+ report<<"\nD3D feature level: "<<unsigned(device_->GetFeatureLevel())<<'\n';
+ return report.str();
+}
 namespace {
 using Vertex = visual::Vertex;
 struct Constants {

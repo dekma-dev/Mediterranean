@@ -58,6 +58,9 @@ bool Game::RestoreSnapshot(const std::string& snapshot) {
   interface_.SetOnly(ui::Panel::None);
   interface_.previewYaw=0;
   interface_.menuNotice.clear();
+  interface_.inventoryNotice.clear();
+  interface_.merchantNotice.clear();
+  interface_.noticeTime=0;
   yaw_=0; pitch_=.45f; distance_=10; time_=0; atmosphereTime_=0; ResetMotion();
   return true;
 }
