@@ -1,6 +1,6 @@
 # Authoring static equipment meshes
 
-Skeletal pipeline checkpoint (2026-10-23): [skeletal asset contract](skeletal-assets.md) documents the validated hierarchy/clip CPU reference and bounded GLB rig/LINEAR-animation reader and inspector. Mesh import and GPU integration remain open; this does not add rig support to the OBJ importer below.
+Skeletal pipeline checkpoint (2026-10-23): [skeletal asset contract](skeletal-assets.md) documents the validated hierarchy/clip CPU reference and bounded GLB rig/LINEAR-animation/indexed-skinned-mesh reader and inspector. CPU deformation is validated; GPU integration remains open; this does not add rig support to the OBJ importer below.
 
 Class weapon extension (2026-10-22): the Warrior blade below remains the editable OBJ example. The other ten class weapon meshes are original code-authored geometry in `engine/Geometry.cpp` (`Equipment`), selected through `game/WeaponVisual.h`. They use grip-local metres: +Y along the haft, +Z along the launcher barrel/bolt rail, grip at the origin. Keep the shaft inside the tested 25.6 mm radius envelope through the hand; launcher release sockets are shared with `HandPose.cpp`. Changes must pass ClassEquipmentTests, GeometryTests and ActionClipTests. Weapon meshes are generated once at startup, not per frame. Their separate budget and current costs are recorded in `graphics.md`; skeletal/animation import remains open.
 

@@ -102,32 +102,40 @@ RigAsset ImportGlbAsset(std::string_view bytes) {
     else {Need(chunks==1 && type==0x004e4942,"unsupported or repeated chunk");binary=bytes.substr(at,length);}
     at+=length;++chunks;
   }
-  const auto doc=Reader(json).Read();Fields(doc,{"asset","nodes","skins","buffers","bufferViews","accessors","animations"});
+  const auto doc=Reader(json).Read();Fields(doc,{"asset","nodes","skins","buffers","bufferViews","accessors","animations","meshes"});
   const auto& asset=Field(doc,"asset");Fields(asset,{"version","generator"});Need(Text(Field(asset,"version"))=="2.0","only glTF 2.0 supported");
   if(const auto* generator=Optional(asset,"generator")) (void)Text(*generator);
   const auto& nodes=Array(Field(doc,"nodes"));const auto& skins=Array(Field(doc,"skins"));
-  Need(!nodes.empty() && nodes.size()<=64 && skins.size()==1,"expected 1..64 joint nodes and exactly one skin");
+  Need(!nodes.empty() && nodes.size()<=65 && skins.size()==1,"expected at most 65 nodes and exactly one skin");
   const auto& skin=skins[0];Fields(skin,{"name","joints","skeleton","inverseBindMatrices"});
   if(const auto* name=Optional(skin,"name")) (void)Text(*name);
-  const auto& ids=Array(Field(skin,"joints"));Need(ids.size()==nodes.size(),"all nodes must belong to this rig-only skin");
+  const auto& ids=Array(Field(skin,"joints"));Need(!ids.empty() && ids.size()<=64,"joint budget is 1..64");
+  const bool hasMesh=Optional(doc,"meshes")!=nullptr;
+  Need(nodes.size()==ids.size()+(hasMesh?1:0),"expected joints and optionally one identity mesh node");
   std::vector<int> remap(nodes.size(),-1);
   for(std::size_t i=0;i<ids.size();++i) {const auto id=Integer(ids[i]);Need(id<nodes.size() && remap[id]<0,"invalid or duplicate skin joint");remap[id]=int(i);}
-  std::vector<animation::Joint> joints(nodes.size());std::vector<int> parents(nodes.size(),-1);
+  std::vector<animation::Joint> joints(ids.size());std::vector<int> parents(nodes.size(),-1);
   for(std::size_t id=0;id<nodes.size();++id) {
-    const auto& n=nodes[id];Fields(n,{"name","children","translation","rotation","scale"});
+    const auto& n=nodes[id];if(remap[id]>=0) Fields(n,{"name","children","translation","rotation","scale"});
+    if(remap[id]<0) {
+      Fields(n,{"name","mesh","skin"});
+      if(const auto* name=Optional(n,"name")) (void)Text(*name);
+      Need(Integer(Field(n,"mesh"))==0 && Integer(Field(n,"skin"))==0,"mesh node must reference mesh/skin zero");
+      continue;
+    }
     auto& j=joints[remap[id]];const auto* name=Optional(n,"name");j.name=name?Text(*name):"joint_"+std::to_string(id);
     if(const auto* v=Optional(n,"translation")) {float t[3];Floats(*v,t,3);j.local.translation={t[0],t[1],-t[2]};}
     if(const auto* v=Optional(n,"rotation")) {float q[4];Floats(*v,q,4);j.local.rotation={-q[0],-q[1],q[2],q[3]};}
     if(const auto* v=Optional(n,"scale")) {float s[3];Floats(*v,s,3);j.local.scale={s[0],s[1],s[2]};}
     if(const auto* children=Optional(n,"children")) for(const auto& child:Array(*children)) {
-      const auto c=Integer(child);Need(c<nodes.size() && c!=id && parents[c]<0,"invalid or multiply-parented node");parents[c]=int(id);
+      const auto c=Integer(child);Need(c<nodes.size() && c!=id && remap[c]>=0 && parents[c]<0,"invalid or multiply-parented node");parents[c]=int(id);
     }
   }
-  for(std::size_t id=0;id<nodes.size();++id) joints[remap[id]].parent=parents[id]<0?-1:remap[parents[id]];
-  if(const auto* root=Optional(skin,"skeleton")) {const auto id=Integer(*root);Need(id<nodes.size() && parents[id]<0,"skeleton must identify the root");}
-  std::vector<DirectX::XMFLOAT4X4> binds(nodes.size());
+  for(std::size_t id=0;id<nodes.size();++id) if(remap[id]>=0) joints[remap[id]].parent=parents[id]<0?-1:remap[parents[id]];
+  if(const auto* root=Optional(skin,"skeleton")) {const auto id=Integer(*root);Need(id<nodes.size() && remap[id]>=0 && parents[id]<0,"skeleton must identify the root");}
+  std::vector<DirectX::XMFLOAT4X4> binds(ids.size());
   for(auto& m:binds) DirectX::XMStoreFloat4x4(&m,DirectX::XMMatrixIdentity());
-  struct Accessor {std::string type;std::size_t count=0,components=0;std::vector<float> values;bool bounds=false;};
+  struct Accessor {std::string type;std::size_t count=0,components=0,componentType=0;std::vector<float> values;bool bounds=false;};
   std::vector<Accessor> data;
   if(Optional(doc,"buffers")) {
     const auto& buffers=Array(Field(doc,"buffers"));Need(buffers.size()==1,"exactly one embedded buffer required");
@@ -143,17 +151,22 @@ RigAsset ImportGlbAsset(std::string_view bytes) {
     std::size_t floats=0;
     for(const auto& accessor:accessors) {
       Fields(accessor,{"bufferView","byteOffset","componentType","count","type","min","max"});
-      Need(Integer(Field(accessor,"componentType"))==5126,"only FLOAT accessors supported");
-      Accessor a;a.type=Text(Field(accessor,"type"));a.count=Integer(Field(accessor,"count"));
+      const auto componentType=Integer(Field(accessor,"componentType"));
+      Need(componentType==5126 || componentType==5123,"only FLOAT/UNSIGNED_SHORT accessors supported");
+      const std::size_t componentBytes=componentType==5126?4:2;
+      Accessor a;a.componentType=componentType;a.type=Text(Field(accessor,"type"));a.count=Integer(Field(accessor,"count"));
       a.components=a.type=="SCALAR"?1:a.type=="VEC3"?3:a.type=="VEC4"?4:a.type=="MAT4"?16:0;
       Need(a.components && a.count>0 && a.count<=65536,"unsupported accessor shape/count");
+      Need(componentType==5126 || a.type=="SCALAR" || a.type=="VEC4","UNSIGNED_SHORT supports indices/joints only");
       floats+=a.count*a.components;Need(floats<=262144,"decoded accessor budget exceeded");
       const auto v=Integer(Field(accessor,"bufferView"));Need(v<views.size(),"invalid buffer view index");
       const auto& view=views[v];const auto start=Offset(view),length=Integer(Field(view,"byteLength")),relative=Offset(accessor);
-      Need(relative%4==0 && relative<=length && a.count*a.components*4<=length-relative,"accessor exceeds buffer view");
+      Need(relative%4==0 && relative<=length && a.count*a.components*componentBytes<=length-relative,"accessor alignment/range invalid");
       a.values.resize(a.count*a.components);
       for(std::size_t i=0;i<a.values.size();++i) {
-        const auto bits=U32(binary,start+relative+i*4);std::memcpy(&a.values[i],&bits,4);
+        const auto offset=start+relative+i*componentBytes;
+        if(componentType==5126) {const auto bits=U32(binary,offset);std::memcpy(&a.values[i],&bits,4);}
+        else a.values[i]=float(static_cast<unsigned char>(binary[offset]) | (unsigned(static_cast<unsigned char>(binary[offset+1]))<<8));
         Need(std::isfinite(a.values[i]),"non-finite accessor value");
       }
       for(const char* label:{"min","max"}) if(const auto* bound=Optional(accessor,label)) {
@@ -169,16 +182,59 @@ RigAsset ImportGlbAsset(std::string_view bytes) {
   } else {
     Need(binary.empty() && !Optional(doc,"bufferViews") && !Optional(doc,"accessors"),"missing embedded buffer");
   }
-  const auto get=[&](const Json& index,const char* type)->const Accessor& {
-    const auto id=Integer(index);Need(id<data.size() && data[id].type==type,"invalid accessor index/type");return data[id];
+  const auto get=[&](const Json& index,const char* type,std::size_t componentType=5126)->const Accessor& {
+    const auto id=Integer(index);Need(id<data.size() && data[id].type==type && data[id].componentType==componentType,"invalid accessor index/type");return data[id];
   };
   if(const auto* index=Optional(skin,"inverseBindMatrices")) {
-    const auto& a=get(*index,"MAT4");Need(a.count==nodes.size(),"bind count must match joint count");
+    const auto& a=get(*index,"MAT4");Need(a.count==ids.size(),"bind count must match joint count");
     for(std::size_t i=0;i<a.count;++i) for(unsigned r=0;r<4;++r) for(unsigned c=0;c<4;++c)
       binds[i].m[r][c]=a.values[i*16+r*4+c]*((r==2)!=(c==2)?-1.f:1.f);
   }
   try {
-    RigAsset result{animation::Skeleton(joints,std::move(binds)),{}};
+    RigAsset result{animation::Skeleton(joints,std::move(binds)),{}, {}};
+    if(hasMesh) {
+      const auto& meshes=Array(Field(doc,"meshes"));Need(meshes.size()==1,"exactly one mesh supported");
+      Fields(meshes[0],{"name","primitives"});
+      if(const auto* name=Optional(meshes[0],"name")) (void)Text(*name);
+      const auto& primitives=Array(Field(meshes[0],"primitives"));Need(primitives.size()==1,"exactly one mesh primitive supported");
+      const auto& primitive=primitives[0];Fields(primitive,{"attributes","indices","mode"});
+      if(const auto* mode=Optional(primitive,"mode")) Need(Integer(*mode)==4,"only TRIANGLES supported");
+      const auto& attributes=Field(primitive,"attributes");Fields(attributes,{"POSITION","NORMAL","JOINTS_0","WEIGHTS_0"});
+      const auto& positions=get(Field(attributes,"POSITION"),"VEC3");
+      const auto& normals=get(Field(attributes,"NORMAL"),"VEC3");
+      const auto& jointIds=get(Field(attributes,"JOINTS_0"),"VEC4",5123);
+      const auto& weights=get(Field(attributes,"WEIGHTS_0"),"VEC4");
+      const auto& indices=get(Field(primitive,"indices"),"SCALAR",5123);
+      Need(positions.bounds && positions.count>=3 && positions.count<=16384,"position bounds/vertex budget invalid");
+      Need(normals.count==positions.count && jointIds.count==positions.count && weights.count==positions.count,"mesh attribute counts differ");
+      Need(indices.count%3==0,"triangle index count must be divisible by three");
+      auto& mesh=result.mesh;mesh.vertices.resize(positions.count);
+      for(std::size_t v=0;v<positions.count;++v) {
+        auto& vertex=mesh.vertices[v];
+        vertex.position={positions.values[v*3],positions.values[v*3+1],-positions.values[v*3+2]};
+        vertex.normal={normals.values[v*3],normals.values[v*3+1],-normals.values[v*3+2]};
+        for(unsigned c=0;c<4;++c) {
+          vertex.joints[c]=std::uint16_t(jointIds.values[v*4+c]);
+          vertex.weights[c]=weights.values[v*4+c];
+        }
+      }
+      mesh.indices.reserve(indices.count);
+      for(std::size_t i=0;i<indices.count;i+=3) {
+        for(unsigned c:{0u,2u,1u}) {
+          const auto index=std::uint16_t(indices.values[i+c]);
+          Need(index<mesh.vertices.size(),"mesh index exceeds vertex count");mesh.indices.push_back(index);
+        }
+        const auto a=mesh.indices[i],b=mesh.indices[i+1],c=mesh.indices[i+2];
+        Need(a!=b && b!=c && a!=c,"repeated triangle vertex");
+        using namespace DirectX;
+        const auto origin=XMLoadFloat3(&mesh.vertices[a].position);
+        const auto cross=XMVector3Cross(XMVectorSubtract(XMLoadFloat3(&mesh.vertices[b].position),origin),
+          XMVectorSubtract(XMLoadFloat3(&mesh.vertices[c].position),origin));
+        Need(XMVectorGetX(XMVector3LengthSq(cross))>1e-16f,"degenerate bind triangle");
+      }
+      // Validate weights, normals and skin-space deformation before publication.
+      (void)DeformMesh(mesh,result.skeleton.RestPose());
+    }
     if(const auto* animations=Optional(doc,"animations")) {
       const auto& list=Array(*animations);Need(!list.empty() && list.size()<=16,"animation budget is 1..16");
       std::size_t totalKeys=0;
@@ -190,13 +246,13 @@ RigAsset ImportGlbAsset(std::string_view bytes) {
         const auto& samplers=Array(Field(source,"samplers"));const auto& channels=Array(Field(source,"channels"));
         Need(!samplers.empty() && samplers.size()<=192 && !channels.empty() && channels.size()<=192,"channel/sampler budget exceeded");
         struct Channel {const Accessor* times=nullptr;const Accessor* values=nullptr;};
-        std::vector<std::array<Channel,3>> tracks(nodes.size());std::vector<bool> used(samplers.size());
+        std::vector<std::array<Channel,3>> tracks(ids.size());std::vector<bool> used(samplers.size());
         for(const auto& channel:channels) {
           Fields(channel,{"sampler","target"});const auto s=Integer(Field(channel,"sampler"));Need(s<samplers.size(),"invalid sampler index");used[s]=true;
           const auto& sampler=samplers[s];Fields(sampler,{"input","output","interpolation"});
           if(const auto* interpolation=Optional(sampler,"interpolation")) Need(Text(*interpolation)=="LINEAR","only LINEAR interpolation supported");
           const auto& target=Field(channel,"target");Fields(target,{"node","path"});
-          const auto node=Integer(Field(target,"node"));Need(node<nodes.size(),"invalid animation target node");
+          const auto node=Integer(Field(target,"node"));Need(node<nodes.size() && remap[node]>=0,"invalid animation target joint");
           const auto path=Text(Field(target,"path"));const int component=path=="translation"?0:path=="rotation"?1:path=="scale"?2:-1;
           Need(component>=0,"unsupported animation target path");auto& track=tracks[remap[node]][component];Need(!track.times,"duplicate joint/path channel");
           track.times=&get(Field(sampler,"input"),"SCALAR");track.values=&get(Field(sampler,"output"),component==1?"VEC4":"VEC3");
@@ -212,7 +268,7 @@ RigAsset ImportGlbAsset(std::string_view bytes) {
           }
         }
         Need(std::all_of(used.begin(),used.end(),[](bool x){return x;}),"unused animation sampler unsupported");
-        Need(named.clip.duration>0,"zero-duration animation unsupported");named.clip.tracks.resize(nodes.size());
+        Need(named.clip.duration>0,"zero-duration animation unsupported");named.clip.tracks.resize(ids.size());
         for(std::size_t joint=0;joint<tracks.size();++joint) {
           std::vector<float> times;
           for(const auto& channel:tracks[joint]) if(channel.times) times.insert(times.end(),channel.times->values.begin(),channel.times->values.end());
@@ -251,6 +307,39 @@ RigAsset ImportGlbAsset(std::string_view bytes) {
   }
 }
 animation::Skeleton ImportGlbRig(std::string_view bytes) {
-  auto asset=ImportGlbAsset(bytes);Need(asset.clips.empty(),"animated asset requires ImportGlbAsset");return std::move(asset.skeleton);
+  auto asset=ImportGlbAsset(bytes);Need(asset.clips.empty() && asset.mesh.vertices.empty(),"mesh/animated asset requires ImportGlbAsset");return std::move(asset.skeleton);
+}
+std::vector<DeformedVertex> DeformMesh(const SkinMesh& mesh,const animation::Pose& pose) {
+  using namespace DirectX;
+  Need(!mesh.vertices.empty() && mesh.vertices.size()<=16384,"invalid deformation vertex count");
+  Need(!pose.skin.empty() && pose.skin.size()<=64 && pose.normal.size()==pose.skin.size(),"invalid deformation palette");
+  for(const auto* palette:{&pose.skin,&pose.normal}) for(const auto& matrix:*palette)
+    for(const auto& row:matrix.m) for(float v:row) Need(std::isfinite(v) && std::abs(v)<=1e8f,"invalid deformation matrix");
+  std::vector<DeformedVertex> output;output.reserve(mesh.vertices.size());
+  for(const auto& vertex:mesh.vertices) {
+    for(float v:{vertex.position.x,vertex.position.y,vertex.position.z}) Need(std::isfinite(v) && std::abs(v)<=1000,"invalid mesh position");
+    const auto normal=XMLoadFloat3(&vertex.normal);
+    const float length=XMVectorGetX(XMVector3LengthSq(normal));
+    Need(std::isfinite(length) && std::abs(length-1)<.001f,"mesh normal must be normalized");
+    float sum=0;
+    for(unsigned c=0;c<4;++c) {
+      Need(vertex.joints[c]<pose.skin.size(),"mesh joint exceeds skin palette");
+      Need(std::isfinite(vertex.weights[c]) && vertex.weights[c]>=0 && vertex.weights[c]<=1,"invalid skin weight");
+      sum+=vertex.weights[c];
+    }
+    Need(std::abs(sum-1)<.001f,"skin weights must sum to one");
+    auto p=XMVectorZero(),n=XMVectorZero();
+    for(unsigned c=0;c<4;++c) {
+      const auto joint=vertex.joints[c];const float weight=vertex.weights[c]/sum;
+      p=XMVectorAdd(p,XMVectorScale(XMVector3TransformCoord(XMLoadFloat3(&vertex.position),XMLoadFloat4x4(&pose.skin[joint])),weight));
+      n=XMVectorAdd(n,XMVectorScale(XMVector3TransformNormal(normal,XMLoadFloat4x4(&pose.normal[joint])),weight));
+    }
+    const float norm=XMVectorGetX(XMVector3LengthSq(n));
+    Need(std::isfinite(norm) && norm>1e-20f,"collapsed deformed normal");
+    DeformedVertex deformed;XMStoreFloat3(&deformed.position,p);XMStoreFloat3(&deformed.normal,XMVector3Normalize(n));
+    for(float v:{deformed.position.x,deformed.position.y,deformed.position.z}) Need(std::isfinite(v) && std::abs(v)<=1e8f,"deformed vertex exceeds budget");
+    output.push_back(deformed);
+  }
+  return output;
 }
 }

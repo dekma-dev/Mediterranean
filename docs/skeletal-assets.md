@@ -1,6 +1,6 @@
 # Skeletal asset contract: first implementation
 
-Checkpoint: 2026-10-23. Roadmap R2 is in progress. `SkeletonRuntime` provides a validated CPU reference and `GltfRigImport` reads a bounded rig-and-animation GLB subset. Both are built independently of `MediterraneanClient`; the playable character still uses the existing procedural ten-bone body and hand skinning. This checkpoint does not import mesh geometry or replace visible character models.
+Checkpoint: 2026-10-23. Roadmap R2 is in progress. `SkeletonRuntime` provides a validated CPU reference and `GltfRigImport` reads a bounded rig, animation and skinned-mesh GLB subset. Both are built independently of `MediterraneanClient`; the playable character still uses the existing procedural ten-bone body and hand skinning. One indexed mesh can now be imported and deformed in the CPU reference; this does not replace visible character models.
 
 ## Implemented representation
 
@@ -38,7 +38,7 @@ Supported subset: GLB version 2, JSON chunk followed by at most one BIN chunk, g
 
 Limits: 4 MiB file, 1 MiB JSON chunk, nesting depth 24, 8,192 JSON values, 1,024 bytes per JSON string. Names remain subject to the skeleton's smaller limit. This first reader accepts ASCII strings with quote/backslash/slash escapes; Unicode and other escapes fail explicitly. It rejects duplicate keys, malformed number syntax, trailing data, non-finite matrices, overlapping parent assignments, invalid indices and misaligned/out-of-range accessor reads. Unknown fields are rejected rather than silently ignored.
 
-Not supported: external/data-URI buffers, standalone `.gltf`, meshes, scenes, materials, matrix nodes, extra non-joint transform nodes, sparse or strided accessors, extensions, arbitrary metadata and general Blender exports. These are deliberate subset errors, not claims that the source is invalid glTF. Position Z is reflected; quaternion X/Y signs and both bind-matrix Z axes are converted consistently to the engine's left-handed row-vector convention.
+Not supported: external/data-URI buffers, standalone `.gltf`, multiple meshes/primitives, scenes, materials, matrix nodes, non-joint transform nodes other than the supported identity mesh node, sparse or strided accessors, extensions, arbitrary metadata and general Blender exports. These are deliberate subset errors, not claims that the source is invalid glTF. Position Z is reflected; quaternion X/Y signs and both bind-matrix Z axes are converted consistently to the engine's left-handed row-vector convention.
 
 The [original hinge fixture](../assets/characters/README.md) exercises hierarchy remapping and explicit bind data. Import tests cover omitted-bind semantics, quaternion conversion, malformed chunks, buffer bounds, unsupported resources and schema restrictions. The inspector also runs as a CTest integration check.
 
@@ -52,8 +52,25 @@ Specification reference: [Khronos skin schema](https://github.com/KhronosGroup/g
 
 Independent timelines are merged per joint at every source key, plus zero and clip duration. Each source channel holds its first/last value outside its input range; missing channels retain the rest component. Quaternion interpolation normalizes its inputs and uses slerp. The canonical clip then preserves linear/spherical interpolation between merged keys. This is offline conversion, not a per-frame file parser.
 
-Additional budgets: 256 accessors/views, 262,144 decoded floats, 16 clips, 192 channels/samplers per clip and 65,536 converted keys across the asset. Clips must have positive duration at most 600 seconds; a lone key at zero without any later channel key is currently unsupported. Empty animation arrays and duplicate clip names reject. `ImportGlbRig` remains the static-only API and rejects animated input so callers cannot silently discard clips.
+Additional budgets: 256 accessors/views, 262,144 decoded scalar components (including integer joint/index data), 16 clips, 192 channels/samplers per clip and 65,536 converted keys across the asset. Clips must have positive duration at most 600 seconds; a lone key at zero without any later channel key is currently unsupported. Empty animation arrays and duplicate clip names reject. `ImportGlbRig` remains the static-only API and rejects animated or mesh input so callers cannot silently discard data.
 
 The inspector prints clip count, name, duration and a sampled midpoint joint position. The reproducible original [animated fixture](../assets/characters/README.md) exercises staggered translation/rotation/scale timelines and static parent inheritance. Tests check converted positions, rotation, scale, looping, malformed targets/interpolation/bounds/counts and non-finite values. No animation has been wired into the playable character yet.
 
-Next steps: expand validated accessor support to mesh weights/geometry, adapt a dedicated renderer path, compare CPU/GPU deformation, then author one hero and a small animation set. The rig/clip fixtures are not imported playable characters.
+Next steps: adapt a dedicated renderer path, compare CPU/GPU deformation, then author one hero and a small animation set. The fixtures are not imported playable characters.
+
+
+## Indexed skinned mesh checkpoint
+
+One optional mesh with one indexed TRIANGLES primitive is supported. A separate identity root node must reference mesh 0 and skin 0; mesh-node TRS, children, parenting and animation are rejected rather than silently applying the wrong skin space. Joint indices in vertices refer directly to skin order, not node order. The joint hierarchy may still be child-first.
+
+Required attributes are tightly packed FLOAT/VEC3 POSITION and NORMAL, FLOAT/VEC4 WEIGHTS_0, and UNSIGNED_SHORT/VEC4 JOINTS_0. Indices are UNSIGNED_SHORT/SCALAR. Position bounds must be present and match the actual data. View/accessor offsets are four-byte aligned in this deliberately narrow subset. Attribute counts must agree. Limits: 3–16,384 vertices and at most 65,535 triangle indices, also constrained by the shared decoded-component and file budgets.
+
+Positions must be finite within 1,000 metres per component; normals must have squared length within 0.001 of one. Four finite nonnegative weights must sum to one within 0.001; the CPU reference renormalizes accepted rounding error. Every joint index is checked, including zero-weight slots. Indices must address existing vertices, triangles cannot repeat an index, and bind triangles with squared cross-product length at or below 1e-16 are rejected. This threshold intentionally excludes near-zero-area geometry.
+
+Conversion reflects position/normal Z and reverses each triangle's winding. `DeformMesh` is an allocating offline reference: it blends positions through the skin matrices and normals through their inverse-transpose palettes, then normalizes the resulting normal. Non-finite or collapsed results reject. It is linear blend skinning, with its usual twisting/volume limitations; it is not a new gameplay renderer or a physically exact deformation model.
+
+The original six-vertex/four-triangle `hinge-mesh.glb` exercises fixed, mixed and fully weighted rows. Tests verify rest-pose preservation, skin-order indexing, converted winding, exact midpoint positions and inverse-transpose normal handling under nonuniform scale. Malformed mode, node transforms, attribute types/counts, weights, joints, indices and normals reject. The inspector prints mesh counts and a CPU-deformed clip midpoint vertex.
+
+UVs, tangents, textures/materials, additional influence sets, byte/32-bit indices, normalized integer weights and general editor exports remain unsupported. No fixture geometry is connected to the player or GPU yet.
+
+Schema reference: [Khronos mesh primitive schema](https://github.com/KhronosGroup/glTF/blob/main/specification/2.0/schema/mesh.primitive.schema.json).

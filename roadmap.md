@@ -16,6 +16,8 @@ Completion requires implementation, relevant regressions and visual/listening ac
 
 ## Implementation history
 
+R2 mesh import (2026-10-23): added a single indexed skinned-mesh subset with four joint influences, validated geometry/weights, explicit skin-order IDs and reflected positions/normals/winding. Original animated strip and CPU deformation regressions cover neutral, fixed, mixed and fully weighted vertices plus nonuniform-scale normals. Inspector reports mesh counts and sampled deformation. DirectX integration, authored hero art and gameplay replacement remain open.
+
 R2 animation-channel import (2026-10-23): GLB assets now carry named LINEAR translation/rotation/scale clips, with validated embedded FLOAT accessors and per-joint merging of independent timelines. Added original reproducible hinge-motion fixture, numerical pose regressions and inspector clip summaries. Static-only callers reject animated files rather than discarding motion. Mesh/weight import, GPU deformation and playable-character integration remain open; the current player is unchanged. See docs/skeletal-assets.md for budgets and unsupported interpolation modes.
 
 R2 validation fixes (2026-10-23): reproduced and fixed clip interpolation bias from slightly non-unit quaternion endpoints, plus missing type validation for optional GLB metadata. Slerp now receives normalized endpoints; generator/skin-name fields reject non-string values. New regression cases failed before the fix and pass afterward. These affect the new offline skeletal path, not the currently active procedural character renderer.

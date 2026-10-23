@@ -18,12 +18,18 @@ int wmain(int argc,wchar_t** argv) {
       const auto& m=pose.global[i];std::cout<<"Joint "<<i<<" position: "<<m._41<<' '<<m._42<<' '<<m._43<<'\n';
     }
     std::cout<<"Validated clips: "<<asset.clips.size()<<'\n';
+    std::cout<<"Validated mesh vertices: "<<asset.mesh.vertices.size()<<"; triangles: "<<asset.mesh.indices.size()/3<<'\n';
     for(const auto& named:asset.clips) {
       const auto midpoint=skeleton.Sample(named.clip,named.clip.duration*.5,false);
       std::cout<<"Clip "<<named.name<<" duration: "<<named.clip.duration<<" s; midpoint joint 0: "
         <<midpoint.global[0]._41<<' '<<midpoint.global[0]._42<<' '<<midpoint.global[0]._43<<'\n';
+      if(!asset.mesh.vertices.empty()) {
+        const auto vertices=assets::DeformMesh(asset.mesh,midpoint);
+        const auto& p=vertices.back().position;
+        std::cout<<"CPU midpoint last vertex: "<<p.x<<' '<<p.y<<' '<<p.z<<'\n';
+      }
     }
-    std::cout<<"Rig/clip validation; no mesh or GPU integration. Source unchanged.\n";
+    std::cout<<"Offline rig/clip/mesh validation; no GPU integration. Source unchanged.\n";
     return 0;
   } catch(const std::exception& error) {std::cerr<<error.what()<<'\n';return 1;}
 }

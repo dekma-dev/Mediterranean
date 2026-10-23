@@ -73,7 +73,7 @@ int main() {
   Require(asset.clips.size()==1 && asset.clips[0].name=="hinge_motion","Imported named clip");
   const auto& clip=asset.clips[0].clip;
   Require(clip.duration==1 && clip.tracks[0].size()==5 && clip.tracks[1].empty(),"Different timelines merge at all source keys; untargeted joint remains at rest");
-  for(const auto sample: {std::pair<double,float>{0,0},{.125,0},{.5,1},{.875,2},{1,2}}) {
+  for(const auto sample: {std::pair<double,float>{0.0,0.f},{.125,0.f},{.5,1.f},{.875,2.f},{1.0,2.f}}) {
     const auto pose=asset.skeleton.Sample(clip,sample.first,false);
     Require(std::abs(pose.global[0]._41-sample.second)<1e-5f && std::abs(pose.global[0]._43-(-2-sample.second))<1e-5f,"Translation endpoints hold and Z converts consistently");
   }
@@ -94,5 +94,48 @@ int main() {
   auto invalidMotion=motion;Put(invalidMotion,28+jsonLength+132,0);Reject(invalidMotion); // repeated time
   invalidMotion=motion;Put(invalidMotion,28+jsonLength+148,0);Reject(invalidMotion); // zero first rotation quaternion
   invalidMotion=motion;Put(invalidMotion,28+jsonLength+176,0x7fc00000);Reject(invalidMotion); // NaN translation
+  std::ifstream meshFile(RPG_MESH_FIXTURE,std::ios::binary);std::ostringstream meshBytes;meshBytes<<meshFile.rdbuf();
+  Require(bool(meshFile),"Missing mesh fixture");const auto meshSource=meshBytes.str();
+  const auto skinned=assets::ImportGlbAsset(meshSource);const auto& mesh=skinned.mesh;
+  Require(mesh.vertices.size()==6 && mesh.indices.size()==12,"Imported indexed strip");
+  Require(mesh.indices[0]==0 && mesh.indices[1]==2 && mesh.indices[2]==1,"Z reflection reverses triangle winding");
+  const auto neutral=assets::DeformMesh(mesh,skinned.skeleton.RestPose());
+  for(std::size_t i=0;i<neutral.size();++i) {
+    const auto& p=mesh.vertices[i].position;const auto& q=neutral[i].position;
+    Require(std::abs(p.x-q.x)<1e-5f && std::abs(p.y-q.y)<1e-5f && std::abs(p.z-q.z)<1e-5f,"Rest deformation preserves mesh");
+    Require(std::abs(neutral[i].normal.z+1)<1e-5f,"Normal handedness conversion");
+  }
+  const auto meshPose=skinned.skeleton.Sample(skinned.clips[0].clip,.5,false);
+  const auto deformed=assets::DeformMesh(mesh,meshPose);
+  Require(std::abs(deformed[1].position.x-.25f)<1e-5f && std::abs(deformed[1].position.z+2)<1e-5f,"Root-weighted row stays fixed");
+  const float offset=std::sqrt(.125f);
+  Require(std::abs(deformed[5].position.x-(1+offset))<1e-5f && std::abs(deformed[5].position.y-4)<1e-5f && std::abs(deformed[5].position.z-(-3+offset))<1e-5f,"Fully weighted row follows converted TRS and inverse bind");
+  Require(std::abs(deformed[3].position.x-(1+offset+.25f)*.5f)<1e-5f && std::abs(deformed[3].position.z-(-5+offset)*.5f)<1e-5f,"Blended row uses skin-order joint IDs, not node IDs");
+  Require(std::abs(deformed[5].normal.x-std::sqrt(.5f))<1e-5f && std::abs(deformed[5].normal.z+std::sqrt(.5f))<1e-5f,"Inverse transpose normal follows rotation");
+  // A diagonal normal under nonuniform scale distinguishes inverse transpose from position transforms.
+  auto diagonal=mesh;diagonal.vertices[5].normal={std::sqrt(.5f),std::sqrt(.5f),0};
+  const auto diagonalPose=assets::DeformMesh(diagonal,meshPose);
+  const float invLength=1/std::sqrt(.25f+1.f/9);
+  Require(std::abs(diagonalPose[5].normal.y-invLength/3)<1e-5f,"Normals handle nonuniform joint scale");
+  bool meshRejected=false;try {assets::ImportGlbRig(meshSource);} catch(const std::runtime_error&) {meshRejected=true;}
+  Require(meshRejected,"Static rig API must not discard mesh");
+  Reject(AlterJson(meshSource,"\"mode\":4","\"mode\":5"));
+  Reject(AlterJson(meshSource,"\"mesh\":0","\"mesh\":1"));
+  Reject(AlterJson(meshSource,"\"mesh\":0","\"translation\":[0,1,0],\"mesh\":0"));
+  Reject(AlterJson(meshSource,"\"node\":1","\"node\":2"));
+  Reject(AlterJson(meshSource,"\"NORMAL\":8","\"NORMAL\":7")); // positions are not unit normals
+  Reject(AlterJson(meshSource,"\"JOINTS_0\":10","\"JOINTS_0\":9")); // float IDs forbidden
+  Reject(AlterJson(meshSource,"\"indices\":11","\"indices\":10")); // indices must be scalar
+  Reject(AlterJson(meshSource,"\"WEIGHTS_0\":9","\"WEIGHTS_0\":2")); // attribute count mismatch
+  Reject(AlterJson(meshSource,"\"mode\":4","\"mode\":4,\"material\":0"));
+  std::uint32_t meshJson=0;for(unsigned i=0;i<4;++i) meshJson|=std::uint32_t(static_cast<unsigned char>(meshSource[12+i]))<<(8*i);
+  const auto bin=28+meshJson;
+  auto invalidMesh=meshSource;Put(invalidMesh,bin+392,0x3f800000);Reject(invalidMesh); // weight sum two
+  invalidMesh=meshSource;Put(invalidMesh,bin+396,0);Reject(invalidMesh); // zero weight sum
+  invalidMesh=meshSource;Put(invalidMesh,bin+392,0xbf800000);Reject(invalidMesh); // negative weight
+  invalidMesh=meshSource;Put(invalidMesh,bin+488,2);Reject(invalidMesh); // invalid joint even in zero-weight slot
+  invalidMesh=meshSource;Put(invalidMesh,bin+536,6);Reject(invalidMesh); // out-of-range index
+  invalidMesh=meshSource;Put(invalidMesh,bin+536,0);Reject(invalidMesh); // repeated triangle vertex
+  invalidMesh=meshSource;Put(invalidMesh,bin+320,0x7fc00000);Reject(invalidMesh); // non-finite normal
   std::cout<<"GLB rig import, coordinate conversion and malformed-input checks passed\n";
 }
