@@ -1,5 +1,7 @@
 # Starting and Debugging Mediterranean
 
+UI repairs (2026-10-23): weapon hover stats now include class damage bonuses, matching equipped attacks and the bag inspector. Long centered labels and item/spell tooltip titles fit their frames without overflowing. Check at 960x600 and your normal fullscreen size; manual check 219 covers comparisons and long labels.
+
 Roster repair (2026-10-23): Save & choose character now keeps the hero you just played selected. Other classes remain available in their original slots. Successful F9 loads clear old menu save errors; F5 refreshes the menu's save result. See manual check 218.
 
 Ground traction (2026-10-23): compare starts, reversals and releasing WASD on village paving, off-path meadow grass, dirt routes and the dock. Grass has a slightly longer stop; full running speed remains unchanged. Cross edges while steering and jumping. Air steering and targeted dash behavior retain their existing rules. See manual check 217.

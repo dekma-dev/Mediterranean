@@ -1,5 +1,7 @@
 # Mediterranean Roadmap
 
+UI consistency repair (2026-10-23): corrected omitted class bonuses in weapon tooltips/shop previews. Centered labels and selected item/spell tooltip headings/actions now fit available widths, including long hero names in HUD/equipment banners. Eleven-class stat regression and small/normal/ultrawide captures cover the change; live readability is manual check 219.
+
 Roster return repair (2026-10-23): returning to character selection retains the active class instead of resetting to Warrior. Shared roster paths remain independent of the selected profile. Successful snapshot loads clear stale menu notices, and keyboard saves update their result. Manual check 218 covers the repair.
 
 Ground traction (2026-10-23): player acceleration, reversal and stopping now sample shared terrain coverage. Stone retains the existing response; dirt/grass use 90%/80% and the dock 95%, with continuous coverage/deck-edge blending. Top speed, jump trajectory, air steering and dash rules remain unchanged. This is a bounded locomotion-response model, not rigid-body friction or sloped terrain. Manual check 217 covers feel and transitions.

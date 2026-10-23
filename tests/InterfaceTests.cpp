@@ -658,6 +658,23 @@ int main() {
     renderer.BeginFrame(); screen.Render(renderer,simulation,0,false); Require(renderer.EndFrame(false),"Target dash render");
     Require(click(550,681).action==ui::Action::Ability,"Available Dash must remain usable with both side windows open.");
     Require(simulation.Load(beforeDash),"Restore interface state after target dash check");
+    screen.SetOnly(ui::Panel::None);
+    renderer.BeginFrame();screen.Render(renderer,simulation,0,false);Require(renderer.EndFrame(false),"Tracker layout render");
+    Require(click(1120,245).action==ui::Action::None && screen.PointerOverUi(),
+      "Visible expedition tracker must block camera gestures behind its text");
+    {
+      ui::Interface overlay;rpg::Simulation idle;
+      const auto draw=[&]() {renderer.BeginFrame();overlay.Render(renderer,idle,0,false);Require(renderer.EndFrame(false),"Overlay hit layout");};
+      const auto hover=[&](float x,float y) {overlay.Pointer(layout.x+x*layout.scale,layout.y+y*layout.scale,float(size.first),float(size.second),false,false);return overlay.PointerOverUi();};
+      overlay.noticeTime=2;overlay.inventoryNotice="Equipment updated.";draw();
+      Require(hover(700,140),"Visible inventory notice must block camera capture");
+      overlay.noticeTime=0;draw();Require(!hover(700,140),"Expired notice must release camera input");
+      overlay.Show(ui::Panel::Inventory);draw();
+      Require(hover(1003,244),"Bag replacing the tracker must retain pointer protection");
+      overlay.Close(ui::Panel::Inventory);overlay.hasWaypoint=true;draw();
+      Require(hover(1120,365),"Tracker waypoint extension must block camera input");
+      overlay.hasWaypoint=false;draw();Require(!hover(1120,365),"Removed waypoint must release its old tracker region");
+    }
     screen.panel=ui::Panel::Menu;
     renderer.BeginFrame(); screen.Render(renderer,simulation,0,false); Require(renderer.EndFrame(false),"Menu render failed.");
     Require(click(640,343).action==ui::Action::Fullscreen,"Fullscreen button must issue the display command.");

@@ -641,6 +641,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  c.Banner({1118,158,104,23},"Atlas  [M]",12);
  regions_.push_back({{1090,13,160,168},{Action::Map},true});
  if (!inventoryOpen || panel!=Panel::None) {
+  regions_.push_back({{1001,193,265,hasWaypoint?183.f:158.f},{},false});
   c.Frame({1001,193,265,hasWaypoint?183.f:158.f},{.025f,.045f,.025f,.82f},border);
   c.Text(1013,202,"EXPEDITION",14,gold); c.Line(1010,226,1260,226,1,border);
   c.Wrap(1013,236,244,s.Objective(),15,ink,4);
@@ -650,6 +651,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   if (hasWaypoint) c.Text(1013,355,"Waypoint  "+std::to_string(int(std::ceil(std::hypot(s.Player().x-waypoint.x,s.Player().z-waypoint.z))))+" m",13,{.56f,.76f,.88f,1});
  }
  if (s.Sparring() || s.SparringReportTime()>0) {
+  regions_.push_back({{470,105,506,81},{},false});
   c.Window({470,105,506,81});
   c.Text(485,113,s.Sparring()?"SPARRING  /  "+std::to_string(int(std::ceil(s.SparringSeconds())))+" seconds":s.SparringResult(),17,gold);
   c.Text(485,141,"Dealt "+std::to_string(s.SparringDamageDealt())+"  /  Taken "+std::to_string(s.SparringDamageTaken())+"  /  No XP or loot",13);
@@ -1128,7 +1130,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    for(int i=0;i<rpg::frontierQuestCount+2;++i) {
     const auto id=rpg::QuestId(int(rpg::QuestId::Patrol)+i);const auto& quest=rpg::DescribeQuest(id);
     const bool done=i==0?s.QuestState()==rpg::Quest::Complete:i==1?s.AnchorState()==rpg::AnchorQuest::Complete:i-2<s.FrontierCompleted();
-    c.Text(227,160+i*30.f,std::to_string(i+1)+". "+quest.title,13,{.22f,.15f,.09f,1});
+    c.FitText(227,160+i*30.f,359,std::to_string(i+1)+". "+quest.title,13,{.22f,.15f,.09f,1});
     c.Text(227,175+i*30.f,done?"Completed":id>s.CurrentQuest()?"Locked":id==s.CurrentQuest()?"Current assignment":"Campaign assignment",9,{.32f,.22f,.13f,1});
    }
    const auto id=s.CurrentQuest();
@@ -1197,6 +1199,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   Icon(c,{mouseX_-19,mouseY_-19,38,38},dragItem_,1,s.Class());
  }
  if (noticeTime>0 && panel==Panel::None) {
+  regions_.push_back({{465,111,510,58},{},false});
   c.Frame({465,111,510,58},{.035f,.06f,.025f,.95f});
   c.Wrap(477,123,486,inventoryNotice,14,ink,2);
  }
