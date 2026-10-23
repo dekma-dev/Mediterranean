@@ -169,6 +169,42 @@ void Render(const std::filesystem::path& root,const std::string& veteran) {
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
   Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),1280,720,L"Character selection test",false),"Hidden window");
   Renderer renderer;Check(renderer.Initialize(window.GetHandle(),1280,720),"Renderer initialization");
+  {
+    const auto folder=root/("return-roster-"+std::to_string(GetTickCount64()));
+    std::filesystem::create_directories(folder);
+    const auto base=folder/"patrol.save",mageFile=folder/("hero-"+std::to_string(int(rpg::ClassId::Mage))+".save");
+    rpg::Simulation hero;hero.CreateCharacter(rpg::ClassId::Warrior,"Guard");Write(base,hero.Save());
+    hero.CreateCharacter(rpg::ClassId::Mage,"Scholar");Write(mageFile,hero.Save());
+    Game returning;returning.Initialize();returning.ChooseCharacter(base);Driver driver;driver.Step(returning);
+    const auto mageControl=Control(int(Control::Class0)+int(rpg::ClassId::Mage));
+    driver.Click(returning,mageControl);driver.Click(returning,Control::Enter);driver.Step(returning);
+    Check(!returning.ChoosingCharacter() && returning.State().Class()==rpg::ClassId::Mage,"Mage entry failed");
+    driver.Key(returning,'W');const auto expected=returning.State().Save();
+    const auto returnClick=[&]() {
+      returning.OpenPanel(ui::Panel::Menu);renderer.BeginFrame();returning.Render(renderer);
+      Check(renderer.Capture((root/"return-to-roster-menu.png").wstring()) && renderer.EndFrame(false),"Return menu render");
+      const ui::Layout layout(float(driver.frame.width),float(driver.frame.height));
+      driver.frame.client={LONG(layout.x+640*layout.scale),LONG(layout.y+522*layout.scale)};
+      driver.frame.down[VK_LBUTTON]=true;driver.Step(returning);
+    };
+    const auto generation=returning.AudioGeneration();returnClick();
+    Check(returning.ChoosingCharacter() && !returning.QuitRequested() && !returning.WantsMouseLook(),"Return failed to release gameplay");
+    Check(Read(mageFile)==expected && returning.AudioGeneration()!=generation,"Return did not save/reset audio generation");
+    const auto frozen=returning.State().Save();driver.frame.down[VK_RETURN]=true;
+    for(int i=0;i<5;++i) driver.Step(returning);
+    Check(returning.ChoosingCharacter() && returning.State().Save()==frozen,"Held input entered world or advanced simulation");
+    driver.frame.down[VK_RETURN]=driver.frame.down[VK_LBUTTON]=false;driver.Step(returning);driver.Step(returning);
+    Check(returning.Selection().Screen()==Selection::Page::Roster && std::string(returning.Selection().Hero().Nickname())=="Guard","Return used class save as roster base");
+    driver.Click(returning,mageControl);driver.Click(returning,Control::Enter);driver.Step(returning);
+    Check(returning.State().Save()==expected,"Saved hero failed to re-enter unchanged");
+    hero.CreateCharacter(rpg::ClassId::Mage,"External");Write(mageFile,hero.Save());
+    returnClick();
+    Check(!returning.ChoosingCharacter() && Read(mageFile)==hero.Save() && returning.State().Message().find("Save changed")!=std::string::npos,"Return discarded progress or overwrote external save");
+    driver.frame.down[VK_LBUTTON]=false;driver.Step(returning);driver.Key(returning,VK_F9);
+    returnClick();driver.frame.down[VK_LBUTTON]=false;driver.Step(returning);driver.Step(returning);
+    driver.Click(returning,Control::Create);
+    Check(returning.Selection().Screen()==Selection::Page::Class,"Creation unavailable after returning to roster");
+  }
   const auto file=root/"render.save";Write(file,veteran);
   Game game;game.Initialize();game.ChooseCharacter(file);
   for(const auto size:{std::pair<int,int>{960,600},{1280,720},{1920,1080},{2560,1080}}) {

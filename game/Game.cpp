@@ -37,6 +37,7 @@ float EnemyAttackSeconds(const rpg::Enemy& enemy,bool active) {
 
 void Game::Initialize() {
   saveFile_=std::filesystem::path(RPG_SAVE_DIRECTORY)/"patrol.save";
+  rosterFile_=saveFile_;
   savedSnapshot_.reset();
   choosingCharacter_=inputBarrier_=false; quitRequested_=fullscreenRequest_=false;
   simulation_=rpg::Simulation{}; time_=0; atmosphereTime_=0;
@@ -47,6 +48,7 @@ void Game::Initialize() {
 }
 
 void Game::ChooseCharacter(const std::filesystem::path& save) {
+  rosterFile_=save;
   CancelUiGesture(); selection_.Open(save); choosingCharacter_=true; inputBarrier_=false;
 }
 
@@ -61,6 +63,11 @@ bool Game::RestoreSnapshot(const std::string& snapshot) {
 
 void Game::Update(double seconds,const Input& input,float wheel) {
   const float dt=std::isfinite(seconds)?static_cast<float>(std::clamp(seconds,0.0,.05)):0.f;
+  // Require a fresh gesture on either side of the roster/world transition.
+  if(inputBarrier_) {
+    for(int key=1;key<256;++key) if(input.Held(key)) return;
+    inputBarrier_=false;return;
+  }
   if(choosingCharacter_) {
     const auto action=selection_.Update(dt,input);
     if(action==ui::CharacterSelection::Action::Quit) quitRequested_=true;
@@ -70,11 +77,6 @@ void Game::Update(double seconds,const Input& input,float wheel) {
       choosingCharacter_=false;inputBarrier_=true;
     }
     return;
-  }
-  // Do not carry an Enter/Space/click or a held movement key into gameplay.
-  if(inputBarrier_) {
-    for(int key=1;key<256;++key) if(input.Held(key)) return;
-    inputBarrier_=false;return;
   }
   interface_.noticeTime=std::max(0.f,interface_.noticeTime-dt);
   // Engine changes the window after this update. Cancel before dispatching a
@@ -158,6 +160,15 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   case ui::Action::Load: LoadProgress(); interface_.menuNotice=simulation_.Message(); break;
   case ui::Action::Fullscreen: fullscreenRequest_=true; break;
   case ui::Action::Quit: quitRequested_=true; break;
+  case ui::Action::CharacterSelection:
+    if(!SaveProgress()) {interface_.menuNotice=simulation_.Message();break;}
+    SuspendInput();
+    interface_.SetOnly(ui::Panel::None);
+    interface_.menuNotice.clear();
+    ResetMotion();
+    ChooseCharacter(rosterFile_);
+    inputBarrier_=true;
+    return;
   case ui::Action::SelectItem:
     interface_.selected=static_cast<ui::Item>(event.value); interface_.selectedBag=event.inventory.source; interface_.Show(ui::Panel::Inventory); break;
   case ui::Action::UseItem: ui::ApplyItem(command,simulation_,static_cast<ui::Item>(event.value),event.inventory.source); break;
@@ -565,7 +576,7 @@ std::wstring Game::WindowTitle() const {
   return L"Mediterranean - Astral Frontier | Native prototype";
 }
 
-void Game::SaveProgress() {
+bool Game::SaveProgress() {
   const auto content=simulation_.Save();
   const auto result=profile::Write(saveFile_,content,savedSnapshot_?&*savedSnapshot_:nullptr);
   switch(result) {
@@ -574,6 +585,7 @@ void Game::SaveProgress() {
   case profile::WriteResult::Busy:simulation_.Notify("Another game is saving this character. Try again.");break;
   case profile::WriteResult::Error:simulation_.Notify("Save failed. Previous save retained. Check project folder access.");break;
   }
+  return result==profile::WriteResult::Saved;
 }
 
 void Game::LoadProgress() {

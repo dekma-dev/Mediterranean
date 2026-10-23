@@ -26,13 +26,25 @@ float Metal(float hz,float t) {
   return Decay(t,.002f,18.f)*(Tone(hz,t)+.45f*Tone(hz*1.47f,t)*std::exp(-12*t)+
     .22f*Tone(hz*2.09f,t)*std::exp(-30*t));
 }
+bool IsStep(Cue cue) {return cue==Cue::Step || (cue>=Cue::StepGrass && cue<=Cue::StepWood);}
+bool IsLanding(Cue cue) {return cue==Cue::Land || (cue>=Cue::LandGrass && cue<=Cue::LandWood);}
+Cue GroundCue(const rpg::WorldMap& map,rpg::Vec2 p,bool landing) {
+  if(!std::isfinite(p.x) || !std::isfinite(p.z)) return landing?Cue::LandGrass:Cue::StepGrass;
+  if(p.x>=rpg::WorldMap::dockMin.x && p.x<=rpg::WorldMap::dockMax.x &&
+     p.z>=rpg::WorldMap::dockMin.z && p.z<=rpg::WorldMap::dockMax.z)
+    return landing?Cue::LandWood:Cue::StepWood;
+  const auto surface=map.SurfaceAt(p);
+  if(surface.paving>=.5f) return landing?Cue::Land:Cue::Step;
+  if(surface.dirt>=.5f) return landing?Cue::LandDirt:Cue::StepDirt;
+  return landing?Cue::LandGrass:Cue::StepGrass;
+}
 float CueLevel(Cue cue) {
-  return cue==Cue::Step?.35f:cue==Cue::Jump?.55f:cue==Cue::Land?.75f:1.f;
+  return IsStep(cue)?.35f:cue==Cue::Jump?.55f:IsLanding(cue)?.75f:1.f;
 }
 float CuePitch(Cue cue,unsigned sequence) {
   constexpr float offsets[]={-.65f,.35f,-.2f,.8f,0.f,-.4f,.55f};
   const float range=cue==Cue::Mend || cue==Cue::Potion || cue==Cue::Interrupt || cue==Cue::Song || cue==Cue::Holy?.012f:
-    cue==Cue::Step?.085f:.045f;
+    IsStep(cue)?.085f:.045f;
   return 1+offsets[sequence%7]*range;
 }
 float MixGain(float previous,float peakLoad,float seconds) {
@@ -56,7 +68,7 @@ std::vector<std::int16_t> Generate(Cue cue) {
   const bool healing=cue==Cue::Mend || cue==Cue::Potion;
   const bool mystical=(cue>=Cue::Holy && cue<=Cue::Ward) || cue==Cue::Cast || cue==Cue::Mend || cue==Cue::Interrupt;
   const float duration=cue==Cue::Mend?1.65f:healing?.95f:cue==Cue::Interrupt?.85f:
-    mystical?1.05f:cue==Cue::HeavyHit?.7f:cue==Cue::Step?.18f:cue==Cue::Land?.38f:cue==Cue::Jump?.3f:cue==Cue::SpellHit?.28f:.48f;
+    mystical?1.05f:cue==Cue::HeavyHit?.7f:IsStep(cue)?.18f:IsLanding(cue)?.38f:cue==Cue::Jump?.3f:cue==Cue::SpellHit?.28f:.48f;
   std::vector<std::int16_t> result(size_t(duration*sampleRate));
   std::uint32_t seed=12345+unsigned(cue)*713;
   float low=0,body=0;
@@ -148,8 +160,28 @@ std::vector<std::int16_t> Generate(Cue cue) {
       value=.18f*Bell(1174.66f,t)+.14f*Bell(1567.98f,t-.045f)+.11f*Bell(2093,t-.09f);
       value+=.25f*air*Decay(t,.002f,35.f);
       break;
+    case Cue::StepGrass: case Cue::LandGrass: {
+      const bool land=IsLanding(cue);
+      value=.22f*body*Decay(t,.006f,land?18.f:35.f)+.28f*low*Decay(t,.004f,land?23.f:40.f);
+      value+=.14f*air*Decay(t-.018f,.012f,land?22.f:32.f);
+      value+=.10f*Sweep(90,45,duration,t)*Decay(t,.006f,land?24.f:48.f);
+      break;
+    }
+    case Cue::StepDirt: case Cue::LandDirt: {
+      const bool land=IsLanding(cue);
+      value=.38f*low*Decay(t,.003f,land?21.f:40.f)+.21f*air*Decay(t,.003f,land?25.f:42.f);
+      value+=.18f*Sweep(120,50,duration,t)*Decay(t,.004f,land?25.f:45.f);
+      value+=.10f*air*Decay(t-.035f,.005f,48.f);
+      break;
+    }
+    case Cue::StepWood: case Cue::LandWood: {
+      const bool land=IsLanding(cue);
+      value=(.23f*Tone(165,t)+.11f*Tone(291,t)+.06f*Tone(457,t))*Decay(t,.002f,land?17.f:32.f);
+      value+=.35f*low*Decay(t,.002f,land?28.f:55.f)+.10f*air*Decay(t,.002f,70.f);
+      break;
+    }
     case Cue::Step: case Cue::Land: {
-      const bool land=cue==Cue::Land;
+      const bool land=IsLanding(cue);
       value=.34f*Sweep(land?105.f:155.f,55.f,duration,t)*Decay(t,.003f,land?23.f:48.f);
       value+=.65f*low*Decay(t,.002f,land?22.f:42.f);
       value+=.12f*air*Decay(t-.025f,.006f,45.f);
@@ -374,11 +406,11 @@ void Events::Update(const rpg::Simulation& state) {
   placed=false;
   if(state.Health()>0) {
     if(state.JumpedThisUpdate()) add(Cue::Jump);
-    if(state.LandingSpeed()>0) add(Cue::Land);
+    if(state.LandingSpeed()>0) add(GroundCue(state.Map(),state.Player(),true));
     if(state.DashedThisUpdate()) add(Cue::Dash);
     if(state.Grounded()) {
       stepDistance+=state.GroundMovementDistance();
-      if(stepDistance>=1.35f) { stepDistance=std::fmod(stepDistance,1.35f); add(Cue::Step); }
+      if(stepDistance>=1.35f) { stepDistance=std::fmod(stepDistance,1.35f); add(GroundCue(state.Map(),state.Player())); }
     } else stepDistance=0;
     if(state.GroundMovementDistance()==0) stepDistance=0;
   } else stepDistance=0;

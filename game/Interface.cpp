@@ -905,7 +905,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  } else if (panel!=Panel::None) {
   c.RectFill({0,0,1280,720},{0,0,0,panel==Panel::Menu?.16f:.30f}); regions_.clear();
   if (panel==Panel::Menu) {
-   c.Window({476,148,328,438}); c.Banner({490,137,300,34},"MEDITERRANEAN",20);
+   c.Window({476,148,328,492}); c.Banner({490,137,300,34},"MEDITERRANEAN",20);
    c.Center(476,177,328,"Dawnwatch expedition",12,muted);
    button({496,197,288,34},"Return to game",Action::Close);
    button({496,241,139,32},"Character",Action::Character); button({645,241,139,32},"Inventory",Action::Inventory);
@@ -919,9 +919,10 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Text(500,467,"Effects  "+std::to_string(effectsVolume)+"%",13,ink);
    button({712,461,30,25},"-",Action::EffectsVolume,-10,effectsVolume>0);
    button({752,461,30,25},"+",Action::EffectsVolume,10,effectsVolume<100);
-   button({496,506,288,32},"Exit to desktop",Action::Quit);
-   c.Center(476,546,328,audioAvailable?"World remains live  /  Esc to return":"Audio unavailable",12,muted);
-   if (!menuNotice.empty()) c.Center(476,563,328,menuNotice,11,gold);
+   button({496,506,288,32},"Save & choose character",Action::CharacterSelection);
+   button({496,546,288,32},"Exit to desktop",Action::Quit);
+   c.Center(476,586,328,audioAvailable?"World remains live  /  Esc to return":"Audio unavailable",12,muted);
+   if (!menuNotice.empty()) c.Wrap(496,603,288,menuNotice,11,gold,2);
    return;
   }
   if (panel==Panel::Build) {

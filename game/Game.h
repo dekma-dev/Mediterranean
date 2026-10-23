@@ -53,7 +53,7 @@ public:
   float EffectsVolume() const { return interface_.effectsVolume/100.f; }
   void SetAudioAvailable(bool value) { interface_.audioAvailable=value; }
 private:
-  std::filesystem::path saveFile_;
+  std::filesystem::path saveFile_,rosterFile_;
   std::optional<std::string> savedSnapshot_;
   ui::CharacterSelection selection_;
   bool choosingCharacter_=false,inputBarrier_=false;
@@ -78,7 +78,7 @@ private:
   bool orbiting_ = false;
   ui::Interface interface_;
   bool fullscreenRequest_ = false,quitRequested_ = false;
-  void SaveProgress();
+  bool SaveProgress();
   void LoadProgress();
   void ResetMotion();
   void UpdateFaces(float dt);

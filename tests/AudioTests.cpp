@@ -21,6 +21,51 @@ void WriteWave(const char* path,const std::vector<std::int16_t>& samples,unsigne
   Require(bool(out),"Audio preview write failed");
 }
 int main() {
+  {
+    rpg::WorldMap map;
+    const rpg::Vec2 positions[]={{0,-10},{25,-27},rpg::WorldMap::trainingPost,{-11.5f,-1}};
+    const sound::Cue steps[]={sound::Cue::Step,sound::Cue::StepGrass,sound::Cue::StepDirt,sound::Cue::StepWood};
+    const sound::Cue lands[]={sound::Cue::Land,sound::Cue::LandGrass,sound::Cue::LandDirt,sound::Cue::LandWood};
+    std::vector<std::int16_t> surfacePreview;
+    for(int surface=0;surface<4;++surface) {
+      const auto p=positions[surface];
+      Require(map.CanStand(p,.45f),"Surface fixture must be walkable");
+      Require(sound::GroundCue(map,p)==steps[surface] && sound::GroundCue(map,p,true)==lands[surface],"Surface sound disagrees with terrain/dock");
+      for(auto cue:{steps[surface],lands[surface]}) {
+        const auto pcm=sound::Generate(cue);
+        surfacePreview.insert(surfacePreview.end(),pcm.begin(),pcm.end());
+        surfacePreview.insert(surfacePreview.end(),sound::sampleRate/3,0);
+        Require(sound::CueLevel(cue)<sound::CueLevel(sound::Cue::HeavyHit),"Ground contacts must not mask combat");
+      }
+      for(int other=0;other<surface;++other)
+        Require(sound::Generate(steps[surface])!=sound::Generate(steps[other]) && sound::Generate(lands[surface])!=sound::Generate(lands[other]),"Ground materials sound identical");
+      for(int rate:{30,60,144}) {
+        rpg::Simulation walker;auto snapshot=walker.Save();auto begin=snapshot.find('\n')+1;
+        if(snapshot.compare(begin,8,"PROFILE ")==0) begin=snapshot.find('\n',begin)+1;
+        const auto end=snapshot.find('\n',begin);std::ostringstream line;line<<p.x<<' '<<p.z<<" 100 0 0 0";
+        snapshot.replace(begin,end-begin,line.str());Require(walker.Load(snapshot),"Surface fixture load failed");
+        sound::Events contacts;int footsteps=0,landings=0;
+        for(int frame=0;frame<rate;++frame) {
+          rpg::Command move;move.movement={0,1};walker.Update(1.f/rate,move);contacts.Update(walker);
+          for(unsigned i=0;i<contacts.count;++i) if(sound::IsStep(contacts.cues[i])) {
+            ++footsteps;Require(contacts.cues[i]==sound::GroundCue(map,walker.Player()),"Footstep used stale surface");
+          }
+        }
+        Require(footsteps==2,"Material selection changed distance-based cadence");
+        for(int frame=0;frame<rate*2;++frame) {
+          rpg::Command jump;jump.jump=frame==0;walker.Update(1.f/rate,jump);contacts.Update(walker);
+          for(unsigned i=0;i<contacts.count;++i) {
+            Require(!sound::IsStep(contacts.cues[i]),"Jump or idle produced false steps");
+            if(sound::IsLanding(contacts.cues[i])) {
+              ++landings;Require(contacts.cues[i]==sound::GroundCue(map,walker.Player(),true),"Landing used stale surface");
+            }
+          }
+        }
+        Require(landings==1,"Material jump must have one landing");
+      }
+    }
+    WriteWave("ground-contacts-preview.wav",surfacePreview);
+  }
   const auto village=sound::AmbientWeights({0,-10}),meadow=sound::AmbientWeights({0,-24}),astral=sound::AmbientWeights(rpg::WorldMap::astralAnchor);
   Require(village[1]>.99f && meadow[0]>.99f && astral[2]>.99f,"Regional ambience is assigned to the wrong place");
   for(int x=-29;x<=29;++x) for(int z=-31;z<=31;++z) {

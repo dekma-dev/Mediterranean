@@ -9,7 +9,10 @@ namespace sound {
 constexpr unsigned sampleRate=22050;
 constexpr unsigned musicSeconds=48;
 enum class Cue { Strike,Heavy,Enemy,Hit,HeavyHit,Hurt,Interrupt,Mend,Potion,Step,Jump,Land,Dash,Cast,Bow,Pistol,
-  Holy,Fire,Thorn,Soul,Mind,Song,Rend,Ward,SpellHit,Count };
+  Holy,Fire,Thorn,Soul,Mind,Song,Rend,Ward,SpellHit,StepGrass,StepDirt,StepWood,LandGrass,LandDirt,LandWood,Count };
+bool IsStep(Cue cue);
+bool IsLanding(Cue cue);
+Cue GroundCue(const rpg::WorldMap& map,rpg::Vec2 position,bool landing=false);
 Cue ClassReleaseCue(rpg::ClassId school);
 Cue ClassRecoveryCue(rpg::ClassId school);
 std::vector<std::int16_t> Generate(Cue cue);

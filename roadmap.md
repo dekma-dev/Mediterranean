@@ -1,5 +1,7 @@
 # Mediterranean Roadmap
 
+Character-menu return (2026-10-23): the live Esc menu now saves and returns to the existing character roster/creation wizard. Save failures keep the current session active; held input is isolated across both transition directions. Gameplay audio suspends in the roster using the existing engine lifecycle. Manual check 215 covers the round trip.
+
 Regional ambience checkpoint (2026-10-23): village creaks/bell, open-ground wind/birds and astral harmonics now blend by position, with smooth transitions and combat ducking. Effects controls their volume. Total PCM is 3.81 MiB under the 4 MiB budget; three additional looping voices use startup-generated samples. See docs/sound-design.md and manual check 214. Listening acceptance, longer/less repetitive environmental variation, spatial emitters, occlusion and adaptive harmonic arrangements remain open.
 
 Adaptive music checkpoint (2026-10-23): synchronized 80 BPM percussion fades into the existing score during accepted attacks or nearby pursuit, holds through short gaps, then releases smoothly. Music volume, death/load and suspension behavior are explicit. The sample bank remains below 4 MiB. See docs/sound-design.md and manual check 213. Regional ambience, adaptive harmonic arrangements, occlusion and surround placement remain open.

@@ -1,5 +1,7 @@
 # Starting and Debugging Mediterranean
 
+Return to character selection (2026-10-23): press Esc and choose **Save & choose character**. The current hero is saved before the roster opens; select another hero or choose Create character to use the existing class/appearance/name wizard. Release held keys/buttons before using the roster. If saving fails or another session changed the profile, the game stays open and explains the failure. F9 explicitly loads the external save; it discards unsaved local changes. Exit to desktop remains a separate button.
+
 Regional ambience (2026-10-23): restart the rebuilt game and enable Effects. Walk from the village south into the meadow, then visit the astral anchor and northern bastion. Backgrounds should blend gradually; combat quiets them. Music can be muted to inspect ambience separately. AudioTests exports ambience-0.wav (wind), ambience-1.wav (village) and ambience-2.wav (astral). Check repeated loop boundaries, Effects mute and Alt-Tab; see manual check 214.
 
 Adaptive music (2026-10-23): restart the rebuilt game, enable Music, then enter and leave combat. A restrained percussion layer fades in; it holds three seconds after danger passes and fades back out. Effects volume does not control this layer. AudioTests exports adaptive-score-preview.wav for a 20-second transition audition. See manual check 213.
