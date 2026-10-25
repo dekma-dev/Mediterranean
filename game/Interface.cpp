@@ -1192,8 +1192,10 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.Wrap(rect.x+50,rect.y+10,150,info.name,15,learned || available?ink:muted,2);
     c.Wrap(rect.x+12,rect.y+46,186,TalentEffect(s,i),12,muted,2);
     const char* state=learned?(planningBuild?"IN DRAFT":"LEARNED"):available?"AVAILABLE / 1 POINT":
-      s.Level()<info.level?"LOCKED":info.prerequisite!=rpg::Talent::Count && !s.HasTalent(info.prerequisite)?"PREREQUISITE":"UNAVAILABLE";
-    c.Text(rect.x+12,rect.y+73,"LEVEL "+std::to_string(info.level)+" / "+state,10,learned || available?accent:muted);
+      !planningBuild && s.Level()<info.level?"LEVEL LOCKED":info.prerequisite!=rpg::Talent::Count &&
+      !(planningBuild?rpg::HasTalent(unsigned(std::max(0,previewBuild)),info.prerequisite):s.HasTalent(info.prerequisite))?"NEEDS PARENT":
+      planningBuild?"DRAFT LIMIT":"UNAVAILABLE";
+    c.FitText(rect.x+12,rect.y+73,186,"LEVEL "+std::to_string(info.level)+" / "+state,10,learned || available?accent:muted);
     regions_.push_back({rect,{Action::SelectTalent,i},true});
    }
    c.Frame({850,150,306,454},{.035f,.08f,.075f,1});
@@ -1240,14 +1242,23 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Wrap(874,341,258,info.description,14,muted,4);
    c.Line(874,423,1132,423,1,border);
    c.Text(874,436,"Requires level "+std::to_string(info.level),13,ink);
-   c.Wrap(874,460,258,info.prerequisite==rpg::Talent::Count?"Prerequisite: Foundations":
-     std::string("Prerequisite: ")+s.TalentDefinition(int(info.prerequisite)).name,12,muted,2);
+   if(info.prerequisite==rpg::Talent::Count) c.Text(874,460,"No prerequisite / foundation talent",12,muted);
+   else {
+    const Rect prerequisite{874,456,258,30};
+    const bool owned=planningBuild?rpg::HasTalent(unsigned(std::max(0,previewBuild)),info.prerequisite):s.HasTalent(info.prerequisite);
+    c.Frame(prerequisite,{.07f,.10f,.075f,1},prerequisite.Contains(mouseX_,mouseY_)?gold:border);
+    c.FitText(882,462,226,std::string(owned?"Met: ":"Needs: ")+s.TalentDefinition(int(info.prerequisite)).name,12,owned?ink:gold);
+    c.Text(1115,461,">",14,gold);
+    regions_.push_back({prerequisite,{Action::SelectTalent,int(info.prerequisite)},true});
+   }
    c.Wrap(874,493,258,status,13,learned?Color{.57f,.83f,.45f,1}:gold,2);
    button({874,546,258,37},planningBuild?(learned?"Remove from draft":"Add to draft"):learned?"Learned":"Learn / 1 point",
      planningBuild?Action::DraftTalent:Action::LearnTalent,selectedTalent,planningBuild?editable:status=="Ready to learn");
    }
    button({148,565,225,22},"I  Foundations / levels 2-3",Action::SelectTalent,0);
    button({387,565,241,22},"II  Mastery / levels 5-9",Action::SelectTalent,9);
+   const float pageX=talentPage?387.f:148.f,pageWidth=talentPage?241.f:225.f;
+   c.Line(pageX+8,584,pageX+pageWidth-8,584,2,gold);
    c.Frame({148,589,480,8}); c.RectFill({151,592,474*xp,2},gold);
    button({666,590,146,28},planningBuild?"Clear draft":"Reset talents",planningBuild?Action::DraftTalent:Action::ConfirmTalentReset,planningBuild?-1:0,
      planningBuild?previewBuild>0:std::string(s.TalentResetStatus())=="Ready to reset" && !confirmTalentReset);

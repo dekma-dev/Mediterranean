@@ -1,5 +1,9 @@
 # Mediterranean Roadmap
 
+Soundtrack checkpoint (2026-10-25): refined procedural melodic phrasing, harp accompaniment, percussion accents and smoothed score gain without growing the PCM bank. Release/Debug audio tests pass. Listening acceptance remains open; full Debug game needs relinking after its running process exits. See docs/sound-design.md and manual check 254.
+
+Talent UI checkpoint (2026-10-25): clickable parent requirements connect talent inspection, draft labels use planned prerequisites, and active-page markers clarify navigation. Three-resolution prerequisite input/capture coverage is in place. Continue R5 live build readability acceptance (manual check 253).
+
 Combat HUD checkpoint (2026-10-25): active spell names now match techniques/signatures/setups instead of falling back to basic/heavy labels. Cast bars show phase, remaining time and contact mark with fitted columns; recovery casts share the layout. Continue R5 live combat readability acceptance (manual check 252).
 
 Quest dialogue UI checkpoint (2026-10-25): reading and objective progress are visible, completed/ready stages have accent cues, and reward/status labels fit their cards. Continue R5 live readability acceptance (manual check 251).

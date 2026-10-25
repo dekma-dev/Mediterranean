@@ -35,6 +35,7 @@ struct MusicIntensity {
 float CueLevel(Cue cue);
 float CuePitch(Cue cue,unsigned sequence);
 float MixGain(float previous,float peakLoad,float seconds);
+float MusicGain(float previous,float target,float seconds);
 struct Placement { float gain=1,left=.70710678f,right=.70710678f; };
 Placement Place(rpg::Vec2 offset,float cameraYaw);
 // Pure event collection, independent of the audio device and playback.
@@ -77,5 +78,6 @@ private:
   bool suspended_=false;
   bool ownsCom_=false;
   float effectGain_=.85f;
+  float musicGain_=0;
   void ClearEffects();
 };

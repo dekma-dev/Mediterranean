@@ -233,6 +233,9 @@ std::vector<std::int16_t> GenerateMusic() {
   constexpr float roots[]={146.832f,116.541f,174.614f,130.813f,146.832f,116.541f,110.f,146.832f};
   constexpr float melody[]={293.665f,349.228f,440.f,391.995f,349.228f,293.665f,261.626f,220.f,
     349.228f,440.f,523.251f,440.f,391.995f,329.628f,277.183f,293.665f};
+  // Breath between phrases and unequal articulation avoid a clockwork solo.
+  constexpr float lengths[]={2.1f,1.5f,2.35f,1.15f,2.2f,1.7f,2.1f,1.1f,
+    2.4f,1.65f,2.25f,1.2f,2.15f,1.6f,1.45f,2.8f};
   const auto envelope=[](float t,float attack,float sustain,float release) {
     if(t<0 || t>=sustain+release) return 0.f;
     const float rise=std::clamp(t/attack,0.f,1.f),fall=std::clamp((sustain+release-t)/release,0.f,1.f);
@@ -257,17 +260,27 @@ std::vector<std::int16_t> GenerateMusic() {
       value+=.026f*swell*(Tone(root*.5f,local)+.55f*Tone(root*2,local)+breath*.6f);
       if(b>=4) value+=.038f*envelope(local,.32f,2.5f,1.5f)*
         (Tone(root*.5f,local)+.4f*Tone(root,local)+.18f*Tone(root*1.5f,local));
+      constexpr float harpTimes[]={0.f,.75f,2.25f,3.75f,4.5f};
+      const float harpNotes[]={root,root*1.498307f,root*2,root*third*2,root*1.498307f};
+      for(int h=0;h<5;++h) {
+        const float age=local-harpTimes[h]-.08f;
+        if(age>=0 && age<2.4f) value+=(h==0?.020f:.013f)*Decay(age,.007f,2.6f)*
+          (Tone(harpNotes[h],age)+.32f*Tone(harpNotes[h]*2.002f,age)*std::exp(-age*2)+
+           .12f*Tone(harpNotes[h]*3.01f,age)*std::exp(-age*5));
+      }
     }
     const int note=std::min(15,int(t/3));
     for(int n=std::max(0,note-1);n<=note;++n) {
       const float local=t-n*3.f,hz=melody[n];
-      value+=.047f*envelope(local,.24f,1.9f,1.5f)*(Tone(hz,local+.0004f*Tone(5.f,local))+.18f*Tone(hz*2,local));
-      value+=.024f*Bell(hz*2,local-.42f);
+      const float phraseGain=n%4==0?1.f:n%4==3?.72f:.87f;
+      value+=.047f*phraseGain*envelope(local,.32f,lengths[n],.8f)*
+        (Tone(hz,local+.00032f*Tone(4.8f,local))+.14f*Tone(hz*2,local));
+      if(n%4==0) value+=.012f*Bell(hz*2,local-.42f);
     }
     // Sparse low percussion enters in the second half and leaves room for SFX.
     if(t>=24 && t<44) {
-      const float beat=std::fmod(t,1.5f);
-      value+=.068f*Sweep(78,38,.6f,beat)*Decay(beat,.008f,9.f)+.06f*breath*Decay(beat,.008f,18.f);
+      const float beat=std::fmod(t,3.f);
+      value+=.045f*Sweep(78,38,.6f,beat)*Decay(beat,.008f,9.f)+.035f*breath*Decay(beat,.008f,18.f);
     }
     // Long, quiet chamber reflections, bounded to the generated buffer.
     for(const auto tap:{std::pair<float,float>{.337f,.12f},{.593f,.08f}}) {
@@ -290,6 +303,12 @@ Cue ClassRecoveryCue(rpg::ClassId school) {
     case C::Necromancer:case C::Demonologist:return Cue::Soul;
     default:return Cue::Mend;
   }
+}
+float MusicGain(float previous,float target,float seconds) {
+  previous=std::isfinite(previous)?std::clamp(previous,0.f,1.f):0;
+  target=std::isfinite(target)?std::clamp(target,0.f,1.f):0;
+  const float dt=std::isfinite(seconds)?std::clamp(seconds,0.f,.1f):0;
+  return previous+(target-previous)*-std::expm1(-dt/.08f);
 }
 void MusicIntensity::Update(bool threat,float seconds) {
   const float dt=std::isfinite(seconds)?std::clamp(seconds,0.f,.1f):0;
@@ -367,11 +386,12 @@ std::vector<std::int16_t> GenerateCombatLayer() {
     const float noise=float(seed&65535)/32767.5f-1;low+=.08f*(noise-low);
     float value=0;
     for(int beat=0;beat<8;++beat) {
-      const float local=t-beat*.75f;if(local<0 || local>.65f) continue;
+      constexpr float accents[]={1.f,.28f,.50f,.37f,.86f,.24f,.55f,.42f};
+      const float local=t-beat*.75f-(beat%2?.012f:0);if(local<0 || local>.65f) continue;
       const bool strong=beat%4==0;
-      value+=(strong?.18f:.075f)*Sweep(strong?82.f:125.f,38.f,.65f,local)*Decay(local,.006f,strong?10.f:18.f);
-      value+=(strong?.12f:.08f)*low*Decay(local,.004f,22.f);
-      if(beat%2) value+=.025f*(noise-low)*Decay(local,.003f,34.f);
+      value+=accents[beat]*(.18f*Sweep(strong?82.f:125.f,38.f,.65f,local)*Decay(local,.006f,strong?10.f:18.f)+
+        .12f*low*Decay(local,.004f,22.f));
+      if(beat==3 || beat==7) value+=.018f*(noise-low)*Decay(local,.003f,34.f);
     }
     value*=std::min({1.f,t/.004f,(6.f-t)/.04f});result[i]=Pcm(value);
   }
@@ -484,19 +504,20 @@ void Audio::Suspend(bool value) {
   if(!engine_ || value==suspended_) return;
   suspended_=value;
   if(value) {ambientMix_.Reset();for(auto* voice:ambience_) if(voice) voice->SetVolume(0);}
-  if(value) { engine_->StopEngine(); ClearEffects(); events_.Reset(); intensity_.Reset();combatMusic_->SetVolume(0);generation_=~0u; }
+  if(value) { engine_->StopEngine(); ClearEffects(); events_.Reset(); intensity_.Reset();musicGain_=0;music_->SetVolume(0);combatMusic_->SetVolume(0);generation_=~0u; }
   else engine_->StartEngine();
 }
 void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds,float cameraYaw) {
   if(!music_ || suspended_) return;
-  music_->SetVolume(std::clamp(musicVolume,0.f,1.f)*.30f);
+  musicGain_=sound::MusicGain(musicGain_,musicVolume,seconds);
+  music_->SetVolume(musicGain_*.30f);
   if(generation!=generation_) {
     generation_=generation; ClearEffects(); events_.Reset(); variations_.fill(0);intensity_.Reset();
     ambientMix_.Reset();
   }
   if(state.Health()<=0) intensity_.Reset();
   else intensity_.Update(sound::CombatThreat(state),seconds);
-  combatMusic_->SetVolume(std::clamp(musicVolume,0.f,1.f)*.30f*intensity_.value);
+  combatMusic_->SetVolume(musicGain_*.30f*intensity_.value);
   ambientMix_.Update(state.Player(),intensity_.value,seconds);
   for(size_t i=0;i<ambience_.size();++i)
     ambience_[i]->SetVolume(std::clamp(effectsVolume,0.f,1.f)*.35f*ambientMix_.levels[i]);

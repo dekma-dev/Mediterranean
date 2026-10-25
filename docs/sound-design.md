@@ -1,5 +1,11 @@
 # Dawnwatch sound direction
 
+## Phrasing and dynamics — 2026-10-25
+
+Score phrasing and dynamics (2026-10-25): varied melodic sustain/phrase accents, quieter sparse bell entrances, a five-note harmonic harp figure and less intrusive score drums refine the existing original 48-second score. Adaptive percussion now has unequal accents and slight offbeat timing. Music slider changes and resume use an 80 ms exponential response shared by score/percussion, with finite-input handling and frame-rate checks. No additional PCM buffers, voices or runtime synthesis; total resident bank remains 4,112,312 bytes (under 4 MiB). Release build/AudioTests pass (1.90 s). Visual Studio Debug AudioTests build/pass (4.27 s); full Debug game relink is blocked by LNK1168 on the running RPGNative.exe, which was left untouched. Automated checks remain muted; subjective listening is pending. Generated dawnwatch-music.wav and adaptive-score-preview.wav in build-ninja-release. No downloads, commits or pushes.
+
+The composition remains synthesized mono audio, not sampled orchestral instruments. The 48-second length, 80 BPM pulse and harmony are unchanged. Per-note sustain and phrase amplitude vary; bells occur at phrase openings, and harp notes follow each section’s root/third/fifth. Background score drums are less frequent and quieter, leaving the adaptive stem to carry combat tension. Music gain settles gradually rather than jumping between slider values; suspension resets gain to silence for a soft resume. Effects gain/event routing is unchanged.
+
 ## Ground contacts — 2026-10-23
 
 Footsteps and landing impacts now select stone, dirt, grass or timber from the shared WorldMap surface weights and dock footprint. Paving/dirt use a 0.5 coverage threshold; the timber deck takes precedence. Existing stone contacts retain their sound; grass adds a softer rustle, dirt a grainy crunch and timber a short hollow resonance. All are original procedural samples, generated once at startup. Their audible realism still needs listening acceptance.

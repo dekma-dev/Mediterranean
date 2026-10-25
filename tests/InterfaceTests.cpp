@@ -790,6 +790,14 @@ int main() {
         Require(node.action==ui::Action::SelectTalent && node.value==i,"Every connected talent node must accept scaled inspection");
       }
       screen.talentPage=0;screen.selectedTalent=4; drawBuild();
+      const auto parent=click(1000,470);
+      Require(parent.action==ui::Action::SelectTalent && parent.value==int(buildState.TalentDefinition(4).prerequisite),
+        "Prerequisite card must navigate to the selected talent's actual parent at every scale");
+      const auto beforePrerequisite=buildState.Save();
+      renderer.BeginFrame();screen.Render(renderer,buildState,0,false);
+      Require(renderer.Capture(L"talent-prerequisite-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),
+        "Prerequisite card capture");
+      Require(buildState.Save()==beforePrerequisite,"Inspecting a prerequisite must not spend a talent point");
       Require(click(1000,563).action==ui::Action::None,"A rank with a missing prerequisite must disable Learn");
       screen.selectedTalent=1; drawBuild();
       const auto learn=click(1000,563);

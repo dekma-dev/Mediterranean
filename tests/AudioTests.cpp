@@ -21,6 +21,17 @@ void WriteWave(const char* path,const std::vector<std::int16_t>& samples,unsigne
   Require(bool(out),"Audio preview write failed");
 }
 int main() {
+  float volumeReference=-1;
+  for(int hz:{30,60,144,1000}) {
+    float level=0;
+    for(int i=0;i<hz;++i) level=sound::MusicGain(level,.7f,1.f/hz);
+    Require(level>.699f && level<=.7f,"Music gain must settle without overshooting");
+    for(int i=0;i<hz/2;++i) level=sound::MusicGain(level,0,1.f/hz);
+    Require(level<.002f,"Music mute must settle promptly");
+    if(volumeReference>=0) Require(std::abs(level-volumeReference)<.00001f,"Music slider smoothing depends on frame rate");
+    volumeReference=level;
+  }
+  Require(sound::MusicGain(.5f,1,0)==.5f && std::isfinite(sound::MusicGain(NAN,NAN,NAN)),"Invalid audio timing must not poison music gain");
   {
     rpg::WorldMap map;
     const rpg::Vec2 positions[]={{0,-10},{25,-27},rpg::WorldMap::trainingPost,{-11.5f,-1}};
