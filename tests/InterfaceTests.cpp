@@ -232,6 +232,32 @@ int main() {
   }
   screen.MoveHotbar(9,0,rpg::ClassId::Warrior);
 
+  for(int version=1;version<=4;++version) {
+    std::string legacy="HOTBARS "+std::to_string(version)+"\n";
+    for(int id=0;id<int(rpg::ClassId::Count);++id) legacy+="4 3 2 1 0 -1 -1 -1 -1 -1\n";
+    ui::Interface migrated; migrated.AssignHotbar(2,19,rpg::ClassId::Warrior);
+    Require(migrated.LoadHotbars(legacy),"Legacy single-row settings must migrate");
+    for(int id=0;id<int(rpg::ClassId::Count);++id) {
+      Require(migrated.HotbarSpell(0,rpg::ClassId(id))==4,"Migration must preserve primary bindings");
+      for(int slot=10;slot<20;++slot) Require(migrated.HotbarSpell(slot,rpg::ClassId(id))==-1,"Legacy modifier slots must start empty");
+    }
+    migrated.MoveHotbar(0,19,rpg::ClassId::Warrior);ui::Interface reload;
+    Require(reload.LoadHotbars(migrated.SaveHotbars()) && reload.HotbarSpell(19,rpg::ClassId::Warrior)==4 &&
+      reload.HotbarSpell(0,rpg::ClassId::Warrior)==-1,"Cross-row binding must persist");
+    const auto saved=reload.SaveHotbars();
+    Require(!reload.LoadHotbars(saved.substr(0,saved.size()/2)) && reload.SaveHotbars()==saved,"Truncated dual-row settings must be atomic");
+  }
+  Require(ui::Interface::BindingLabel(10)=="Ctrl+1" && ui::Interface::BindingLabel(19)=="Ctrl+0","Modifier labels must match keys");
+  for(int modifier:{VK_CONTROL,VK_LCONTROL,VK_RCONTROL}) {
+    Game keyboard,expected;Require(keyboard.RestoreSnapshot(test::dashFixture) && expected.RestoreSnapshot(test::dashFixture),"Modifier fixture");
+    Input input;Input::Frame frame;frame.focused=true;input.Update(frame);
+    keyboard.Update(.01,input,0);expected.ExecuteCommand({},.01f);
+    rpg::Command select;select.nextTarget=true;keyboard.ExecuteCommand(select);expected.ExecuteCommand(select);
+    frame.down[modifier]=true;frame.down['1']=true;input.Update(frame);keyboard.Update(.01,input,0);
+    rpg::Command technique;technique.ability=5;technique.queueAttack=true;expected.ExecuteCommand(technique,.01f);
+    Require(keyboard.State().Save()==expected.State().Save(),"Ctrl+1 must route only to the secondary technique");
+  }
+
   screen.Escape(); Require(screen.panel==ui::Panel::Menu && screen.CapturesMovement(),"Escape must open the menu and capture commands.");
   screen.Escape(); Require(screen.panel==ui::Panel::None,"Escape must close the menu.");
   screen.Toggle(ui::Panel::Inventory); screen.Escape();
@@ -517,7 +543,7 @@ int main() {
   }
   {
     Game game; game.Initialize(); Input input; Input::Frame frame;
-    frame.focused=true; frame.client={802,628}; frame.screen=frame.client;
+    frame.focused=true; frame.client={802,568}; frame.screen=frame.client;
     const auto step=[&]() {
       input.Update(frame); game.Update(.05,input,0);
       renderer.BeginFrame(); game.Render(renderer); Require(renderer.EndFrame(false),"Menu movement capture render failed");
@@ -707,6 +733,32 @@ int main() {
     screen.MoveHotbar(9,2,simulation.Class());
     Require(simulation.Load(beforeDash),"Restore interface state after target dash check");
     screen.SetOnly(ui::Panel::None);
+    renderer.BeginFrame();screen.Render(renderer,simulation,0,false);Require(renderer.EndFrame(false),"Dual-row drag layout");
+    const auto beforeRows=simulation.Save();
+    const auto beforeBindings=screen.SaveHotbars();
+    const auto rowPointer=[&](float x,float y,bool press,bool held,bool release) {
+      return screen.Pointer(layout.x+x*layout.scale,layout.y+y*layout.scale,float(size.first),float(size.second),press,false,held,release);
+    };
+    rowPointer(377,681,true,true,false);rowPointer(898,620,false,true,false);
+    Require(rowPointer(898,620,false,false,true).action==ui::Action::None &&
+      screen.HotbarSpell(19,simulation.Class())==0 && screen.HotbarSpell(0,simulation.Class())==-1,
+      "Dragging between rows must move a spell without casting");
+    renderer.BeginFrame();screen.Render(renderer,simulation,0,false);
+    Require(renderer.Capture(L"dual-hotbar-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),"Dual-row screenshot");
+    rowPointer(898,620,true,true,false);screen.CancelDrag();
+    Require(rowPointer(377,681,false,false,true).action==ui::Action::None && screen.HotbarSpell(19,simulation.Class())==0,
+      "Cancelled modifier-row drag must not move or cast");
+    Require(simulation.Save()==beforeRows,"Hotbar editing must not change gameplay");
+    screen.MoveHotbar(19,0,simulation.Class());
+    screen.SetOnly(ui::Panel::Build);
+    renderer.BeginFrame();screen.Render(renderer,simulation,0,false);Require(renderer.EndFrame(false),"Spellbook drop source");
+    rowPointer(165,165,true,true,false);rowPointer(898,620,false,true,false);
+    renderer.BeginFrame();screen.Render(renderer,simulation,0,false);
+    Require(renderer.Capture(L"spellbook-drop-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),"Raised spellbook drop targets");
+    Require(rowPointer(898,620,false,false,true).action==ui::Action::None && screen.HotbarSpell(19,simulation.Class())==0,
+      "Spellbook must assign to a modifier slot through the raised drop targets");
+    Require(screen.LoadHotbars(beforeBindings),"Restore per-resolution hotbar bindings");
+    screen.SetOnly(ui::Panel::None);
     renderer.BeginFrame();screen.Render(renderer,simulation,0,false);Require(renderer.EndFrame(false),"Tracker layout render");
     Require(click(1120,245).action==ui::Action::None && screen.PointerOverUi(),
       "Visible expedition tracker must block camera gestures behind its text");
@@ -754,6 +806,9 @@ int main() {
     renderer.BeginFrame(); screen.Render(renderer,simulation,0,false);
     const auto atlasCapture=L"atlas-drawn-"+std::to_wstring(size.first)+L"x"+std::to_wstring(size.second)+L".png";
     Require(renderer.Capture(atlasCapture) && renderer.EndFrame(false),"Atlas render/capture failed.");
+    const auto beforeAtlasRead=simulation.Save();
+    Require(click(970,284).action==ui::Action::Journal,"Atlas assignment card must open the journal at every scale");
+    Require(simulation.Save()==beforeAtlasRead,"Reading the atlas assignment must not advance a quest");
     Require(click(477.5f,366).action==ui::Action::PlaceWaypoint,"Atlas must accept a map click.");
     Require(std::abs(screen.pendingWaypoint.x)<.001f && std::abs(screen.pendingWaypoint.z)<.001f,"Waypoint coordinates must match the world map.");
     screen.hasWaypoint=true; screen.waypoint={0,0}; click(160,366);
@@ -775,7 +830,7 @@ int main() {
       rpg::Simulation buildState; Require(buildState.Load(Fixture("veteran-preview.save")),"Scaled build fixture");
       screen.SetOnly(ui::Panel::None);
       renderer.BeginFrame(); screen.Render(renderer,buildState,0,false); Require(renderer.EndFrame(false),"Build HUD render");
-      Require(click(608,628).action==ui::Action::Build,"N shortcut must be clickable at every UI scale");
+      Require(click(608,568).action==ui::Action::Build,"N shortcut must be clickable at every UI scale");
       screen.SetOnly(ui::Panel::Build); screen.selectedTalent=0;
       Require(click(1000,563).action==ui::Action::None,"Opening N must invalidate the previous layout");
       const auto drawBuild=[&]() {
@@ -1061,6 +1116,18 @@ int main() {
       Require(renderer.Capture(path) && renderer.EndFrame(false),"Tooltip capture failed");
       Require(state.Save()==before,"Hovering must not change gameplay or purchase items");
     }
+    // Compare an unequipped weapon to the actual worn weapon, with both side windows open.
+    Require(state.Load(Fixture("veteran-preview.save")),"Equipment comparison fixture");
+    tips.SetOnly(ui::Panel::Character);tips.Show(ui::Panel::Inventory);
+    const int weapon=state.Items().Find(rpg::Item::Starter);
+    Require(weapon>=0 && state.Items().Worn(rpg::GearSlot::Weapon)!=rpg::Item::Starter,"Comparison needs a different worn weapon");
+    const float bx=1028+float(weapon%6)*40,by=274+float(weapon/6)*42;
+    renderer.BeginFrame();tips.Render(renderer,state,0,false);Require(renderer.EndFrame(false),"Comparison layout");
+    tips.Pointer(layout.x+bx*layout.scale,layout.y+by*layout.scale,float(size.first),float(size.second),false,false);
+    const auto beforeCompare=state.Save();
+    renderer.BeginFrame();tips.Render(renderer,state,0,false);
+    Require(renderer.Capture(L"equipment-compare-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),"Equipment comparison capture");
+    Require(state.Save()==beforeCompare,"Comparison and matching-slot highlight must not equip the hovered item");
   }
   for(const auto size:{std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
     Require(renderer.Resize(size.first,size.second),"Long-label UI resize");
@@ -1223,6 +1290,38 @@ int main() {
         renderer.EndFrame(false),"Attack bar capture");
       Require(fighter.Save()==before,"Attack bar rendering must not advance or cast an attack");
     }
+  }
+  {
+    rpg::Enemy enemy;enemy.health=80;enemy.stunned=1;enemy.rooted=2;enemy.snared=3;enemy.exposed=4;
+    const auto statuses=ui::TargetStatusEffects(enemy);
+    Require(statuses.size()==4 && statuses[0].seconds==1 && statuses[3].seconds==4,"Concurrent target conditions must all be represented");
+    enemy.stunned=0;Require(ui::TargetStatusEffects(enemy).size()==3,"Expired target condition must disappear");
+    enemy.health=0;Require(ui::TargetStatusEffects(enemy).empty(),"Defeated targets must not retain status badges");
+  }
+  for(const auto size:{std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
+    Require(renderer.Resize(size.first,size.second),"Status HUD resize");
+    rpg::Simulation state;Require(state.Load(Fixture("combat-preview.save")),"Status HUD fixture");
+    rpg::Command select;select.nextTarget=true;state.Update(.001f,select);
+    auto& target=const_cast<rpg::Enemy&>(*state.TargetActor());
+    target.stunned=1;target.rooted=2;target.snared=3;target.exposed=4;target.windup=.4f;
+    ui::Interface hud;const auto before=state.Save();
+    renderer.BeginFrame();hud.Render(renderer,state,0,false);Require(renderer.EndFrame(false),"Status HUD layout");
+    const ui::Layout layout(float(size.first),float(size.second));
+    const auto event=hud.Pointer(layout.x+775*layout.scale,layout.y+438*layout.scale,
+      float(size.first),float(size.second),true,false);
+    Require(event.action==ui::Action::None,"Status inspection must be read-only");
+    renderer.BeginFrame();hud.Render(renderer,state,0,false);
+    Require(renderer.Capture(L"status-hud-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),"Status tooltip capture");
+    Require(state.Save()==before,"Status rendering must not change gameplay");
+    hud.Pointer(layout.x+800*layout.scale,layout.y+408*layout.scale,float(size.first),float(size.second),false,false);
+    Require(hud.PointerOverUi(),"Visible enemy windup must block camera gestures through its cast bar");
+    target.windup=0;
+    renderer.BeginFrame();hud.Render(renderer,state,0,false);Require(renderer.EndFrame(false),"Enemy cast expiry redraw");
+    Require(!hud.PointerOverUi(),"Expired enemy windup must remove its cast hit region");
+    hud.Pointer(layout.x+775*layout.scale,layout.y+438*layout.scale,float(size.first),float(size.second),false,false);
+    target.stunned=target.rooted=target.snared=target.exposed=0;
+    renderer.BeginFrame();hud.Render(renderer,state,0,false);Require(renderer.EndFrame(false),"Status expiry redraw");
+    Require(!hud.PointerOverUi(),"Expired badges must release their pointer regions");
   }
   const auto loadingRoot=std::filesystem::current_path()/"loading-check";
   std::filesystem::create_directories(loadingRoot);

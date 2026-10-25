@@ -333,7 +333,7 @@ float4 PSMain(VOut i) : SV_TARGET {
  }
  float3 geometric=normalize(i.n),n=geometric;
  float3 weights=pow(abs(normalize(i.tn)),4); weights/=max(dot(weights,1),.00001);
- float scale=i.material==3?.8:i.material==5?1.1:i.material==6 || i.material==12?3:i.material==11?2: .6;
+ float scale=i.material==1?1.4:i.material==3?.8:i.material==5?1.1:i.material==6 || i.material==12?3:i.material==11?2: .6;
  float4 mx=materials.Sample(surfaceSampler,float3(i.tp.zy*scale,i.material));
  float4 my=materials.Sample(surfaceSampler,float3(i.tp.xz*scale,i.material));
  float4 mz=materials.Sample(surfaceSampler,float3(i.tp.xy*scale,i.material));
@@ -346,7 +346,7 @@ float4 PSMain(VOut i) : SV_TARGET {
  float cavity=1;
  if (i.material==1) {
   float broad=Noise(i.wp.xz*.16),fine=Noise(i.wp.xz*1.7);
-  albedo=lerp(float3(.22,.32,.12),float3(.39,.43,.20),broad)*detail;
+  albedo=lerp(float3(.22,.29,.13),float3(.36,.39,.20),broad)*detail;
   // The 256-square weight map shares authored routes with the atlas and cover.
   // WorldMap survey bounds: 58 x 62 m playable land, plus a 4 m paper gutter.
   float2 groundUV=float2((i.wp.x+33)/66,(35-i.wp.z)/70);
@@ -406,15 +406,31 @@ float4 PSMain(VOut i) : SV_TARGET {
  float3 base=pow(saturate(albedo),2.2);
  float metal=i.material==7?.8:0;
  float3 view=normalize(eyeAndHud.xyz-i.wp),halfVector=normalize(lightDir+view);
- float exponent=lerp(96,5,roughness*roughness);
+ // GGX microfacets: roughness controls highlight width, while masking keeps
+ // grazing highlights bounded. Derivative variance damps distant sparkle.
+ float3 ndx=ddx(n),ndy=ddy(n);
+ roughness=sqrt(saturate(roughness*roughness+.25*(dot(ndx,ndx)+dot(ndy,ndy))));
+ roughness=clamp(roughness,.18,1);
+ float nv=max(.001,saturate(dot(n,view))),nh=saturate(dot(n,halfVector));
+ float alpha=roughness*roughness,alpha2=alpha*alpha;
+ float denominator=nh*nh*(alpha2-1)+1;
+ float distribution=alpha2/max(.00001,3.14159265*denominator*denominator);
+ float k=(roughness+1)*(roughness+1)*.125;
+ float masking=(nv/(nv*(1-k)+k))*(diffuse/(diffuse*(1-k)+k));
  float3 fresnel=lerp(.035,base,metal);
  fresnel+=(1-fresnel)*pow(1-saturate(dot(view,halfVector)),5);
  float3 skyFill=eyeAndHud.w<0?float3(.52,.68,.91):SkyRadiance(float3(0,1,0))*1.4+float3(.12,.13,.14);
  float3 ambient=lerp(float3(.29,.23,.16),skyFill,n.y*.5+.5)*hemisphere;
  float3 sunlight=eyeAndHud.w<0?float3(1,.88,.70)*2.15:Daylight();
- float specular=pow(saturate(dot(n,halfVector)),exponent)*(exponent+8)/32;
- float3 result=base*(ambient*cavity+sunlight*diffuse*visibility)*(1-metal*.45);
- result+=fresnel*(specular*sunlight*visibility*diffuse+ambient*.45);
+ float3 specular=fresnel*distribution*masking/max(.004,4*nv*max(diffuse,.001));
+ float3 diffuseWeight=(1-fresnel)*(1-metal);
+ float3 result=base*diffuseWeight*(ambient*cavity+sunlight*diffuse*visibility);
+ result+=specular*sunlight*diffuse*visibility*3.14159265;
+ // Low-frequency sky/ground reflection supplies metal in shadow without
+ // pretending the diffuse term is reflected light. No extra texture fetch.
+ float reflectedUp=saturate(reflect(-view,n).y*.5+.5);
+ float3 environment=lerp(float3(.29,.23,.16),skyFill,lerp(reflectedUp,.5,roughness*roughness));
+ result+=fresnel*environment*lerp(.38,.16,roughness)*cavity;
  if (i.material==10) result=base*2.3;
  if (eyeAndHud.w<0) return float4(pow(max(0,result/(1+result)),1/2.2),1);
  // Extinction and in-scattered sky light mix before tone mapping, not in display RGB.

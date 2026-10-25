@@ -3,17 +3,31 @@
 #include <cmath>
 #include <sstream>
 namespace ui {
+std::vector<StatusEffect> TargetStatusEffects(const rpg::Enemy& enemy) {
+  std::vector<StatusEffect> result;
+  if(enemy.health<=0) return result;
+  if(enemy.stunned>0) result.push_back({"Stunned","Unable to act until the stun expires.",24,enemy.stunned});
+  if(enemy.rooted>0) result.push_back({"Rooted","Movement is prevented while the root lasts.",22,enemy.rooted});
+  if(enemy.snared>0) result.push_back({"Snared","Movement speed is reduced while the snare lasts.",22,enemy.snared});
+  if(enemy.exposed>0) result.push_back({"Exposed","Incoming attack damage is increased by 25%.",24,enemy.exposed});
+  return result;
+}
 std::string Interface::SaveHotbars() const {
-  std::ostringstream out;out<<"HOTBARS 4\n";
+  std::ostringstream out;out<<"HOTBARS 5\n";
   for(const auto& bar:hotbars_) {for(int spell:bar) out<<spell<<' ';out<<'\n';}
   return out.str();
 }
 bool Interface::LoadHotbars(const std::string& data) {
   if(data.size()>4096) return false;
   std::istringstream in(data);std::string tag;int version=0;
-  if(!(in>>tag>>version) || tag!="HOTBARS" || (version<1 || version>4)) return false;
+  if(!(in>>tag>>version) || tag!="HOTBARS" || (version<1 || version>5)) return false;
   auto candidate=hotbars_;
-  for(auto& bar:candidate) for(auto& spell:bar) if(!(in>>spell) || spell < -1 || spell>(version==1?4:version==2?5:version==3?6:7)) return false;
+  for(auto& bar:candidate) {
+    // Old layouts retain every existing binding; new modifier slots start empty.
+    bar.fill(-1);
+    for(int slot=0;slot<(version<5?10:hotbarSlots);++slot)
+      if(!(in>>bar[slot]) || bar[slot] < -1 || bar[slot]>(version==1?4:version==2?5:version==3?6:7)) return false;
+  }
   in>>std::ws;if(!in.eof()) return false;
   hotbars_=candidate;CancelDrag();InvalidateHitRegions();return true;
 }

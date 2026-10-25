@@ -7,7 +7,7 @@ namespace ui {
 enum class LoadingStage { World,Chronicles,Sound,Entering };
 void RenderLoading(Renderer& renderer,LoadingStage stage);
 enum class Panel { None,Menu,Character,Inventory,Map,Journal,Merchant,Build,Quest };
-enum class Action { None,Hotbar,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview,MusicVolume,EffectsVolume,Build,SelectTalent,LearnTalent,QuestConfirm,QuestPage,SelectSpell,ConfirmTalentReset,ResetTalents,CancelTalentReset,BuildPage,SelectLoadout,SelectBuildPreset,RequestBuildApply,RequestBuildStore,ConfirmBuild,CancelBuild,PlanBuild,EditBuild,DraftTalent,CharacterSelection,SelectJournal,InspectStat };
+enum class Action { None,Hotbar,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview,MusicVolume,EffectsVolume,Build,SelectTalent,LearnTalent,QuestConfirm,QuestPage,SelectSpell,ConfirmTalentReset,ResetTalents,CancelTalentReset,BuildPage,SelectLoadout,SelectBuildPreset,RequestBuildApply,RequestBuildStore,ConfirmBuild,CancelBuild,PlanBuild,EditBuild,DraftTalent,CharacterSelection,SelectJournal,InspectStat,InspectStatus };
 using Item=rpg::Item;
 struct Rect { float x,y,w,h; bool Contains(float px,float py) const { return px>=x && py>=y && px<x+w && py<y+h; } };
 struct Layout {
@@ -24,10 +24,17 @@ bool Owned(const rpg::Simulation& simulation,Item item);
 bool Equipped(const rpg::Simulation& simulation,Item item);
 bool CanUse(const rpg::Simulation& simulation,Item item);
 struct ItemSummary { std::string stats,comparison; float difference=0; };
+struct StatusEffect { const char* name; const char* description; int icon; float seconds; };
+std::vector<StatusEffect> TargetStatusEffects(const rpg::Enemy& enemy);
 ItemSummary SummarizeItem(const rpg::Simulation& simulation,Item item);
 void ApplyItem(rpg::Command& command,const rpg::Simulation& simulation,Item item,int bagSlot=-1);
 class Interface {
 public:
+  static constexpr int hotbarSlots=20;
+  static std::string BindingLabel(int slot) {
+    if(slot<0 || slot>=hotbarSlots) return {};
+    return std::string(slot>=10?"Ctrl+":"")+(slot%10==9?"0":std::to_string(slot%10+1));
+  }
   void Escape() { CancelDrag(); InvalidateHitRegions(); CancelBuildConfirmation(); panel=panel==Panel::Menu?Panel::None:Panel::Menu; }
   void Toggle(Panel next);
   void Show(Panel next);
@@ -57,14 +64,14 @@ public:
   std::string SaveHotbars() const;
   bool LoadHotbars(const std::string& data);
   int HotbarSpell(int slot,rpg::ClassId id) const {
-    return slot>=0 && slot<10?hotbars_[rpg::ValidClass(id)?int(id):0][slot]:-1;
+    return slot>=0 && slot<hotbarSlots?hotbars_[rpg::ValidClass(id)?int(id):0][slot]:-1;
   }
   void MoveHotbar(int from,int to,rpg::ClassId id) {
-    if(from<0 || from>=10 || to<0 || to>=10 || !rpg::ValidClass(id)) return;
+    if(from<0 || from>=hotbarSlots || to<0 || to>=hotbarSlots || !rpg::ValidClass(id)) return;
     std::swap(hotbars_[int(id)][from],hotbars_[int(id)][to]);
   }
   void AssignHotbar(int spell,int to,rpg::ClassId id) {
-    if(spell<0 || spell>7 || to<0 || to>=10 || !rpg::ValidClass(id)) return;
+    if(spell<0 || spell>7 || to<0 || to>=hotbarSlots || !rpg::ValidClass(id)) return;
     hotbars_[int(id)][to]=spell;
   }
   // Central panels share one window; only the Esc menu captures movement.
@@ -92,9 +99,9 @@ public:
   bool audioAvailable=false;
   rpg::Vec2 waypoint{},pendingWaypoint{};
 private:
-  std::array<std::array<int,10>,int(rpg::ClassId::Count)> hotbars_=[] {
-    std::array<std::array<int,10>,int(rpg::ClassId::Count)> bars{};
-    for(auto& bar:bars) bar={0,1,2,3,4,5,6,7,-1,-1}; return bars;
+  std::array<std::array<int,hotbarSlots>,int(rpg::ClassId::Count)> hotbars_=[] {
+    std::array<std::array<int,hotbarSlots>,int(rpg::ClassId::Count)> bars{};
+    for(auto& bar:bars) bar={0,1,2,3,4,5,6,7,-1,-1,5,6,7,3,4,-1,-1,-1,-1,-1}; return bars;
   }();
   rpg::ClassId renderedClass_=rpg::ClassId::Warrior;
   int dragSpell_=-1,dragHotbar_=-1;

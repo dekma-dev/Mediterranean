@@ -1,5 +1,11 @@
 # Mediterranean Roadmap
 
+Inventory/atlas reference checkpoint (2026-10-25): actual worn-item comparison, matching gear-slot highlighting, atlas assignment navigation and readable enemy cast/health feedback are implemented. Release/Debug interface, inventory and trade checks pass. Continue manual check 257 and the larger remaining reference gaps: original icon artwork, character assets, detailed motion and utility-rail composition. See docs/video-reference-graphics-ui.md for inspected timestamps and scope.
+
+Recorded-reference action deck checkpoint (2026-10-25): two functional spell rows, Ctrl+1–0 routing, cross-row/spellbook assignment and HOTBARS 1–4 migration are implemented. Release/Debug UI regression checks pass; manual check 256 remains for live acceptance. Continue reference work with distinctive spell artwork, utility-rail composition, character/armor assets and motion choreography; the recorded map/inventory/settings composition is reviewed but not yet reproduced in full. Evidence and scope: docs/video-reference-graphics-ui.md.
+
+Graphics/reference checkpoint (2026-10-25): GGX material response, filtered roughness, finer ground relief and simultaneous live status strips are implemented and tested. Next realism priorities are character/armor forms and surface art, foliage/environment composition, and longer reference-based motion validation; additional polygons alone do not resolve those gaps. See docs/video-reference-graphics-ui.md for sampled recording evidence, remaining interface differences and verification limits. Manual check 255 covers moving highlights and live status feedback.
+
 Soundtrack checkpoint (2026-10-25): refined procedural melodic phrasing, harp accompaniment, percussion accents and smoothed score gain without growing the PCM bank. Release/Debug audio tests pass. Listening acceptance remains open; full Debug game needs relinking after its running process exits. See docs/sound-design.md and manual check 254.
 
 Talent UI checkpoint (2026-10-25): clickable parent requirements connect talent inspection, draft labels use planned prerequisites, and active-page markers clarify navigation. Three-resolution prerequisite input/capture coverage is in place. Continue R5 live build readability acceptance (manual check 253).

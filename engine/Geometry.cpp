@@ -561,9 +561,13 @@ std::vector<std::uint8_t> BuildMaterialLayer(Material material,unsigned size) {
       height=.022f*broad+.004f*strata-.007f*pit;
       roughness=.78f+.18f*fine; break;
     }
-    case Material::Ground:
-      value=.72f+.20f*noise(u,v,10)+.08f*fine; height=.009f*noise(u,v,16);
-      roughness=.96f; break;
+    case Material::Ground: {
+      // Packed soil grains and shallow gravel, baked into the existing mip chain.
+      const float grain=noise(u,v,48),gravel=smooth((noise(u,v,16)-.56f)*6);
+      value=.72f+.16f*noise(u,v,10)+.08f*fine+.06f*grain+.06f*gravel;
+      height=.005f*noise(u,v,16)+.002f*grain+.006f*gravel;
+      roughness=.86f+.10f*fine-.07f*gravel; break;
+    }
     case Material::Cloth: {
       // Uneven warp/weft and diagonal twill; periodic and mip-filtered by the
       // existing material array. No extra samples or resident texture layers.

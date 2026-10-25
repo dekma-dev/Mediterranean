@@ -6,7 +6,9 @@ Follow-up: [mastery and response](mastery-and-response.md) adds eighteen talents
 
 Only the Esc game menu captures movement and combat controls. Character, inventory, atlas, journal, build, shop and quest windows keep keyboard movement live. Their visible rectangles still consume pointer input, preventing clicks or camera drags through buttons. Walking away from a conversation/shop closes it through the existing distance rules. Focus loss and character selection retain input suspension. Esc is not a world pause: enemies and cooldowns continue.
 
-The bottom bar has ten larger slots, bound to **1–9, 0**. Default bindings are the four class actions followed by a potion; the remaining five slots start empty. This is ten assignable slots, not ten newly authored spells per class. Q remains a potion shortcut.
+The bottom action deck has two rows of ten slots: **1–9, 0** below and **Ctrl+1–9, Ctrl+0** above. New layouts put the four foundation actions, potion, technique, signature and setup in the first row. The upper row offers technique/signature/setup/defense/potion shortcuts, with five empty slots. These are additional bindings to the existing spells, not twenty different abilities. Q remains a potion shortcut. Holding Ctrl selects only the upper binding; an empty upper slot never falls back to the lower row.
+
+Settings now use HOTBARS version 5. Versions 1–4 retain all ten original bindings and receive an empty upper row. Both rows remain independent per class. During a spellbook drag, both rows rise above the build window as drop targets; release outside them cancels the assignment.
 
 Drag between slots to swap their contents. Open **N** and drag a spell card onto a slot to assign it. Clicking a slot activates on release; dragging never casts. Unavailable/cooling-down spells can still be moved. Dropping outside a slot cancels. Layouts are independent per class and persist with F5 or Save & choose character in `saves/patrol.save.hotbars`; F9 reloads them along with the selected character. Concurrent writes use the existing conflict-safe storage and never silently replace another instance's settings.
 

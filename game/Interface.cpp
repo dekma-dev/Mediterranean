@@ -578,6 +578,18 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
 
 void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bool debug) {
  Canvas c(renderer); regions_.clear();
+ struct StatusTip { std::string name,description,value; };
+ std::vector<StatusTip> statusTips;
+ const auto statusBadge=[&](float x,float y,int icon,const std::string& name,const std::string& description,
+     const std::string& value,bool harmful) {
+   const Rect rect{x,y,34,30};
+   c.Frame(rect,dark,harmful?Color{.75f,.30f,.16f,1}:gold);
+   PaintedIcon(c,{x+3,y+3,28,24},icon);
+   c.RectFill({x+2,y+18,30,10},{.02f,.02f,.015f,.82f});
+   c.Center(x+2,y+19,30,value,9,ink);
+   regions_.push_back({rect,{Action::InspectStatus,int(statusTips.size())},false});
+   statusTips.push_back({name,description,value});
+ };
  renderedClass_=s.Class();
  const float frameSeconds=std::clamp(time-lastRenderTime_,0.f,.05f);lastRenderTime_=time;
  if(std::hypot(mouseX_-hoverX_,mouseY_-hoverY_)>3) hoverTime_=0;
@@ -594,9 +606,17 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Center(rect.x,rect.y+(rect.h-15)*.5f-2+press,rect.w,label,15,enabled?ink:Color{.52f,.50f,.45f,1});
   regions_.push_back({rect,{action,value},enabled});
  };
+ Item inspectedGear=dragging_?dragItem_:Item::None;
+ if(!dragging_ && inventoryOpen && (panel==Panel::None || panel==Panel::Merchant))
+  for(int i=0;i<rpg::Inventory::capacity;++i)
+   if(Rect{1010+float(i%6)*40,255+float(i/6)*42,37,39}.Contains(mouseX_,mouseY_)) inspectedGear=s.Items().Bag()[i].item;
+ const auto compatibleGear=rpg::ValidItem(inspectedGear)?Describe(inspectedGear).slot:rpg::GearSlot::None;
  const auto slot=[&](Rect rect,Item item,bool selectedSlot=false,int bag=-1,int gear=-1) {
+  const bool destination=gear>=0 && compatibleGear!=rpg::GearSlot::None && gear==int(compatibleGear);
+  selectedSlot=selectedSlot || destination;
   if (item==Item::None) {
    c.EmptySlot(rect);
+   if(destination) {c.Line(rect.x+2,rect.y+2,rect.x+rect.w-2,rect.y+2,2,gold);c.Line(rect.x+2,rect.y+rect.h-2,rect.x+rect.w-2,rect.y+rect.h-2,2,gold);}
    // Empty bag cells clear inspection but remain valid drag destinations.
    regions_.push_back({rect,{Action::SelectItem,int(Item::None)},bag>=0,bag,gear});
    regions_.back().event.inventory.source=bag;
@@ -626,7 +646,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
 
  // Combat frames sit beside the action; side windows move them to the top.
  const bool combatLayout=!HasPanels();
- const float ux=combatLayout?330.f:18.f,uy=combatLayout?518.f:23.f;
+ const float ux=combatLayout?330.f:18.f,uy=combatLayout?458.f:23.f;
  regions_.push_back({{ux-5,uy,285,78},{},false});
  c.Frame({ux+27,uy+8,229,66},{.035f,.075f,.065f,.94f},{.39f,.46f,.28f,1});
  c.Banner({ux+49,uy,208,26},s.Nickname(),15);
@@ -661,26 +681,41 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  }
  c.Center(rx+3,uy+51,126,s.EmpoweredAttack()?"EMPOWERED CAST":s.EmpoweredReady()?"HEAVY READY":
    s.Barrier()>0?"Ward "+Number(s.Barrier()):"Build with basic hits",10,s.EmpoweredReady()?gold:muted);
+ const float statusY=combatLayout?uy-35:uy+82;
+ int playerStatus=0;
+ if(s.Barrier()>0) statusBadge(ux+58+playerStatus++*39,statusY,17,"Protective ward",
+   "Absorbs incoming damage. The number is remaining protection, not seconds.",Number(s.Barrier()),false);
+ if(s.EvasionSeconds()>0) statusBadge(ux+58+playerStatus++*39,statusY,22,"Evasion",
+   "Evades the next incoming hit while this effect lasts.",Seconds(s.EvasionSeconds())+"s",false);
+ if(s.EmpoweredReady()) statusBadge(ux+58+playerStatus++*39,statusY,24,"Full reserve",
+   "Your class reserve is full. Spend it with a heavy attack or signature.","Ready",false);
  if (s.TargetActor()) {
   const auto& target=*s.TargetActor();
-  const float tx=combatLayout?750.f:475.f,ty=combatLayout?518.f:26.f;
+  const float tx=combatLayout?750.f:475.f,ty=combatLayout?458.f:26.f;
   regions_.push_back({{tx,ty,286,78},{},false});
   c.Frame({tx,ty+8,244,66},{.085f,.045f,.035f,.94f},{.46f,.36f,.20f,1});
   c.Banner({tx+2,ty,226,26},target.Name(),14); c.Portrait(tx+253,ty+36,true,target.kind==rpg::EnemyKind::Captain?3:1);
   c.Frame({tx+9,ty+30,223,20},{.10f,.025f,.015f,1});
   c.Gradient({tx+12,ty+33,217*std::clamp(target.health/target.MaxHealth(),0.f,1.f),14},
     {.76f,.35f,.16f,1},{.35f,.075f,.04f,1});
-  c.Center(tx+10,ty+31,221,std::to_string(int(std::ceil(target.health)))+" / "+std::to_string(int(target.MaxHealth())),12);
+  c.Center(tx+10,ty+31,221,std::to_string(int(std::ceil(target.health)))+" / "+std::to_string(int(target.MaxHealth()))+
+    "  ("+std::to_string(int(std::ceil(100*std::clamp(target.health/target.MaxHealth(),0.f,1.f))))+"%)",12);
   const auto distance=std::to_string(int(std::ceil(std::hypot(s.Player().x-target.position.x,s.Player().z-target.position.z))));
   const std::string condition=target.stunned>0?"Stunned  "+Seconds(target.stunned)+"s":
     target.rooted>0?"Rooted  "+Seconds(target.rooted)+"s":target.snared>0?"Snared  "+Seconds(target.snared)+"s":
     target.exposed>0?"Exposed +25%  "+Seconds(target.exposed)+"s":"";
-  c.Center(tx+5,ty+54,228,target.windup>0?"Incoming strike  "+Seconds(target.windup)+"s":
-    !condition.empty()?condition:distance+" m  /  Selected target",11,target.windup>0?gold:muted);
+  c.Center(tx+5,ty+54,228,!condition.empty()?condition:distance+" m  /  Selected target",11,muted);
   if (target.windup>0) {
-   c.RectFill({tx+10,ty+70,220,3},{.12f,.035f,.02f,1});
-   c.RectFill({tx+10,ty+70,220*std::clamp(1-target.windup/target.WindupDuration(),0.f,1.f),3},{1,.57f,.16f,1});
+   const Rect cast{tx+10,combatLayout?ty-59:ty+117,220,19};
+   c.Frame(cast,{.12f,.035f,.02f,1},{.67f,.34f,.12f,1});
+   c.Gradient({cast.x+3,cast.y+3,214*std::clamp(1-target.windup/target.WindupDuration(),0.f,1.f),13},
+     {.76f,.30f,.11f,1},{.32f,.055f,.02f,1});
+   c.Center(cast.x,cast.y+3,cast.w,"Incoming strike / "+Seconds(target.windup)+"s",11,ink);
+   regions_.push_back({cast,{},false});
   }
+  int badge=0;
+  for(const auto& effect:TargetStatusEffects(target)) statusBadge(tx+10+badge++*39,
+    combatLayout?ty-35:ty+82,effect.icon,effect.name,effect.description,Seconds(effect.seconds)+"s",true);
  }
  c.Oval(1170,94,81,81,{.025f,.04f,.02f,1});
  Atlas(c,s,{1096,20,148,148},true,hasWaypoint,waypoint);
@@ -712,51 +747,55 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  }
  c.Skin({0,704,1280,16},7,{.65f,.64f,.57f,1});
  const float xp=s.Level()==rpg::levelCap?1.f:float(s.Experience()-s.LevelStartExperience())/(s.NextLevelExperience()-s.LevelStartExperience());
- c.Frame({439,645,403,7}); c.RectFill({442,648,397*xp,2},{.55f,.63f,.29f,1});
+ const auto drawHotbars=[&]() {
  c.Window({344,648,592,62}); c.Scroll(329,676,-1,1.5f); c.Scroll(951,676,1,1.5f);
- for (int slotIndex=0;slotIndex<10;++slotIndex) {
+ c.Window({344,592,592,57});
+ c.RectFill({442,650,397,2},border); c.RectFill({442,650,397*xp,2},{.55f,.63f,.29f,1});
+ for (int slotIndex=0;slotIndex<hotbarSlots;++slotIndex) {
   const int i=HotbarSpell(slotIndex,s.Class());
-  const float x=350+slotIndex*58.f; const Rect rect{x,653,54,51};
+  const float x=350+(slotIndex%10)*58.f,y=slotIndex<10?653.f:597.f; const Rect rect{x,y,54,51};
   const bool hover=rect.Contains(mouseX_,mouseY_);
   if(i<0) c.EmptySlot(rect);
   else {
     c.Frame(rect,{.08f,.12f,.055f,1},i==1 && s.EmpoweredReady()?classAccent:hover?gold:border);
-    AbilityArtwork(c,{x+4,657,46,43},i,s.Class());
+    AbilityArtwork(c,{x+4,y+4,46,43},i,s.Class());
   }
   const bool ready=!CapturesMovement() && i>=0 && (rpg::ValidSpell(i)?std::string(s.AbilityStatus(i))=="READY":CanUse(s,Item::Potion));
   const float cooldown=i<0?0:rpg::ValidSpell(i)?s.Cooldown(i):s.PotionCooldown();
-  if(i>=0 && !ready) c.RectFill({x+4,657,46,43},{.02f,.025f,.01f,.36f});
+  if(i>=0 && !ready) c.RectFill({x+4,y+4,46,43},{.02f,.025f,.01f,.36f});
   // Readiness stays legible without relying solely on dimmed artwork.
-  if(i>=0 && cooldown<=0) c.Line(x+7,701,x+47,701,2,
+  if(i>=0 && cooldown<=0) c.Line(x+7,y+48,x+47,y+48,2,
     ready?Color{.64f,.79f,.45f,.9f}:Color{.65f,.29f,.20f,.85f});
   if(cooldown>0) {
     const float fraction=std::clamp(cooldown/(rpg::ValidSpell(i)?s.AbilityCooldown(i):3.f),0.f,1.f);
-    c.CooldownSweep({x+4,657,46,43},fraction);
-    c.Center(x,672,54,Seconds(cooldown),19,ink);
+    c.CooldownSweep({x+4,y+4,46,43},fraction);
+    c.Center(x,y+19,54,Seconds(cooldown),19,ink);
   }
-  if(hover) c.RectFill({x+3,656,48,45},{.85f,.65f,.3f,(pointerHeld_?.23f:.12f)*std::min(1.f,hoverTime_*8+.15f)});
-  if(i==4) c.Center(x+32,685,18,std::to_string(s.Potions()),12,ink);
-  c.Text(x+4,654,slotIndex==9?"0":std::to_string(slotIndex+1),13,ink);
+  if(hover) c.RectFill({x+3,y+3,48,45},{.85f,.65f,.3f,(pointerHeld_?.23f:.12f)*std::min(1.f,hoverTime_*8+.15f)});
+  if(i==4) c.Center(x+32,y+32,18,std::to_string(s.Potions()),12,ink);
+  c.Text(x+4,y+1,BindingLabel(slotIndex),slotIndex<10?13:10,ink);
   if(i>=0 && i==s.QueuedAttack()) {
-    c.Line(x+4,700,x+50,700,3,classAccent);
-    c.Center(x,686,54,"NEXT",10,ink);
+    c.Line(x+4,y+47,x+50,y+47,3,classAccent);
+    c.Center(x,y+33,54,"NEXT",10,ink);
   }
   regions_.push_back({rect,{Action::Hotbar,slotIndex},ready || (!CapturesMovement() && s.CanBufferAttack(i))});
 
  }
- if(s.EvasionSeconds()>0) c.Center(505,565,270,"EVASION / "+Seconds(s.EvasionSeconds())+"s",12,classAccent);
+ };
+ drawHotbars();
+ if(s.EvasionSeconds()>0) c.Center(505,505,270,"EVASION / "+Seconds(s.EvasionSeconds())+"s",12,classAccent);
  if(s.CastingRecovery()) {
-   c.Frame({440,594,400,20},dark,gold);
-   c.Gradient({443,597,394*s.RecoveryProgress(),14},{.55f,.64f,.35f,1},{.2f,.32f,.18f,1});
-   c.FitText(450,597,232,s.Spell(3).name,12,ink);
-   c.FitText(688,597,144,"Casting / "+Seconds(s.RecoveryCastDuration()*(1-s.RecoveryProgress()))+"s",11,ink);
+   c.Frame({440,534,400,20},dark,gold);
+   c.Gradient({443,537,394*s.RecoveryProgress(),14},{.55f,.64f,.35f,1},{.2f,.32f,.18f,1});
+   c.FitText(450,537,232,s.Spell(3).name,12,ink);
+   c.FitText(688,537,144,"Casting / "+Seconds(s.RecoveryCastDuration()*(1-s.RecoveryProgress()))+"s",11,ink);
  }
- // A second row contains real navigation tools, leaving the primary bindings intact.
+ // Navigation sits above the two spell rows, separate from cast feedback.
  if (panel==Panel::None) {
   const char* labels[]={"C Gear","I Bag","N Build","M Atlas","J Journal","Esc"};
   const Action actions[]={Action::Character,Action::Inventory,Action::Build,Action::Map,Action::Journal,Action::Menu};
   for(int i=0;i<6;++i) {
-   const Rect nav{447+i*65.f,617,62,23};
+   const Rect nav{447+i*65.f,557,62,23};
    button(nav,labels[i],actions[i]);
    if((i==0 && characterOpen) || (i==1 && inventoryOpen))
     c.Line(nav.x+7,nav.y+nav.h-3,nav.x+nav.w-7,nav.y+nav.h-3,2,gold);
@@ -767,27 +806,27 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
      s.AttackSeconds()<contact?(s.ClassInfo().range>3?"Release":"Swing"):"Recovery";
    const float duration=combat::Duration(s.HeavyAttack());
    const float remaining=std::max(0.f,(duration-s.AttackSeconds())/s.AttackRate());
-   c.Frame({440,594,400,20},{.035f,.065f,.065f,.97f});
-   c.Gradient({443,597,394*std::clamp(s.AttackProgress(),0.f,1.f),14},
+   c.Frame({440,534,400,20},{.035f,.065f,.065f,.97f});
+   c.Gradient({443,537,394*std::clamp(s.AttackProgress(),0.f,1.f),14},
      s.AttackSeconds()<contact?Color{.27f,.48f,.49f,1}:Color{.40f,.34f,.20f,1},{.10f,.17f,.16f,1});
-   c.FitText(450,597,232,s.Spell(s.AttackAbility()).name,12,ink);
-   c.FitText(688,597,144,std::string(phase)+" / "+Seconds(remaining)+"s",11,ink);
+   c.FitText(450,537,232,s.Spell(s.AttackAbility()).name,12,ink);
+   c.FitText(688,537,144,std::string(phase)+" / "+Seconds(remaining)+"s",11,ink);
    const float releaseX=443+394*contact/duration;
-   c.Line(releaseX,594,releaseX,597,1.5f,gold);
+   c.Line(releaseX,534,releaseX,537,1.5f,gold);
   }
  }
  if (s.TalentPoints()>0) {
-  c.Oval(631,615,9,9,{.35f,.20f,.06f,1}); c.Ring(631,615,9,gold);
-  c.Center(622,608,18,std::to_string(s.TalentPoints()),12,ink);
-  regions_.push_back({{622,606,18,18},{Action::Build},true});
+  c.Oval(631,555,9,9,{.35f,.20f,.06f,1}); c.Ring(631,555,9,gold);
+  c.Center(622,548,18,std::to_string(s.TalentPoints()),12,ink);
+  regions_.push_back({{622,546,18,18},{Action::Build},true});
  }
  c.Text(22,674,std::to_string(s.Gold())+" gold",16,gold);
  c.Text(22,695,"WASD  Move     RMB  Orbit     F11  Display",11,muted);
  if (!characterOpen && panel!=Panel::Quest) c.Wrap(22,614,385,s.Message(),14,ink,3);
  if (panel==Panel::None && s.Health()>0) {
   const auto prompt=s.InteractionPrompt();
-  if (!prompt.empty()) { const float w=std::min(510.f,c.Width(prompt,14)+30); c.Frame({640-w/2,485,w,27}); c.Center(640-w/2,490,w,prompt,14,gold); }
-  if (s.Channeling()) { c.RectFill({470,640,340,3},border); c.RectFill({470,640,340*s.ChannelProgress(),3},blue); }
+  if (!prompt.empty()) { const float w=std::min(510.f,c.Width(prompt,14)+30); c.Frame({640-w/2,360,w,27}); c.Center(640-w/2,365,w,prompt,14,gold); }
+  if (s.Channeling()) { c.RectFill({470,586,340,3},border); c.RectFill({470,586,340*s.ChannelProgress(),3},blue); }
  }
 
  // Independent side windows: no world dimming, keyboard movement remains live.
@@ -816,7 +855,8 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Center(251,y+44,52,rightLabels[row],10,muted);
   }
   c.Banner({69,514,180,26},s.WardArmorEquipped()?"Astral ward":"Frontier outfit",14);
-  c.Text(28,552,"Drag gear to your bag. Right-click to remove.",11,muted);
+  c.FitText(28,552,266,compatibleGear!=rpg::GearSlot::None?std::string("Fits highlighted slot / ")+s.ItemDefinition(inspectedGear).name:
+    "Drag gear to your bag. Right-click to remove.",11,compatibleGear!=rpg::GearSlot::None?gold:muted);
   button({26,579,34,27},"<",Action::RotatePreview,-1);
   button({64,579,63,27},"Front",Action::RotatePreview,0);
   button({131,579,34,27},">",Action::RotatePreview,1);
@@ -1153,7 +1193,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
       std::clamp(remaining/s.AbilityCooldown(i),0.f,1.f));
     c.FitText(spellSlot.x+33,spellSlot.y+3,128,s.Spell(i).name,13,ink);
     std::string bindings;
-    for(int binding=0;binding<10;++binding) if(HotbarSpell(binding,s.Class())==i) {if(!bindings.empty()) bindings+="/";bindings+=binding==9?"0":std::to_string(binding+1);}
+    for(int binding=0;binding<hotbarSlots;++binding) if(HotbarSpell(binding,s.Class())==i) {if(!bindings.empty()) bindings+="/";bindings+=BindingLabel(binding);}
     c.FitText(spellSlot.x+33,spellSlot.y+18,128,(bindings.empty()?"Unbound":"Key "+bindings)+" / "+
       (remaining>0?Seconds(remaining)+"s remaining":Number(s.AbilityCooldown(i))+"s cooldown"),10,remaining>0?gold:muted);
     if(spellSlot.Contains(mouseX_,mouseY_))
@@ -1266,6 +1306,11 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
      std::to_string(s.Experience())+" XP  /  "+std::to_string(s.NextLevelExperience())+" for next level",12,muted);
    c.Text(124,628,planningBuild?"DRAFT: "+std::to_string(rpg::TalentCount(unsigned(std::max(0,previewBuild))))+" / 5 points. Review draft to apply or save. Live talents are unchanged.":
      "N or X closes. Choices are saved with F5. The world remains active.",12,muted);
+   if(dragging_ && dragSpell_>=0) {
+    drawHotbars();
+    c.Frame({mouseX_-23,mouseY_-23,46,46},dark,gold);
+    AbilityArtwork(c,{mouseX_-20,mouseY_-20,40,40},dragSpell_,s.Class());
+   }
    return;
   }
   const bool map=panel==Panel::Map;
@@ -1292,10 +1337,17 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.Line(px-6,py,px-2,py,1,surveyInk);c.Line(px+2,py,px+6,py,1,surveyInk);
     c.Line(px,py-6,px,py-2,1,surveyInk);c.Line(px,py+2,px,py+6,1,surveyInk);
    } else c.FitText(164,90,626,"Survey the parchment to inspect an area and place a waypoint.",13,muted);
-   c.Text(833,134,"DAWNWATCH ISLAND",18,gold); c.Text(833,166,"Hand-drawn island survey",14,muted);
-   c.Wrap(833,207,286,s.Objective(),17,ink,4);
+   const auto& assignment=rpg::DescribeQuest(s.CurrentQuest());
+   c.Frame({827,124,298,183},{.055f,.065f,.035f,.95f});
+   c.Text(840,135,"CURRENT ASSIGNMENT",11,gold);
+   c.Wrap(840,157,272,assignment.title,18,ink,2);
+   c.Line(840,204,1112,204,1,border);
+   const auto objective=s.Objective();const auto firstLine=objective.find('\n');
+   c.Wrap(840,214,272,firstLine==std::string::npos?objective:objective.substr(firstLine+1),13,muted,3);
+   button({840,271,272,27},"Read assignment / J",Action::Journal);
    const std::pair<Color,const char*> legend[]={{{.68f,.87f,1,1},"Your position and facing"},{gold,"Keeper / quest objective"},{{.72f,.20f,.15f,1},"Living raider"},{{.59f,.38f,.84f,1},"Astral anchor"},{{.35f,.72f,.76f,1},"Sparring post"},{{.95f,.57f,.22f,1},"Quartermaster"}};
-   for (int i=0;i<6;++i) { c.Oval(842,320+i*27.f,4,4,legend[i].first); c.Text(858,309+i*27.f,legend[i].second,15,muted); }
+   c.Text(840,319,"SURVEY KEY",11,gold);
+   for (int i=0;i<6;++i) { c.Oval(842,346+i*21.f,3,3,legend[i].first); c.Text(854,338+i*21.f,legend[i].second,12,muted); }
    c.Frame({827,478,298,75},{.07f,.06f,.04f,1});
    c.Text(840,489,hasWaypoint?"MARKED DESTINATION":"YOUR BEARINGS",11,gold);
    const auto bearing=hasWaypoint?waypoint:s.Player();
@@ -1344,9 +1396,19 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Text(209,606,"The world remains active while reading the journal.",14,muted);
   }
  }
+ // Lift drop targets above the spellbook only during a real spell drag.
+ // Their final regions must match their visual order and vanish on cancellation.
+ if(dragging_ && dragSpell_>=0) drawHotbars();
  // Reverse hit order matches pointer dispatch: covered cells never leak tooltips.
  for (auto it=regions_.rbegin();!dragging_ && it!=regions_.rend();++it) if (it->rect.Contains(mouseX_,mouseY_)) {
-  if(it->event.action==Action::InspectStat) {
+  if(it->event.action==Action::InspectStatus) {
+   const auto& status=statusTips[it->event.value];
+   const float x=std::clamp(it->rect.x-80,8.f,962.f);
+   const float y=it->rect.y>300?it->rect.y-151:it->rect.y+37;
+   c.Window({x,y,310,141});c.FitText(x+14,y+14,282,status.name+" / "+status.value,17,gold);
+   c.Line(x+14,y+43,x+296,y+43,1,border);
+   c.Wrap(x+14,y+56,282,status.description,14,ink,4);
+  } else if(it->event.action==Action::InspectStat) {
    const int stat=it->event.value;
    const char* titles[]={"Vitality","Armor protection","Basic attack","Heavy attack","Character progression"};
    const std::string values[]={Number(s.Health())+" / "+Number(s.MaxHealth())+" health",
@@ -1369,7 +1431,23 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    const Item item=purchase?rpg::shopOffers[it->event.value].item:static_cast<Item>(it->event.value);
    if (!rpg::ValidItem(item)) break;
    const auto info=s.ItemDefinition(item); const auto summary=SummarizeItem(s,item);
-   const float x=std::clamp(mouseX_>640?mouseX_-329:mouseX_+21,8.f,963.f),y=std::clamp(mouseY_-42,8.f,466.f);
+   const Item worn=info.slot!=rpg::GearSlot::None?s.Items().Worn(info.slot):Item::None;
+   const bool compare=rpg::ValidItem(worn) && worn!=item;
+   const float width=compare?628.f:309.f;
+   const float x=std::clamp(mouseX_>640?mouseX_-width-20:mouseX_+21,8.f,1272.f-width),y=std::clamp(mouseY_-42,8.f,466.f);
+   if(compare) {
+    const float wx=x+319;const auto wornInfo=s.ItemDefinition(worn);const auto wornStats=SummarizeItem(s,worn);
+    c.Window({wx,y,309,246});
+    c.Gradient({wx+9,y+8,291,31},{.17f,.28f,.13f,.6f},{.04f,.08f,.04f,.3f});
+    c.Text(wx+16,y+17,"CURRENTLY EQUIPPED",12,{.66f,.85f,.48f,1});
+    Icon(c,{wx+14,y+49,40,42},worn,1,s.Class());
+    c.FitText(wx+64,y+49,229,wornInfo.name,16,gold);
+    c.FitText(wx+64,y+75,229,ItemTypeLabel(wornInfo),11,muted);
+    c.Line(wx+14,y+101,wx+295,y+101,1,border);
+    c.FitText(wx+14,y+114,281,wornStats.stats,14,ink);
+    c.Wrap(wx+14,y+145,281,wornInfo.description,12,muted,3);
+    c.FitText(wx+14,y+218,281,"Equipping the inspected item replaces this slot",11,gold);
+   }
    c.Window({x,y,309,246}); Icon(c,{x+13,y+12,34,38},item,1,s.Class());
    c.FitText(x+57,y+11,238,info.name,16,gold); c.FitText(x+57,y+37,238,ItemTypeLabel(info),11,muted);
    c.RectFill({x+14,y+62,281,1},border);
@@ -1393,11 +1471,11 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    const std::string status=potion?(s.Health()<=0?"DEFEATED":s.Potions()==0?"NO POTIONS":s.Health()>=s.MaxHealth()?"FULL HEALTH":s.PotionCooldown()>0?"COOLDOWN":"READY"):s.AbilityStatus(ability);
    // Anchor above the action bar, away from the pointer and navigation row.
    const float x=std::clamp(it->rect.x-120,345.f,605.f);
-   const float lift=combatLayout?-115.f:0.f;
+   const float lift=combatLayout?-175.f:-60.f;
    c.Window({x,403+lift,330,210});
    AbilityArtwork(c,{x+14,417+lift,36,36},ability,s.Class());
    c.FitText(x+61,416+lift,253,potion?"Healing draught":s.Spell(ability).name,18,gold);
-   c.Text(x+61,439+lift,"KEY "+std::string(it->event.value==9?"0":std::to_string(it->event.value+1))+" / "+
+   c.Text(x+61,439+lift,"KEY "+BindingLabel(it->event.value)+" / "+
      (potion?"CONSUMABLE":ability==6?"SIGNATURE":ability==5?"TECHNIQUE":ability==7?"SETUP":"CLASS ABILITY"),10,muted);
    c.Line(x+14,461+lift,x+316,461+lift,1,border);
    c.Wrap(x+14,470+lift,302,detail,13,ink,2);
