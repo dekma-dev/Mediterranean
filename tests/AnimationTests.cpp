@@ -305,6 +305,71 @@ void TransitionRegressions() {
 }
 }
 int main() {
+  float referenceLag=0,referenceLean=0;
+  for(int hz:{1000,144,60,30}) {
+    animation::LocomotionController turn;
+    const auto advance=[&](float duration,float rate,bool grounded) {
+      for(float age=0;age<duration-1e-6f;) {
+        const float dt=std::min(1.f/hz,duration-age);
+        turn.Update(dt,grounded?2.f*dt:0,1,0,rate,grounded,0,0,true);age+=dt;
+        Require(std::abs(turn.turnLag)<=.141f && std::abs(turn.turnLean)<=.073f,
+          "Turn inertia must stay within the authored rig range");
+      }
+    };
+    advance(.3f,3,true);advance(.17f,-3,true);
+    if(hz==1000) {referenceLag=turn.turnLag;referenceLean=turn.turnLean;}
+    else Require(std::abs(turn.turnLag-referenceLag)<.0001f && std::abs(turn.turnLean-referenceLean)<.0001f,
+      "Turn inertia must agree across frame rates at equal elapsed time");
+    Require(turn.turnLag>0 && turn.turnLean>0,"Reversing a turn must reverse its shoulder lag and bank");
+    const float before=turn.turnLag;
+    turn.Update(.001f,0,0,0,0,false,2,.1f,true);
+    Require(std::abs(turn.turnLag-before)<.002f,"Takeoff must release turn inertia without snapping");
+    advance(1.f,0,false);
+    Require(std::abs(turn.turnLag)<.00001f && std::abs(turn.turnLean)<.00001f,"Turn inertia must settle after turning stops");
+    turn.Update(.01f,0,0,0,0,true,0,0,false);
+    Require(turn.turnLag==0 && turn.turnLean==0,"Defeat must clear turn inertia");
+  }
+  for(bool heavy:{false,true}) {
+    animation::State state;state.pose.attackSeconds=combat::StrokeStart(heavy);state.pose.heavyAttack=heavy;
+    state.SettleWeapon(.001f,true);
+    const auto before=BuildCharacterPose(0,0,false,state.pose);
+    state.pose.attackSeconds=-1;state.SettleWeapon(.001f,true);
+    const auto after=BuildCharacterPose(0,0,false,state.pose);
+    Require(Distance(before.arms[1].end,after.arms[1].end)<.001f,
+      "Cancelling a loaded stroke must not teleport the weapon hand to idle");
+    Require(state.pose.attackSeconds<0 && state.pose.carriedAttackSeconds==combat::StrokeStart(heavy),
+      "Cancellation must retain a frozen pose without advancing to phantom contact");
+    for(int i=0;i<160;++i) state.SettleWeapon(.001f,true);
+    Require(state.pose.carriedAttackWeight==0,"Cancelled weapon must settle fully within 160 ms");
+  }
+  // Enrage cooldowns and interruption lockouts must never masquerade as an
+  // animation clock. Only accepted release events start follow-through.
+  for(int hz:{30,60,144,1000}) {
+    Game boss;boss.Initialize();
+    auto& foes=const_cast<std::vector<rpg::Enemy>&>(boss.State().Enemies());
+    for(auto& foe:foes) {foe.health=0;foe.state=rpg::EnemyState::Dead;}
+    auto& foe=foes[0];foe.kind=rpg::EnemyKind::Captain;foe.rank=1;
+    foe.health=foe.MaxHealth()*.3f;foe.position=foe.home={0,-6};
+    foe.state=rpg::EnemyState::Pursuing;foe.facing=3.14159265f;foe.windup=.01f;
+    boss.ExecuteCommand({},.01f);
+    Require(std::abs(boss.EnemyAnimation(0).attackSeconds-combat::Contact(true))<.0001f,
+      "Enraged boss release must begin at contact rather than skip recovery");
+    for(float t=0;t<.12f-1e-6f;) {
+      const float dt=std::min(1.f/hz,.12f-t);boss.ExecuteCommand({},dt);t+=dt;
+    }
+    Require(std::abs(boss.EnemyAnimation(0).attackSeconds-(combat::Contact(true)+.12f))<.0001f,
+      "Boss recovery clock must advance consistently at different frame rates");
+    foe.health=foe.MaxHealth();foe.attackCooldown=.5f;
+    boss.ExecuteCommand({},.001f);
+    Require(std::abs(boss.EnemyAnimation(0).attackSeconds-(combat::Contact(true)+.121f))<.0001f,
+      "Health/cooldown changes must not jump an existing recovery pose");
+    Game interrupted;interrupted.Initialize();
+    auto& stopped=const_cast<std::vector<rpg::Enemy>&>(interrupted.State().Enemies())[0];
+    stopped.attackCooldown=.8f;stopped.windup=0;
+    interrupted.ExecuteCommand({},.01f);
+    Require(interrupted.EnemyAnimation(0).attackSeconds<0,
+      "An interruption lockout without a release must not fabricate a swing");
+  }
   // A direction reversal must retain blend velocity at the input edge. The
   // previous first-order filter immediately changed its slope by ~14/s.
   animation::LocomotionController blend;

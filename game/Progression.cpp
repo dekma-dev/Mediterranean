@@ -187,6 +187,7 @@ void Simulation::Respawn() {
     enemy.position=enemy.home; enemy.health=enemy.MaxHealth(); enemy.state=EnemyState::Idle;
     enemy.windup=enemy.attackCooldown=enemy.hitFlash=enemy.repathTimer=0;
     enemy.snared=enemy.rooted=enemy.stunned=enemy.exposed=0;
+    enemy.bossAttack=enemy.nextBossAttack=0;
     enemy.movementSpeed=enemy.movementDistance=0;
     enemy.path.clear(); enemy.waypoint=0;
   }

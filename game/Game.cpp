@@ -15,22 +15,22 @@
 #include <fstream>
 
 namespace {
-float EnemyStrike(const rpg::Enemy& enemy,bool active) {
+float EnemyStrike(const rpg::Enemy& enemy,bool active,float releaseAge=1) {
   // Cooldowns are frozen while defeated or outside a sparring round. They must
   // not keep driving the presentation toward an unfinished strike indefinitely.
   if (!active || enemy.health<=0) return 0;
-  return enemy.windup>0?1-enemy.windup/enemy.WindupDuration():
-    std::max(0.f,1-(enemy.AttackInterval()-enemy.attackCooldown)/.2f);
+  return enemy.windup>0?combat::Smooth(1-enemy.windup/enemy.WindupDuration()):
+    1-combat::Smooth(releaseAge/.4f);
 }
-float EnemyAttackSeconds(const rpg::Enemy& enemy,bool active) {
+float EnemyAttackSeconds(const rpg::Enemy& enemy,bool active,float releaseAge) {
   if (!active || enemy.health<=0) return -1;
-  const bool heavy=enemy.kind==rpg::EnemyKind::Captain;
-  const float contact=combat::Contact(heavy),start=combat::StrokeStart(heavy);
+  const bool heavy=enemy.kind==rpg::EnemyKind::Captain || enemy.kind==rpg::EnemyKind::Reaver || enemy.kind==rpg::EnemyKind::Wraith;
+  const float contact=enemy.kind==rpg::EnemyKind::Wraith?combat::StrokeStart(true):combat::Contact(heavy),start=contact-.09f;
   if (enemy.windup>0) {
     if (enemy.windup<=.09f) return contact-enemy.windup;
-    return start*std::clamp((enemy.WindupDuration()-enemy.windup)/(enemy.WindupDuration()-.09f),0.f,1.f);
+    return start*combat::Smooth((enemy.WindupDuration()-enemy.windup)/(enemy.WindupDuration()-.09f));
   }
-  const float age=contact+enemy.AttackInterval()-enemy.attackCooldown;
+  const float age=contact+releaseAge;
   return age<combat::Duration(heavy)?age:-1.f;
 }
 }
@@ -352,6 +352,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   playerAnimation_.pose.action=playerAnimation_.actions.pose;
   if(simulation_.Class()!=rpg::ClassId::Warrior) playerAnimation_.pose.cast=0;
   playerAnimation_.pose.heavyAttack=simulation_.HeavyAttack();
+  playerAnimation_.SettleWeapon(dt,simulation_.Health()>0);
   const float lateralAcceleration=command.haltMovement?0:
     ((velocity.x-previousVelocity.x)*std::cos(playerPose_.facing)-
      (velocity.z-previousVelocity.z)*std::sin(playerPose_.facing))/dt;
@@ -378,7 +379,16 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
       enemyFeet_[i].Reset(enemy.position,enemy.facing);
       enemyMovement_[i].Reset(enemy.position.x,enemy.position.z);
     }
-    const float strike=EnemyStrike(enemy,simulation_.Health()>0 && (i<enemies.size() || simulation_.Sparring()));
+    const bool active=simulation_.Health()>0 && enemy.health>0 && (i<enemies.size() || simulation_.Sparring());
+    auto& releaseAge=enemyAnimations_[i].enemyReleaseAge;
+    releaseAge=std::min(1.f,releaseAge+dt);
+    for(std::size_t eventIndex=0;eventIndex<simulation_.VisualEventCount();++eventIndex) {
+      const auto& event=simulation_.VisualEvents()[eventIndex];
+      if(event.actor==enemy.id && (event.kind==rpg::CombatVisualKind::EnemySwing || event.kind==rpg::CombatVisualKind::EnemyLance))
+        releaseAge=std::clamp(event.elapsed,0.f,dt);
+    }
+    if(!active || enemy.windup>0) releaseAge=1;
+    const float strike=EnemyStrike(enemy,active,releaseAge);
     const float turnRate=motion::AngleDelta(enemyPoses_[i].facing,enemy.facing)/dt;
     // Enemy heading is already smoothed by simulation, then frozen for attacks.
     // Use it exactly so the character always faces the displayed damage cone.
@@ -389,12 +399,19 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
     motion::Spring(enemyAnimations_[i].pose.bank,enemyAnimations_[i].bankVelocity,
       enemy.health>0?std::clamp(movement.lateralAcceleration/50.f,-1.f,1.f):0.f,18.f,dt);
     applyImpacts(enemyAnimations_[i],enemy.id,enemy.health>0);
-    enemyAnimations_[i].pose.attackSeconds=EnemyAttackSeconds(enemy,simulation_.Health()>0 && (i<enemies.size() || simulation_.Sparring()));
-    enemyAnimations_[i].pose.heavyAttack=enemy.kind==rpg::EnemyKind::Captain;
+    const float actionSeconds=EnemyAttackSeconds(enemy,active,releaseAge);
+    enemyAnimations_[i].pose.attackSeconds=actionSeconds;
+    enemyAnimations_[i].pose.heavyAttack=enemy.kind==rpg::EnemyKind::Captain || enemy.kind==rpg::EnemyKind::Reaver;
+    const auto gestureClass=enemy.kind==rpg::EnemyKind::Wraith?rpg::ClassId::Mage:
+      enemy.kind==rpg::EnemyKind::Reaver?rpg::ClassId::Demonologist:enemy.Boss()?rpg::ClassId::Paladin:rpg::ClassId::Warrior;
+    enemyAnimations_[i].actions.Update(dt,gestureClass,actionSeconds,
+      enemyAnimations_[i].pose.heavyAttack || enemy.kind==rpg::EnemyKind::Wraith,-1,active,false,enemy.Boss(),false,enemy.Boss()?int(enemy.bossAttack):-1);
+    enemyAnimations_[i].pose.action=enemyAnimations_[i].actions.pose;
     if(enemy.kind==rpg::EnemyKind::Wraith) {
       enemyAnimations_[i].pose.attackSeconds=-1;
-      enemyAnimations_[i].pose.cast=enemyPoses_[i].attack;
+      enemyAnimations_[i].pose.cast=0;
     }
+    enemyAnimations_[i].SettleWeapon(dt,active);
     enemyFeet_[i].Update(dt,enemy.position,enemy.facing,true,enemy.health>0,enemyAnimations_[i].pose);
     enemyAnimations_[i].locomotion.Update(dt,enemy.movementDistance,movement.forward,movement.right,turnRate,true,0,0,enemy.health>0);
     enemyAnimations_[i].pose.motion=enemyAnimations_[i].locomotion.pose;
@@ -552,7 +569,7 @@ void Game::Render(Renderer& renderer,bool showInterface) {
       enemy.kind==rpg::EnemyKind::Wraith?0.f:pose.attack,pose.gait,enemyOutfit,enemyAnimations_[i].pose,std::uint64_t(enemy.id)+16);
     if (enemy.windup>0 && simulation_.Health()>0) {
       const float progress=1-enemy.windup/enemy.WindupDuration();
-      const XMFLOAT4 warning{1,.55f*(1-progress),.12f,.68f};
+      const XMFLOAT4 warning=enemy.Interruptible()?XMFLOAT4{1,.55f*(1-progress),.12f,.68f}:XMFLOAT4{.85f,.4f,.95f,.75f};
       const auto point=[&](float angle,float radius) -> XMFLOAT3 {
         return {enemy.position.x+std::sin(angle)*radius,.045f,enemy.position.z+std::cos(angle)*radius};
       };
@@ -560,15 +577,18 @@ void Game::Render(Renderer& renderer,bool showInterface) {
         const float a=enemy.facing-enemy.HalfAngle()+segment*enemy.HalfAngle()/16;
         const float b=a+enemy.HalfAngle()/16,r=enemy.Reach();
         renderer.DrawEffectRibbon(point(a,r-.025f),point(a,r+.025f),point(b,r+.025f),point(b,r-.025f),warning);
+        if(enemy.Boss() && enemy.bossAttack!=0)
+          renderer.DrawEffectRibbon(point(a,.05f),point(a,r),point(b,r),point(b,.05f),
+            {warning.x,warning.y,warning.z,.10f+.12f*progress});
       }
-      for (float side : {-1.f,1.f}) {
+      if(!(enemy.Boss() && enemy.bossAttack==1)) for (float side : {-1.f,1.f}) {
         const float angle=enemy.facing+side*enemy.HalfAngle();
         const auto a=point(angle,.24f),b=point(angle,enemy.Reach());
         const float x=std::cos(angle)*.018f,z=-std::sin(angle)*.018f;
         renderer.DrawEffectRibbon({a.x-x,a.y,a.z-z},{a.x+x,a.y,a.z+z},
           {b.x+x,b.y,b.z+z},{b.x-x,b.y,b.z-z},warning);
       }
-      if (enemy.Boss()) for(int segment=0;segment<64;++segment) {
+      if (enemy.Boss() && enemy.bossAttack==0) for(int segment=0;segment<64;++segment) {
         const float a=segment*motion::tau/64,b=(segment+1)*motion::tau/64;
         for(float radius : {rpg::Enemy::shockInner,rpg::Enemy::shockOuter})
           renderer.DrawEffectRibbon(point(a,radius-.035f),point(a,radius+.035f),

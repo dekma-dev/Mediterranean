@@ -165,7 +165,8 @@ XMFLOAT3 CombatEffects::SpellTracePoint(XMFLOAT3 origin,rpg::Vec2 destination,fl
     origin.z+(destination.z-origin.z)*u};
 }
 void CombatEffects::Emit(const rpg::CombatVisualEvent& event,const XMFLOAT3* spellOrigin) {
-  if(event.kind==K::UiClick || event.kind==K::CastStart || event.kind==K::ReserveReady || event.kind==K::CastCancelled) return;
+  if(event.kind==K::UiClick || event.kind==K::CastStart || event.kind==K::ReserveReady || event.kind==K::CastCancelled ||
+    event.kind==K::EnemyPrepare || event.kind==K::BossPrepare) return;
   const float elapsed=std::isfinite(event.elapsed)?std::clamp(event.elapsed,0.f,.05f):0;
   if (event.kind==K::DashStart) {
     CancelTrail(0);
@@ -318,20 +319,21 @@ void CombatEffects::Render(Renderer& renderer) const {
   for (const auto& burst : bursts_) {
     if (burst.age>=BurstLife(burst.event.kind)) continue;
     const auto& e=burst.event;
-    if(e.kind==K::EnemyQuake || e.kind==K::EnemyLance) {
+    if(e.kind==K::EnemyQuake || e.kind==K::EnemyLance || e.kind==K::EnemyTempest || e.kind==K::EnemyExecution) {
       const float fade=std::pow(Unit(1-burst.age/.35f),2.f);
       const auto point=[&](float angle,float radius,float y) -> XMFLOAT3 {
         return {e.position.x+std::sin(angle)*radius,y,e.position.z+std::cos(angle)*radius};
       };
-      if(e.kind==K::EnemyQuake) {
-        for(float radius:{rpg::Enemy::shockInner,rpg::Enemy::shockOuter})
+      if(e.kind==K::EnemyQuake || e.kind==K::EnemyTempest) {
+        const bool tempest=e.kind==K::EnemyTempest;
+        for(float radius:{tempest?1.9f:rpg::Enemy::shockInner,tempest?3.8f:rpg::Enemy::shockOuter})
           renderer.DrawEffectRing({e.position.x,.07f,e.position.z},radius,{1,.27f,.06f,fade});
         for(int i=0;i<24;++i) {
           const float angle=i*motion::tau/24;
-          renderer.DrawEffectGlow(point(angle,4.2f,.15f+burst.age*1.6f),.18f,{1,.37f,.08f,fade});
+          renderer.DrawEffectGlow(point(angle,tempest?2.8f:4.2f,.15f+burst.age*1.6f),.18f,{1,.37f,.08f,fade});
         }
       } else {
-        const auto start=point(e.facing,.25f,1.05f),end=point(e.facing,7.f,1.05f);
+        const auto start=point(e.facing,.25f,1.05f),end=point(e.facing,e.kind==K::EnemyExecution?8.f:7.f,1.05f);
         const float x=std::cos(e.facing)*.12f,z=-std::sin(e.facing)*.12f;
         renderer.DrawEffectRibbon({start.x-x,start.y,start.z-z},{start.x+x,start.y,start.z+z},
           {end.x+x,end.y,end.z+z},{end.x-x,end.y,end.z-z},{.58f,.35f,1,fade});

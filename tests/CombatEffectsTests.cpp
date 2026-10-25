@@ -209,6 +209,30 @@ int main() {
     encounter.SetCameraOrbit(.5f,.65f,11);
     renderer.BeginFrame();encounter.Render(renderer);
     Capture(renderer,kind==rpg::EnemyKind::Captain?L"boss-warning.png":kind==rpg::EnemyKind::Wraith?L"lance-warning.png":L"cleave-warning.png");
+    for(int frame=0;frame<12;++frame) encounter.ExecuteCommand({},.05f);
+    encounter.SetCameraOrbit(1.4f,.35f,6);
+    renderer.BeginFrame();encounter.Render(renderer,false);
+    Capture(renderer,kind==rpg::EnemyKind::Captain?L"boss-anticipation.png":kind==rpg::EnemyKind::Wraith?L"lance-anticipation.png":L"cleave-anticipation.png");
+    if(kind==rpg::EnemyKind::Captain) for(unsigned attack:{1u,2u}) {
+      foe.bossAttack=attack;foe.nextBossAttack=(attack+1)%3;foe.windup=.8f;
+      encounter.SetCameraOrbit(.5f,.65f,11);
+      renderer.BeginFrame();encounter.Render(renderer);
+      Capture(renderer,attack==1?L"boss-tempest-warning.png":L"boss-execution-warning.png");
+    }
+  }
+  {
+    Game retreat;Require(retreat.RestoreSnapshot(duel),"Caster retreat capture fixture");
+    auto& foes=const_cast<std::vector<rpg::Enemy>&>(retreat.State().Enemies());
+    auto& caster=foes[0];caster.kind=rpg::EnemyKind::Wraith;caster.windup=0;caster.attackCooldown=2;
+    for(std::size_t i=1;i<foes.size();++i) {foes[i].health=0;foes[i].state=rpg::EnemyState::Dead;}
+    retreat.SetCameraOrbit(1.1f,.45f,9);
+    for(int frame=0;frame<48;++frame) {
+      retreat.ExecuteCommand({},1.f/60);
+      if(frame==15 || frame==31 || frame==47) {
+        renderer.BeginFrame();retreat.Render(renderer,false);
+        Capture(renderer,frame==15?L"caster-retreat-start.png":frame==31?L"caster-retreat-step.png":L"caster-retreat-recovery.png");
+      }
+    }
   }
   const auto scene=[&]() {
     renderer.BeginFrame(); renderer.SetCamera({0,1,-4},{0,1,0});
@@ -216,12 +240,13 @@ int main() {
   };
   scene(); const auto base=Capture(renderer,L"effects-depth-reference.png");
   const auto baseDraws=renderer.LastDrawCalls()-renderer.CloudLightUpdates();
-  for(auto kind:{K::EnemyLance,K::EnemyQuake}) {
+  for(auto kind:{K::EnemyLance,K::EnemyQuake,K::EnemyTempest,K::EnemyExecution}) {
     CombatEffects special;special.Emit({kind,{0,0},0,0,100});special.Advance(.05f);
     renderer.BeginFrame();renderer.SetCamera({8,9,-10},{0,0,1});
     special.Render(renderer);
     Require(renderer.EffectVertices()>0 && renderer.EffectVertices()<3000,"Enemy special effect exceeds its fixed geometry budget");
-    Capture(renderer,kind==K::EnemyLance?L"enemy-lance.png":L"enemy-doomquake.png");
+    const auto path=L"enemy-special-"+std::to_wstring(int(kind))+L".png";
+    Capture(renderer,path.c_str());
     for(int i=0;i<12;++i) special.Advance(.05f);
     scene();special.Render(renderer);
     Require(renderer.EffectVertices()==0 && renderer.EndFrame(false),"Enemy spell effect failed to expire");

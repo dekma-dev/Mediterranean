@@ -3,6 +3,7 @@
 #include "game/CharacterSelection.h"
 #include "game/MapArtwork.h"
 #include "game/UiSkin.h"
+#include "game/EncounterView.h"
 #include "engine/Renderer.h"
 #include <algorithm>
 #include <array>
@@ -646,6 +647,27 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
 
  // Combat frames sit beside the action; side windows move them to the top.
  const bool combatLayout=!HasPanels();
+ if(combatLayout) {
+  const auto incoming=ReadIncomingAttacks(s);
+  if(incoming.count) {
+   const Rect board{438,24,400,27+incoming.count*48.f};
+   c.Frame(board,{.045f,.035f,.03f,.91f},border);
+   c.Banner({board.x+55,board.y-5,290,26},"INCOMING ATTACKS",14);
+   for(unsigned i=0;i<incoming.count;++i) {
+    const auto& row=incoming.rows[i];const auto& enemy=*row.enemy;
+    const float y=board.y+27+i*48;
+    const Color accent=enemy.Interruptible()?Color{.95f,.52f,.18f,1}:Color{.76f,.51f,.95f,1};
+    c.Text(board.x+9,y,enemy.AttackName(),14,ink);
+    c.Text(board.x+170,y,enemy.Boss()?(enemy.Enraged()?"BOSS / ENRAGED":"BOSS"):enemy.Name(),10,muted);
+    std::ostringstream countdown;countdown<<std::fixed<<std::setprecision(1)<<std::ceil(enemy.windup*10)/10<<"s";
+    c.Center(board.x+346,y,45,countdown.str(),14,accent);
+    c.RectFill({board.x+9,y+17,382,3},{.1f,.08f,.06f,1});
+    c.RectFill({board.x+9,y+17,382*std::clamp(1-enemy.windup/enemy.WindupDuration(),0.f,1.f),3},accent);
+    c.Text(board.x+9,y+23,row.threatens?enemy.Counterplay():"CLEAR NOW - WATCH THE WARNING",10,row.threatens?accent:muted);
+   }
+   regions_.push_back({board,{},false});
+  }
+ }
  const float ux=combatLayout?330.f:18.f,uy=combatLayout?458.f:23.f;
  regions_.push_back({{ux-5,uy,285,78},{},false});
  c.Frame({ux+27,uy+8,229,66},{.035f,.075f,.065f,.94f},{.39f,.46f,.28f,1});

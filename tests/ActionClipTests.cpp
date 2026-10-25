@@ -190,6 +190,21 @@ void Captures() {
 }
 }
 int main() {
+  for(unsigned attack=0;attack<3;++attack) {
+    Check(Size(SampleBossGesture(attack,0))==0 && Size(SampleBossGesture(attack,combat::Duration(true)))==0,
+      "Boss gesture must return to neutral at its endpoints");
+    ActionChannels previous;
+    for(int i=0;i<760;++i) {
+      const auto sample=SampleBossGesture(attack,i*.001f);
+      Check(Size(sample-previous)<.012f,"Boss gesture must remain continuous across contact");
+      Sample dynamics;dynamics.attackSeconds=i*.001f;dynamics.heavyAttack=true;dynamics.action=sample;
+      const auto pose=BuildCharacterPose(0,0,false,dynamics);
+      Check(pose.WeaponPoint(.96f).y>.05f,"Boss gesture drove its weapon through the floor");
+      previous=sample;
+    }
+  }
+  Check(Size(SampleBossGesture(0,.15f)-SampleBossGesture(1,.15f))>.1f &&
+    Size(SampleBossGesture(1,.15f)-SampleBossGesture(2,.15f))>.1f,"Boss preparations must have distinct silhouettes");
   ClipsAndRig();Controller();Integration();Captures();
   std::cout<<"PASS: class actions, fixed-limb/wrist continuity, timed release, cancellation, save isolation and 88 GPU views\n";
 }

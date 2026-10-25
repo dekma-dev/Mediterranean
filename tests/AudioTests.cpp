@@ -21,6 +21,35 @@ void WriteWave(const char* path,const std::vector<std::int16_t>& samples,unsigne
   Require(bool(out),"Audio preview write failed");
 }
 int main() {
+  for(int hz:{30,60,144,1000}) for(bool boss:{false,true}) {
+    rpg::Simulation fight;
+    auto& enemies=const_cast<std::vector<rpg::Enemy>&>(fight.Enemies());
+    for(auto& enemy:enemies) {enemy.health=0;enemy.state=rpg::EnemyState::Dead;}
+    auto& enemy=enemies[0];enemy.kind=boss?rpg::EnemyKind::Captain:rpg::EnemyKind::Raider;
+    enemy.rank=boss?1:0;enemy.health=enemy.MaxHealth();enemy.state=rpg::EnemyState::Pursuing;
+    enemy.position=enemy.home={fight.Player().x,fight.Player().z+1.8f};enemy.facing=3.14159265f;
+    sound::Events cues;const auto expected=boss?sound::Cue::BossPrepare:sound::Cue::EnemyPrepare;
+    int preparations=0;
+    for(int frame=0;frame<hz/5;++frame) {
+      fight.Update(1.f/hz,{});cues.Update(fight);
+      for(unsigned i=0;i<cues.count;++i) if(cues.cues[i]==expected) {
+        ++preparations;
+        Require(cues.spatial[i] && std::hypot(cues.origins[i].x-enemy.position.x,cues.origins[i].z-enemy.position.z)<.01f,
+          "Enemy preparation must originate at the committed caster");
+      }
+    }
+    Require(preparations==1 && enemy.windup>0,"Preparation must sound once at commitment, not every windup frame");
+    // Use a campaign-valid pending cast for persistence: the synthetic boss
+    // above deliberately overrides rank/health without earning its campaign.
+    rpg::Simulation pending;
+    Require(pending.Load("MEDITERRANEAN 3\n-4 5.2 100 0 1 0\n2 0 0 0\n0\n0 0 0 0\n"
+      "100 -4 7 80 0 0 1 0.5 3.14159\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n"),"Pending cast fixture");
+    const auto save=pending.Save();Require(fight.Load(save),"Preparation save must reload");
+    cues.Reset();cues.Update(fight);Require(!Has(cues,expected),"Loading a pending cast must not replay its preparation");
+    fight.Update(0,{});cues.Update(fight);Require(!Has(cues,expected),"Invalid updates must not create preparation cues");
+  }
+  Require(sound::Generate(sound::Cue::EnemyPrepare)!=sound::Generate(sound::Cue::BossPrepare),
+    "Boss and ordinary preparation must have distinct sound signatures");
   float volumeReference=-1;
   for(int hz:{30,60,144,1000}) {
     float level=0;

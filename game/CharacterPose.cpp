@@ -58,8 +58,11 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   const float driveSign=dynamics.retreat?-1.f:1.f;
   // The drive/bracing pose takes priority over an earlier attack or cast pose.
   const float burst=std::max(dash,brake);
-  const auto stroke=combat::Sample(dynamics.attackSeconds,dynamics.heavyAttack);
-  const bool timed=dynamics.attackSeconds>=0;
+  const bool carried=dynamics.attackSeconds<0 && dynamics.carriedAttackWeight>0;
+  const bool heavy=carried?dynamics.carriedHeavyAttack:dynamics.heavyAttack;
+  auto stroke=combat::Sample(carried?dynamics.carriedAttackSeconds:dynamics.attackSeconds,heavy);
+  const bool timed=dynamics.attackSeconds>=0 || carried;
+  if(carried) {stroke.weight*=animation::Unit(dynamics.carriedAttackWeight);stroke.coil*=animation::Unit(dynamics.carriedAttackWeight);}
   if (timed) swing=stroke.weight;
   swing*=1-burst;
   const float cast=animation::Unit(dynamics.cast)*(1-swing)*(1-hit)*(1-burst);
@@ -102,9 +105,9 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   pose.upperPitch-=air*animation::SmoothStep(-rise)*.08f;
   pose.bodyLift-=air*animation::SmoothStep(-rise)*.025f;
   if (timed) {
-    pose.upperYaw+=stroke.weight*((dynamics.heavyAttack?-.46f:-.36f)+stroke.cut*.82f)*(1-burst);
+    pose.upperYaw+=stroke.weight*((heavy?-.46f:-.36f)+stroke.cut*.82f)*(1-burst);
     pose.upperPitch+=stroke.weight*(-.10f+stroke.cut*.22f)*(1-burst);
-    pose.bodyLift-=stroke.coil*(dynamics.heavyAttack?.065f:.035f)*(1-air);
+    pose.bodyLift-=stroke.coil*(heavy?.065f:.035f)*(1-air);
   }
   std::array<XMFLOAT3,2> contacts{};
   if (contactWeight>0) for (int i=0;i<2;++i) {
@@ -156,7 +159,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
       const float cut=stroke.cut,weight=stroke.weight*(1-burst);
       // Coil beside the shoulder, cut across the body, then return to guard.
       XMFLOAT3 attackHand=i==1?
-        XMFLOAT3{.46f-cut*.34f,(dynamics.heavyAttack?1.66f:1.48f)-cut*.38f,-.13f+cut*.59f}:
+        XMFLOAT3{.46f-cut*.34f,(heavy?1.66f:1.48f)-cut*.38f,-.13f+cut*.59f}:
         XMFLOAT3{-.34f,1.25f,.23f-cut*.10f};
       if(i==1 && form==rpg::WeaponForm::Mace) {
         // A compact raised hammer path, distinct from the sword's cross-cut.

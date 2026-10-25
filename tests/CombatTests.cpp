@@ -24,6 +24,78 @@ bool HasFeedback(const rpg::Simulation& game,rpg::FeedbackKind kind) {
 }
 
 int main() {
+  float retreatReference=-1;
+  for(float z:{-8.f,-5.1f}) {
+    rpg::Simulation corner;Require(corner.Load(duel),"Retreat obstacle fixture");
+    // Put the player on the clear east side of the western house.
+    auto saved=corner.Save();const auto begin=saved.find('\n',saved.find("PROFILE "))+1;
+    const auto end=saved.find('\n',begin);
+    saved.replace(begin,end-begin,"-3 "+std::to_string(z)+" 100 0 0 0");
+    Require(corner.Load(saved),"Retreat obstacle player position");
+    auto& foes=const_cast<std::vector<rpg::Enemy>&>(corner.Enemies());
+    for(auto& foe:foes) {foe.health=0;foe.state=rpg::EnemyState::Dead;}
+    auto& caster=foes[0];caster.kind=rpg::EnemyKind::Wraith;caster.health=caster.MaxHealth();
+    caster.state=rpg::EnemyState::Pursuing;caster.position=caster.home={-4.6f,z};caster.facing=motion::tau*.25f;
+    caster.attackCooldown=.8f;
+    Require(corner.Map().CanStand(caster.position,.45f),"Retreat fixture starts inside an obstacle");
+    for(int frame=0;frame<60;++frame) {
+      const auto before=caster.position;corner.Update(1.f/60,{});
+      Require(corner.Map().CanTravel(before,caster.position,.45f),"Cornered caster tunneled into the building");
+    }
+    Require(caster.windup>0,"Cornered caster must attack when recovery finishes");
+  }
+  for(int hz:{30,60,144,1000}) for(int condition=0;condition<4;++condition) {
+    rpg::Simulation tactical;
+    auto& foes=const_cast<std::vector<rpg::Enemy>&>(tactical.Enemies());
+    for(auto& foe:foes) {foe.health=0;foe.state=rpg::EnemyState::Dead;}
+    auto& caster=foes[0];caster.kind=rpg::EnemyKind::Wraith;caster.health=caster.MaxHealth();
+    caster.state=rpg::EnemyState::Pursuing;caster.position=caster.home={0,-8.2f};
+    caster.facing=3.14159265f;caster.attackCooldown=2;
+    if(condition==1) caster.rooted=2;
+    if(condition==2) caster.snared=2;
+    if(condition==3) caster.windup=1.1f;
+    const auto start=caster.position;
+    for(int frame=0;frame<hz;++frame) {
+      const auto before=caster.position;tactical.Update(1.f/hz,{});
+      Require(tactical.Map().CanTravel(before,caster.position,.45f),"Caster retreat crossed collision geometry");
+      Require(std::abs(motion::AngleDelta(caster.facing,3.14159265f))<.02f,"Retreat must keep the caster facing its target");
+    }
+    const float travel=std::hypot(caster.position.x-start.x,caster.position.z-start.z);
+    if(condition==0) {
+      Require(travel>1.2f && travel<1.6f,"Ranged recovery must regain space at a catchable speed");
+      if(retreatReference>=0) Require(std::abs(travel-retreatReference)<.02f,"Ranged retreat depends on refresh rate");
+      retreatReference=travel;
+      caster.attackCooldown=0;tactical.Update(1.f/hz,{});
+      Require(caster.windup>0,"Caster must stop retreating and commit when recovery ends");
+    } else if(condition==2) Require(travel>.4f && travel<.8f,"Snare must slow ranged retreat");
+    else Require(travel<.0001f,"Root or committed windup must prevent retreat");
+  }
+  {
+    rpg::Simulation rotation;Require(rotation.Load(duel),"Boss rotation fixture");
+    auto& foes=const_cast<std::vector<rpg::Enemy>&>(rotation.Enemies());
+    auto& boss=foes[0];boss.kind=rpg::EnemyKind::Captain;boss.rank=1;boss.health=boss.MaxHealth();
+    boss.position=boss.home={-4,9.2f};boss.facing=3.14159265f;
+    for(int slot=0;slot<3;++slot) {
+      boss.attackCooldown=0;BeginSwing(rotation);
+      Require(boss.bossAttack==unsigned(slot) && boss.nextBossAttack==unsigned((slot+1)%3),"Boss did not advance its committed rotation");
+      const auto attack=boss.bossAttack;boss.health=boss.MaxHealth()*.3f;
+      rotation.Update(.01f,{});
+      Require(boss.bossAttack==attack,"Enrage must not change the committed attack geometry");
+      boss.windup=.001f;rotation.Update(.001f,{});
+    }
+    Require(boss.nextBossAttack==0,"Rotation must wrap to Doomquake");
+    boss.bossAttack=1;
+    Require(!boss.Interruptible() && boss.Hits(2,-1) && !boss.Hits(4,1),"Tempest must force retreat rather than a rear safe spot");
+    boss.bossAttack=2;
+    Require(boss.Interruptible() && boss.Hits(7,1) && !boss.Hits(3,0),"Execution line must permit a lateral dodge");
+    rpg::Simulation guard;Require(guard.Load(duel),"Armored cast fixture");
+    auto& armored=const_cast<std::vector<rpg::Enemy>&>(guard.Enemies())[0];
+    armored.kind=rpg::EnemyKind::Captain;armored.rank=1;armored.bossAttack=1;armored.health=armored.MaxHealth();
+    armored.state=rpg::EnemyState::Pursuing;armored.windup=1.5f;
+    rpg::Command heavy;heavy.nextTarget=true;heavy.ability=1;guard.Update(.01f,heavy);
+    for(int i=0;i<10;++i) guard.Update(.05f,{});
+    Require(armored.health<armored.MaxHealth() && armored.windup>0,"Armored cast must take damage without accepting a heavy interrupt");
+  }
   // Controlled encounter fixtures exercise real contact resolution, not only
   // shape helpers. Other enemies are disabled to isolate each ability.
   for(int hz:{30,60,144,1000}) for(int scenario=0;scenario<6;++scenario) {

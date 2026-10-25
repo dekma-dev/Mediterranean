@@ -182,29 +182,68 @@ inline ActionChannels SampleAction(rpg::ClassId id,ActionClip clip,float seconds
     result.pitch+=recoil[int(id)]*weight*strength;
     result.roll+=balance[int(id)]*weight*strength;
   }
+  if(!restore && !RangedClass(id)) {
+    // Shift body weight into the blow and catch it after contact. Zero-ended
+    // envelopes preserve the exact weapon contact clock and idle handoff.
+    const float strength=heavy?1.f:.55f;
+    if(seconds<release) {
+      const float wave=std::sin(seconds/release*3.14159265f),load=wave*wave*strength;
+      result.hip-=.018f*load;result.pitch-=.025f*load;
+      result.left=result.left+ActionVector{0,.018f,-.018f}*load;
+    } else {
+      const float phase=(seconds-release)/(ActionDuration(clip)-release);
+      const float wave=std::sin(phase*3.14159265f),catchWeight=wave*wave*strength;
+      result.hip-=.012f*catchWeight;result.pitch+=.022f*catchWeight;
+      result.left=result.left+ActionVector{.012f,.015f,.02f}*catchWeight;
+    }
+  }
   result.open=std::clamp(result.open,0.f,1.f);
   result.aim=std::clamp(result.aim,0.f,1.f);
   return result;
+}
+inline ActionChannels SampleBossGesture(unsigned attack,float seconds) {
+  if(attack>2 || !std::isfinite(seconds) || seconds<0 || seconds>=combat::Duration(true)) return {};
+  const float contact=combat::Contact(true);
+  const float phase=seconds<contact?seconds/contact:(seconds-contact)/(combat::Duration(true)-contact);
+  const float wave=std::sin(phase*3.14159265f),weight=wave*wave;
+  const bool preparing=seconds<contact;
+  ActionChannels pose;
+  if(attack==0) { // Doomquake: load through the hips, then brace the impact.
+    pose.hip=-.025f*weight;pose.pitch=(preparing?-.04f:.045f)*weight;
+    pose.left={0,.055f*weight,preparing?-.03f*weight:.04f*weight};
+  } else if(attack==1) { // Tempest: compact, broad-shouldered ground pound.
+    pose.hip=-.045f*weight;pose.roll=.025f*weight;
+    pose.left={-.065f*weight,.10f*weight,.025f*weight};
+    pose.right={.035f*weight,.045f*weight,-.025f*weight};
+    pose.pitch=(preparing?-.055f:.07f)*weight;
+  } else { // Execution: narrow loaded shoulder and directed forward reach.
+    pose.yaw=(preparing?-.08f:.055f)*weight;pose.pitch=.035f*weight;
+    pose.left={.04f*weight,.035f*weight,.09f*weight};
+    pose.right={-.025f*weight,0,.035f*weight};
+  }
+  return pose;
 }
 struct ActionController {
   ActionChannels pose,releasePose;
   float lastSeconds=-1,releaseAge=1;
   ActionClip lastClip=ActionClip::Basic;
   rpg::ClassId lastClass=rpg::ClassId::Warrior;
+  int lastVariant=-1;
   void Reset() { *this={}; }
-  void Update(float dt,rpg::ClassId id,float attackSeconds,bool heavy,float healSeconds,bool alive,bool technique=false,bool signature=false,bool opening=false) {
+  void Update(float dt,rpg::ClassId id,float attackSeconds,bool heavy,float healSeconds,bool alive,bool technique=false,bool signature=false,bool opening=false,int variant=-1) {
     if(!alive || !rpg::ValidClass(id)) { Reset(); return; }
     if(!std::isfinite(dt) || dt<=0) return;
     dt=std::min(dt,.05f);
     const auto clip=attackSeconds>=0?(opening?ActionClip::Opening:signature?ActionClip::Signature:technique?ActionClip::Technique:heavy?ActionClip::Heavy:ActionClip::Basic):ActionClip::Restore;
     const float seconds=attackSeconds>=0?attackSeconds:healSeconds;
     const bool active=std::isfinite(seconds) && seconds>=0 && seconds<ActionDuration(clip);
-    const bool changed=lastSeconds>=0 && (!active || id!=lastClass || clip!=lastClip || seconds+.00001f<lastSeconds);
+    const bool changed=lastSeconds>=0 && (!active || id!=lastClass || clip!=lastClip || variant!=lastVariant || seconds+.00001f<lastSeconds);
     if(changed && (lastSeconds+dt<ActionDuration(lastClip)-.0001f || (active && clip!=lastClip))) {
       releasePose=pose; releaseAge=0;
     }
     releaseAge=std::min(.16f,releaseAge+dt);
     pose=active?SampleAction(id,clip,seconds):ActionChannels{};
+    if(active && attackSeconds>=0 && variant>=0) pose=pose+SampleBossGesture(unsigned(variant),seconds);
     // An interrupted gesture settles even when a menu has taken input. A new
     // action crossfades out the previous pose without postponing its hit clock.
     const float t=releaseAge/.16f;
@@ -212,7 +251,7 @@ struct ActionController {
     // the abrupt acceleration of a cubic cancellation envelope.
     const float carry=1-t*t*t*(t*(t*6-15)+10);
     if(carry>0) pose=pose*(1-carry)+releasePose*carry;
-    lastSeconds=active?seconds:-1; lastClip=clip; lastClass=id;
+    lastSeconds=active?seconds:-1; lastClip=clip; lastClass=id;lastVariant=variant;
   }
 };
 }

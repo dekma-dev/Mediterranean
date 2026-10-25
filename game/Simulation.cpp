@@ -307,13 +307,14 @@ void Simulation::ResolveAttack(float elapsed) {
     case ClassId::Scout: enemy.snared=3;break;
     case ClassId::Druid: enemy.rooted=2;heal+=18;break;
     case ClassId::Necromancer: heal+=damage*.45f;break;
-    case ClassId::Psionic: enemy.stunned=2;enemy.windup=0;break;
+    case ClassId::Psionic: if(enemy.windup<=0 || enemy.Interruptible()) {enemy.stunned=2;enemy.windup=0;} break;
     case ClassId::Bard: heal+=20;cooldowns_[0]=0;break;
     case ClassId::Engineer: enemy.exposed=5;break;
     case ClassId::Demonologist: heal+=15;break;
     default: break;
     }
   }
+  if(enemy.windup>0 && !enemy.Interruptible()) enemy.stunned=0;
   heal=std::min(heal,MaxHealth()-health_);health_+=heal;
   if(heal>0) Emit(FeedbackKind::Heal,player_,int(heal));
   enemy.health-=damage;
@@ -323,7 +324,7 @@ void Simulation::ResolveAttack(float elapsed) {
   enemy.hitFlash=std::max(0.f,.2f-elapsed); enemy.damagedThisUpdate=true; attackFlash_=.2f;
   message_=attackEmpowered_?CombatStyleInfo().payoff:"Hit.";
   enemy.state=EnemyState::Pursuing;
-  if ((index==1 || ((index==6 || index==7) && class_==ClassId::Psionic) || (index==5 && (class_==ClassId::Psionic || class_==ClassId::Bard))) && enemy.windup>0) {
+  if ((index==1 || ((index==6 || index==7) && class_==ClassId::Psionic) || (index==5 && (class_==ClassId::Psionic || class_==ClassId::Bard))) && enemy.windup>0 && enemy.Interruptible()) {
     enemy.windup=0; enemy.attackCooldown=class_==ClassId::Psionic?1.5f:.8f;
     Emit(FeedbackKind::Interrupt,enemy.position);
     EmitVisual(CombatVisualKind::Interrupt,enemy.position,1.4f,facing_,enemy.id,elapsed);
@@ -894,9 +895,10 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
   if (enemy.state==EnemyState::Returning) enemy.windup=0;
   if (enemy.state==EnemyState::Returning && Length(Difference(enemy.position,enemy.home))<.015f) {
     enemy.position=enemy.home; enemy.health=enemy.MaxHealth(); enemy.state=EnemyState::Idle; enemy.path.clear();
+    enemy.bossAttack=enemy.nextBossAttack=0;
   }
   if (enemy.state==EnemyState::Idle) { enemy.movementSpeed=0; return; }
-  if(enemy.stunned>0) {enemy.windup=enemy.movementSpeed=0;return;}
+  if(enemy.stunned>0 && (enemy.windup<=0 || enemy.Interruptible())) {enemy.windup=enemy.movementSpeed=0;return;}
   // Commit facing and position during a windup. Players can step outside its cone,
   // move away, or interrupt it with heavy strike before the impact is resolved.
   if (enemy.windup>0) {
@@ -908,7 +910,7 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
       if(enemy.kind!=EnemyKind::Wraith)
         EmitVisual(CombatVisualKind::EnemySwing,enemy.position,0,enemy.facing,enemy.id,elapsed);
       if(enemy.Boss() || enemy.kind==EnemyKind::Wraith)
-        EmitVisual(enemy.Boss()?CombatVisualKind::EnemyQuake:CombatVisualKind::EnemyLance,
+        EmitVisual(enemy.Boss()?(enemy.bossAttack==1?CombatVisualKind::EnemyTempest:enemy.bossAttack==2?CombatVisualKind::EnemyExecution:CombatVisualKind::EnemyQuake):CombatVisualKind::EnemyLance,
           enemy.position,0,enemy.facing,enemy.id,elapsed);
       const auto delta=Difference(player_,enemy.position);
       const float dot=distance<.001f?1.f:(std::sin(enemy.facing)*delta.x+std::cos(enemy.facing)*delta.z)/distance;
@@ -921,6 +923,35 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
       else Emit(FeedbackKind::Miss,enemy.position);
       enemy.attackCooldown=std::max(0.f,enemy.AttackInterval()*(enemy.Enraged()?.65f:1.f)-afterContact);
     }
+    return;
+  }
+  // Ranged recovery is an opportunity to regain space, not another attack.
+  // Keep facing the player so the shared directional rig can back/side-step.
+  // Once recovery expires the caster must commit, even when cornered.
+  if(enemy.kind==EnemyKind::Wraith && enemy.state==EnemyState::Pursuing &&
+    enemy.attackCooldown>0 && distance<4.5f && HasLineOfSight(enemy.position,player_)) {
+    const float away=distance>.001f?std::atan2(enemy.position.x-player_.x,enemy.position.z-player_.z):enemy.facing+motion::tau*.5f;
+    enemy.facing=motion::Turn(enemy.facing,away+motion::tau*.5f,10.f,dt);
+    const float side=(enemy.id&1)?1.f:-1.f;
+    Vec2 retreat=enemy.position;bool clear=false;
+    for(float offset:{0.f,side*.6f,-side*.6f,side*1.1f,-side*1.1f}) {
+      const float reach=std::min(.65f,4.5f-distance);
+      const Vec2 candidate{enemy.position.x+std::sin(away+offset)*reach,
+        enemy.position.z+std::cos(away+offset)*reach};
+      if(Length(Difference(candidate,enemy.home))<=12.f && map_.CanTravel(enemy.position,candidate,.45f) &&
+        HasLineOfSight(candidate,player_)) {retreat=candidate;clear=true;break;}
+    }
+    const float room=Length(Difference(retreat,enemy.position));
+    if(enemy.rooted>0) enemy.movementSpeed=0;
+    const float travel=motion::Travel(enemy.movementSpeed,clear && enemy.rooted<=0?
+      std::min(1.55f,(4.5f-distance)*8.f)*(enemy.snared>0?.45f:1.f):0.f,12.f,dt);
+    if(clear && room>.00001f && travel>0) {
+      const auto before=enemy.position;const auto delta=Difference(retreat,before);
+      const float step=std::min(travel,room);
+      Move(enemy.position,{delta.x/room*step,delta.z/room*step},.45f);
+      enemy.movementDistance+=Length(Difference(enemy.position,before));
+    }
+    enemy.path.clear();enemy.waypoint=0;enemy.repathTimer=0;
     return;
   }
   Vec2 goal=enemy.state==EnemyState::Pursuing?player_:enemy.home;
@@ -982,13 +1013,16 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
   const float attackFacing=std::atan2(player_.x-enemy.position.x,player_.z-enemy.position.z);
   if (pursuing && Length(Difference(player_,enemy.position))<=enemy.CastRange() && height_<1.5f && health_>0 && enemy.attackCooldown<=0 &&
     std::abs(motion::AngleDelta(enemy.facing,attackFacing))<.1f && HasLineOfSight(enemy.position,player_)) {
+    if(enemy.Boss()) {enemy.bossAttack=enemy.nextBossAttack;enemy.nextBossAttack=(enemy.nextBossAttack+1)%3;}
     enemy.windup=enemy.WindupDuration(); enemy.path.clear(); enemy.movementSpeed=0;
+    EmitVisual(enemy.Boss()?CombatVisualKind::BossPrepare:CombatVisualKind::EnemyPrepare,
+      enemy.position,0,enemy.facing,enemy.id,frameTail);
   }
 }
 
 std::string Simulation::Save() const {
   std::ostringstream out;
-  out << std::setprecision(9) << "MEDITERRANEAN 17\n" << "PROFILE " << int(class_) << ' ' << std::quoted(nickname_) << ' ' << frontierCompleted_ << ' ' << frontierActive_ << ' ' << legacyLoot_ << '\n' << player_.x << ' ' << player_.z << ' '
+  out << std::setprecision(9) << "MEDITERRANEAN 18\n" << "PROFILE " << int(class_) << ' ' << std::quoted(nickname_) << ' ' << frontierCompleted_ << ' ' << frontierActive_ << ' ' << legacyLoot_ << '\n' << player_.x << ' ' << player_.z << ' '
     << health_ << ' ' << facing_ << ' ' << static_cast<int>(quest_) << ' ' << gold_ << '\n';
   out << Potions() << ' ' << HasRewardWeapon() << ' ' << RewardWeaponEquipped() << ' ' << potionCooldown_ << '\n';
   out << static_cast<int>(anchorQuest_) << '\n';
@@ -1008,6 +1042,7 @@ std::string Simulation::Save() const {
   out<<"TECHNIQUE "<<cooldowns_[5]<<'\n';
   out<<"SIGNATURE "<<cooldowns_[6]<<'\n';
   out<<"OPENING "<<cooldowns_[7]<<'\n';
+  out<<"ENCOUNTERS";for(const auto& enemy:enemies_) out<<' '<<enemy.bossAttack<<' '<<enemy.nextBossAttack;out<<'\n';
   return out.str();
 }
 
@@ -1016,7 +1051,7 @@ bool Simulation::Load(const std::string& data) {
   std::istringstream input(data);
   std::string magic; int version=0, quest=0,potions=2,owned=0,equipped=0;
   Simulation candidate;
-  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>17) return false;
+  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>18) return false;
   if(version>=11) {
     std::string tag,name;int id=0,completed=0,active=0,looted=0;
     if(!(input>>tag>>id>>std::quoted(name)>>completed>>active>>looted) || tag!="PROFILE" ||
@@ -1156,6 +1191,15 @@ bool Simulation::Load(const std::string& data) {
   if(version>=17) {
     std::string tag;
     if(!(input>>tag>>candidate.cooldowns_[7]) || tag!="OPENING" || !valid(candidate.cooldowns_[7],0,spells[7].cooldown)) return false;
+  }
+  if(version>=18) {
+    std::string tag;if(!(input>>tag) || tag!="ENCOUNTERS") return false;
+    for(auto& enemy:candidate.enemies_) {
+      if(!(input>>enemy.bossAttack>>enemy.nextBossAttack) || enemy.bossAttack>2 || enemy.nextBossAttack>2 ||
+        (!enemy.Boss() && (enemy.bossAttack || enemy.nextBossAttack))) return false;
+    }
+  } else {
+    for(auto& enemy:candidate.enemies_) if(enemy.Boss() && enemy.windup>0) enemy.nextBossAttack=1;
   }
   input >> std::ws;
   if (!input.eof()) return false;

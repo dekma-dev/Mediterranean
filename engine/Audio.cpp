@@ -67,7 +67,7 @@ Placement Place(rpg::Vec2 offset,float cameraYaw) {
 std::vector<std::int16_t> Generate(Cue cue) {
   const bool healing=cue==Cue::Mend || cue==Cue::Potion;
   const bool mystical=(cue>=Cue::Holy && cue<=Cue::Ward) || cue==Cue::Cast || cue==Cue::Mend || cue==Cue::Interrupt;
-  const float duration=cue==Cue::ReserveReady?.65f:cue==Cue::CastCancelled?.22f:cue==Cue::UiClick?.12f:cue==Cue::Mend?1.65f:healing?.95f:cue==Cue::Interrupt?.85f:
+  const float duration=cue==Cue::EnemyPrepare?.32f:cue==Cue::BossPrepare?.48f:cue==Cue::ReserveReady?.65f:cue==Cue::CastCancelled?.22f:cue==Cue::UiClick?.12f:cue==Cue::Mend?1.65f:healing?.95f:cue==Cue::Interrupt?.85f:
     mystical?1.05f:cue==Cue::HeavyHit?.7f:IsStep(cue)?.18f:IsLanding(cue)?.38f:cue==Cue::Jump?.3f:cue==Cue::SpellHit?.28f:.48f;
   std::vector<std::int16_t> result(size_t(duration*sampleRate));
   std::uint32_t seed=12345+unsigned(cue)*713;
@@ -80,6 +80,14 @@ std::vector<std::int16_t> Generate(Cue cue) {
     const float air=noise-low;
     float value=0;
     switch(cue) {
+    case Cue::EnemyPrepare:
+      // Cloth/armor tension before the swing, distinct from its impact.
+      value=.20f*body*Decay(t,.035f,12.f)+.09f*Metal(310,t-.025f);
+      value+=.055f*Sweep(130,205,duration,t)*Decay(t,.04f,10.f);break;
+    case Cue::BossPrepare:
+      // Low resonant load with a restrained metallic rattle; no impact transient.
+      value=.18f*Sweep(75,115,duration,t)*Decay(t,.055f,7.f);
+      value+=.11f*Metal(185,t-.045f)+.15f*body*Decay(t,.045f,9.f);break;
     case Cue::ReserveReady:
       value=.12f*Bell(293.665f,t)+.07f*Bell(440.f,t-.045f)+.045f*body*Decay(t,.01f,14.f);break;
     case Cue::CastCancelled:
@@ -417,7 +425,7 @@ void Events::Update(const rpg::Simulation& state) {
     const auto p=state.Player();
     if(std::hypot(event.position.x-p.x,event.position.z-p.z)>18) continue;
     origin=event.position;
-    placed=event.kind==K::EnemySwing || event.kind==K::EnemyLance || event.kind==K::EnemyQuake || event.kind==K::Hit || event.kind==K::HeavyHit || event.kind==K::Interrupt;
+    placed=event.kind==K::EnemyPrepare || event.kind==K::BossPrepare || event.kind==K::EnemySwing || event.kind==K::EnemyLance || event.kind==K::EnemyQuake || event.kind==K::EnemyTempest || event.kind==K::EnemyExecution || event.kind==K::Hit || event.kind==K::HeavyHit || event.kind==K::Interrupt;
     switch(event.kind) {
     case K::Strike:add(event.school==rpg::ClassId::Demonologist?Cue::Rend:Cue::Strike);break;
     case K::HeavyStrike:add(event.school==rpg::ClassId::Warrior?Cue::Heavy:ClassReleaseCue(event.school));break;
@@ -425,10 +433,14 @@ void Events::Update(const rpg::Simulation& state) {
     case K::ReserveReady:add(Cue::ReserveReady);break;
     case K::CastCancelled:add(Cue::CastCancelled);break;
     case K::CastStart:add(Cue::Cast);break;
+    case K::EnemyPrepare:add(Cue::EnemyPrepare);break;
+    case K::BossPrepare:add(Cue::BossPrepare);break;
     case K::SpellCast:add(ClassReleaseCue(event.school));break;
     case K::EnemySwing:add(Cue::Enemy);break;
     case K::EnemyLance:add(Cue::Mind);break;
     case K::EnemyQuake:add(Cue::HeavyHit);break;
+    case K::EnemyTempest:add(Cue::HeavyHit);break;
+    case K::EnemyExecution:add(Cue::Fire);break;
     case K::Hit:case K::HeavyHit:
       add(rpg::DescribeClass(event.school).range>3 && event.school!=rpg::ClassId::Scout && event.school!=rpg::ClassId::Engineer?
         Cue::SpellHit:event.kind==K::HeavyHit?Cue::HeavyHit:Cue::Hit);break;

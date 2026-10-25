@@ -124,6 +124,21 @@ std::string Campaign(const std::string& veteran) {
   Check(s.QuestPrimaryAction()==QuestAction::AcceptFrontier,"Next frontier offer");
   Command accept;accept.questAction=QuestAction::AcceptFrontier;s.Update(.01f,accept);
   Check(s.FrontierActive() && s.Enemies()[0].rank==chapter+1 && s.DefeatedCount()==0,"New enemy squad");
+  for(unsigned attack=0;attack<3;++attack) {
+   auto snapshot=s;auto& boss=const_cast<std::vector<Enemy>&>(snapshot.Enemies())[2];
+   boss.bossAttack=attack;boss.nextBossAttack=(attack+1)%3;
+   boss.state=EnemyState::Pursuing;boss.windup=1.f;boss.attackCooldown=0;
+   Roundtrip(snapshot);
+   auto legacy=Record(snapshot.Save(),"MEDITERRANEAN ","MEDITERRANEAN 17");
+   legacy.erase(legacy.find("ENCOUNTERS"));
+   Simulation migrated;Check(migrated.Load(legacy),"Version seventeen enemy cast migration");
+   Check(migrated.Enemies()[2].bossAttack==0 && migrated.Enemies()[2].nextBossAttack==1 &&
+     migrated.Enemies()[2].windup==1.f,"Legacy pending cast must remain Doomquake and then advance");
+   auto corrupt=snapshot.Save();const auto p=corrupt.find("ENCOUNTERS");
+   corrupt.replace(p,corrupt.find('\n',p)-p,"ENCOUNTERS 0 0 0 0 3 1");
+   Simulation invalid;const auto before=invalid.Save();
+   Check(!invalid.Load(corrupt) && invalid.Save()==before,"Invalid rotation must reject atomically");
+  }
   Roundtrip(s);
   if(chapter==0) {
    // Sparring remains independent of an accepted frontier assignment.

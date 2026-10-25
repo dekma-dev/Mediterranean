@@ -1,5 +1,11 @@
 # Dawnwatch sound direction
 
+## Enemy anticipation — 2026-10-25
+
+Enemy attack commitment now emits one spatial preparation cue before release. Ordinary preparation uses a short cloth/metal tension sound; boss preparation uses a lower resonant load. These original synthesized samples last 0.32 and 0.48 seconds and are generated once at startup. They are attack-onset accents, not looping cast tracks: an interrupted cast may retain the short sound tail but cannot produce another preparation or impact from the audio system. Existing release cues remain separate.
+
+Preparation uses the caster's position and existing distance attenuation/panning. It allocates no particle bursts and does not change hit timing. Loading a pending cast does not replay its onset. The resident PCM bank is now 4,147,592 bytes, below the existing 4 MiB limit; the twelve-voice pool is unchanged. Automated timing/spatial/persistence checks pass, but live audibility and perceived timbre remain manual acceptance work.
+
 ## Phrasing and dynamics — 2026-10-25
 
 Score phrasing and dynamics (2026-10-25): varied melodic sustain/phrase accents, quieter sparse bell entrances, a five-note harmonic harp figure and less intrusive score drums refine the existing original 48-second score. Adaptive percussion now has unequal accents and slight offbeat timing. Music slider changes and resume use an 80 ms exponential response shared by score/percussion, with finite-input handling and frame-rate checks. No additional PCM buffers, voices or runtime synthesis; total resident bank remains 4,112,312 bytes (under 4 MiB). Release build/AudioTests pass (1.90 s). Visual Studio Debug AudioTests build/pass (4.27 s); full Debug game relink is blocked by LNK1168 on the running RPGNative.exe, which was left untouched. Automated checks remain muted; subjective listening is pending. Generated dawnwatch-music.wav and adaptive-score-preview.wav in build-ninja-release. No downloads, commits or pushes.

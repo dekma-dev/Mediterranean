@@ -21,6 +21,8 @@ struct Sample {
   float cast=0;
   float attackSeconds=-1;
   bool heavyAttack=false;
+  float carriedAttackSeconds=-1,carriedAttackWeight=0;
+  bool carriedHeavyAttack=false;
   float takeoff=0,bank=0;
   float support=0,clothSide=0,clothBack=0;
   std::array<Foot,2> departureFeet{};
@@ -53,6 +55,26 @@ inline float DashBrake(float phase) {
   return SmoothStep((phase-.18f)/.48f)*(1-.65f*SmoothStep((phase-.65f)/.35f));
 }
 struct State {
+  // Time since an actual enemy release event, never inferred from cooldown.
+  // Cooldowns can change on enrage/interruption without a weapon impact.
+  float enemyReleaseAge=1;
+  float previousWeaponSeconds=-1,weaponReleaseAge=1;
+  bool previousWeaponHeavy=false;
+  void SettleWeapon(float dt,bool alive) {
+    if(!alive) {previousWeaponSeconds=-1;weaponReleaseAge=1;pose.carriedAttackWeight=0;return;}
+    if(pose.attackSeconds>=0) {
+      previousWeaponSeconds=pose.attackSeconds;previousWeaponHeavy=pose.heavyAttack;
+      weaponReleaseAge=1;pose.carriedAttackWeight=0;return;
+    }
+    if(previousWeaponSeconds>=0) {
+      pose.carriedAttackSeconds=previousWeaponSeconds;pose.carriedHeavyAttack=previousWeaponHeavy;
+      previousWeaponSeconds=-1;weaponReleaseAge=0;
+    }
+    weaponReleaseAge=std::min(.16f,weaponReleaseAge+dt);
+    // Freeze the cancelled stroke and lower it to guard; never play a phantom
+    // contact. Its authoritative attack clock and hit events remain cancelled.
+    pose.carriedAttackWeight=1-SmoothStep(weaponReleaseAge/.16f);
+  }
   Sample pose;
   LocomotionController locomotion;
   ActionController actions;

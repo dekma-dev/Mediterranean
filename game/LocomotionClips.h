@@ -44,6 +44,7 @@ struct LocomotionController {
   MotionChannels pose;
   std::array<float,6> weights{};
   std::array<float,6> weightVelocities{};
+  float turnLag=0,turnLagVelocity=0,turnLean=0,turnLeanVelocity=0;
   float phase=0,startAge=1,stopAge=1,landingAge=1,previousSpeed=0;
   float reverseAge=1,reverseForward=0,reverseRight=0;
   float startForward=1,startRight=0,stopForward=1,stopRight=0,lastForward=1,lastRight=0;
@@ -93,6 +94,13 @@ struct LocomotionController {
       motion::Spring(weights[i],weightVelocities[i],target[i],24,dt);
       pose=pose+SampleClip(MotionClip(i),phase)*weights[i];
     }
+    // Shoulders trail a turn while the body banks into a travelling arc.
+    // Keep this independent of the foot cycle: pivot reversals must not reset
+    // the stride or rotate the authoritative actor/attack warning.
+    const float angular=grounded?std::clamp(turnRate,-4.f,4.f):0.f;
+    motion::Spring(turnLag,turnLagVelocity,-angular*.035f,18.f,dt);
+    motion::Spring(turnLean,turnLeanVelocity,-angular*.018f*moving,16.f,dt);
+    pose.yaw+=turnLag;pose.roll+=turnLean;
     const auto directed=[](MotionChannels clip,float forward,float right) {
       const float pitch=clip.pitch;clip.pitch*=forward;clip.roll-=pitch*right;
       return clip;

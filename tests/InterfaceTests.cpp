@@ -2,6 +2,7 @@
 #include "tests/DashFixture.h"
 #include "tests/QuestFixture.h"
 #include "game/Interface.h"
+#include "game/EncounterView.h"
 #include "game/CharacterView.h"
 #include "game/TerrainSurface.h"
 #include "engine/Renderer.h"
@@ -1322,6 +1323,31 @@ int main() {
     target.stunned=target.rooted=target.snared=target.exposed=0;
     renderer.BeginFrame();hud.Render(renderer,state,0,false);Require(renderer.EndFrame(false),"Status expiry redraw");
     Require(!hud.PointerOverUi(),"Expired badges must release their pointer regions");
+  }
+  for(const auto size:{std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
+    Require(renderer.Resize(size.first,size.second),"Incoming attack HUD resize");
+    rpg::Simulation state;
+    auto& enemies=const_cast<std::vector<rpg::Enemy>&>(state.Enemies());
+    for(unsigned i=0;i<enemies.size();++i) {
+      auto& enemy=enemies[i];enemy.position=enemy.home={float(i)-1,-6};
+      enemy.state=rpg::EnemyState::Pursuing;enemy.facing=3.14159265f;enemy.windup=.9f-i*.2f;
+    }
+    enemies[1].kind=rpg::EnemyKind::Wraith;
+    enemies[2].rank=1;enemies[2].bossAttack=1;enemies[2].health=enemies[2].MaxHealth();
+    const auto alerts=ui::ReadIncomingAttacks(state);
+    Require(alerts.count==3 && alerts.rows[0].enemy->id==102 && alerts.rows[2].enemy->id==100,
+      "Incoming attacks must include unselected enemies in deadline order");
+    Require(!alerts.rows[0].threatens && alerts.rows[1].threatens,"Threat status must use actual circle/lance geometry");
+    const auto before=state.Save();ui::Interface hud;
+    renderer.BeginFrame();hud.Render(renderer,state,0,false);
+    Require(renderer.Capture(L"incoming-attacks-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),"Incoming attack capture");
+    const ui::Layout layout(float(size.first),float(size.second));
+    const auto event=hud.Pointer(layout.x+500*layout.scale,layout.y+60*layout.scale,float(size.first),float(size.second),true,false);
+    Require(event.action==ui::Action::None && hud.PointerOverUi() && state.Save()==before,"Incoming panel must be read-only");
+    enemies[0].health=0;enemies[1].position={30,30};enemies[2].windup=0;
+    Require(ui::ReadIncomingAttacks(state).count==0,"Dead, distant and expired casts must disappear");
+    renderer.BeginFrame();hud.Render(renderer,state,0,false);Require(renderer.EndFrame(false),"Incoming expiry redraw");
+    Require(!hud.PointerOverUi(),"Expired incoming rows must release pointer regions");
   }
   const auto loadingRoot=std::filesystem::current_path()/"loading-check";
   std::filesystem::create_directories(loadingRoot);

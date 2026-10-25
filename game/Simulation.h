@@ -32,6 +32,7 @@ struct Enemy {
   std::size_t waypoint = 0;
   EnemyKind kind = EnemyKind::Raider;
   float windup = 0, facing = 0;
+  unsigned bossAttack=0,nextBossAttack=0; // committed warning and next rotation slot
   float snared=0,rooted=0,stunned=0,exposed=0; // transient combat effects
   bool Boss() const { return kind==EnemyKind::Captain && rank>0; }
   bool Enraged() const { return Boss() && health>0 && health<=MaxHealth()*.4f; }
@@ -39,16 +40,17 @@ struct Enemy {
   float WindupDuration() const { return Boss()?1.5f:kind==EnemyKind::Trainer?.9f:kind==EnemyKind::Captain?1.f:kind==EnemyKind::Reaver?1.15f:kind==EnemyKind::Wraith?1.1f:.7f; }
   float AttackInterval() const { return kind==EnemyKind::Captain?2.4f:kind==EnemyKind::Reaver?2.7f:kind==EnemyKind::Wraith?1.2f:1.4f; }
   float Damage() const { return (Boss()?28.f:kind==EnemyKind::Captain?16.f:kind==EnemyKind::Reaver?20.f:kind==EnemyKind::Wraith?15.f:8.f)+rank*2.f+(Enraged()?10.f:0.f); }
-  float CastRange() const { return Boss()?5.5f:kind==EnemyKind::Wraith?6.5f:kind==EnemyKind::Reaver?2.7f:2.f; }
-  float Reach() const { return kind==EnemyKind::Wraith?7.f:kind==EnemyKind::Reaver?3.2f:attackReach; }
-  float HalfAngle() const { return kind==EnemyKind::Wraith?.16f:kind==EnemyKind::Reaver?1.65f:attackHalfAngle; }
+  bool Interruptible() const { return !Boss() || bossAttack!=1; }
+  float CastRange() const { return Boss()?6.5f:kind==EnemyKind::Wraith?6.5f:kind==EnemyKind::Reaver?2.7f:2.f; }
+  float Reach() const { return Boss() && bossAttack==1?3.8f:Boss() && bossAttack==2?8.f:kind==EnemyKind::Wraith?7.f:kind==EnemyKind::Reaver?3.2f:attackReach; }
+  float HalfAngle() const { return Boss() && bossAttack==1?3.14159265f:Boss() && bossAttack==2?.22f:kind==EnemyKind::Wraith?.16f:kind==EnemyKind::Reaver?1.65f:attackHalfAngle; }
   static constexpr float shockInner=2.8f,shockOuter=5.8f;
   bool Hits(float distance,float dot) const {
     return (distance<=Reach() && dot>=std::cos(HalfAngle())) ||
-      (Boss() && distance>=shockInner && distance<=shockOuter);
+      (Boss() && bossAttack==0 && distance>=shockInner && distance<=shockOuter);
   }
-  const char* AttackName() const { return Boss()?"Doomquake":kind==EnemyKind::Wraith?"Veil lance":kind==EnemyKind::Reaver?"Reaping cleave":"Incoming strike"; }
-  const char* Counterplay() const { return Boss()?"INNER FLANK / OR OUTSIDE RING":kind==EnemyKind::Wraith?"SIDESTEP / INTERRUPT":kind==EnemyKind::Reaver?"GET BEHIND / INTERRUPT":"DODGE / INTERRUPT"; }
+  const char* AttackName() const { return Boss()?(bossAttack==1?"Iron tempest":bossAttack==2?"Execution line":"Doomquake"):kind==EnemyKind::Wraith?"Veil lance":kind==EnemyKind::Reaver?"Reaping cleave":"Incoming strike"; }
+  const char* Counterplay() const { return Boss()?(bossAttack==1?"UNINTERRUPTIBLE - MOVE OUT":bossAttack==2?"SIDESTEP / INTERRUPT":"INNER FLANK / OR OUTSIDE RING"):kind==EnemyKind::Wraith?"SIDESTEP / INTERRUPT":kind==EnemyKind::Reaver?"GET BEHIND / INTERRUPT":"DODGE / INTERRUPT"; }
   const char* Name() const { if(Boss()) return rank>=8?"BOSS: ASHEN OVERLORD":"BOSS: OATHBREAKER";if(kind==EnemyKind::Reaver) return "ASH REAVER";if(kind==EnemyKind::Wraith) return "VEIL HUNTER";return kind==EnemyKind::Trainer?"SPARRING GUARD":kind==EnemyKind::Captain?"RAIDER CAPTAIN":"RAIDER"; }
   static constexpr float attackReach = 2.4f, attackHalfAngle = 1.f;
 };
@@ -83,7 +85,7 @@ struct CombatFeedback {
 };
 
 // One-update presentation events. Never serialized or used to resolve combat.
-enum class CombatVisualKind { Strike, HeavyStrike, EnemySwing, Hit, HeavyHit, Hurt, Interrupt, Mend, Potion, DashStart, DashStop, DashImpact,SpellCast,BarrierHit,CastStart,UiClick,ReserveReady,CastCancelled,EnemyLance,EnemyQuake };
+enum class CombatVisualKind { Strike, HeavyStrike, EnemySwing, Hit, HeavyHit, Hurt, Interrupt, Mend, Potion, DashStart, DashStop, DashImpact,SpellCast,BarrierHit,CastStart,UiClick,ReserveReady,CastCancelled,EnemyLance,EnemyQuake,EnemyTempest,EnemyExecution,EnemyPrepare,BossPrepare };
 struct CombatVisualEvent {
   CombatVisualKind kind = CombatVisualKind::Hit;
   Vec2 position;
@@ -205,6 +207,11 @@ public:
   std::size_t VisualEventCount() const { return visualEventCount_; }
   int Target() const { return target_; }
   const Enemy* TargetActor() const;
+  bool VisibleEnemyCast(const Enemy& enemy) const {
+    return enemy.health>0 && enemy.windup>0 && enemy.state==EnemyState::Pursuing &&
+      std::hypot(player_.x-enemy.position.x,player_.z-enemy.position.z)<=12.f &&
+      HasLineOfSight(enemy.position,player_);
+  }
   bool Sparring() const { return sparring_; }
   const Enemy& SparringOpponent() const { return trainer_; }
   float SparringSeconds() const { return sparringRemaining_; }
