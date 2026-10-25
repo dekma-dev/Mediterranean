@@ -53,7 +53,7 @@ visual::BodyPalette BuildCharacterRig(const CharacterPose& pose,const CharacterO
   const auto& tone=rpg::skinTones[outfit.appearance.skin];
   if(outfit.appearance.dye!=0) {const auto& dye=rpg::tunicDyes[outfit.appearance.dye];cloth={dye.r,dye.g,dye.b,1};}
   const XMFLOAT4 skin{tone.r,tone.g,tone.b,float(visual::Material::Skin)},steel{.52f,.59f,.61f,float(visual::Material::Metal)},
-    leather{.20f,.14f,.095f,float(visual::Material::Cloth)},trousers{.24f,.25f,.23f,float(visual::Material::Cloth)};
+    leather{.20f,.14f,.095f,float(visual::Material::Leather)},trousers{.24f,.25f,.23f,float(visual::Material::Cloth)};
   if(outfit.appearance.dye==0) {cloth.x*=.82f;cloth.y*=.82f;cloth.z*=.82f;}
   cloth.w=float(visual::Material::Cloth);
   if(!outfit.tunic) cloth={.61f,.58f,.46f,float(visual::Material::Cloth)};

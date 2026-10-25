@@ -155,9 +155,18 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     if (timed) {
       const float cut=stroke.cut,weight=stroke.weight*(1-burst);
       // Coil beside the shoulder, cut across the body, then return to guard.
-      const XMFLOAT3 attackHand=i==1?
+      XMFLOAT3 attackHand=i==1?
         XMFLOAT3{.46f-cut*.34f,(dynamics.heavyAttack?1.66f:1.48f)-cut*.38f,-.13f+cut*.59f}:
         XMFLOAT3{-.34f,1.25f,.23f-cut*.10f};
+      if(i==1 && form==rpg::WeaponForm::Mace) {
+        // A compact raised hammer path, distinct from the sword's cross-cut.
+        attackHand.x+=.035f*cut;attackHand.y+=.055f*cut*(1-cut);
+        attackHand.z-=.025f*cut;
+      } else if(i==1 && form==rpg::WeaponForm::Cleaver) {
+        // Forward-weighted blade follows a wider, lower diagonal.
+        attackHand.x+=.065f*(1-cut)-.035f*cut;
+        attackHand.y-=.035f*cut;attackHand.z+=.04f*cut;
+      }
       hand.x+=(attackHand.x-hand.x)*weight;
       hand.y+=(attackHand.y-hand.y)*weight;
       hand.z+=(attackHand.z-hand.z)*weight;
@@ -178,7 +187,9 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   XMFLOAT3 weapon{.12f,-.76f+swing*1.72f+landing*.25f+air*.20f+dash*.32f+brake*.16f,.63f-swing*.45f};
   if (timed) {
     const float weight=stroke.weight*(1-burst);
-    const XMFLOAT3 cut{.22f-stroke.cut*.38f,1.05f-stroke.cut*1.25f,.05f+stroke.cut*1.05f};
+    XMFLOAT3 cut{.22f-stroke.cut*.38f,1.05f-stroke.cut*1.25f,.05f+stroke.cut*1.05f};
+    if(form==rpg::WeaponForm::Mace) {cut.x*=1-.35f*stroke.cut;cut.y+=.09f*stroke.cut*(1-stroke.cut);cut.z-=.025f*stroke.cut;}
+    else if(form==rpg::WeaponForm::Cleaver) {cut.x+=.10f*(1-2*stroke.cut);cut.z+=.06f*stroke.cut;}
     // Blend out to the current movement layer, not a fixed standing blade.
     // Otherwise the first/last timed-attack sample snaps during flight or a
     // landing, and a suppressed attack overrides the dash's weapon clearance.

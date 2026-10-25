@@ -115,6 +115,30 @@ inline ActionChannels SampleAction(rpg::ClassId id,ActionClip clip,float seconds
       ready.left={-.02f,.035f,0};cast.left={-.035f,.06f,.025f};settle.left={-.025f,.035f,0};
     }
   }
+  if(clip==ActionClip::Technique || clip==ActionClip::Signature || clip==ActionClip::Opening) {
+    // Class-authored anticipation/release paths, evaluated by the same C1
+    // spline as the base pose. Never retime the authoritative release event.
+    ActionVector gather{},project{};float turn=0,lean=0;
+    switch(id) {
+    case rpg::ClassId::Warrior: gather={-.025f,.04f,-.03f};project={.025f,-.02f,.04f};turn=-.085f;lean=.035f;break;
+    case rpg::ClassId::Paladin: gather={.035f,.065f,.015f};project={.025f,.02f,.065f};turn=.025f;lean=.02f;break;
+    case rpg::ClassId::Scout: gather={-.025f,.025f,-.045f};project={.025f,.015f,.055f};turn=-.06f;lean=-.02f;break;
+    case rpg::ClassId::Priest: gather={.035f,.09f,-.025f};project={-.025f,.08f,.045f};turn=.035f;lean=-.035f;break;
+    case rpg::ClassId::Druid: gather={.02f,.01f,.02f};project={.065f,.045f,.04f};turn=.085f;lean=.025f;break;
+    case rpg::ClassId::Mage: gather={.03f,.01f,-.045f};project={-.02f,.02f,.055f};turn=-.055f;lean=.035f;break;
+    case rpg::ClassId::Necromancer: gather={-.03f,.07f,.04f};project={.055f,-.055f,-.025f};turn=.065f;lean=.035f;break;
+    case rpg::ClassId::Psionic: gather={-.025f,-.045f,.06f};project={-.045f,-.015f,.065f};turn=-.025f;lean=-.025f;break;
+    case rpg::ClassId::Bard: gather={-.07f,.04f,.025f};project={.075f,-.025f,.03f};turn=.095f;lean=.015f;break;
+    case rpg::ClassId::Engineer: gather={.015f,-.015f,-.045f};project={-.015f,.025f,-.035f};turn=-.035f;lean=-.045f;break;
+    case rpg::ClassId::Demonologist: gather={-.045f,-.025f,-.045f};project={.04f,-.035f,.065f};turn=-.10f;lean=.055f;break;
+    default:break;
+    }
+    const float strength=clip==ActionClip::Opening?.25f:clip==ActionClip::Technique?.45f:.6f;
+    ready.left=ready.left+gather*strength;cast.left=cast.left+project*strength;
+    settle.left=settle.left+(project*.4f-gather*.2f)*strength;
+    ready.yaw+=turn*strength;cast.yaw-=turn*.65f*strength;settle.yaw-=turn*.25f*strength;
+    ready.pitch-=lean*.5f*strength;cast.pitch+=lean*strength;settle.pitch+=lean*.3f*strength;
+  }
   const std::array<ActionChannels,5> keys{{{},ready,cast,settle,{}}};
   unsigned segment=0; while(segment<3 && seconds>times[segment+1]) ++segment;
   const float interval=times[segment+1]-times[segment],t=(seconds-times[segment])/interval;
@@ -147,6 +171,17 @@ inline ActionChannels SampleAction(rpg::ClassId id,ActionClip clip,float seconds
     result.yaw+=.045f*weight;result.hip-=.012f*weight;
     if(RangedClass(id)) result.left=result.left+ActionVector{-.025f,.03f,.05f}*weight;
   }
+  if(!restore && seconds>release) {
+    // Small class-specific settling after contact. A squared sine starts and
+    // ends at zero velocity; hand sockets and hit timing stay authoritative.
+    const float phase=(seconds-release)/(ActionDuration(clip)-release);
+    const float wave=std::sin(phase*3.14159265f),weight=wave*wave;
+    constexpr std::array<float,11> recoil{.018f,.012f,-.018f,-.010f,.014f,.022f,.016f,-.008f,.012f,-.026f,.024f};
+    constexpr std::array<float,11> balance{-.012f,.006f,-.008f,.004f,.012f,-.010f,.008f,-.004f,.016f,-.006f,-.014f};
+    const float strength=heavy?1.f:.45f;
+    result.pitch+=recoil[int(id)]*weight*strength;
+    result.roll+=balance[int(id)]*weight*strength;
+  }
   result.open=std::clamp(result.open,0.f,1.f);
   result.aim=std::clamp(result.aim,0.f,1.f);
   return result;
@@ -172,7 +207,10 @@ struct ActionController {
     pose=active?SampleAction(id,clip,seconds):ActionChannels{};
     // An interrupted gesture settles even when a menu has taken input. A new
     // action crossfades out the previous pose without postponing its hit clock.
-    const float carry=1-combat::Smooth(releaseAge/.16f);
+    const float t=releaseAge/.16f;
+    // Quintic fade has zero velocity and acceleration at both ends, avoiding
+    // the abrupt acceleration of a cubic cancellation envelope.
+    const float carry=1-t*t*t*(t*(t*6-15)+10);
     if(carry>0) pose=pose*(1-carry)+releasePose*carry;
     lastSeconds=active?seconds:-1; lastClip=clip; lastClass=id;
   }

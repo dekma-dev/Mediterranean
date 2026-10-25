@@ -84,7 +84,12 @@ float Field(unsigned bone,XMFLOAT3 p) {
   // Smooth muscle volume away from elbow/knee/wrist, with no joint-sized balls
   // or extra overlapping surfaces. Endpoint derivatives remain zero.
   const float peak=std::sin(t*3.14159265f);
-  const float volume=(bone<6?(bone%2?.012f:.009f):.006f)*peak*peak;
+  // Directional calf/quadriceps/biceps volume replaces circular bulges. The
+  // field and skin weights share this contour at every mesh detail level.
+  XMFLOAT3 nearest;XMStoreFloat3(&nearest,XMLoadFloat3(&segment.from)+d*t);
+  const float depth=std::clamp((p.z-nearest.z)/.10f,-1.f,1.f);
+  const float anatomy=bone<6?(bone%2?1-.30f*depth:1+.25f*depth):1+.25f*depth;
+  const float volume=(bone<6?(bone%2?.014f:.011f):.008f)*peak*peak*anatomy;
   return Capsule(p,segment)-volume;
 }
 float Surface(XMFLOAT3 p) {

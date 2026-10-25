@@ -333,7 +333,7 @@ float4 PSMain(VOut i) : SV_TARGET {
  }
  float3 geometric=normalize(i.n),n=geometric;
  float3 weights=pow(abs(normalize(i.tn)),4); weights/=max(dot(weights,1),.00001);
- float scale=i.material==3?.8:i.material==5?1.1:i.material==6?3: .6;
+ float scale=i.material==3?.8:i.material==5?1.1:i.material==6 || i.material==12?3:i.material==11?2: .6;
  float4 mx=materials.Sample(surfaceSampler,float3(i.tp.zy*scale,i.material));
  float4 my=materials.Sample(surfaceSampler,float3(i.tp.xz*scale,i.material));
  float4 mz=materials.Sample(surfaceSampler,float3(i.tp.xy*scale,i.material));

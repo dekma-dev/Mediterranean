@@ -49,10 +49,10 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
         fitting.scale,fitting.color,fitting.material,2);
     }
     if (outfit.belt) {
-      part(M::Limb,0,.95f,0,{.55f,.085f,.37f},leather,S::Cloth);
+      part(M::Limb,0,.95f,0,{.55f,.085f,.37f},leather,S::Leather);
       part(M::Box,0,.95f,.19f,{.10f,.075f,.025f},{.67f,.49f,.22f,1},S::Metal);
       for (float side : {-1.f,1.f}) {
-        part(M::Torso,side*.245f,.86f,-.10f,{.16f,.22f,.16f},leather,S::Cloth);
+        part(M::Torso,side*.245f,.86f,-.10f,{.16f,.22f,.16f},leather,S::Leather);
         part(M::Box,side*.245f,.91f,-.005f,{.15f,.065f,.03f},{.36f,.24f,.13f,1},S::Cloth);
         part(M::Sphere,side*.245f,.90f,.015f,{.025f,.025f,.012f},{.67f,.49f,.22f,1},S::Metal,0);
       }
@@ -69,7 +69,7 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       for (int i=0;i<4;++i) renderer.DrawMeshBetween(M::Box,
         upper(seam[i]),upper(seam[i+1]),
         .022f,.009f,{.63f,.50f,.25f,1},S::Cloth,{std::sin(yaw),0,std::cos(yaw)});
-      part(M::Torso,0,1.51f,0,{.25f,.065f,.24f},leather,S::Cloth);
+      part(M::Torso,0,1.51f,0,{.25f,.065f,.24f},leather,S::Leather);
     }
     if (outfit.armor) {
       // Overlapping abdominal lames and fasteners give the cuirass real relief.
@@ -83,7 +83,7 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       part(M::Torso,0,1.29f,.20f,{.09f,.14f,.02f},{.21f,.37f,.43f,1},S::Metal);
     }
     head(M::Head,0,1.76f,.012f,{.265f,.31f,.26f},skin,S::Skin);
-    if (!outfit.helm) head(M::Hair,0,1.76f,.012f,{.267f,.31f,.262f},hairTint,S::Cloth);
+    if (!outfit.helm) head(M::Hair,0,1.76f,.012f,{.267f,.31f,.262f},hairTint,S::Hair);
     const auto face=dynamics.face;
     const float pain=facial::Unit(face.pain),focus=facial::Unit(face.focus),smile=facial::Unit(face.smile)*(1-pain);
     const float closed=std::max(facial::Unit(face.blink),pain*.68f+focus*.16f);
@@ -109,12 +109,12 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
         head(M::Feature,x+eyeX,y+irisY,.122f,{.0045f,irisHeight*.65f,.002f},{.025f,.028f,.025f,1},S::Plain);
       }
       const float browRoll=-side*(.06f+focus*.21f-pain*.16f);
-      head(M::Feature,x,y+.020f-focus*.003f+pain*.002f,.113f,{.046f,.0065f,.010f},hairTint,S::Cloth,browRoll);
+      head(M::Feature,x,y+.020f-focus*.003f+pain*.002f,.113f,{.046f,.0065f,.010f},hairTint,S::Hair,browRoll);
       head(M::Feature,side*.121f,1.755f,-.004f,{.032f,.063f,.039f},skin,S::Skin,0,2);
       head(M::Feature,side*.132f,1.756f,.007f,{.009f,.037f,.020f},shade(.55f,.34f,.24f),S::Skin,0,0);
     }
     if (outfit.helm) {
-      head(M::Sphere,0,1.86f,.012f,{.31f,.21f,.30f},steel,S::Metal);
+      head(M::Helm,0,1.86f,.012f,{.31f,.21f,.30f},steel,S::Metal);
       head(M::Box,0,1.817f,.15f,{.26f,.035f,.04f},{.72f,.54f,.24f,1},S::Metal);
       head(M::Blade,0,1.99f,0,{.04f,.19f,.16f},{.26f,.38f,.47f,1},S::Cloth);
       for (float side : {-1.f,1.f}) head(M::Torso,side*.13f,1.73f,.075f,{.055f,.18f,.115f},steel,S::Metal);
@@ -140,7 +140,7 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       }
       const float bootYaw=yaw+pose.footYaw[i];
       const XMFLOAT3 foot{ankle.x+std::sin(bootYaw)*.035f,ankle.y-.035f,ankle.z+std::cos(bootYaw)*.035f};
-      renderer.DrawMesh(M::Boot,foot,{.23f,.24f,.37f},outfit.boots?leather:skin,outfit.boots?S::Cloth:S::Skin,bootYaw);
+      renderer.DrawMesh(M::Boot,foot,{.23f,.24f,.37f},outfit.boots?leather:skin,outfit.boots?S::Leather:S::Skin,bootYaw);
       if (outfit.boots) {
         renderer.DrawMesh(M::Boot,{foot.x,foot.y-.105f,foot.z},{.24f,.035f,.38f},{.09f,.075f,.05f,1},S::Cloth,bootYaw);
         renderer.DrawSegment({knee.x,knee.y-.025f,knee.z},{knee.x,knee.y+.025f,knee.z},.245f,.26f,{.39f,.29f,.15f,1},S::Cloth);
@@ -158,13 +158,13 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       }
       const auto elbow=world(arm.joint),hand=world(arm.end);
       const auto handColor=outfit.gloves?leather:skin;
-      const auto handMaterial=outfit.gloves?S::Cloth:S::Skin;
+      const auto handMaterial=outfit.gloves?S::Leather:S::Skin;
       const auto fingers=BuildHandPose(pose,side>0?1u:0u,outfit.weapon,outfit.shield,pose.handCast);
       const auto handFrame=XMLoadFloat4x4(&fingers.frame)*actorTransform;
       const auto handPoint=[&](XMFLOAT3 local) { return world(fingers.Point(local)); };
       if (outfit.gloves) {
         const XMFLOAT3 cuff{hand.x+(elbow.x-hand.x)*.32f,hand.y+(elbow.y-hand.y)*.32f,hand.z+(elbow.z-hand.z)*.32f};
-        renderer.DrawSegment(cuff,hand,.205f,.22f,leather,S::Cloth);
+        renderer.DrawSegment(cuff,hand,.205f,.22f,leather,S::Leather);
       }
       // Wrist bridge overlaps both the solved forearm and shaped palm.
       const XMFLOAT3 wristStart{hand.x+(elbow.x-hand.x)*.12f,hand.y+(elbow.y-hand.y)*.12f,hand.z+(elbow.z-hand.z)*.12f};
@@ -183,7 +183,7 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
         };
         if(form==rpg::WeaponForm::Blade) {
           weaponPart(M::Blade,.53f,{.12f,.86f,.07f},blade,S::Metal);
-          weaponPart(M::Limb,.005f,{.065f,.19f,.065f},leather,S::Cloth);
+          weaponPart(M::Limb,.005f,{.065f,.19f,.065f},leather,S::Leather);
           weaponPart(M::Box,.10f,{.26f,.045f,.055f},blade,S::Metal);
           weaponPart(M::Sphere,-.11f,{.08f,.08f,.08f},blade,S::Metal);
         } else renderer.DrawMeshTransformed(WeaponMesh(form),weaponFrame,
@@ -203,9 +203,9 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
     }
     if (outfit.armor && !outfit.shoulders) {
       const auto guardColor=outfit.shoulders?leather:steel;
-      const auto guardMaterial=outfit.shoulders?S::Cloth:S::Metal;
+      const auto guardMaterial=outfit.shoulders?S::Leather:S::Metal;
       for (float side : {-1.f,1.f}) {
-        part(M::Torso,side*.31f,1.46f,0,{.26f,.18f,.31f},guardColor,guardMaterial);
+        part(M::Pauldron,side*.31f,1.46f,0,{.26f,.18f,.31f},guardColor,guardMaterial);
         part(M::Torso,side*.31f,1.41f,0,{.27f,.03f,.32f},{.66f,.50f,.23f,1},S::Metal);
         for(int layer=0;layer<3;++layer) {
           part(M::Torso,side*(.32f+layer*.018f),1.43f-layer*.045f,0,

@@ -234,8 +234,11 @@ Geometry BuildMesh(Mesh mesh) {
     for(unsigned side=0;side<2;++side) {
       for(unsigned row=0;row<=rows;++row) for(unsigned column=0;column<=columns;++column) {
         const float t=float(row)/rows,u=2.f*column/columns-1;
-        const float pleat=.045f*std::cos(u*3*3.14159265f)*t;
-        const XMFLOAT3 p{u*(.36f+.14f*t),.5f-t,.72f+.18f*(1-u*u)+pleat};
+        // Pleats gather at the belt and relax toward a curved, turned hem.
+        // Preserve the shared topology and two-sided normals at every LOD.
+        const float pleat=(.025f+.035f*t)*std::cos(u*3*3.14159265f);
+        const float hem=.025f*t*t*t*(1-u*u);
+        const XMFLOAT3 p{u*(.36f+.14f*t),.5f-t+hem,.72f+.18f*(1-u*u)+pleat+.025f*t*t*t};
         const bool trim=column==0 || column==columns || row==rows;
         const float shade=1-.12f*t+.04f*std::cos(u*3*3.14159265f);
         g.vertices.push_back({p,{},trim?XMFLOAT4{.72f,.57f,.33f,1}:XMFLOAT4{shade,shade,shade,1}});
@@ -245,6 +248,32 @@ Geometry BuildMesh(Mesh mesh) {
         if(side==0) {Triangle(g,a,b,c);Triangle(g,a,c,d);}
         else {Triangle(g,a,c,b);Triangle(g,a,d,c);}
       }
+    }
+    Normals(g);return g;
+  }
+  if(mesh==Mesh::Pauldron || mesh==Mesh::PauldronLow) {
+    // Rolled lower edge, raised crown and elongated shoulder shell. Reuses
+    // the same attachment transform and distant-detail policy as other armor.
+    auto g=Lathe({{-.5f,.35f,.43f},{-.39f,.43f,.50f},{-.27f,.45f,.50f},
+      {-.15f,.40f,.47f},{.10f,.37f,.43f},{.34f,.26f,.32f},{.5f,.035f,.05f}},
+      mesh==Mesh::Pauldron?32:12);
+    for(auto& v:g.vertices) {
+      const float ridge=std::max(0.f,1-std::abs(v.position.x)/.10f);
+      v.position.y+=.025f*ridge*std::max(0.f,v.position.y+.15f);
+      if(v.position.y<-.27f) v.color={.81f,.76f,.64f,1};
+    }
+    Normals(g);return g;
+  }
+  if(mesh==Mesh::Helm || mesh==Mesh::HelmLow) {
+    // Fitted bowl with rolled brow and a raised central ridge, replacing the
+    // spherical cap. The distant variant retains the same silhouette.
+    auto g=Lathe({{-.5f,.46f,.45f},{-.44f,.50f,.49f},{-.34f,.47f,.47f},
+      {-.05f,.46f,.46f},{.22f,.37f,.39f},{.40f,.23f,.27f},{.5f,.035f,.045f}},
+      mesh==Mesh::Helm?32:12);
+    for(auto& v:g.vertices) {
+      const float crown=std::max(0.f,1-std::abs(v.position.x)/.09f);
+      v.position.y+=.035f*crown*std::max(0.f,v.position.y+.34f);
+      if(v.position.y<-.34f) v.color={.77f,.73f,.62f,1};
     }
     Normals(g);return g;
   }
@@ -536,10 +565,14 @@ std::vector<std::uint8_t> BuildMaterialLayer(Material material,unsigned size) {
       value=.72f+.20f*noise(u,v,10)+.08f*fine; height=.009f*noise(u,v,16);
       roughness=.96f; break;
     case Material::Cloth: {
-      const float weave=std::sin(u*2*pi*24)*std::sin(v*2*pi*24);
+      // Uneven warp/weft and diagonal twill; periodic and mip-filtered by the
+      // existing material array. No extra samples or resident texture layers.
+      const float warp=std::sin(u*2*pi*24),weft=std::sin(v*2*pi*24);
+      const float weave=warp*weft,twill=std::sin(2*pi*(u*12-v*12));
       const float fold=std::sin(2*pi*(u*3+.18f*noise(u,v,4)));
-      value=.91f+.035f*weave+.025f*fold+.04f*broad;
-      height=.0008f*weave+.0015f*fold; roughness=.91f+.06f*broad; break;
+      value=.86f+.035f*weave+.018f*twill+.035f*fold+.065f*broad+.015f*fine;
+      height=.0006f*weave+.0003f*twill+.0015f*fold;
+      roughness=.86f+.08f*broad+.035f*(.5f+.5f*weave); break;
     }
     case Material::Roof: {
       const float row=std::floor(v*6),ty=v*6-row;
@@ -554,10 +587,28 @@ std::vector<std::uint8_t> BuildMaterialLayer(Material material,unsigned size) {
       value=.87f+.10f*broad+.03f*fine; height=.004f*fine; roughness=.94f; break;
     case Material::Metal: {
       const float scratch=noise(u,v*4,32);
-      value=.85f+.10f*broad+.05f*scratch; height=.00045f*scratch;
-      roughness=.27f+.18f*broad+.06f*scratch; break;
+      const float tarnish=smooth((noise(u,v,8)-.45f)*3);
+      value=.84f+.10f*broad+.05f*scratch-.06f*tarnish; height=.00045f*scratch;
+      roughness=.27f+.18f*broad+.06f*scratch+.10f*tarnish; break;
     }
-    case Material::Skin: value=.97f+.03f*broad; roughness=.64f; break;
+    case Material::Hair: {
+      // Swept strands, not the cloth weave previously used by the hair cap.
+      const float strand=.5f+.5f*std::sin(2*pi*(u*20+.18f*std::sin(v*2*pi)));
+      value=.77f+.11f*broad+.10f*strand;
+      height=.0005f*strand;roughness=.52f+.15f*broad;break;
+    }
+    case Material::Leather: {
+      // Broad irregular grain and shallow creases, rather than woven cloth.
+      const float grain=noise(u,v,40),creases=smooth((.32f-noise(u,v,12))*5);
+      value=.78f+.13f*broad+.07f*grain-.055f*creases;
+      height=.0008f*grain-.0014f*creases;
+      roughness=.57f+.17f*broad+.08f*creases;break;
+    }
+    case Material::Skin:
+      // Low-contrast pores avoid the plastic uniform sheen without baking
+      // lighting into skin or changing the selected complexion.
+      value=.96f+.025f*broad+.015f*fine;
+      height=.00015f*fine;roughness=.61f+.09f*broad+.025f*fine;break;
     case Material::Leaves: value=.87f+.13f*broad; roughness=.86f; break;
     case Material::Plain: case Material::Glow: value=1; break;
     default: break;

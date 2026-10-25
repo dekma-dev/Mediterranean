@@ -105,6 +105,8 @@ struct Canvas {
   const float edge=std::min(6.f,a.h*.14f);
   const Color tint=primary?Color{.46f,.025f,.035f,highlight?.78f:.65f}:Color{.19f,.22f,.19f,highlight?.62f:.24f};
   RectFill({a.x+edge,a.y+edge,a.w-2*edge,a.h-2*edge},enabled?tint:Color{0,0,0,.3f});
+  Gradient({a.x+edge,a.y+edge,a.w-2*edge,a.h-2*edge},
+    {1,.85f,.57f,enabled?.075f:.025f},{0,0,0,.24f});
   if(highlight && enabled) {
    Line(a.x+7,a.y+4,a.x+a.w-7,a.y+4,1,{1,.82f,.45f,1});
    Line(a.x+7,a.y+a.h-5,a.x+a.w-7,a.y+a.h-5,1,{1,.82f,.45f,.6f});
@@ -202,7 +204,9 @@ struct Canvas {
  void Window(Rect a) {
   RectFill({a.x+4,a.y+6,a.w,a.h},{0,0,0,.55f});
   Skin(a,28);
-  RectFill({a.x+11,a.y+11,a.w-22,a.h-22},{.006f,.005f,.004f,.24f});
+  // Keep the antique frame, but quiet the leather behind body text.
+  Gradient({a.x+11,a.y+11,a.w-22,a.h-22},{.028f,.022f,.017f,.62f},{.012f,.015f,.014f,.81f});
+  Line(a.x+17,a.y+17,a.x+a.w-17,a.y+17,1,{.67f,.52f,.30f,.35f});
   // Restrained inset stitching and metal corner studs leave the content clear.
   for(float side:{0.f,1.f}) {
    const float x=a.x+8+side*(a.w-16);
@@ -222,7 +226,8 @@ struct Canvas {
  }
  void EmptySlot(Rect a) {
   Skin(a,10,{.46f,.44f,.38f,1});
-  RectFill({a.x+4,a.y+4,a.w-8,a.h-8},{.005f,.008f,.006f,.38f});
+  Gradient({a.x+4,a.y+4,a.w-8,a.h-8},{.005f,.008f,.006f,.78f},{.04f,.034f,.025f,.60f});
+  Diamond(a.x+a.w*.5f,a.y+a.h*.5f,2,3,{.43f,.35f,.21f,.35f});
  }
  void Alcove(Rect a) {
   Skin(a,18);
@@ -585,7 +590,8 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Button(rect,enabled,false);
   if(hover && enabled) c.RectFill({rect.x+3,rect.y+3,rect.w-6,rect.h-6},
     {.85f,.63f,.27f,(pointerHeld_?.24f:.12f)*std::min(1.f,hoverTime_*8+.15f)});
-  c.Center(rect.x,rect.y+(rect.h-15)*.5f-2,rect.w,label,15,enabled?ink:muted);
+  const float press=hover && enabled && pointerHeld_?1.f:0.f;
+  c.Center(rect.x,rect.y+(rect.h-15)*.5f-2+press,rect.w,label,15,enabled?ink:Color{.52f,.50f,.45f,1});
   regions_.push_back({rect,{action,value},enabled});
  };
  const auto slot=[&](Rect rect,Item item,bool selectedSlot=false,int bag=-1,int gear=-1) {
@@ -602,6 +608,10 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Gradient({rect.x+4,rect.y+4,rect.w-8,rect.h-8},rare?Color{.14f,.31f,.20f,1}:Color{.14f,.22f,.25f,1},{.025f,.045f,.06f,1});
   for (int i=0;i<5;++i) c.Line(rect.x+rect.w*.5f,rect.y+rect.h*.5f,rect.x+5+i*(rect.w-10)/4,rect.y+5,1,{.52f,.60f,.39f,.15f});
   Icon(c,{rect.x+3,rect.y+3,rect.w-6,rect.h-6},item,dragging_ && item==dragItem_?.35f:1.f,s.Class());
+  if(selectedSlot) {
+   c.Line(rect.x+3,rect.y+rect.h-3,rect.x+rect.w-3,rect.y+rect.h-3,2,gold);
+   c.Diamond(rect.x+rect.w*.5f,rect.y+rect.h-4,3,2,{1,.86f,.51f,1});
+  }
   for(float dx : {4.f,rect.w-5}) {
    c.Oval(rect.x+dx,rect.y+4,1.4f,1.4f,gold);
    c.Line(rect.x+dx,rect.y+rect.h-8,rect.x+dx,rect.y+rect.h-4,.8f,border);
@@ -716,6 +726,9 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   const bool ready=!CapturesMovement() && i>=0 && (rpg::ValidSpell(i)?std::string(s.AbilityStatus(i))=="READY":CanUse(s,Item::Potion));
   const float cooldown=i<0?0:rpg::ValidSpell(i)?s.Cooldown(i):s.PotionCooldown();
   if(i>=0 && !ready) c.RectFill({x+4,657,46,43},{.02f,.025f,.01f,.36f});
+  // Readiness stays legible without relying solely on dimmed artwork.
+  if(i>=0 && cooldown<=0) c.Line(x+7,701,x+47,701,2,
+    ready?Color{.64f,.79f,.45f,.9f}:Color{.65f,.29f,.20f,.85f});
   if(cooldown>0) {
     const float fraction=std::clamp(cooldown/(rpg::ValidSpell(i)?s.AbilityCooldown(i):3.f),0.f,1.f);
     c.CooldownSweep({x+4,657,46,43},fraction);
@@ -741,7 +754,12 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  if (panel==Panel::None) {
   const char* labels[]={"C Gear","I Bag","N Build","M Atlas","J Journal","Esc"};
   const Action actions[]={Action::Character,Action::Inventory,Action::Build,Action::Map,Action::Journal,Action::Menu};
-  for(int i=0;i<6;++i) button({447+i*65.f,617,62,23},labels[i],actions[i]);
+  for(int i=0;i<6;++i) {
+   const Rect nav{447+i*65.f,617,62,23};
+   button(nav,labels[i],actions[i]);
+   if((i==0 && characterOpen) || (i==1 && inventoryOpen))
+    c.Line(nav.x+7,nav.y+nav.h-3,nav.x+nav.w-7,nav.y+nav.h-3,2,gold);
+  }
   if (s.Attacking()) {
    const float contact=combat::Contact(s.HeavyAttack());
    const char* phase=s.AttackSeconds()<combat::StrokeStart(s.HeavyAttack())?"Wind-up":
@@ -840,8 +858,12 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    const auto item=s.Items().Bag()[i].item;
    slot(rect,item,selectedBag==i,i);
   }
-  c.Frame({1008,430,248,27},{.035f,.065f,.06f,1}); c.Text(1017,436,std::to_string(24-s.Items().UsedSlots())+" free slots",12,muted);
-  c.Oval(1189,443,5,5,gold); c.Text(1200,434,std::to_string(s.Gold()),14,gold);
+  c.Frame({1008,430,248,27},{.035f,.065f,.06f,1});
+  const int used=s.Items().UsedSlots();
+  c.Text(1017,435,std::to_string(used)+" / 24 slots",12,used==24?Color{1,.57f,.37f,1}:muted);
+  c.RectFill({1017,451,136,2},{.18f,.16f,.12f,1});
+  c.RectFill({1017,451,136*used/24.f,2},used==24?Color{.85f,.38f,.22f,1}:gold);
+  c.Oval(1173,443,5,5,gold); c.FitText(1183,435,65,std::to_string(s.Gold()),13,gold);
   const auto info=s.ItemDefinition(selected);
   c.Frame({1008,464,248,104},{.065f,.105f,.09f,1});
   c.Gradient({1012,468,240,40},{.28f,.20f,.09f,.5f},{.08f,.05f,.025f,.3f});
@@ -1081,13 +1103,13 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Text(148,136,"SPELLBOOK / inspect or drag an ability to the action bar",11,muted);
    for(int card=0;card<7;++card) {
     const int i=card>=4?card+1:card;
-    const Rect spellSlot{148+(card%4)*173.f,151+(card/4)*30.f,167,28};
+    const Rect spellSlot{148+(card%4)*173.f,151+(card/4)*34.f,167,32};
     c.Frame(spellSlot,selectedSpell==i?Color{.12f,.23f,.20f,1}:dark,selectedSpell==i?gold:border);
-    AbilityArtwork(c,{spellSlot.x+3,spellSlot.y+3,21,21},i,s.Class());
-    c.FitText(spellSlot.x+29,spellSlot.y+1,132,s.Spell(i).name,12,ink);
+    AbilityArtwork(c,{spellSlot.x+3,spellSlot.y+3,26,26},i,s.Class());
+    c.FitText(spellSlot.x+33,spellSlot.y+3,128,s.Spell(i).name,13,ink);
     std::string bindings;
     for(int binding=0;binding<10;++binding) if(HotbarSpell(binding,s.Class())==i) {if(!bindings.empty()) bindings+="/";bindings+=binding==9?"0":std::to_string(binding+1);}
-    c.FitText(spellSlot.x+29,spellSlot.y+14,132,(bindings.empty()?"Unbound":"Key "+bindings)+" / "+Number(s.AbilityCooldown(i))+"s",10,muted);
+    c.FitText(spellSlot.x+33,spellSlot.y+18,128,(bindings.empty()?"Unbound":"Key "+bindings)+" / "+Number(s.AbilityCooldown(i))+"s",10,muted);
     regions_.push_back({spellSlot,{Action::SelectSpell,i},true});
    }
    const auto& branches=s.ClassInfo().branches;
@@ -1254,8 +1276,8 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Window({x,470,300,149}); c.FitText(x+14,480,272,potion?"Healing draught":s.Spell(ability).name,19,gold);
    c.Wrap(x+14,512,272,detail,14,ink,2);
    const float remaining=potion?s.PotionCooldown():s.Cooldown(ability);
-   c.Text(x+14,554,"Cooldown: "+Number(potion?3.f:s.AbilityCooldown(ability))+"s"+
-     (potion?"  /  Stock: "+std::to_string(s.Potions()):ability<3?"  /  "+std::string(ability==2 && s.RetreatMobility()?"Travel: ":"Range: ")+Number(s.Spell(ability).range)+" m":""),12,muted);
+   c.FitText(x+14,554,272,"Cooldown: "+Number(potion?3.f:s.AbilityCooldown(ability))+"s"+
+     (potion?"  /  Stock: "+std::to_string(s.Potions()):ability!=3?"  /  "+std::string(ability==2 && s.RetreatMobility()?"Travel: ":"Range: ")+Number(s.Spell(ability).range)+" m":""),12,muted);
    c.Line(x+14,576,x+286,576,1,border);
    c.FitText(x+14,589,272,status+(remaining>0?"  "+Seconds(remaining)+"s":""),12,status=="READY"?Color{.57f,.84f,.40f,1}:Color{1,.64f,.40f,1});
   }

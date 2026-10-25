@@ -44,6 +44,15 @@ int main() {
   }
   const auto coat=visual::BuildMesh(visual::Mesh::CoatPanel);
   Check(coat.vertices.size()==198 && coat.indices.size()==960,"Coat panel must retain bounded two-sided topology");
+  for(const auto& v:coat.vertices)
+    Check(std::abs(v.position.x)<=.501f && v.position.y>=-.501f && v.position.y<=.501f &&
+      v.position.z>=.65f && v.position.z<=1.01f,"Tailored coat escaped its attachment envelope");
+  for(auto mesh:{visual::Mesh::Helm,visual::Mesh::HelmLow}) {
+    const auto helm=visual::BuildMesh(mesh);
+    for(const auto& v:helm.vertices)
+      Check(std::abs(v.position.x)<=.501f && std::abs(v.position.z)<=.501f &&
+        v.position.y>=-.501f && v.position.y<=.531f,"Helmet must retain its fitted head envelope");
+  }
   std::size_t bytes=0,triangles=0,weaponBytes=0,weaponTriangles=0;
   for (unsigned mesh=0;mesh<static_cast<unsigned>(visual::Mesh::Count);++mesh) {
     const auto g=visual::BuildMesh(static_cast<visual::Mesh>(mesh));
@@ -147,6 +156,10 @@ int main() {
   Check(!visual::VisibleSphere({0,0,30},.5f,camera),"Object beyond the far plane was retained.");
   Check(!visual::VisibleSphere({20,0,5},.5f,camera),"Object outside the side plane was retained.");
   std::size_t textureBytes=visual::shadowSize*visual::shadowSize*4*visual::shadowLayers;
+  Check(visual::BuildMaterialLayer(visual::Material::Leather,128)!=
+    visual::BuildMaterialLayer(visual::Material::Cloth,128),"Leather must not reuse cloth weave");
+  Check(visual::BuildMaterialLayer(visual::Material::Hair,128)!=
+    visual::BuildMaterialLayer(visual::Material::Cloth,128),"Hair must not reuse cloth weave");
   for (unsigned layer=0;layer<static_cast<unsigned>(visual::Material::Count);++layer) {
     const auto pixels=visual::BuildMaterialLayer(static_cast<visual::Material>(layer),visual::materialSize);
     Check(pixels.size()==visual::materialSize*visual::materialSize*4,"Material upload dimensions are invalid.");

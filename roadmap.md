@@ -1,5 +1,13 @@
 # Mediterranean Roadmap
 
+Weapon-path/armor checkpoint (2026-10-25): mace and cleaver attacks now use distinct solved hand paths and weapon directions; shaped plate pauldrons replace rounded shoulder forms for plate classes. Hair has a dedicated strand material. Contact clocks and equipment ownership remain intact. Continue R2 authored hero and R3 live movement acceptance; see docs/character-material-motion.md.
+
+Anatomy/leather/settling checkpoint (2026-10-25): directional muscle contours refine the existing weighted body across LODs; a dedicated packed leather layer separates hide fittings, boots and gloves from cloth. Class-specific post-release balance and a smoother cancellation fade advance R3/R5. Authored hero production and live visual/motion acceptance remain outstanding; see docs/character-material-motion.md.
+
+UI readability checkpoint (2026-10-25): quieter antique panel interiors, beveled button feedback, selected-item/active-navigation markers, bag capacity meter and fitted currency text improve the existing interface. Spellbook cards/icons are larger; hotbar readiness has an explicit edge indicator and newer attack tooltips show range. Continue R5 live readability/accessibility acceptance; no new artwork download or input ownership changes.
+
+Character material/action checkpoint (2026-10-25): fitted helmet geometry with attachment LOD, curved coat hems, packed cloth/skin/metal surface refinements and class-specific technique/signature/setup pose paths advance R3/R5. See docs/character-material-motion.md. R2 production hero, authored clothing textures and live motion acceptance remain open.
+
 Setup/coat checkpoint (2026-10-25): seven class arts now include a mobile basic-clock setup attack with distinct reserve/control payoff; N supports two spell rows. Added split articulated cloth coat panels and a directional reversal catch. Save 17/hotbar 4 migrate older records. See docs/class-openings.md. Continue R2 authored hero and R6 encounter/balance acceptance; these are bounded procedural improvements, not reference-level character production.
 
 Signature/motion checkpoint (2026-10-25): six active actions per class now include a reserve-consuming signature with individual payoff. Directional starts/stops, weapon carrying posture and hair/boot detail advance R3/R5/R6. Validate live combat balance and motion; continue R2 authored hero work rather than treating procedural polish as reference-level character art. See docs/class-signatures.md.

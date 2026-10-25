@@ -33,14 +33,14 @@ inline Fittings Build(const CharacterOutfit& outfit) {
  if(outfit.tunic) {
   switch(outfit.classId) {
    case rpg::ClassId::Warrior:
-    for(int n=0;n<4;++n) chest(-.14f+n*.09f,1.36f-n*.065f,{.09f,.09f,.035f},hide,S::Cloth);
+    for(int n=0;n<4;++n) chest(-.14f+n*.09f,1.36f-n*.065f,{.09f,.09f,.035f},hide,S::Leather);
     chest(-.05f,1.29f,{.065f,.075f,.045f},iron,S::Metal);break;
    case rpg::ClassId::Paladin:
     chest(0,1.25f,{.24f,.43f,.035f},fabric,S::Cloth);
     chest(0,1.32f,{.055f,.19f,.055f},brass,S::Metal);
     chest(0,1.34f,{.16f,.045f,.058f},brass,S::Metal);break;
    case rpg::ClassId::Scout:
-    for(int n=0;n<5;++n) {chest(.14f-n*.065f,1.42f-n*.075f,{.075f,.09f,.04f},hide,S::Cloth);
+    for(int n=0;n<5;++n) {chest(.14f-n*.065f,1.42f-n*.075f,{.075f,.09f,.04f},hide,S::Leather);
      chest(.14f-n*.065f,1.42f-n*.075f,{.03f,.025f,.065f},bone,S::Cloth);}break;
    case rpg::ClassId::Priest:
     for(float side:{-1.f,1.f}) {chest(side*.12f,1.27f,{.085f,.42f,.04f},bone,S::Cloth);
@@ -61,7 +61,7 @@ inline Fittings Build(const CharacterOutfit& outfit) {
     chest(-.10f,1.29f,{.14f,.39f,.035f},fabric,S::Cloth);
     for(int n=0;n<5;++n) chest(.065f,1.43f-n*.065f,{.026f,.026f,.05f},brass,S::Metal);break;
    case rpg::ClassId::Engineer:
-    chest(0,1.24f,{.34f,.38f,.04f},hide,S::Cloth);
+    chest(0,1.24f,{.34f,.38f,.04f},hide,S::Leather);
     for(float side:{-1.f,1.f}) {chest(side*.13f,1.40f,{.055f,.15f,.06f},iron,S::Metal);
      for(int n=0;n<3;++n) chest(side*.105f,1.28f-n*.045f,{.055f,.03f,.07f},brass,S::Metal);}break;
    case rpg::ClassId::Demonologist:
@@ -74,8 +74,8 @@ inline Fittings Build(const CharacterOutfit& outfit) {
  if(outfit.tunic) {
   const bool armored=outfit.classId==rpg::ClassId::Warrior || outfit.classId==rpg::ClassId::Paladin || outfit.classId==rpg::ClassId::Engineer;
   for(float side:{-1.f,1.f}) {
-   chest(side*.045f,1.26f,{.012f,.34f,.018f},armored?iron:hide,armored?S::Metal:S::Cloth);
-   add(M::Torso,side*.075f,1.51f,.075f,{.11f,.055f,.16f},hide,S::Cloth);
+   chest(side*.045f,1.26f,{.012f,.34f,.018f},armored?iron:hide,armored?S::Metal:S::Leather);
+   add(M::Torso,side*.075f,1.51f,.075f,{.11f,.055f,.16f},hide,S::Leather);
    for(int n=0;n<4;++n) chest(side*.052f,1.13f+n*.075f,{.018f,.018f,.028f},brass,S::Metal);
   }
  }
@@ -83,7 +83,7 @@ inline Fittings Build(const CharacterOutfit& outfit) {
   const bool plate=outfit.classId==rpg::ClassId::Warrior || outfit.classId==rpg::ClassId::Paladin || outfit.classId==rpg::ClassId::Engineer;
   const bool spines=outfit.classId==rpg::ClassId::Druid || outfit.classId==rpg::ClassId::Necromancer || outfit.classId==rpg::ClassId::Demonologist;
   for(float side:{-1.f,1.f}) {
-   add(M::Torso,side*.32f,1.48f,0,{plate?.31f:.25f,plate?.19f:.13f,.34f},plate?iron:fabric,plate?S::Metal:S::Cloth);
+   add(plate?M::Pauldron:M::Torso,side*.32f,1.48f,0,{plate?.31f:.25f,plate?.19f:.13f,.34f},plate?iron:fabric,plate?S::Metal:S::Cloth);
    for(int n=0;n<3;++n) add(spines?M::Blade:M::Torso,side*(.27f+n*.045f),1.55f+(spines?.035f*n:0),.015f,
     {spines?.035f:.025f,spines?.14f:.022f,.20f},spines?bone:brass,plate?S::Metal:S::Cloth);
   }
@@ -93,7 +93,7 @@ inline Fittings Build(const CharacterOutfit& outfit) {
   const bool tools=outfit.classId==rpg::ClassId::Engineer || outfit.classId==rpg::ClassId::Scout;
   if(tools) for(int n=0;n<3;++n) add(M::Limb,-.25f-n*.025f,.86f,.08f,{.024f,.20f,.024f},iron,S::Metal);
   else if(outfit.classId==rpg::ClassId::Mage || outfit.classId==rpg::ClassId::Priest || outfit.classId==rpg::ClassId::Necromancer)
-   {add(M::Box,-.25f,.83f,.08f,{.13f,.19f,.07f},hide,S::Cloth);
+   {add(M::Box,-.25f,.83f,.08f,{.13f,.19f,.07f},hide,S::Leather);
     add(M::Box,-.25f,.83f,.12f,{.08f,.14f,.012f},bone,S::Cloth);}
   else if(outfit.classId==rpg::ClassId::Bard) for(int n=0;n<3;++n)
    add(M::Limb,-.25f-n*.026f,.86f,.08f,{.02f,.18f-n*.025f,.02f},brass,S::Metal);

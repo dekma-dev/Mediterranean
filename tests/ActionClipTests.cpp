@@ -29,6 +29,18 @@ Sample Motion(ClassId id,ActionClip clip,float t,int layer=0) {
   return result;
 }
 void ClipsAndRig() {
+  for(bool heavy:{false,true}) {
+    Sample strike;strike.attackSeconds=heavy?.24f:.14f;strike.heavyAttack=heavy;
+    const auto sword=BuildCharacterPose(0,0,false,strike,rpg::WeaponForm::Blade);
+    const auto mace=BuildCharacterPose(0,0,false,strike,rpg::WeaponForm::Mace);
+    const auto cleaver=BuildCharacterPose(0,0,false,strike,rpg::WeaponForm::Cleaver);
+    Check(Distance(sword.arms[1].end,mace.arms[1].end)>.005f &&
+      Distance(sword.arms[1].end,cleaver.arms[1].end)>.005f,
+      "Mace and cleaver must have distinct solved attack paths, not just different meshes");
+    Check(Distance(sword.weaponDirection,mace.weaponDirection)>.005f &&
+      Distance(sword.weaponDirection,cleaver.weaponDirection)>.005f,
+      "Melee weapon orientation must follow its own authored strike");
+  }
   float largestHandStep=0,largestTipStep=0;
   std::string handCase,bladeCase;
   std::set<std::string> names;
@@ -80,6 +92,22 @@ void ClipsAndRig() {
   Check(Size(SampleAction(ClassId::Count,ActionClip::Heavy,.2f))==0,"Invalid class sampled outside the clip table");
 }
 void Controller() {
+  // Check velocity continuity at authored anticipation/release/recovery keys.
+  // A small sample displacement alone can miss a sharp change of velocity.
+  constexpr float epsilon=.0001f;
+  for(int id=0;id<int(ClassId::Count);++id) for(auto clip:{ActionClip::Technique,ActionClip::Signature,ActionClip::Opening}) {
+    const auto type=ClassId(id);const bool heavy=clip!=ActionClip::Opening;
+    const float release=RangedClass(type)?combat::StrokeStart(heavy):combat::Contact(heavy);
+    for(float knot:{release*(heavy?.65f:.40f),release,release+.09f}) {
+      const auto middle=SampleAction(type,clip,knot);
+      auto incoming=(middle-SampleAction(type,clip,knot-epsilon))*(1/epsilon);
+      auto outgoing=(SampleAction(type,clip,knot+epsilon)-middle)*(1/epsilon);
+      // Normalized aim/openness saturate by design; test the spatial channels.
+      incoming.open=incoming.aim=outgoing.open=outgoing.aim=0;
+      if(Size(incoming-outgoing)>=.20f) std::cerr<<"Velocity key: "<<id<<'/'<<int(clip)<<'/'<<knot<<" delta "<<Size(incoming-outgoing)<<'\n';
+      Check(Size(incoming-outgoing)<.20f,"Class action velocity broke at an authored key");
+    }
+  }
   for(float height:{0.f,.5f,2.f,5.f}) {
     const XMFLOAT3 palm{2,1.4f+height,-3};const rpg::Vec2 target{4,7};
     Check(Distance(CombatEffects::SpellTracePoint(palm,target,0),palm)<.00001f,"Spell trace must start at the solved palm");
@@ -104,6 +132,10 @@ void Controller() {
   c.Update(.001f,ClassId::Mage,-1,false,0,true);
   Check(Size(c.pose-before)<.003f,"A replacement action snapped the previous gesture away");
   c.Reset();Check(Size(c.pose)==0,"Load/reset must clear the action layer");
+  c.Update(.01f,ClassId::Engineer,.21f,true,2,true);
+  const auto held=c.pose;
+  c.Update(.0001f,ClassId::Engineer,-1,false,2,true);
+  Check(Size(c.pose-held)<.000001f,"Cancellation must begin without an acceleration kick");
 }
 std::string Fixture(ClassId id) {
   const std::string duel="MEDITERRANEAN 3\n-4 5.2 50 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
@@ -142,14 +174,16 @@ void Captures() {
   const auto root=std::filesystem::current_path()/"action-clip-check";std::filesystem::create_directories(root);
   Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),960,720,L"Class action checks",false),"Hidden action window");
   Renderer renderer;Check(renderer.Initialize(window.GetHandle(),960,720),"Action renderer");
-  for(int id=0;id<int(ClassId::Count);++id) for(int phase=0;phase<7;++phase) {
+  for(int id=0;id<int(ClassId::Count);++id) for(int phase=0;phase<8;++phase) {
     const auto type=ClassId(id);const auto clip=phase==6?ActionClip::Opening:phase==5?ActionClip::Signature:phase==4?ActionClip::Technique:phase==3?ActionClip::Restore:ActionClip::Heavy;
     const float release=RangedClass(type)?combat::StrokeStart(clip!=ActionClip::Opening):combat::Contact(clip!=ActionClip::Opening);
     const float t=phase==0?release*.65f:phase==1?release:phase==2?release+.09f:phase>=4?release:.18f;
     auto sample=Motion(type,clip,t);sample.face.focus=.5f;
     const auto& color=rpg::DescribeClass(type).color;
     renderer.BeginFrame();renderer.SetCamera({2.2f,1.7f,3.5f},{0,1.0f,0});
-    DrawCharacter(renderer,{0,0},0,0,{color[0],color[1],color[2],1},0,0,CharacterOutfit::From(rpg::Inventory{},type),sample,1);
+    auto outfit=CharacterOutfit::From(rpg::Inventory{},type);
+    if(phase==7) outfit.helm=true;
+    DrawCharacter(renderer,{0,0},0,0,{color[0],color[1],color[2],1},0,0,outfit,sample,1);
     Check(renderer.Capture((root/(std::to_string(id)+"-"+std::to_string(phase)+".png")).wstring()) && renderer.EndFrame(false),"Class gesture GPU capture");
   }
   Check(renderer.ValidateDebugMessages(),"Class action D3D debug errors");
@@ -157,5 +191,5 @@ void Captures() {
 }
 int main() {
   ClipsAndRig();Controller();Integration();Captures();
-  std::cout<<"PASS: class actions, fixed-limb/wrist continuity, timed release, cancellation, save isolation and 44 GPU views\n";
+  std::cout<<"PASS: class actions, fixed-limb/wrist continuity, timed release, cancellation, save isolation and 88 GPU views\n";
 }

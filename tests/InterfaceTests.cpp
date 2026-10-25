@@ -782,7 +782,7 @@ int main() {
         "Build close button must identify its modal panel");
       for(int card=0;card<7;++card) {
         const int spell=card>=4?card+1:card;
-        const auto inspect=click(210+(card%4)*173.f,164+(card/4)*30.f);
+        const auto inspect=click(210+(card%4)*173.f,167+(card/4)*34.f);
         Require(inspect.action==ui::Action::SelectSpell && inspect.value==spell,
           "Each foundation spell must open inspection, not cast through the modal");
         screen.selectedSpell=spell;
