@@ -12,6 +12,8 @@ Hair and eyebrows now use a dedicated periodic strand/roughness layer instead of
 
 Regression checks compare solved mace/cleaver paths and directions against the sword, sweep existing action/limb/wrist continuity, and retain mesh/texture budgets. Manual check 244 covers live silhouettes, equipment and movement transitions. These improvements do not complete the authored-hero roadmap milestone.
 
+Validation: five targeted Release suites pass (16.90 s), all 44 Release suites pass (103.76 s), five focused Debug suites pass (42.50 s), Visual Studio Debug build and hidden startup/render smoke pass. Inspected Paladin and Demonologist contact captures. The initial mace anticipation failed the unchanged wrist-speed limit; phasing its extra lift into the cut corrected the failure. No performance benchmark was run for this pass.
+
 ## Follow-up: anatomy, leather and settling
 
 2026-10-25: the continuous weighted body field now gives calves more rear volume, thighs more forward volume and arms directional muscle fullness, shared by all three mesh detail levels. This changes the existing connected surface rather than adding overlapping muscle objects. Existing joint positions and authoritative collision dimensions remain unchanged.

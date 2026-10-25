@@ -991,21 +991,36 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   if (panel==Panel::Menu) {
    c.Window({476,148,328,492}); c.Banner({490,137,300,34},"MEDITERRANEAN",20);
    c.Center(476,177,328,"Dawnwatch expedition",12,muted);
-   button({496,197,288,34},"Return to game",Action::Close);
-   button({496,241,139,32},"Character",Action::Character); button({645,241,139,32},"Inventory",Action::Inventory);
-   button({496,281,139,32},"Atlas",Action::Map); button({645,281,139,32},"Journal",Action::Journal);
+   button({496,197,288,34},"Return to game  /  Esc",Action::Close);
+   button({496,241,139,32},"Character  /  C",Action::Character); button({645,241,139,32},"Inventory  /  I",Action::Inventory);
+   button({496,281,139,32},"Atlas  /  M",Action::Map); button({645,281,139,32},"Journal  /  J",Action::Journal);
    button({496,327,288,32},fullscreen?"Fullscreen  /  F11":"Windowed  /  F11",Action::Fullscreen);
    button({496,369,139,32},"Save game",Action::Save); button({645,369,139,32},"Load game",Action::Load);
    c.Line(500,418,780,418,1,border);
-   c.Text(500,433,"Music  "+std::to_string(musicVolume)+"%",13,ink);
+   const auto volumeMeter=[&](float y,const char* name,int volume,Action action) {
+    c.Text(500,y,std::string(name)+(volume==0?"  /  Muted":"  /  "+std::to_string(volume)+"%"),13,volume==0?muted:ink);
+    for(int step=0;step<=10;++step) {
+     const Rect cell{500+18.f*step,y+16,17,12};
+     const bool hover=cell.Contains(mouseX_,mouseY_);
+     const bool lit=step>0 && step*10<=volume;
+     c.RectFill(cell,{.025f,.022f,.018f,1});
+     c.Gradient({cell.x+1,cell.y+2,15,8},lit?Color{.74f,.55f,.24f,1}:Color{.22f,.19f,.13f,1},
+       lit?Color{.38f,.25f,.10f,1}:Color{.10f,.08f,.05f,1});
+     if(step==0) c.Line(cell.x+4,cell.y+9,cell.x+12,cell.y+3,1,volume==0?gold:muted);
+     if(hover) c.Line(cell.x,cell.y+12,cell.x+17,cell.y+12,1,ink);
+     if(step*10==volume) c.Line(cell.x,cell.y,cell.x+17,cell.y,1,gold);
+     regions_.push_back({cell,{action,step*10-volume},true});
+    }
+   };
+   volumeMeter(427,"Music",musicVolume,Action::MusicVolume);
    button({712,427,30,25},"-",Action::MusicVolume,-10,musicVolume>0);
    button({752,427,30,25},"+",Action::MusicVolume,10,musicVolume<100);
-   c.Text(500,467,"Effects  "+std::to_string(effectsVolume)+"%",13,ink);
+   volumeMeter(461,"Effects",effectsVolume,Action::EffectsVolume);
    button({712,461,30,25},"-",Action::EffectsVolume,-10,effectsVolume>0);
    button({752,461,30,25},"+",Action::EffectsVolume,10,effectsVolume<100);
    button({496,506,288,32},"Save & choose character",Action::CharacterSelection);
    button({496,546,288,32},"Exit to desktop",Action::Quit);
-   c.Center(476,586,328,audioAvailable?"World remains live  /  Esc to return":"Audio unavailable",12,muted);
+   c.Center(476,586,328,audioAvailable?"Click a meter to set volume; first mark mutes.":"Audio unavailable / levels retained",11,muted);
    if (!menuNotice.empty()) c.Wrap(496,603,288,menuNotice,11,gold,2);
    return;
   }
@@ -1106,10 +1121,16 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     const Rect spellSlot{148+(card%4)*173.f,151+(card/4)*34.f,167,32};
     c.Frame(spellSlot,selectedSpell==i?Color{.12f,.23f,.20f,1}:dark,selectedSpell==i?gold:border);
     AbilityArtwork(c,{spellSlot.x+3,spellSlot.y+3,26,26},i,s.Class());
+    const float remaining=s.Cooldown(i);
+    if(remaining>0) c.CooldownSweep({spellSlot.x+3,spellSlot.y+3,26,26},
+      std::clamp(remaining/s.AbilityCooldown(i),0.f,1.f));
     c.FitText(spellSlot.x+33,spellSlot.y+3,128,s.Spell(i).name,13,ink);
     std::string bindings;
     for(int binding=0;binding<10;++binding) if(HotbarSpell(binding,s.Class())==i) {if(!bindings.empty()) bindings+="/";bindings+=binding==9?"0":std::to_string(binding+1);}
-    c.FitText(spellSlot.x+33,spellSlot.y+18,128,(bindings.empty()?"Unbound":"Key "+bindings)+" / "+Number(s.AbilityCooldown(i))+"s",10,muted);
+    c.FitText(spellSlot.x+33,spellSlot.y+18,128,(bindings.empty()?"Unbound":"Key "+bindings)+" / "+
+      (remaining>0?Seconds(remaining)+"s remaining":Number(s.AbilityCooldown(i))+"s cooldown"),10,remaining>0?gold:muted);
+    if(spellSlot.Contains(mouseX_,mouseY_))
+      c.Line(spellSlot.x+4,spellSlot.y+spellSlot.h-2,spellSlot.x+spellSlot.w-4,spellSlot.y+spellSlot.h-2,1,gold);
     regions_.push_back({spellSlot,{Action::SelectSpell,i},true});
    }
    const auto& branches=s.ClassInfo().branches;
@@ -1162,7 +1183,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     AbilityArtwork(c,{874,166,48,48},selectedSpell,s.Class());
     c.Text(937,175,selectedSpell==7?"SETUP SPELL":selectedSpell==6?"SIGNATURE SPELL":selectedSpell==5?"CLASS TECHNIQUE":"FOUNDATION SPELL",13,gold);
     c.Text(937,198,"Drag the card to bind / level 1",11,muted);
-    c.Text(874,231,spell.name,22,ink);
+    c.FitText(874,231,258,spell.name,22,ink);
     c.Wrap(874,264,258,SpellEffect(s,selectedSpell),14,gold,2);
     c.Wrap(874,311,258,selectedSpell==1?std::string(style.resource)+": "+std::to_string(style.capacity)+
       " basic hits fill the reserve. "+style.payoff:spell.description,13,muted,5);
@@ -1224,19 +1245,41 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    if (hasWaypoint) button({833,562,286,39},"Clear waypoint",Action::ClearWaypoint);
    c.Text(156,619,"Roads and markers follow the playable map. Island: 58 x 62 m.",13,muted);
   } else {
+   const int current=std::clamp(int(s.CurrentQuest())-int(rpg::QuestId::Patrol),0,rpg::frontierQuestCount+1);
+   const int selected=journalSelection>=0 && journalSelection<rpg::frontierQuestCount+2?journalSelection:current;
+   const auto completed=[&](int chapter) {
+    return chapter==0?s.QuestState()==rpg::Quest::Complete:chapter==1?s.AnchorState()==rpg::AnchorQuest::Complete:chapter-2<s.FrontierCompleted();
+   };
+   button({208,117,397,27},"Return to current assignment",Action::SelectJournal,-1);
    c.Parchment({208,151,397,384});
    for(int i=0;i<rpg::frontierQuestCount+2;++i) {
     const auto id=rpg::QuestId(int(rpg::QuestId::Patrol)+i);const auto& quest=rpg::DescribeQuest(id);
-    const bool done=i==0?s.QuestState()==rpg::Quest::Complete:i==1?s.AnchorState()==rpg::AnchorQuest::Complete:i-2<s.FrontierCompleted();
+    const bool done=completed(i);
+    const Rect row{218,156+i*30.f,377,30};
+    if(i==selected) {
+     c.RectFill(row,{.28f,.16f,.06f,.24f});
+     c.RectFill({218,row.y,3,30},{.40f,.20f,.07f,.9f});
+    } else if(row.Contains(mouseX_,mouseY_)) c.RectFill(row,{.40f,.25f,.10f,.12f});
+    regions_.push_back({row,{Action::SelectJournal,i},true});
     c.FitText(227,160+i*30.f,359,std::to_string(i+1)+". "+quest.title,13,{.22f,.15f,.09f,1});
     c.Text(227,175+i*30.f,done?"Completed":id>s.CurrentQuest()?"Locked":id==s.CurrentQuest()?"Current assignment":"Campaign assignment",9,{.32f,.22f,.13f,1});
    }
-   const auto id=s.CurrentQuest();
+   const auto id=rpg::QuestId(int(rpg::QuestId::Patrol)+selected);
    const auto& quest=rpg::DescribeQuest(id);
-   c.Frame({622,158,450,377});c.Wrap(643,177,402,quest.title,23,ink,2);
-   c.Wrap(643,243,402,quest.offer,16,muted,8);
-   c.Text(643,475,"REWARD / "+std::to_string(quest.experience)+" XP",15,gold);
-   button({734,545,338,43},"Show objective on the atlas",Action::Map);
+   const bool done=completed(selected),locked=selected>current;
+   c.Frame({622,158,450,377});
+   c.Text(643,176,done?"COMPLETED CHAPTER":locked?"SEALED CHAPTER":"CURRENT ASSIGNMENT",12,gold);
+   c.Wrap(643,207,402,quest.title,23,ink,2);
+   c.Line(643,267,1048,267,1,border);
+   const std::string story=locked?"Continue your current assignment to unlock this chapter of the expedition.":done?quest.complete:quest.offer;
+   float storySize=16;
+   while(storySize>12 && c.Lines(402,story,storySize).size()*(storySize+5)>186) storySize-=1;
+   c.Wrap(643,282,402,story,storySize,muted,int(186/(storySize+5)));
+   if(!locked) {
+    c.Text(643,475,std::string(done?"REWARD RECEIVED / ":"REWARD / ")+std::to_string(quest.experience)+" XP",15,gold);
+    c.FitText(643,501,402,std::to_string(quest.gold)+" gold / "+quest.speaker,13,muted);
+   }
+   button({734,545,338,43},"Track current objective on atlas",Action::Map);
    c.Wrap(209,552,397,s.Objective(),14,muted,2);
    c.Text(209,606,"The world remains active while reading the journal.",14,muted);
   }
@@ -1252,8 +1295,9 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Window({x,y,309,246}); Icon(c,{x+13,y+12,34,38},item,1,s.Class());
    c.FitText(x+57,y+11,238,info.name,16,gold); c.FitText(x+57,y+37,238,ItemTypeLabel(info),11,muted);
    c.RectFill({x+14,y+62,281,1},border);
-   c.Text(x+14,y+73,summary.stats,14,ink);
+   c.FitText(x+14,y+73,281,summary.stats,14,ink);
    const Color comparison=summary.difference>0?Color{.48f,.86f,.37f,1}:summary.difference<0?Color{1,.43f,.32f,1}:muted;
+   c.Gradient({x+11,y+94,287,39},{comparison.x,comparison.y,comparison.z,.12f},{.02f,.025f,.02f,.15f});
    c.Wrap(x+14,y+99,281,summary.comparison,13,comparison,2);
    c.Wrap(x+14,y+142,281,info.description,12,muted,3);
    const std::string quantity=it->bag>=0?"Stack "+std::to_string(s.Items().Bag()[it->bag].count):"Owned "+std::to_string(s.Items().Count(item));
@@ -1272,14 +1316,23 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    const int ability=HotbarSpell(it->event.value,s.Class());if(ability<0) break; const bool potion=ability==4;
    const std::string detail=potion?"Restores up to 40 health.":SpellEffect(s,ability);
    const std::string status=potion?(s.Health()<=0?"DEFEATED":s.Potions()==0?"NO POTIONS":s.Health()>=s.MaxHealth()?"FULL HEALTH":s.PotionCooldown()>0?"COOLDOWN":"READY"):s.AbilityStatus(ability);
-   const float x=std::clamp(it->rect.x-30,460.f,680.f);
-   c.Window({x,470,300,149}); c.FitText(x+14,480,272,potion?"Healing draught":s.Spell(ability).name,19,gold);
-   c.Wrap(x+14,512,272,detail,14,ink,2);
+   // Anchor above the action bar, away from the pointer and navigation row.
+   const float x=std::clamp(it->rect.x-120,345.f,605.f);
+   const float lift=combatLayout?-115.f:0.f;
+   c.Window({x,403+lift,330,210});
+   AbilityArtwork(c,{x+14,417+lift,36,36},ability,s.Class());
+   c.FitText(x+61,416+lift,253,potion?"Healing draught":s.Spell(ability).name,18,gold);
+   c.Text(x+61,439+lift,"KEY "+std::string(it->event.value==9?"0":std::to_string(it->event.value+1))+" / "+
+     (potion?"CONSUMABLE":ability==6?"SIGNATURE":ability==5?"TECHNIQUE":ability==7?"SETUP":"CLASS ABILITY"),10,muted);
+   c.Line(x+14,461+lift,x+316,461+lift,1,border);
+   c.Wrap(x+14,470+lift,302,detail,13,ink,2);
+   c.Wrap(x+14,510+lift,302,potion?"Restores health immediately. Shares a three-second potion cooldown.":s.Spell(ability).description,11,muted,2);
    const float remaining=potion?s.PotionCooldown():s.Cooldown(ability);
-   c.FitText(x+14,554,272,"Cooldown: "+Number(potion?3.f:s.AbilityCooldown(ability))+"s"+
+   c.FitText(x+14,548+lift,302,"Cooldown: "+Number(potion?3.f:s.AbilityCooldown(ability))+"s"+
      (potion?"  /  Stock: "+std::to_string(s.Potions()):ability!=3?"  /  "+std::string(ability==2 && s.RetreatMobility()?"Travel: ":"Range: ")+Number(s.Spell(ability).range)+" m":""),12,muted);
-   c.Line(x+14,576,x+286,576,1,border);
-   c.FitText(x+14,589,272,status+(remaining>0?"  "+Seconds(remaining)+"s":""),12,status=="READY"?Color{.57f,.84f,.40f,1}:Color{1,.64f,.40f,1});
+   const Color readiness=status=="READY"?Color{.57f,.84f,.40f,1}:Color{1,.64f,.40f,1};
+   c.Gradient({x+12,571+lift,306,28},{readiness.x,readiness.y,readiness.z,.16f},{.02f,.025f,.02f,.4f});
+   c.FitText(x+20,578+lift,290,status+(remaining>0?" / "+Seconds(remaining)+"s remaining":""),12,readiness);
   }
   break;
  }

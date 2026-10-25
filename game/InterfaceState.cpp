@@ -20,6 +20,7 @@ bool Interface::LoadHotbars(const std::string& data) {
 void Interface::Show(Panel next) {
   CancelBuildConfirmation();
   if (next==Panel::Build && panel!=Panel::Build) loadoutsPage=false;
+  if (next==Panel::Journal && panel!=Panel::Journal) journalSelection=-1;
   const auto before=StateKey();
   if (next==Panel::Character) { characterOpen=true; if (panel!=Panel::Merchant) panel=Panel::None; }
   else if (next==Panel::Inventory) { inventoryOpen=true; if (panel!=Panel::Merchant) panel=Panel::None; }

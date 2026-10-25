@@ -732,6 +732,24 @@ int main() {
       "Effects increase must remain clickable at every UI scale");
     Require(click(640,220).action==ui::Action::Close,"Return button must close the menu.");
     Require(click(1000,680).action==ui::Action::None,"Menu must prevent clicks reaching the underlying HUD.");
+    for(int level=0;level<=10;++level) {
+      const auto music=click(508+18.f*level,449),effects=click(508+18.f*level,483);
+      Require(music.action==ui::Action::MusicVolume && music.value==level*10-screen.musicVolume,
+        "Music meter must map every scaled mark to the requested level");
+      Require(effects.action==ui::Action::EffectsVolume && effects.value==level*10-screen.effectsVolume,
+        "Effects meter must map every scaled mark to the requested level");
+    }
+    const auto beforeMenu=simulation.Save();
+    const int savedMusic=screen.musicVolume,savedEffects=screen.effectsVolume;
+    const bool savedAudio=screen.audioAvailable;
+    for(bool muted:{false,true}) {
+      screen.musicVolume=muted?0:35;screen.effectsVolume=muted?100:70;screen.audioAvailable=!muted;
+      renderer.BeginFrame();screen.Render(renderer,simulation,0,false);
+      Require(renderer.Capture(std::wstring(muted?L"menu-muted-":L"menu-audio-")+std::to_wstring(size.first)+L".png") &&
+        renderer.EndFrame(false),"Audio menu capture");
+    }
+    Require(simulation.Save()==beforeMenu,"Audio menu rendering must not change gameplay");
+    screen.audioAvailable=savedAudio;screen.musicVolume=savedMusic;screen.effectsVolume=savedEffects;
     screen.SetOnly(ui::Panel::Map);
     renderer.BeginFrame(); screen.Render(renderer,simulation,0,false);
     const auto atlasCapture=L"atlas-drawn-"+std::to_wstring(size.first)+L"x"+std::to_wstring(size.second)+L".png";
@@ -1079,6 +1097,77 @@ int main() {
     Require(renderer.Capture(L"combat-hud-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),
       "Combat HUD diagnostic capture failed");
     Require(state.Save()==before,"HUD rendering and disabled clicks must not change combat state");
+    float hoverClock=0;
+    for(int slot:{0,4,6,7}) {
+      hud.Pointer(layout.x+(377+slot*58.f)*layout.scale,layout.y+679*layout.scale,
+        float(size.first),float(size.second),false,false);
+      for(int frame=0;frame<10;++frame) {
+        hoverClock+=.05f;renderer.BeginFrame();hud.Render(renderer,state,hoverClock,false);
+        Require(renderer.EndFrame(false),"Delayed spell tooltip render failed");
+      }
+      renderer.BeginFrame();hud.Render(renderer,state,hoverClock,false);
+      Require(renderer.Capture(L"spell-tooltip-"+std::to_wstring(slot)+L"-"+std::to_wstring(size.first)+L".png") &&
+        renderer.EndFrame(false),"Spell tooltip capture failed");
+      Require(state.Save()==before,"Spell tooltip must not consume a spell, item or cooldown");
+    }
+    hud.SetOnly(ui::Panel::Build);hud.selectedSpell=0;
+    renderer.BeginFrame();hud.Render(renderer,state,hoverClock,false);
+    Require(renderer.Capture(L"spellbook-live-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),
+      "Live spellbook cooldown capture failed");
+    Require(state.Save()==before,"Live spellbook presentation changed combat state");
+  }
+  for(const auto size:{std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
+    Require(renderer.Resize(size.first,size.second),"Journal resize");
+    rpg::Simulation state;ui::Interface journal;journal.Show(ui::Panel::Journal);
+    const auto saved=state.Save();const ui::Layout layout(float(size.first),float(size.second));
+    const auto render=[&]() {
+      renderer.BeginFrame();journal.Render(renderer,state,0,false);Require(renderer.EndFrame(false),"Journal render");
+    };
+    render();
+    for(int chapter=0;chapter<rpg::frontierQuestCount+2;++chapter) {
+      const auto event=journal.Pointer(layout.x+400*layout.scale,layout.y+(169+chapter*30.f)*layout.scale,
+        float(size.first),float(size.second),true,false);
+      Require(event.action==ui::Action::SelectJournal && event.value==chapter,"Journal row must select its own chapter");
+      journal.journalSelection=event.value;journal.InvalidateHitRegions();render();
+    }
+    renderer.BeginFrame();journal.Render(renderer,state,0,false);
+    Require(renderer.Capture(L"journal-locked-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),"Locked chapter capture");
+    const auto current=journal.Pointer(layout.x+400*layout.scale,layout.y+130*layout.scale,
+      float(size.first),float(size.second),true,false);
+    Require(current.action==ui::Action::SelectJournal && current.value==-1,"Journal current shortcut");
+    journal.journalSelection=current.value;journal.InvalidateHitRegions();render();
+    const auto atlas=journal.Pointer(layout.x+900*layout.scale,layout.y+565*layout.scale,
+      float(size.first),float(size.second),true,false);
+    Require(atlas.action==ui::Action::Map,"Journal atlas shortcut");
+    renderer.BeginFrame();journal.Render(renderer,state,0,false);
+    Require(renderer.Capture(L"journal-current-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),"Current chapter capture");
+    Require(state.Save()==saved,"Journal browsing must not accept quests or change rewards/progress");
+    journal.journalSelection=7;journal.Close(ui::Panel::Journal);journal.Show(ui::Panel::Journal);
+    Require(journal.journalSelection==-1,"Reopening journal must follow current assignment");
+    Require(state.Load(test::anchorOffer) && state.QuestState()==rpg::Quest::Complete,"Completed journal fixture");
+    const auto completedSave=state.Save();journal.journalSelection=0;
+    renderer.BeginFrame();journal.Render(renderer,state,0,false);
+    Require(renderer.Capture(L"journal-completed-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),"Completed chapter capture");
+    Require(state.Save()==completedSave,"Reading a completed chapter must not grant rewards twice");
+  }
+  {
+    Require(renderer.Resize(1280,720),"Audio menu input resolution");
+    Game game;game.OpenPanel(ui::Panel::Menu);
+    Input input;Input::Frame frame;frame.focused=true;
+    const auto step=[&]() {
+      input.Update(frame);game.Update(.01,input,0);
+      renderer.BeginFrame();game.Render(renderer);Require(renderer.EndFrame(false),"Audio menu input render");
+    };
+    const auto clickAt=[&](LONG x,LONG y) {
+      frame.client={x,y};frame.screen=frame.client;frame.down[VK_LBUTTON]=true;step();
+      frame.down[VK_LBUTTON]=false;step();
+    };
+    step();clickAt(508,449);
+    Require(game.MusicVolume()==0,"Music mute mark must reach the game mixer level");
+    clickAt(688,449);Require(game.MusicVolume()==1,"Music maximum mark must reach the game mixer level");
+    clickAt(598,483);Require(std::abs(game.EffectsVolume()-.5f)<.001f,"Effects midpoint must reach the game mixer level");
+    clickAt(508,483);Require(game.EffectsVolume()==0,"Effects mute mark must reach the game mixer level");
+    clickAt(767,473);Require(std::abs(game.EffectsVolume()-.1f)<.001f,"Increment button must unmute effects after meter use");
   }
   const auto loadingRoot=std::filesystem::current_path()/"loading-check";
   std::filesystem::create_directories(loadingRoot);

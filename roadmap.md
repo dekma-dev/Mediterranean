@@ -1,5 +1,11 @@
 # Mediterranean Roadmap
 
+Menu UI checkpoint (2026-10-25): Escape now has direct segmented volume selection, mute feedback and navigation shortcuts. Scaled pointer and game-level mixer checks cover the new controls. Continue R5 live readability and audible acceptance (manual check 247).
+
+Journal UI checkpoint (2026-10-25): chapters are browsable with parchment selection, explicit locked/completed states, reward history and current-objective navigation. Three-size capture/input coverage is in place. Continue R5 live readability acceptance, including journal check 246.
+
+Spell UI checkpoint (2026-10-25): action-bar tooltips now show artwork, actual binding, spell category, numeric effect, description, cooldown/range and live readiness reason. Combat placement clears the health frames. Spellbook cards display cooldown sweeps/countdowns and hover emphasis; long spell names and item stats fit their columns, and comparison rows have a clearer background. Continue R5 live readability acceptance.
+
 Weapon-path/armor checkpoint (2026-10-25): mace and cleaver attacks now use distinct solved hand paths and weapon directions; shaped plate pauldrons replace rounded shoulder forms for plate classes. Hair has a dedicated strand material. Contact clocks and equipment ownership remain intact. Continue R2 authored hero and R3 live movement acceptance; see docs/character-material-motion.md.
 
 Anatomy/leather/settling checkpoint (2026-10-25): directional muscle contours refine the existing weighted body across LODs; a dedicated packed leather layer separates hide fittings, boots and gloves from cloth. Class-specific post-release balance and a smoother cancellation fade advance R3/R5. Authored hero production and live visual/motion acceptance remain outstanding; see docs/character-material-motion.md.
