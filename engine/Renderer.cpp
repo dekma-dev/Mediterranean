@@ -44,7 +44,14 @@ bool Renderer::Check(HRESULT result, const wchar_t* operation) {
  std::wostringstream s; s << operation << L" failed (0x" << std::hex << static_cast<unsigned long>(result) << L").";
  error_ = s.str(); OutputDebugStringW(error_.c_str()); return false;
 }
-bool Renderer::Initialize(HWND window, int width, int height) {
+bool Renderer::Initialize(HWND window, int width, int height,const visual::BodyGeometry* previewBody) {
+ if(previewBody) {
+  try {
+   visual::ValidateBodyGeometry(*previewBody);
+   for(const auto& v:previewBody->mesh.vertices) previewBodyRadius_=std::max(previewBodyRadius_,std::sqrt(v.position.x*v.position.x+v.position.y*v.position.y+v.position.z*v.position.z));
+  }
+  catch(const std::exception&) {error_=L"Invalid imported body preview geometry.";return false;}
+ }
  DXGI_SWAP_CHAIN_DESC d{};
  d.BufferCount=2; d.BufferDesc.Width=width; d.BufferDesc.Height=height;
  d.BufferDesc.Format=DXGI_FORMAT_R8G8B8A8_UNORM; d.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -64,7 +71,7 @@ bool Renderer::Initialize(HWND window, int width, int height) {
  ComPtr<IDXGIFactory> factory;
  if (SUCCEEDED(swapChain_->GetParent(IID_PPV_ARGS(factory.GetAddressOf()))))
   factory->MakeWindowAssociation(window,DXGI_MWA_NO_ALT_ENTER);
- if (!CreateTargets(width,height) || !CreatePipeline() || !CreateUiArtwork()) return false;
+ if (!CreateTargets(width,height) || !CreatePipeline(previewBody) || !CreateUiArtwork()) return false;
  SetCamera({0,3,-6},{0,1,0});
  return true;
 }
@@ -85,7 +92,7 @@ bool Renderer::Resize(int width, int height) {
  if (!Check(swapChain_->ResizeBuffers(0,width,height,DXGI_FORMAT_UNKNOWN,0),L"Resize swap chain")) return false;
  return CreateTargets(width,height);
 }
-bool Renderer::CreatePipeline() {
+bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
  const auto *vs=&compiled_scene::VSMain,*ps=&compiled_scene::PSMain,*world=&compiled_scene::VSWorld,*shadow=&compiled_scene::VSShadow;
  const auto *body=&compiled_scene::VSBody,*bodyShadow=&compiled_scene::VSBodyShadow;
  const auto *hand=&compiled_scene::VSHand,*handShadow=&compiled_scene::VSHandShadow;
@@ -124,13 +131,13 @@ bool Renderer::CreatePipeline() {
  std::vector<Vertex> vertices; std::vector<std::uint32_t> indices;
  std::vector<visual::SkinInfluence> influences;
  for (unsigned i=0;i<meshCount;++i) {
-  auto mesh=visual::BuildMesh(static_cast<visual::Mesh>(i));
+  auto mesh=previewBody && visual::IsBodyMesh(static_cast<visual::Mesh>(i))?previewBody->mesh:visual::BuildMesh(static_cast<visual::Mesh>(i));
   auto& range=meshes_[i]; range.start=static_cast<UINT>(indices.size()); range.count=static_cast<UINT>(mesh.indices.size());
   for (auto index : mesh.indices) indices.push_back(index+static_cast<UINT>(vertices.size()));
   for (const auto& v : mesh.vertices) range.radius=std::max(range.radius,std::sqrt(v.position.x*v.position.x+v.position.y*v.position.y+v.position.z*v.position.z));
   vertices.insert(vertices.end(),mesh.vertices.begin(),mesh.vertices.end());
   if(visual::IsBodyMesh(static_cast<visual::Mesh>(i))) {
-    const auto& weights=visual::CharacterBody(i-unsigned(visual::Mesh::Body)).influences;
+    const auto& weights=previewBody?previewBody->influences:visual::CharacterBody(i-unsigned(visual::Mesh::Body)).influences;
     influences.insert(influences.end(),weights.begin(),weights.end());
   }
   else if(visual::IsHandMesh(static_cast<visual::Mesh>(i))) {
@@ -398,6 +405,15 @@ unsigned Renderer::DrawBody(XMFLOAT3 position,float yaw,const visual::BodyPalett
  // Covers every solved limb/torso pose, including fully raised arms. Bounds are
  // intentionally conservative; the simulation's collision body is unchanged.
  item.radius=3.f;
+ if(previewBodyRadius_>0) {
+  // Frobenius norm bounds nonuniform scaling/shear of the bind sphere.
+  // A weighted blend stays inside the largest transformed-joint bound.
+  for(const auto& m:palette.joints) {
+   const float linear=m._11*m._11+m._12*m._12+m._13*m._13+m._21*m._21+m._22*m._22+m._23*m._23+m._31*m._31+m._32*m._32+m._33*m._33;
+   const float translation=std::sqrt(m._41*m._41+m._42*m._42+m._43*m._43);
+   item.radius=std::max(item.radius,previewBodyRadius_*std::sqrt(linear)+translation);
+  }
+ }
  item.body=255;
  return bodyCount_-1;
 }

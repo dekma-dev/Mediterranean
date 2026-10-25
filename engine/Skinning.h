@@ -13,6 +13,8 @@ struct BodyPalette {
   // RGB tint, W material index. Regions: chest, sleeve, forearm, thigh, shin, neck.
   std::array<DirectX::XMFLOAT4,bodyRegions> colors;
 };
+// Validate externally supplied preview geometry before immutable GPU upload.
+void ValidateBodyGeometry(const BodyGeometry& body);
 const std::array<BoneSegment,bodyBones>& BodyBindPose();
 const BodyGeometry& CharacterBody(unsigned level=0);
 DirectX::XMMATRIX BoneFrame(DirectX::XMFLOAT3 from,DirectX::XMFLOAT3 to,DirectX::XMFLOAT3 forward={0,0,1});

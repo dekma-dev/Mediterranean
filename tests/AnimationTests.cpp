@@ -69,6 +69,14 @@ void ClipLibraryRegressions() {
     for(int i=0;i<hz*2;++i) controller.Update(1.f/hz,0,0,0,0,true,0,0,true);
     Require(magnitude(controller.pose)<.00001f,"Stopping must blend fully back to idle");
   }
+  for(int hz:{30,60,144,1000}) {
+    animation::LocomotionController pivot;
+    for(int i=0;i<hz;++i) pivot.Update(1.f/hz,0,0,0,2,true,0,0,true);
+    Require(std::abs(pivot.phase-.36f)<.0001f,"Stationary turn cadence must advance consistently without walking");
+    const float phase=pivot.phase;
+    for(int i=0;i<hz;++i) pivot.Update(1.f/hz,0,0,0,2,false,1,1,true);
+    Require(pivot.phase==phase,"Airborne turning must not trigger planted pivot steps");
+  }
   const float directions[][2]={{1,0},{-1,0},{0,-1},{0,1}};
   {
     animation::LocomotionController taps;

@@ -21,7 +21,7 @@ inline ActionChannels operator*(ActionChannels a,float t) {
   return {a.left*t,a.right*t,a.pitch*t,a.yaw*t,a.roll*t,a.hip*t,a.open*t,a.aim*t};
 }
 inline ActionChannels operator-(ActionChannels a,ActionChannels b) { return a+b*-1.f; }
-enum class ActionClip { Basic,Heavy,Restore };
+enum class ActionClip { Basic,Heavy,Restore,Technique };
 struct ClassActionClip {
   const char* name;
   ActionChannels prepare,release,follow;
@@ -64,11 +64,11 @@ inline const std::array<ClassActionClip,int(rpg::ClassId::Count)> classActionCli
     {{.015f,0,.01f},{-.015f,-.015f,.015f},.025f,.035f,-.01f,-.015f}}
 }};
 inline bool RangedClass(rpg::ClassId id) { return rpg::DescribeClass(id).range>3; }
-inline float ActionDuration(ActionClip clip) { return clip==ActionClip::Restore?.72f:combat::Duration(clip==ActionClip::Heavy); }
+inline float ActionDuration(ActionClip clip) { return clip==ActionClip::Restore?.72f:combat::Duration(clip==ActionClip::Heavy || clip==ActionClip::Technique); }
 inline ActionChannels SampleAction(rpg::ClassId id,ActionClip clip,float seconds) {
   if(!rpg::ValidClass(id) || !std::isfinite(seconds) || seconds<0 || seconds>=ActionDuration(clip)) return {};
   const auto& definition=classActionClips[int(id)];
-  const bool restore=clip==ActionClip::Restore,heavy=clip==ActionClip::Heavy;
+  const bool restore=clip==ActionClip::Restore,heavy=clip==ActionClip::Heavy || clip==ActionClip::Technique;
   if(restore && id==rpg::ClassId::Warrior) return {}; // Existing Mend remains unchanged.
   const float release=restore?.18f:RangedClass(id)?combat::StrokeStart(heavy):combat::Contact(heavy);
   const float prepare=release*(restore || heavy?.65f:.40f),follow=restore?.34f:release+.09f;
@@ -125,6 +125,16 @@ inline ActionChannels SampleAction(rpg::ClassId id,ActionClip clip,float seconds
   const auto mb=segment<3?(keys[segment+2]-a)*(interval/(times[segment+2]-times[segment])):ActionChannels{};
   const float t2=t*t,t3=t2*t;
   auto result=a*(2*t3-3*t2+1)+ma*(t3-2*t2+t)+b*(-2*t3+3*t2)+mb*(t3-t2);
+  if(clip==ActionClip::Technique) {
+    // Smooth zero-ended accent differentiates the tactical gesture while
+    // retaining the contact clock and the final fixed-length arm solve.
+    const float accent=std::sin(seconds/ActionDuration(clip)*3.14159265f);
+    const float weight=accent*accent;
+    result.hip-=.018f*weight;
+    result.pitch+=.025f*weight;
+    if(RangedClass(id)) result.left=result.left+ActionVector{.025f,.045f,.025f}*weight;
+    else {result.yaw-=.07f*weight;result.left=result.left+ActionVector{.02f,.04f,-.025f}*weight;}
+  }
   result.open=std::clamp(result.open,0.f,1.f);
   result.aim=std::clamp(result.aim,0.f,1.f);
   return result;
@@ -135,11 +145,11 @@ struct ActionController {
   ActionClip lastClip=ActionClip::Basic;
   rpg::ClassId lastClass=rpg::ClassId::Warrior;
   void Reset() { *this={}; }
-  void Update(float dt,rpg::ClassId id,float attackSeconds,bool heavy,float healSeconds,bool alive) {
+  void Update(float dt,rpg::ClassId id,float attackSeconds,bool heavy,float healSeconds,bool alive,bool technique=false) {
     if(!alive || !rpg::ValidClass(id)) { Reset(); return; }
     if(!std::isfinite(dt) || dt<=0) return;
     dt=std::min(dt,.05f);
-    const auto clip=attackSeconds>=0?(heavy?ActionClip::Heavy:ActionClip::Basic):ActionClip::Restore;
+    const auto clip=attackSeconds>=0?(technique?ActionClip::Technique:heavy?ActionClip::Heavy:ActionClip::Basic):ActionClip::Restore;
     const float seconds=attackSeconds>=0?attackSeconds:healSeconds;
     const bool active=std::isfinite(seconds) && seconds>=0 && seconds<ActionDuration(clip);
     const bool changed=lastSeconds>=0 && (!active || id!=lastClass || clip!=lastClip || seconds+.00001f<lastSeconds);

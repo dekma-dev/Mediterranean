@@ -194,6 +194,12 @@ int main() {
   const auto root=std::filesystem::current_path()/"class-effects-check";std::filesystem::create_directories(root);
   Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),960,640,L"Class effects checks",false),"Hidden window");
   Renderer r;Check(r.Initialize(window.GetHandle(),960,640),"D3D renderer");
+  for(int id=0;id<int(ClassId::Count);++id) {
+    CombatVisualEvent e;e.school=ClassId(id);e.kind=CombatVisualKind::HeavyHit;e.heavy=true;e.technique=true;e.height=1.2f;
+    r.BeginFrame();r.SetCamera({0,2,-4},{0,1,0});classfx::Impact(r,e,.12f);
+    Check(r.EffectVertices()>0 && r.EffectVertices()<5000,"Technique impact exceeded bounded geometry");
+    Capture(r,root/(std::to_string(id)+"-technique.png"));
+  }
   Captures(r,root);Recoveries(r,root);LiveStates(r,root);SchoolHues(r,root);
   Check(sizeof(CombatEffects)<=16384,"Class effects exceeded the fixed CPU budget");
   Check(r.ValidateDebugMessages(),"D3D validation errors");

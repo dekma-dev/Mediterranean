@@ -84,7 +84,7 @@ struct CombatVisualEvent {
   // Snapshot the accepted action: presentation can outlive recovery/selection.
   Vec2 source{};
   float sourceHeight=0;
-  bool heavy=false,empowered=false;
+  bool heavy=false,empowered=false,technique=false;
 };
 
 class Simulation {
@@ -105,7 +105,7 @@ public:
   float Barrier() const { return barrier_; }
   bool RetreatMobility() const { return CombatStyleInfo().retreatDistance>0; }
   float MobilityDuration() const { return CombatStyleInfo().retreatDuration; }
-  float AttackRate() const { return ClassAttackRate(class_,HeavyAttack()); }
+  float AttackRate() const { return ClassAttackRate(class_,HeavyAttack())*(attackAbility_==5?.8f:1.f); }
   float BuildBonus(unsigned mask,float TalentInfo::*stat) const;
   int FrontierCompleted() const { return frontierCompleted_; }
   bool FrontierActive() const { return frontierActive_; }
@@ -142,7 +142,8 @@ public:
   float RecoveryCastDuration() const { return ClassRecoveryCast(class_)/(1+BuildBonus(build_,&TalentInfo::castSpeed)); }
   float RecoveryProgress() const { return CastingRecovery()?1-recoveryCast_/RecoveryCastDuration():0; }
   bool Attacking() const { return attackAbility_>=0; }
-  bool HeavyAttack() const { return attackAbility_==1; }
+  bool TechniqueAttack() const { return attackAbility_==5; }
+  bool HeavyAttack() const { return attackAbility_==1 || attackAbility_==5; }
   float AttackSeconds() const { return Attacking()?attackAge_:-1.f; }
   float AttackProgress() const { return Attacking()?attackAge_/combat::Duration(HeavyAttack()):0; }
   float Health() const { return health_; }
@@ -172,7 +173,7 @@ public:
     return HasTalent(Talent::Executioner) && maximum>0 && health>0 && health<=maximum*.5f?1.25f:1.f;
   }
   float HeavyDamageAgainst(float health,float maximum) const { return HeavyDamage()*HeavyMultiplier(health,maximum); }
-  float AbilityCooldown(int index) const { return ValidSpell(index)?abilityCooldowns[index]-
+  float AbilityCooldown(int index) const { return index==5?spells[5].cooldown:ValidSpell(index)?abilityCooldowns[index]-
     (index==3?BuildBonus(build_,&TalentInfo::mendCooldown):index==2?BuildBonus(build_,&TalentInfo::dashCooldown):
     index==1?BuildBonus(build_,&TalentInfo::heavyCooldown):BuildBonus(build_,&TalentInfo::basicCooldown)):0; }
   int DefeatedCount() const;
@@ -297,7 +298,7 @@ private:
   float landingSpeed_ = 0, landingElapsed_ = 0;
   bool damagedThisUpdate_ = false;
   bool jumpedThisUpdate_ = false, dashedThisUpdate_ = false;
-  std::array<float,4> cooldowns_{};
+  std::array<float,6> cooldowns_{};
   int target_ = -1, gold_ = 0;
   int queuedAttack_=-1;
   EntityId queuedTarget_=0;

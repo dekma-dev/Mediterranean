@@ -195,7 +195,7 @@ void ClothingContracts() {
     Simulation hero;Check(hero.CreateCharacter(ClassId(i),"Tester"),"Clothing hero");
     auto outfit=CharacterOutfit::From(hero.Items(),ClassId(i));
     const auto all=clothing::Build(outfit);
-    Check(all.count>0 && all.count<32,"Class fittings missing or over budget");
+    Check(all.count>0 && all.count<48,"Class fittings missing or over budget");
     std::string signature;
     for(unsigned n=0;n<all.count;++n) {
       const auto& p=all.parts[n];

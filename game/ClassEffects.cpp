@@ -70,6 +70,12 @@ void Projectile(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,floa
   const auto point=[&](float u) { return CombatEffects::SpellTracePoint(origin,e.destination,Unit(u),arc); };
   auto c=Color(e.school,fade*.72f);
   const auto head=point(t);
+  if(e.technique && e.school==C::Mage) {
+    c={.35f,.78f,1.f,fade*.8f};
+    r.DrawEffectStreak(point(t-.17f),head,.035f,c);
+    for(int n=0;n<3;++n) r.DrawEffectStreak(Add(head,{(n-1)*.05f,.06f,0}),point(t-.07f),.012f,c);
+    return;
+  }
   if(physical) {
     const auto tail=point(t-.08f);
     r.DrawEffectStreak(tail,head,.012f*power,{1,.87f,.64f,fade});
@@ -135,6 +141,16 @@ void Impact(Renderer& r,const rpg::CombatVisualEvent& e,float age) {
   const float size=(e.heavy?1.1f:.72f)*(e.empowered?1.2f:1);
   const XMFLOAT3 p{e.position.x-std::sin(e.facing)*.34f,e.height,e.position.z-std::cos(e.facing)*.34f};
   auto c=Color(e.school,fade*.8f);
+  if(e.technique) {
+    if(e.school==C::Mage) c={.35f,.78f,1.f,fade*.8f};
+    const XMFLOAT3 ground{e.position.x,.055f,e.position.z};
+    // A short broken seal identifies the tactical contact without hiding feet.
+    for(int n=0;n<3;++n) Arc(r,ground,.42f+phase*.30f,n*tau/3+phase,.65f,.012f,c,true);
+  }
+  if(e.technique && e.school==C::Mage) {
+    for(int n=0;n<8;++n) Ray(r,p,n*tau/8,.10f+phase*.18f,.28f+phase*.65f,.016f,c);
+    r.DrawEffectGlow(p,.28f,{.6f,.88f,1.f,flash*.65f});return;
+  }
   const float bloom=std::sin(phase*pi);
   const int facets=3+int(e.school)%4;
   for(int i=0;i<facets;++i) {
@@ -344,7 +360,7 @@ void Prepare(Renderer& r,const rpg::Simulation& state,XMFLOAT3 p) {
   const float progress=state.CastingRecovery()?state.RecoveryProgress():state.AttackSeconds()/combat::StrokeStart(state.HeavyAttack());
   if(progress<=0 || progress>=1) return;
   const float alpha=std::sin(progress*pi*.5f)*.55f;
-  const auto id=state.Class();const auto c=Color(id,alpha);
+  const auto id=state.Class();const auto c=state.TechniqueAttack() && id==C::Mage?XMFLOAT4{.35f,.78f,1.f,alpha}:Color(id,alpha);
   if((id==C::Scout || id==C::Engineer) && !state.CastingRecovery()) {
     if(!state.HeavyAttack()) return;
     // Compact sight brackets at the weapon; no premature muzzle flash.

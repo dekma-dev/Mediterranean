@@ -287,7 +287,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
     if(event.kind==rpg::CombatVisualKind::SpellCast) {
       auto launch=playerAnimation_.pose;
       launch.attackSeconds=-1; launch.cast=0;
-      launch.action=animation::SampleAction(event.school,event.heavy?animation::ActionClip::Heavy:animation::ActionClip::Basic,
+      launch.action=animation::SampleAction(event.school,event.technique?animation::ActionClip::Technique:event.heavy?animation::ActionClip::Heavy:animation::ActionClip::Basic,
         combat::StrokeStart(event.heavy));
       const bool shield=simulation_.Items().Worn(rpg::GearSlot::Offhand)!=rpg::Item::None;
       const auto form=rpg::WeaponFor(event.school).form;
@@ -342,7 +342,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   if(simulation_.ClassInfo().range>3 && simulation_.Attacking())
     playerAnimation_.pose.attackSeconds=-1;
   playerAnimation_.actions.Update(dt,simulation_.Class(),simulation_.AttackSeconds(),simulation_.HeavyAttack(),
-    simulation_.CastingRecovery()?std::min(.30f,simulation_.RecoveryProgress()*1.5f):playerAnimation_.castAge,simulation_.Health()>0);
+    simulation_.CastingRecovery()?std::min(.30f,simulation_.RecoveryProgress()*1.5f):playerAnimation_.castAge,simulation_.Health()>0,simulation_.TechniqueAttack());
   playerAnimation_.pose.action=playerAnimation_.actions.pose;
   if(simulation_.Class()!=rpg::ClassId::Warrior) playerAnimation_.pose.cast=0;
   playerAnimation_.pose.heavyAttack=simulation_.HeavyAttack();

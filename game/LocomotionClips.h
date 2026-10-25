@@ -67,7 +67,10 @@ struct LocomotionController {
     // would discard its hip offset on the first airborne frame.
     if(grounded && airborne) landingAge=std::isfinite(landingElapsed)?std::clamp(landingElapsed,0.f,dt):0;
     airborne=!grounded; previousSpeed=speed;
-    phase=std::remainder(phase+travel/1.57f,1.f);
+    // Pivot steps need a cadence even without translation. Blend out their
+    // contribution during travel so strafing does not double the foot cycle.
+    const float pivot=grounded?std::min(std::abs(turnRate),3.f)*dt*.18f*(1-std::clamp(speed/2.f,0.f,1.f)):0;
+    phase=std::remainder(phase+travel/1.57f+pivot,1.f);
     const float moving=std::clamp(speed/2.f,0.f,1.f);
     std::array<float,6> target={std::max(0.f,forward),std::max(0.f,-forward),std::max(0.f,-right),std::max(0.f,right),0,0};
     const float sum=target[0]+target[1]+target[2]+target[3];

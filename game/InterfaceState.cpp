@@ -4,16 +4,16 @@
 #include <sstream>
 namespace ui {
 std::string Interface::SaveHotbars() const {
-  std::ostringstream out;out<<"HOTBARS 1\n";
+  std::ostringstream out;out<<"HOTBARS 2\n";
   for(const auto& bar:hotbars_) {for(int spell:bar) out<<spell<<' ';out<<'\n';}
   return out.str();
 }
 bool Interface::LoadHotbars(const std::string& data) {
   if(data.size()>4096) return false;
   std::istringstream in(data);std::string tag;int version=0;
-  if(!(in>>tag>>version) || tag!="HOTBARS" || version!=1) return false;
+  if(!(in>>tag>>version) || tag!="HOTBARS" || (version!=1 && version!=2)) return false;
   auto candidate=hotbars_;
-  for(auto& bar:candidate) for(auto& spell:bar) if(!(in>>spell) || spell < -1 || spell>4) return false;
+  for(auto& bar:candidate) for(auto& spell:bar) if(!(in>>spell) || spell < -1 || spell>(version==1?4:5)) return false;
   in>>std::ws;if(!in.eof()) return false;
   hotbars_=candidate;CancelDrag();InvalidateHitRegions();return true;
 }

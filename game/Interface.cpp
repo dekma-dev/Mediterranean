@@ -38,6 +38,7 @@ std::string Number(float value) {
  std::ostringstream text; text<<std::setprecision(4)<<value; return text.str();
 }
 std::string SpellEffect(const rpg::Simulation& s,int ability) {
+ if (ability==5) return Number(s.HeavyDamage()*(s.Class()==rpg::ClassId::Demonologist?.85f:.65f))+" base damage / tactical contact";
  if (ability==0) return Number(s.StrikeDamage())+" base damage";
  if (ability==1) return Number(s.HeavyDamage())+" base damage"+
    (s.HasTalent(rpg::Talent::Executioner)?" / "+Number(s.HeavyDamage()*1.25f)+" at half target HP":"");
@@ -280,7 +281,8 @@ void AbilityArtwork(Canvas& c,Rect rect,int ability,rpg::ClassId id=rpg::ClassId
   else if(id==rpg::ClassId::Scout) PaintedIcon(c,rect,22);
   else Icon(c,rect,Item::Shield,1,id);
  }
- else if(ability>=4) PaintedIcon(c,rect,11);
+ else if(ability==5) ClassSigil(c,rect,id,1);
+ else if(ability==4) PaintedIcon(c,rect,11);
  else if(ability==1 && (id==rpg::ClassId::Warrior || id==rpg::ClassId::Paladin || id==rpg::ClassId::Demonologist)) PaintedIcon(c,rect,24);
  else {
   PaintedIcon(c,rect,int(rpg::WeaponFor(id).form));
@@ -700,11 +702,11 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.Frame(rect,{.08f,.12f,.055f,1},i==1 && s.EmpoweredReady()?classAccent:hover?gold:border);
     AbilityArtwork(c,{x+4,657,46,43},i,s.Class());
   }
-  const bool ready=!CapturesMovement() && i>=0 && (i<4?std::string(s.AbilityStatus(i))=="READY":CanUse(s,Item::Potion));
-  const float cooldown=i<0?0:i<4?s.Cooldown(i):s.PotionCooldown();
+  const bool ready=!CapturesMovement() && i>=0 && (rpg::ValidSpell(i)?std::string(s.AbilityStatus(i))=="READY":CanUse(s,Item::Potion));
+  const float cooldown=i<0?0:rpg::ValidSpell(i)?s.Cooldown(i):s.PotionCooldown();
   if(i>=0 && !ready) c.RectFill({x+4,657,46,43},{.02f,.025f,.01f,.36f});
   if(cooldown>0) {
-    const float fraction=std::clamp(cooldown/(i<4?s.AbilityCooldown(i):3.f),0.f,1.f);
+    const float fraction=std::clamp(cooldown/(rpg::ValidSpell(i)?s.AbilityCooldown(i):3.f),0.f,1.f);
     c.CooldownSweep({x+4,657,46,43},fraction);
     c.Center(x,672,54,Seconds(cooldown),19,ink);
   }
@@ -1066,14 +1068,15 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     return;
    }
    c.Text(148,136,"SPELLBOOK / inspect or drag an ability to the action bar",11,muted);
-   for(int i=0;i<4;++i) {
-    const Rect spellSlot{148+i*170.f,157,154,52};
+   for(int card=0;card<5;++card) {
+    const int i=card==4?5:card;
+    const Rect spellSlot{148+card*138.f,157,132,52};
     c.Frame(spellSlot,selectedSpell==i?Color{.12f,.23f,.20f,1}:dark,selectedSpell==i?gold:border);
     AbilityArtwork(c,{spellSlot.x+6,spellSlot.y+6,39,39},i,s.Class());
-    c.Text(spellSlot.x+52,spellSlot.y+10,s.Spell(i).name,14,ink);
+    c.FitText(spellSlot.x+50,spellSlot.y+10,76,s.Spell(i).name,12,ink);
     std::string bindings;
     for(int binding=0;binding<10;++binding) if(HotbarSpell(binding,s.Class())==i) {if(!bindings.empty()) bindings+="/";bindings+=binding==9?"0":std::to_string(binding+1);}
-    c.Text(spellSlot.x+52,spellSlot.y+30,(bindings.empty()?"Unbound":"Key "+bindings)+" / "+Number(s.AbilityCooldown(i))+"s",11,muted);
+    c.FitText(spellSlot.x+50,spellSlot.y+30,76,(bindings.empty()?"Unbound":"Key "+bindings)+" / "+Number(s.AbilityCooldown(i))+"s",11,muted);
     regions_.push_back({spellSlot,{Action::SelectSpell,i},true});
    }
    const auto& branches=s.ClassInfo().branches;
@@ -1124,7 +1127,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    } else if (rpg::ValidSpell(selectedSpell)) {
     const auto& spell=s.Spell(selectedSpell);
     AbilityArtwork(c,{874,166,48,48},selectedSpell,s.Class());
-    c.Text(937,175,"FOUNDATION SPELL",13,gold);
+    c.Text(937,175,selectedSpell==5?"CLASS TECHNIQUE":"FOUNDATION SPELL",13,gold);
     c.Text(937,198,"Drag the card to bind / level 1",11,muted);
     c.Text(874,231,spell.name,22,ink);
     c.Wrap(874,264,258,SpellEffect(s,selectedSpell),14,gold,2);
@@ -1132,7 +1135,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
       " basic hits fill the reserve. "+style.payoff:spell.description,13,muted,5);
     c.Text(874,413,"Cooldown "+Number(s.AbilityCooldown(selectedSpell))+"s / "+
       (spell.range>0?Number(spell.range)+" m":"self"),13,ink);
-    c.Text(874,435,selectedSpell<2?"Contact "+Number(spell.contact)+"s / recovery "+Number(spell.recovery)+"s":
+    c.Text(874,435,(selectedSpell<2 || selectedSpell==5)?"Contact "+Number(spell.contact)+"s / recovery "+Number(spell.recovery)+"s":
       selectedSpell==2?Number(s.RetreatMobility()?style.retreatDistance:3.5f)+" m travel / "+Number(s.MobilityDuration())+"s burst":
       (spell.contact>0?Number(spell.contact)+"s stationary preparation":"Instant defense"),12,muted);
     c.Text(874,457,selectedSpell==1 && style.steadyHeavy?"Stand still until release":spell.targeting,12,muted);

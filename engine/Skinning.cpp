@@ -2,9 +2,32 @@
 #include <algorithm>
 #include <cmath>
 #include <unordered_map>
+#include <stdexcept>
 
 namespace visual {
 using namespace DirectX;
+void ValidateBodyGeometry(const BodyGeometry& body) {
+  const auto& mesh=body.mesh;
+  const auto require=[](bool ok) {if(!ok) throw std::runtime_error("Invalid body preview geometry");};
+  require(mesh.vertices.size()>=3 && mesh.vertices.size()<=16384 && body.influences.size()==mesh.vertices.size());
+  require(!mesh.indices.empty() && mesh.indices.size()<=65535 && mesh.indices.size()%3==0);
+  for(std::size_t i=0;i<mesh.vertices.size();++i) {
+    const auto& v=mesh.vertices[i];const auto& skin=body.influences[i];
+    const float radius=v.position.x*v.position.x+v.position.y*v.position.y+v.position.z*v.position.z;
+    const float normal=v.normal.x*v.normal.x+v.normal.y*v.normal.y+v.normal.z*v.normal.z;
+    require(std::isfinite(radius) && radius<=3000000 && std::isfinite(normal) && std::abs(normal-1)<.001f);
+    require(std::isfinite(v.color.x) && std::isfinite(v.color.y) && std::isfinite(v.color.z) &&
+      std::isfinite(v.color.w) && v.color.w>=0 && v.color.w<bodyRegions && std::floor(v.color.w)==v.color.w);
+    const float weights[]={skin.weights.x,skin.weights.y,skin.weights.z,skin.weights.w};float sum=0;
+    for(unsigned k=0;k<4;++k) {require(skin.bones[k]<bodyBones && std::isfinite(weights[k]) && weights[k]>=0);sum+=weights[k];}
+    require(std::abs(sum-1)<.00001f);
+  }
+  for(std::size_t i=0;i<mesh.indices.size();i+=3) {
+    for(unsigned k=0;k<3;++k) require(mesh.indices[i+k]<mesh.vertices.size());
+    const auto a=XMLoadFloat3(&mesh.vertices[mesh.indices[i]].position),b=XMLoadFloat3(&mesh.vertices[mesh.indices[i+1]].position),c=XMLoadFloat3(&mesh.vertices[mesh.indices[i+2]].position);
+    require(XMVectorGetX(XMVector3LengthSq(XMVector3Cross(b-a,c-a)))>1e-16f);
+  }
+}
 const std::array<BoneSegment,bodyBones>& BodyBindPose() {
   static const std::array<BoneSegment,bodyBones> bones={{
     {{0,.80f,0},{0,1.02f,0},.22f,.23f}, {{0,1.04f,0},{0,1.43f,0},.23f,.28f},
@@ -46,9 +69,23 @@ float Ellipsoid(XMFLOAT3 p,XMFLOAT3 center,XMFLOAT3 radius) {
 }
 float Field(unsigned bone,XMFLOAT3 p) {
   if (bone==0) return Ellipsoid(p,{0,.91f,0},{.255f,.18f,.165f});
-  if (bone==1) return std::min(Ellipsoid(p,{0,1.235f,0},{.29f,.31f,.17f}),
+  if (bone==1) {
+    // A fitted waist widens into the rib cage instead of one balloon-shaped
+    // torso. The contour is shared by every LOD and the influence field.
+    const float chest=std::clamp((p.y-1.02f)/.25f,0.f,1.f);
+    const float smooth=chest*chest*(3-2*chest);
+    const float width=.245f+.045f*smooth;
+    return std::min(Ellipsoid(p,{0,1.235f,.008f},{width,.31f,.155f+.015f*smooth}),
     Capsule(p,{{0,1.43f,0},{0,1.59f,0},.09f,.072f}));
-  return Capsule(p,BodyBindPose()[bone]);
+  }
+  const auto& segment=BodyBindPose()[bone];
+  const auto d=XMLoadFloat3(&segment.to)-XMLoadFloat3(&segment.from);
+  const float t=std::clamp(XMVectorGetX(XMVector3Dot(XMLoadFloat3(&p)-XMLoadFloat3(&segment.from),d))/XMVectorGetX(XMVector3LengthSq(d)),0.f,1.f);
+  // Smooth muscle volume away from elbow/knee/wrist, with no joint-sized balls
+  // or extra overlapping surfaces. Endpoint derivatives remain zero.
+  const float peak=std::sin(t*3.14159265f);
+  const float volume=(bone<6?(bone%2?.012f:.009f):.006f)*peak*peak;
+  return Capsule(p,segment)-volume;
 }
 float Surface(XMFLOAT3 p) {
   float distance=Field(0,p);

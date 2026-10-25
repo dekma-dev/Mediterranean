@@ -143,7 +143,26 @@ inline float ClassRecoveryBarrier(ClassId id) {
  return wards[ValidClass(id)?int(id):0];
 }
 inline SpellInfo ClassSpell(ClassId id,int index) {
- auto result=spells[index];const auto& info=DescribeClass(id);result.name=info.actions[index];
+ if(!ValidSpell(index)) return spells[0];
+ auto result=spells[index];const auto& info=DescribeClass(id);
+ if(index==5) {
+  static constexpr const char* names[]={"Hamstring","Radiant seal","Pinning arrow","Absolution","Briar grasp","Winter lance","Soul harvest","Mind fracture","Dissonance","Armor piercer","Blood rend"};
+  static constexpr const char* effects[]={
+   "65% heavy damage; slows for four seconds.",
+   "65% heavy damage; grants a 24-point ward on contact.",
+   "65% heavy damage; roots for two seconds. Movement before release cancels the shot.",
+   "65% heavy damage; heals for half the damage dealt.",
+   "65% heavy damage; roots for three seconds.",
+   "65% heavy damage, or 110% against a slowed/rooted enemy; slows for three seconds.",
+   "65% heavy damage; heals for 60% of damage dealt.",
+   "65% heavy damage; stuns for 1.5 seconds and interrupts wind-up.",
+   "65% heavy damage; interrupts wind-up and exposes for four seconds.",
+   "65% heavy damage; exposes for six seconds. Movement before release cancels the shot.",
+   "85% heavy damage; costs six health on commitment, never reducing the caster below one."};
+  result.name=names[ValidClass(id)?int(id):0];result.description=effects[ValidClass(id)?int(id):0];result.range=info.range;
+  const float rate=ClassAttackRate(id,true)*.8f;result.contact/=rate;result.recovery/=rate;return result;
+ }
+ result.name=info.actions[index];
  if(index<2) {
   result.range=info.range;
   const float rate=ClassAttackRate(id,index==1);

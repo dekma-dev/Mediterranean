@@ -207,7 +207,7 @@ int main() {
  Require(!restored.HasTalent(Talent::Vitality),"Airborne learning must be rejected");
 
  // Version seven has no BUILD record. Migration derives all earned points once.
- auto old=Record(Record(Record(veteranSave,"PROFILE ",""),"BUILD ",""),"LOADOUTS ",""); old=Record(Record(old,"APPEARANCE ",""),"SURVEY ",""); old.replace(14,old.find('\n')-14,"7");
+ auto old=Record(Record(Record(veteranSave,"PROFILE ",""),"BUILD ",""),"LOADOUTS ",""); old=Record(Record(old,"APPEARANCE ",""),"SURVEY ",""); old=Record(old,"TECHNIQUE ",""); old.replace(14,old.find('\n')-14,"7");
  Require(restored.Load(old) && restored.Save()==veteranSave && restored.TalentPoints()==2,"Version seven must migrate with unspent points");
  Require(restored.Load(restored.Save()) && restored.TalentPoints()==2,"Reloading must not duplicate earned points");
  const auto stable=restored.Save();
@@ -227,7 +227,7 @@ int main() {
  reject(veteranSave+"BUILD 0\n");
  reject(Player(veteranSave,0,-10,160)); // Maximum health without Vitality.
  Require(restored.Load(hybrid.Save()) && restored.Save()==hybrid.Save(),"A mixed build must round-trip exactly");
- auto version8=Record(Record(hybrid.Save(),"PROFILE ",""),"LOADOUTS ",""); version8=Record(Record(version8,"APPEARANCE ",""),"SURVEY ",""); version8.replace(14,version8.find('\n')-14,"8");
+ auto version8=Record(Record(hybrid.Save(),"PROFILE ",""),"LOADOUTS ",""); version8=Record(Record(version8,"APPEARANCE ",""),"SURVEY ",""); version8=Record(version8,"TECHNIQUE ",""); version8.replace(14,version8.find('\n')-14,"8");
  Require(restored.Load(version8) && restored.Save()==hybrid.Save(),"Version-eight learned builds must migrate without losing choices");
  auto newInOld=Record(version8,"BUILD ","BUILD 65\n");
  Require(!restored.Load(newInOld),"Version eight must not accept talent IDs introduced in version nine");

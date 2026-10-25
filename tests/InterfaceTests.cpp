@@ -772,8 +772,9 @@ int main() {
         "Right-click must not learn a talent");
       Require(click(1159,73).action==ui::Action::Close && click(1159,73).value==int(ui::Panel::Build),
         "Build close button must identify its modal panel");
-      for(int spell=0;spell<4;++spell) {
-        const auto inspect=click(222+spell*170.f,183);
+      for(int card=0;card<5;++card) {
+        const int spell=card==4?5:card;
+        const auto inspect=click(210+card*138.f,183);
         Require(inspect.action==ui::Action::SelectSpell && inspect.value==spell,
           "Each foundation spell must open inspection, not cast through the modal");
         screen.selectedSpell=spell;

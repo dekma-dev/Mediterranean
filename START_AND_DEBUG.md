@@ -362,3 +362,6 @@ Class action inspection: compare keys 1 and 2 on different classes, then use 4 w
 Add `-Benchmark1080p` alongside `-BenchmarkSuite` to measure exact 1920x1080 render buffers and save four reference PNGs. This remains a hidden diagnostic run. The report is `Release-benchmark-suite-1080p.txt`; capture filenames append `.scene-0.png` through `.scene-3.png`. Capture encoding is excluded from the measured frames.
 
 Run `scripts/build-native.ps1 -Backend Ninja -Configuration Release -BenchmarkSuite` for the reproducible four-workload report. See [performance baseline and clock audit](docs/performance-baseline.md) for interpretation, first measurements and limitations. Reports distinguish missing GPU observations from zero cost and include tail timings and adapter metadata.
+
+
+Class techniques (2026-10-25): fresh action bars bind the fifth class action to **6**. Existing layouts are preserved; open **N** and drag the rightmost spell card onto any action slot. **5** remains the potion. See [class techniques](docs/class-techniques.md) for contact effects, casting rules and save-version compatibility.

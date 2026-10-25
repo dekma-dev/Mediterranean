@@ -14,7 +14,9 @@
 #include <functional>
 class Renderer {
 public:
-  bool Initialize(HWND window, int width, int height);
+  // Optional immutable preview mesh replaces all three body LODs for this
+  // renderer only. Read synchronously; no borrowed pointer survives this call.
+  bool Initialize(HWND window, int width, int height,const visual::BodyGeometry* previewBody=nullptr);
   bool Resize(int width, int height);
   void BeginFrame();
   bool EndFrame(bool vsync = true);
@@ -110,7 +112,7 @@ public:
 private:
   bool Check(HRESULT result, const wchar_t* operation);
   bool CreateTargets(int width, int height);
-  bool CreatePipeline();
+  bool CreatePipeline(const visual::BodyGeometry* previewBody);
   bool FlushHud();
   bool CreateMaterials();
   bool CreateUiArtwork();
@@ -133,6 +135,7 @@ private:
   std::vector<Instance> instanceScratch_;
   std::array<visual::BodyPalette,visual::maxBodies> bodyPalettes_{};
   unsigned bodyCount_=0;
+  float previewBodyRadius_=0;
   std::array<visual::HandPalette,visual::maxHands> handPalettes_{};
   unsigned handCount_=0;
   Microsoft::WRL::ComPtr<ID3D11Buffer> handConstants_;

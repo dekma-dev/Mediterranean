@@ -204,7 +204,7 @@ void Mastery(const std::string& levelTen) {
     for(float t=0;t<duration+.05f;t+=.01f)s.Update(.01f,{});
     Check(!s.CastingRecovery() && s.Cooldown(3)>0,"Advanced recovery failed to finish");
   }
-  auto old=s.Save();old.replace(14,old.find('\n')-14,"13");Simulation restored;const auto stable=restored.Save();
+  auto old=s.Save();old.erase(old.find("TECHNIQUE "));old.replace(14,old.find('\n')-14,"13");Simulation restored;const auto stable=restored.Save();
   Check(!restored.Load(old) && restored.Save()==stable,"Legacy save accepted mastery bits");
   unsigned missing=s.BuildMask()&~(1u<<branch);Check(!ValidBuild(missing,10),"Mastery without foundation was accepted");
   Check(!ValidBuild(s.BuildMask(),4),"Advanced build accepted before level gate");

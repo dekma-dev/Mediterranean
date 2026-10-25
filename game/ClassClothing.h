@@ -69,6 +69,16 @@ inline Fittings Build(const CharacterOutfit& outfit) {
    default:break;
   }
  }
+ // Layered closure, collar lining and small paired rivets read at portrait
+ // distance. These remain torso-bound and obey the existing attachment LOD.
+ if(outfit.tunic) {
+  const bool armored=outfit.classId==rpg::ClassId::Warrior || outfit.classId==rpg::ClassId::Paladin || outfit.classId==rpg::ClassId::Engineer;
+  for(float side:{-1.f,1.f}) {
+   chest(side*.045f,1.26f,{.012f,.34f,.018f},armored?iron:hide,armored?S::Metal:S::Cloth);
+   add(M::Torso,side*.075f,1.51f,.075f,{.11f,.055f,.16f},hide,S::Cloth);
+   for(int n=0;n<4;++n) chest(side*.052f,1.13f+n*.075f,{.018f,.018f,.028f},brass,S::Metal);
+  }
+ }
  if(outfit.shoulders) {
   const bool plate=outfit.classId==rpg::ClassId::Warrior || outfit.classId==rpg::ClassId::Paladin || outfit.classId==rpg::ClassId::Engineer;
   const bool spines=outfit.classId==rpg::ClassId::Druid || outfit.classId==rpg::ClassId::Necromancer || outfit.classId==rpg::ClassId::Demonologist;

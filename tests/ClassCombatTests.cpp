@@ -234,4 +234,43 @@ void BufferedAttacks() {
     Check(s.QueuedAttack()==-1,"Changing target must not redirect a buffered attack");
   }
 }
-int main() {Cadence();Mobility();Preparation();Reserves();Recovery();DefensiveIdentity();BufferedAttacks();std::cout<<"PASS: class clocks, retreat collision, casting movement, empowered combat, recovery wards and buffered input.\n";}
+void Techniques() {
+  std::set<std::string> names;
+  for(int id=0;id<int(ClassId::Count);++id) for(int hz:{30,60,144,1000}) {
+    Simulation s;Duel(s,ClassId(id));
+    auto& enemy=const_cast<Enemy&>(s.Enemies()[0]);enemy.windup=0;enemy.attackCooldown=1.4f;
+    const float before=enemy.health,health=s.Health();
+    names.insert(s.Spell(5).name);
+    Command c;c.ability=5;s.Update(.001f,c);
+    Check(s.Attacking() && s.Cooldown(5)>11,"Technique must commit with its own cooldown");
+    Check(enemy.health==before,"Technique cannot damage on commitment");
+    Simulation saved;Check(saved.Load(s.Save()) && saved.Cooldown(5)==s.Cooldown(5) && !saved.Attacking(),"Technique cooldown must persist without replaying contact");
+    Tick(s,s.Spell(5).contact-.002f,hz);Check(enemy.health==before,"Technique contact too early");
+    Tick(s,.004f,hz);Check(enemy.health<before,"Technique failed to land");
+    if(id==int(ClassId::Warrior) || id==int(ClassId::Mage)) Check(enemy.snared>2.9f,"Technique slow missing");
+    if(id==int(ClassId::Scout) || id==int(ClassId::Druid)) Check(enemy.rooted>1.9f,"Technique root missing");
+    if(id==int(ClassId::Paladin)) Check(s.Barrier()==24,"Seal ward missing");
+    if(id==int(ClassId::Psionic)) Check(enemy.stunned>1.4f,"Mental stun missing");
+    if(id==int(ClassId::Bard) || id==int(ClassId::Engineer)) Check(enemy.exposed>3.9f,"Exposure missing");
+    if(id==int(ClassId::Priest) || id==int(ClassId::Necromancer)) Check(s.Health()>health,"Contact recovery missing");
+    if(id==int(ClassId::Demonologist)) Check(s.Health()==health-6,"Sacrifice must happen once");
+    const float landed=enemy.health;Tick(s,.15f,hz);Check(enemy.health==landed,"Technique repeated contact");
+    Simulation cancelled;Duel(cancelled,ClassId(id));cancelled.Update(.001f,c);Command stop;stop.haltMovement=true;cancelled.Update(.001f,stop);Tick(cancelled,.8f,hz);
+    Check(cancelled.Enemies()[0].health==80,"Cancelled technique must not hit");
+  }
+  Simulation baseline;
+  auto legacy=baseline.Save();legacy.erase(legacy.find("TECHNIQUE "));legacy.replace(14,legacy.find('\n')-14,"14");
+  Check(baseline.Load(legacy) && baseline.Cooldown(5)==0,"Version 14 must acquire a ready technique");
+  const auto stable=baseline.Save();
+  for(const char* value:{"-1","13","nan","inf"}) {
+    auto bad=stable;const auto at=bad.find("TECHNIQUE ");bad.replace(at,bad.find('\n',at)-at,std::string("TECHNIQUE ")+value);
+    Check(!baseline.Load(bad) && baseline.Save()==stable,"Invalid technique cooldown must reject atomically");
+  }
+  for(auto id:{ClassId::Scout,ClassId::Mage,ClassId::Engineer}) {
+    Simulation s;Duel(s,id);Command c;c.ability=5;s.Update(.001f,c);c={};c.movement={1,0};s.Update(.01f,c);
+    Check(!s.Attacking() && s.Cooldown(5)>0,"Planted technique must cancel on movement without refund");
+    Tick(s,.8f);Check(s.Enemies()[0].health==80,"Interrupted technique cannot damage later");
+  }
+  Check(names.size()==unsigned(ClassId::Count),"Technique names must be class-specific");
+}
+int main() {Cadence();Mobility();Preparation();Reserves();Recovery();DefensiveIdentity();BufferedAttacks();Techniques();std::cout<<"PASS: class clocks, retreat collision, casting movement, empowered combat, recovery wards and buffered input.\n";}
