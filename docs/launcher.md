@@ -1,5 +1,7 @@
 # Mediterranean launcher
 
+Response update (2026-10-23): launcher buttons now ease their hover/focus highlight; animation redraw is limited to affected controls while visible. Character creation has eased button feedback, pressed states, a brief panel transition and subtle hall dust. The class page advertises the eighteen-node talent system. No extra textures, downloads or new launcher settings are required.
+
 `MediterraneanLauncher.exe` is our native Windows launcher. It runs beside `RPGNative.exe` and provides Play, display options and game status. It uses Win32/GDI+ for its interface and embedded original chapter-hall/frame artwork shared with character selection; the game renderer remains DirectX 11.
 
 ## Build and play

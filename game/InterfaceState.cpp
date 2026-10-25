@@ -28,7 +28,7 @@ void Interface::Show(Panel next) {
   if (before!=StateKey()) InvalidateHitRegions();
 }
 void Interface::SetOnly(Panel next) {
-  selectedSpell=-1; CancelBuildConfirmation(); loadoutsPage=false; previewBuild=-1; selectedLoadout=0;
+  selectedSpell=-1; talentPage=0; CancelBuildConfirmation(); loadoutsPage=false; planningBuild=false; previewBuild=-1; selectedLoadout=0;
   CancelDrag(); InvalidateHitRegions(); characterOpen=inventoryOpen=false; panel=Panel::None; Show(next);
 }
 void Interface::Toggle(Panel next) {

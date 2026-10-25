@@ -54,10 +54,14 @@ std::string TalentEffect(const rpg::Simulation& s,int index) {
  if(info.strike || info.heavy) return "+"+Number(info.strike)+" basic / +"+Number(info.heavy)+" heavy damage";
  if(info.health) return "+"+Number(info.health)+" maximum health";
  if(info.armor) return "+"+Number(info.armor)+" damage reduction";
+ if(info.castSpeed) return "+"+Number(info.castSpeed*100)+"% cast speed"+(info.mend?" / recovery power":" / -1s cooldown");
  if(info.mend) return "+"+Number(rpg::ClassHealer(s.Class())?info.mend:info.mend*.5f)+(rpg::ClassHealer(s.Class())?" healing":" barrier capacity");
  if(info.mendCooldown) return "Recovery cooldown: -"+Number(info.mendCooldown)+"s";
  if(info.dashCooldown) return "Dash cooldown: -"+Number(info.dashCooldown)+"s";
- return index==6?"Heavy: +25% finishing damage":"Healing: +20 at low health";
+ if(info.basicCooldown) return "Basic cooldown: -"+Number(info.basicCooldown)+"s";
+ if(info.heavyCooldown) return "Heavy cooldown: -"+Number(info.heavyCooldown)+"s";
+ if(index>=9) return info.effect;
+ return index==6?"Heavy: +25% finishing damage":rpg::ClassHealer(s.Class())?"Healing: +20 at low health":"Barrier: +10 at low health";
 }
 Color IconUv(int tile) {
  // Authored atlas cell edges, inset three source pixels to exclude separators.
@@ -271,7 +275,11 @@ void ClassSigil(Canvas& c,Rect rect,rpg::ClassId id,float alpha=1) {
 }
 void AbilityArtwork(Canvas& c,Rect rect,int ability,rpg::ClassId id=rpg::ClassId::Warrior) {
  if(ability==2) PaintedIcon(c,rect,22);
- else if(ability==3) PaintedIcon(c,rect,23);
+ else if(ability==3) {
+  if(rpg::ClassHealer(id)) PaintedIcon(c,rect,23);
+  else if(id==rpg::ClassId::Scout) PaintedIcon(c,rect,22);
+  else Icon(c,rect,Item::Shield,1,id);
+ }
  else if(ability>=4) PaintedIcon(c,rect,11);
  else if(ability==1 && (id==rpg::ClassId::Warrior || id==rpg::ClassId::Paladin || id==rpg::ClassId::Demonologist)) PaintedIcon(c,rect,24);
  else {
@@ -422,6 +430,13 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  c.Art({0,0,1280,720},Renderer::UiArt::Hall);
  c.Gradient({0,0,1280,132},{.015f,.012f,.01f,.9f},{.015f,.012f,.01f,0});
  c.Gradient({0,628,1280,92},{.015f,.012f,.01f,0},{.015f,.012f,.01f,.94f});
+ // Sparse warm dust catches the hall light without competing with the live hero.
+ for(int i=0;i<18;++i) {
+   const float t=selection.Time(),x=320+std::fmod(i*91.f+t*(2+i%3),470.f);
+   const float y=150+std::fmod(i*61.f-t*7+6000.f,430.f);
+   const float a=.09f+.08f*std::sin(t*.8f+i);
+   c.Oval(x,y,1.1f,1.1f,{.95f,.76f,.43f,a});
+ }
  c.Text(66,35,"MEDITERRANEAN",34,{1,.85f,.54f,1});
  c.Text(68,80,"T H E   D A W N W A T C H   C H R O N I C L E",11,ink);
  c.Text(842,46,roster?"YOUR CHARACTERS":customize?"GIVE YOUR HERO AN IDENTITY":"CHOOSE YOUR CALLING",customize?17.f:20.f,ink);
@@ -448,7 +463,10 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
   const bool enabled=selection.Enabled(control),focused=selection.Focus()==control,hover=selection.Hover()==control;
   const bool primary=control==C::Enter || control==C::Next || control==C::Confirm || control==C::Create;
   c.Button(a,enabled,focused || hover,primary);
-  c.Center(a.x,a.y+(a.h-18)*.5f-1,a.w,label,primary?19.f:15.f,enabled?ink:muted);
+  const float highlight=selection.Highlight(control);
+  if(enabled) c.Gradient({a.x+5,a.y+4,a.w-10,a.h-8},{.96f,.72f,.36f,.14f*highlight},{.6f,.36f,.12f,.03f*highlight});
+  const float depression=selection.Pressed(control)?1.5f:0;
+  c.Center(a.x,a.y+(a.h-18)*.5f-1+depression,a.w,label,primary?19.f:15.f,enabled?ink:muted);
   if(focused && enabled) c.Line(a.x+8,a.y+a.h-7,a.x+a.w-8,a.y+a.h-7,1,gold);
  };
  button(C::Left,"<");button(C::Right,">");
@@ -491,7 +509,8 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
    }
    c.Text(842,429,"TALENT PATHS  /  N IN GAME",11,gold);
    c.Wrap(842,451,350,std::string(info.branches[0])+"  /  "+info.branches[1]+"  /  "+info.branches[2],14,ink,2);
-   c.Text(842,495,"Health "+std::to_string(int(hero.MaxHealth()))+"  /  Range "+Number(info.range)+" m",13,muted);
+   c.Text(842,490,"18 talents / 3 paths / 5 earned choices",12,gold);
+   c.Text(842,510,"Health "+std::to_string(int(hero.MaxHealth()))+"  /  Range "+Number(info.range)+" m",12,muted);
    button(C::Next,selection.ClassSlot(int(selection.SelectedClass())).status==Status::New?"Appearance & name":"Class slot occupied");
   } else {
    c.Text(842,241,"HERO'S NAME",11,gold);const auto a=CharacterSelection::Bounds(C::Name);
@@ -536,6 +555,7 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  c.Text(84,594,customize?"Back to change your class":"One hero per class",11,muted);
  if(!selection.Notice().empty()) c.Wrap(842,650,350,selection.Notice(),12,gold,3);
  c.Text(72,699,"Tab  Select     Enter  Confirm     Arrow keys  Rotate     F11  Display",11,muted);
+ if(selection.PageAge()<.16f) c.RectFill({814,140,400,510},{.045f,.03f,.02f,.28f*(1-selection.PageAge()/.16f)});
 }
 
 void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bool debug) {
@@ -616,7 +636,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Oval(px,py-arc,7,8,fill);c.Ring(px,py-arc,8,gold);c.Oval(px-2,py-3-arc,1.5f,2,ink);
   }
  }
- c.Center(rx+3,uy+51,126,s.EmpoweredAttack()?"EMPOWERED CAST":s.EmpoweredReady()?"2  /  EMPOWERED":
+ c.Center(rx+3,uy+51,126,s.EmpoweredAttack()?"EMPOWERED CAST":s.EmpoweredReady()?"HEAVY READY":
    s.Barrier()>0?"Ward "+Number(s.Barrier()):"Build with basic hits",10,s.EmpoweredReady()?gold:muted);
  if (s.TargetActor()) {
   const auto& target=*s.TargetActor();
@@ -691,14 +711,18 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   if(hover) c.RectFill({x+3,656,48,45},{.85f,.65f,.3f,(pointerHeld_?.23f:.12f)*std::min(1.f,hoverTime_*8+.15f)});
   if(i==4) c.Center(x+32,685,18,std::to_string(s.Potions()),12,ink);
   c.Text(x+4,654,slotIndex==9?"0":std::to_string(slotIndex+1),13,ink);
-  regions_.push_back({rect,{Action::Hotbar,slotIndex},ready});
+  if(i>=0 && i==s.QueuedAttack()) {
+    c.Line(x+4,700,x+50,700,3,classAccent);
+    c.Center(x,686,54,"NEXT",10,ink);
+  }
+  regions_.push_back({rect,{Action::Hotbar,slotIndex},ready || (!CapturesMovement() && s.CanBufferAttack(i))});
 
  }
  if(s.EvasionSeconds()>0) c.Center(505,565,270,"EVASION / "+Seconds(s.EvasionSeconds())+"s",12,classAccent);
  if(s.CastingRecovery()) {
    c.Frame({505,588,270,23},dark,gold);
    c.Gradient({508,591,264*s.RecoveryProgress(),17},{.55f,.64f,.35f,1},{.2f,.32f,.18f,1});
-   c.Center(508,591,264,std::string(s.Spell(3).name)+" / casting",12,ink);
+   c.Center(508,591,264,std::string(s.Spell(3).name)+" / "+Seconds(s.RecoveryCastDuration()*(1-s.RecoveryProgress()))+"s",12,ink);
  }
  // A second row contains real navigation tools, leaving the primary bindings intact.
  if (panel==Panel::None) {
@@ -957,7 +981,8 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Text(124,104,"Level "+std::to_string(s.Level())+"  /  "+s.ClassName(),18,ink);
    c.Frame({850,102,306,32},{.07f,.16f,.13f,1},s.TalentPoints()>0?gold:border);
    c.Center(850,109,306,std::to_string(s.TalentPoints())+" talent point"+(s.TalentPoints()==1?"":"s")+" available",15,gold);
-   button({594,102,218,32},loadoutsPage?"Talents & spellbook":"Saved builds",Action::BuildPage);
+   button({594,102,218,32},loadoutsPage?"Talents & spellbook":planningBuild?"Review draft":"Saved builds",Action::BuildPage);
+   if(!loadoutsPage) button({428,106,154,24},planningBuild?"Discard draft":"Plan a build",Action::PlanBuild);
    if (loadoutsPage) {
     const auto name=[&s](int mask) -> std::string {
      if (mask<0) return "Empty slot";
@@ -989,7 +1014,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.Text(124,482,"SPECIALIZATION PRESETS / LEVEL 3",11,gold);
     for (int i=0;i<int(rpg::buildPresets.size());++i)
      button({124+(i%2)*172.f,502+(i/2)*34.f,160,29},rpg::ClassPresetName(s.Class(),i),Action::SelectBuildPreset,i);
-    c.Text(124,608,"Select a slot, then store the preview.",12,muted);
+    button({124,608,336,25},"Edit preview on talent tree",Action::EditBuild);
     c.Frame({488,150,668,454},{.035f,.08f,.075f,1});
     c.Text(512,166,"BUILD PREVIEW",12,gold);
     c.Text(512,188,name(previewBuild),19,ink);
@@ -1001,13 +1026,14 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     const auto live=s.PreviewBuild(s.BuildMask()),proposed=s.PreviewBuild(mask);
     const float proposedWard=rpg::ClassRecoveryBarrier(s.Class())+
       (proposed.mend-s.ClassInfo().healing)*.5f+
-      (rpg::HasTalent(mask,rpg::Talent::Mercy) && s.Health()<=proposed.health*.35f?10.f:0.f);
-    const char* labels[]={"Maximum health","Basic damage","Heavy damage","Damage reduction",rpg::ClassHealer(s.Class())?"Self healing":"Barrier capacity","Mobility cooldown","Recovery cooldown"};
-    const float current[]={live.health,live.strike,live.heavy,live.armor,rpg::ClassHealer(s.Class())?live.mend:s.RecoveryWard(),live.dashCooldown,live.mendCooldown};
-    const float next[]={proposed.health,proposed.strike,proposed.heavy,proposed.armor,rpg::ClassHealer(s.Class())?proposed.mend:proposedWard,proposed.dashCooldown,proposed.mendCooldown};
-    for (int i=0;i<7;++i) {
-     const float y=273+i*24.f,delta=next[i]-current[i]; const std::string unit=i>=5?"s":"";
-     if (i%2==0) c.RectFill({505,y-3,632,24},{.075f,.125f,.11f,1});
+      (rpg::HasTalent(mask,rpg::Talent::Mercy) && s.Health()<=proposed.health*.35f?10.f:0.f)+
+      (rpg::HasTalent(mask,rpg::Talent::Overflow)?12.f:0.f);
+    const char* labels[]={"Maximum health","Basic damage","Heavy damage","Damage reduction",rpg::ClassHealer(s.Class())?"Self healing":"Barrier capacity","Mobility cooldown","Recovery cooldown","Basic cooldown","Heavy cooldown","Recovery cast"};
+    const float current[]={live.health,live.strike,live.heavy,live.armor,rpg::ClassHealer(s.Class())?live.mend:s.RecoveryWard(),live.dashCooldown,live.mendCooldown,live.basicCooldown,live.heavyCooldown,live.recoveryCast};
+    const float next[]={proposed.health,proposed.strike,proposed.heavy,proposed.armor,rpg::ClassHealer(s.Class())?proposed.mend:proposedWard,proposed.dashCooldown,proposed.mendCooldown,proposed.basicCooldown,proposed.heavyCooldown,proposed.recoveryCast};
+    for (int i=0;i<10;++i) {
+     const float y=273+i*17.5f,delta=next[i]-current[i]; const std::string unit=i>=5?"s":"";
+     if (i%2==0) c.RectFill({505,y-2,632,17.5f},{.075f,.125f,.11f,1});
      c.Text(512,y,labels[i],13,ink); c.Text(810,y,Number(current[i])+unit,13,muted);
      c.Text(940,y,Number(next[i])+unit,13,gold);
      c.Text(1071,y,delta==0?"--":std::string(delta>0?"+":"")+Number(delta)+unit,13,
@@ -1039,13 +1065,15 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.Wrap(488,612,668,s.Message(),11,muted,2);
     return;
    }
-   c.Text(148,136,"SPELLBOOK / select an ability to inspect its current power and upgrades",11,muted);
+   c.Text(148,136,"SPELLBOOK / inspect or drag an ability to the action bar",11,muted);
    for(int i=0;i<4;++i) {
     const Rect spellSlot{148+i*170.f,157,154,52};
     c.Frame(spellSlot,selectedSpell==i?Color{.12f,.23f,.20f,1}:dark,selectedSpell==i?gold:border);
     AbilityArtwork(c,{spellSlot.x+6,spellSlot.y+6,39,39},i,s.Class());
     c.Text(spellSlot.x+52,spellSlot.y+10,s.Spell(i).name,14,ink);
-    c.Text(spellSlot.x+52,spellSlot.y+30,std::string("Key ")+s.Spell(i).key+" / "+Number(s.AbilityCooldown(i))+"s",11,muted);
+    std::string bindings;
+    for(int binding=0;binding<10;++binding) if(HotbarSpell(binding,s.Class())==i) {if(!bindings.empty()) bindings+="/";bindings+=binding==9?"0":std::to_string(binding+1);}
+    c.Text(spellSlot.x+52,spellSlot.y+30,(bindings.empty()?"Unbound":"Key "+bindings)+" / "+Number(s.AbilityCooldown(i))+"s",11,muted);
     regions_.push_back({spellSlot,{Action::SelectSpell,i},true});
    }
    const auto& branches=s.ClassInfo().branches;
@@ -1053,18 +1081,25 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    for (int branch=0;branch<3;++branch) {
     const float x=248+branch*232.f;
     c.RectFill({x-76,222,152,25},dark); c.Center(x-76,226,152,branches[branch],16,branchColors[branch]);
-    const bool connected=s.HasTalent(rpg::Talent(branch));
+    const unsigned shownBuild=planningBuild && previewBuild>=0?unsigned(previewBuild):s.BuildMask();
+    const bool connected=rpg::HasTalent(shownBuild,rpg::Talent(talentPage?9+branch:branch));
     const Color wire=connected?branchColors[branch]:border;
     // Both level-three choices connect to the foundation, not to each other.
-    c.Line(x,346,x,353,2,wire); c.Line(x,353,x-111,353,2,wire);
-    c.Line(x-111,353,x-111,512,2,wire);
-    c.Line(x-111,406,x-105,406,2,wire); c.Line(x-111,512,x-105,512,2,wire);
-    c.Center(x-45,452,90,"DISCIPLINES",10,muted);
+    if(talentPage) {
+      c.Line(x,346,x,360,2,wire);c.Line(x,452,x,466,2,wire);
+    } else {
+      c.Line(x,346,x,353,2,wire); c.Line(x,353,x-111,353,2,wire);
+      c.Line(x-111,353,x-111,512,2,wire);
+      c.Line(x-111,406,x-105,406,2,wire); c.Line(x-111,512,x-105,512,2,wire);
+      c.Center(x-45,452,90,"DISCIPLINES",10,muted);
+    }
    }
-   for (int i=0;i<int(rpg::Talent::Count);++i) {
+   for (int i=talentPage*9;i<std::min(int(rpg::Talent::Count),talentPage*9+9);++i) {
     const auto talent=rpg::Talent(i); const auto& info=s.TalentDefinition(i);
-    const bool learned=s.HasTalent(talent),available=std::string(s.TalentStatus(talent))=="Ready to learn";
-    const Rect rect{143+(i%3)*232.f,254+(i/3)*106.f,210,92};
+    const bool learned=planningBuild?rpg::HasTalent(unsigned(std::max(0,previewBuild)),talent):s.HasTalent(talent);
+    unsigned trial=unsigned(std::max(0,previewBuild));
+    const bool available=planningBuild?rpg::TogglePlannedTalent(trial,talent):std::string(s.TalentStatus(talent))=="Ready to learn";
+    const Rect rect{143+(i%3)*232.f,254+((i%9)/3)*106.f,210,92};
     const bool hovered=rect.Contains(mouseX_,mouseY_),selectedNode=selectedSpell<0 && !confirmTalentReset && i==selectedTalent;
     const Color accent=learned?Color{.57f,.83f,.45f,1}:available?gold:border;
     c.Frame(rect,selectedNode?Color{.12f,.23f,.20f,1}:Color{.035f,.085f,.075f,1},selectedNode || hovered?gold:accent);
@@ -1072,9 +1107,9 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     TalentIcon(c,{rect.x+11,rect.y+8,30,33},i,learned || available?1.f:.45f,s.Class());
     c.Wrap(rect.x+50,rect.y+10,150,info.name,15,learned || available?ink:muted,2);
     c.Wrap(rect.x+12,rect.y+46,186,TalentEffect(s,i),12,muted,2);
-    const char* state=learned?"LEARNED":available?"AVAILABLE / 1 POINT":
+    const char* state=learned?(planningBuild?"IN DRAFT":"LEARNED"):available?"AVAILABLE / 1 POINT":
       s.Level()<info.level?"LOCKED":info.prerequisite!=rpg::Talent::Count && !s.HasTalent(info.prerequisite)?"PREREQUISITE":"UNAVAILABLE";
-    c.Text(rect.x+12,rect.y+76,"LEVEL "+std::to_string(info.level)+" / "+state,10,accent);
+    c.Text(rect.x+12,rect.y+73,"LEVEL "+std::to_string(info.level)+" / "+state,10,learned || available?accent:muted);
     regions_.push_back({rect,{Action::SelectTalent,i},true});
    }
    c.Frame({850,150,306,454},{.035f,.08f,.075f,1});
@@ -1090,7 +1125,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     const auto& spell=s.Spell(selectedSpell);
     AbilityArtwork(c,{874,166,48,48},selectedSpell,s.Class());
     c.Text(937,175,"FOUNDATION SPELL",13,gold);
-    c.Text(937,198,std::string("Key ")+spell.key+" / learned at level 1",11,muted);
+    c.Text(937,198,"Drag the card to bind / level 1",11,muted);
     c.Text(874,231,spell.name,22,ink);
     c.Wrap(874,264,258,SpellEffect(s,selectedSpell),14,gold,2);
     c.Wrap(874,311,258,selectedSpell==1?std::string(style.resource)+": "+std::to_string(style.capacity)+
@@ -1098,7 +1133,8 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.Text(874,413,"Cooldown "+Number(s.AbilityCooldown(selectedSpell))+"s / "+
       (spell.range>0?Number(spell.range)+" m":"self"),13,ink);
     c.Text(874,435,selectedSpell<2?"Contact "+Number(spell.contact)+"s / recovery "+Number(spell.recovery)+"s":
-      selectedSpell==2?Number(s.RetreatMobility()?style.retreatDistance:3.5f)+" m travel / "+Number(s.MobilityDuration())+"s burst":"Instant / no mana cost",12,muted);
+      selectedSpell==2?Number(s.RetreatMobility()?style.retreatDistance:3.5f)+" m travel / "+Number(s.MobilityDuration())+"s burst":
+      (spell.contact>0?Number(spell.contact)+"s stationary preparation":"Instant defense"),12,muted);
     c.Text(874,457,selectedSpell==1 && style.steadyHeavy?"Stand still until release":spell.targeting,12,muted);
     c.Text(874,483,"RELATED TALENTS",11,gold);
     for(int i=0;i<3;++i) if (rpg::ValidTalent(spell.upgrades[i])) {
@@ -1108,11 +1144,13 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     }
    } else {
    const auto talent=rpg::Talent(selectedTalent); const auto& info=s.TalentDefinition(selectedTalent);
-   const bool learned=s.HasTalent(talent);
-   const std::string status=s.TalentStatus(talent);
+   const bool learned=planningBuild?rpg::HasTalent(unsigned(std::max(0,previewBuild)),talent):s.HasTalent(talent);
+   unsigned trial=unsigned(std::max(0,previewBuild));
+   const bool editable=planningBuild && rpg::TogglePlannedTalent(trial,talent);
+   const std::string status=planningBuild?(editable?(learned?"Remove this path and dependent nodes":"Add to draft / no live changes"):"Needs prerequisite or a free draft point"):s.TalentStatus(talent);
    TalentIcon(c,{874,166,48,52},selectedTalent,1,s.Class());
    c.Text(937,175,branches[selectedTalent%3],14,branchColors[selectedTalent%3]);
-   c.Text(937,199,selectedTalent<3?"Foundation talent":selectedTalent<6?"Specialization / option A":"Specialization / option B",11,muted);
+   c.Text(937,199,selectedTalent>=9?"Advanced discipline":selectedTalent<3?"Foundation talent":selectedTalent<6?"Specialization / option A":"Specialization / option B",11,muted);
    c.Wrap(874,232,258,info.name,20,gold,2);
    c.Wrap(874,288,258,TalentEffect(s,selectedTalent),15,ink,2);
    c.Wrap(874,341,258,info.description,14,muted,4);
@@ -1121,15 +1159,18 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Wrap(874,460,258,info.prerequisite==rpg::Talent::Count?"Prerequisite: Foundations":
      std::string("Prerequisite: ")+s.TalentDefinition(int(info.prerequisite)).name,12,muted,2);
    c.Wrap(874,493,258,status,13,learned?Color{.57f,.83f,.45f,1}:gold,2);
-   button({874,546,258,37},learned?"Learned":"Learn / 1 point",Action::LearnTalent,selectedTalent,status=="Ready to learn");
+   button({874,546,258,37},planningBuild?(learned?"Remove from draft":"Add to draft"):learned?"Learned":"Learn / 1 point",
+     planningBuild?Action::DraftTalent:Action::LearnTalent,selectedTalent,planningBuild?editable:status=="Ready to learn");
    }
-   c.Text(148,568,"Points at levels 2, 3, 5, 7 and 9. Five choices by level 10.",12,ink);
+   button({148,565,225,22},"I  Foundations / levels 2-3",Action::SelectTalent,0);
+   button({387,565,241,22},"II  Mastery / levels 5-9",Action::SelectTalent,9);
    c.Frame({148,589,480,8}); c.RectFill({151,592,474*xp,2},gold);
-   button({666,590,146,28},"Reset talents",Action::ConfirmTalentReset,0,
-     std::string(s.TalentResetStatus())=="Ready to reset" && !confirmTalentReset);
+   button({666,590,146,28},planningBuild?"Clear draft":"Reset talents",planningBuild?Action::DraftTalent:Action::ConfirmTalentReset,planningBuild?-1:0,
+     planningBuild?previewBuild>0:std::string(s.TalentResetStatus())=="Ready to reset" && !confirmTalentReset);
    c.Text(148,607,s.Level()==rpg::levelCap?"Level cap reached  /  "+std::to_string(s.EarnedPoints())+" points earned":
      std::to_string(s.Experience())+" XP  /  "+std::to_string(s.NextLevelExperience())+" for next level",12,muted);
-   c.Text(124,628,"N or X closes. Choices are saved with F5. The world remains active.",12,muted);
+   c.Text(124,628,planningBuild?"DRAFT: "+std::to_string(rpg::TalentCount(unsigned(std::max(0,previewBuild))))+" / 5 points. Review draft to apply or save. Live talents are unchanged.":
+     "N or X closes. Choices are saved with F5. The world remains active.",12,muted);
    return;
   }
   const bool map=panel==Panel::Map;

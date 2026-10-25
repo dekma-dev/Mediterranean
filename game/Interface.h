@@ -1,12 +1,13 @@
 #pragma once
 #include "game/Simulation.h"
 #include <vector>
+#include <cstdint>
 class Renderer;
 namespace ui {
 enum class LoadingStage { World,Chronicles,Sound,Entering };
 void RenderLoading(Renderer& renderer,LoadingStage stage);
 enum class Panel { None,Menu,Character,Inventory,Map,Journal,Merchant,Build,Quest };
-enum class Action { None,Hotbar,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview,MusicVolume,EffectsVolume,Build,SelectTalent,LearnTalent,QuestConfirm,QuestPage,SelectSpell,ConfirmTalentReset,ResetTalents,CancelTalentReset,BuildPage,SelectLoadout,SelectBuildPreset,RequestBuildApply,RequestBuildStore,ConfirmBuild,CancelBuild,CharacterSelection };
+enum class Action { None,Hotbar,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview,MusicVolume,EffectsVolume,Build,SelectTalent,LearnTalent,QuestConfirm,QuestPage,SelectSpell,ConfirmTalentReset,ResetTalents,CancelTalentReset,BuildPage,SelectLoadout,SelectBuildPreset,RequestBuildApply,RequestBuildStore,ConfirmBuild,CancelBuild,PlanBuild,EditBuild,DraftTalent,CharacterSelection };
 using Item=rpg::Item;
 struct Rect { float x,y,w,h; bool Contains(float px,float py) const { return px>=x && py>=y && px<x+w && py<y+h; } };
 struct Layout {
@@ -34,11 +35,11 @@ public:
   void Close(Panel next);
   bool IsOpen(Panel next) const;
   bool HasPanels() const { return panel!=Panel::None || characterOpen || inventoryOpen; }
-  unsigned StateKey() const {
-    const unsigned view=(unsigned(panel)*4+unsigned(characterOpen)*2+unsigned(inventoryOpen))*16+
+  std::uint64_t StateKey() const {
+    const std::uint64_t view=(unsigned(panel)*4+unsigned(characterOpen)*2+unsigned(inventoryOpen))*16+
       unsigned(selectedSpell+1)*2+unsigned(confirmTalentReset);
-    return (((view*2+unsigned(loadoutsPage))*3+unsigned(pendingBuild.action))*513+
-      unsigned(previewBuild+1))*4+unsigned(selectedLoadout+1);
+    return (((((view*2+unsigned(loadoutsPage))*3+unsigned(pendingBuild.action))*262145+
+      unsigned(previewBuild+1))*4+unsigned(selectedLoadout+1))*2+unsigned(talentPage))*2+unsigned(planningBuild);
   }
   void CancelBuildConfirmation() {
     if (confirmTalentReset || pendingBuild.action!=rpg::BuildAction::None) InvalidateHitRegions();
@@ -48,7 +49,7 @@ public:
   bool PointerOverUi() const;
   Event Pointer(float x,float y,float width,float height,bool clicked,bool rightClicked,bool held=false,bool released=false);
   void CancelDrag() { dragSpell_=dragHotbar_=-1; dragBag_=dragGear_=-1; dragItem_=Item::None; dragging_=false; }
-  void InvalidateHitRegions() { regions_.clear(); renderedState_=~0u; }
+  void InvalidateHitRegions() { regions_.clear(); renderedState_=~std::uint64_t(0); }
   bool Dragging() const { return dragging_; }
   void Render(Renderer& renderer,const rpg::Simulation& simulation,float time,bool debug);
   bool CapturesMovement() const { return panel==Panel::Menu; }
@@ -70,9 +71,11 @@ public:
   Panel panel=Panel::None;
   bool characterOpen=false,inventoryOpen=false;
   int selectedTalent=0;
+  int talentPage=0;
   int selectedSpell=-1;
   bool confirmTalentReset=false;
   bool loadoutsPage=false;
+  bool planningBuild=false;
   int previewBuild=-1,selectedLoadout=0;
   rpg::BuildCommand pendingBuild;
   int questPage=0;
@@ -98,7 +101,7 @@ private:
   float hoverTime_=0,lastRenderTime_=0;
   float hoverX_=-1,hoverY_=-1;
   std::vector<Region> regions_;
-  unsigned renderedState_=~0u;
+  std::uint64_t renderedState_=~std::uint64_t(0);
   int questTextKey_=-1;
   float renderedWidth_=0,renderedHeight_=0;
   float mouseX_=-100,mouseY_=-100;

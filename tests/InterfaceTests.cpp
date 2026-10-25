@@ -644,6 +644,15 @@ int main() {
     clickAt(660,568); // Request application, then switch to the talent page.
     clickAt(700,118); clickAt(660,568);
     Require(game.State().BuildMask()==65,"Switching pages must discard pending confirmation and stale click regions");
+    clickAt(500,118); // Plan a custom build without changing the hero.
+    clickAt(248,320);clickAt(1000,563); // Remove Arms and its descendant.
+    Require(game.State().BuildMask()==65,"Planning removed live talents before confirmation");
+    clickAt(480,320);clickAt(1000,563); // Add Vitality to draft.
+    Require(game.State().BuildMask()==65,"Planning added a live talent before confirmation");
+    clickAt(700,118);clickAt(660,568); // Review, request apply.
+    Require(game.State().BuildMask()==65,"Draft application bypassed confirmation");
+    clickAt(660,568);
+    Require(game.State().BuildMask()==2,"Confirmed custom draft was not applied");
     frame.down['N']=frame.down['W']=true; step();
     Require(game.State().Player().z>position.z,"A fresh N press must close the menu and restore movement");
   }
@@ -740,10 +749,11 @@ int main() {
       Require(!screen.CapturesMovement(),
         "Build menu must leave movement live");
       for (int i=0;i<int(rpg::Talent::Count);++i) {
-        const auto node=click(248+(i%3)*232.f,320+(i/3)*106.f);
+        screen.talentPage=i/9;drawBuild();
+        const auto node=click(248+(i%3)*232.f,320+((i%9)/3)*106.f);
         Require(node.action==ui::Action::SelectTalent && node.value==i,"Every connected talent node must accept scaled inspection");
       }
-      screen.selectedTalent=4; drawBuild();
+      screen.talentPage=0;screen.selectedTalent=4; drawBuild();
       Require(click(1000,563).action==ui::Action::None,"A rank with a missing prerequisite must disable Learn");
       screen.selectedTalent=1; drawBuild();
       const auto learn=click(1000,563);

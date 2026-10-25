@@ -212,4 +212,26 @@ void DefensiveIdentity() {
     }
   }
 }
-int main() {Cadence();Mobility();Preparation();Reserves();Recovery();DefensiveIdentity();std::cout<<"PASS: class clocks, retreat collision, casting movement, empowered combat and recovery wards.\n";}
+void BufferedAttacks() {
+  for(int hz:{30,60,144,1000}) {
+    Simulation s;Duel(s,ClassId::Warrior);
+    auto& target=const_cast<Enemy&>(s.Enemies()[0]);target.windup=0;target.attackCooldown=10;
+    Command attack;attack.ability=0;s.Update(.001f,attack);Tick(s,.73f,hz);
+    Check(s.CanBufferAttack(0),"Near-ready basic must be bufferable");
+    const float hp=target.health;const int resource=s.ClassResource();attack.queueAttack=true;s.Update(.001f,attack);
+    Check(s.QueuedAttack()==0 && target.health==hp && s.ClassResource()==resource,"Queue must not hit or grant a resource");
+    const float heldCooldown=target.attackCooldown;target.attackCooldown=std::min(target.attackCooldown,target.AttackInterval());
+    const auto saved=s.Save();target.attackCooldown=heldCooldown;
+    Simulation copy;Check(copy.Load(saved) && copy.QueuedAttack()==-1,"Queue must not survive save/load");
+    Tick(s,.19f,hz);Check(s.Attacking() && s.QueuedAttack()==-1,"Buffered basic did not start after cooldown");
+    Tick(s,.25f,hz);Check(target.health<hp && s.ClassResource()==resource+1,"Buffered attack must land once");
+    Tick(s,.55f,hz);s.Update(.001f,attack);Check(s.QueuedAttack()==0,"Second queue fixture");
+    Command menu;menu.haltMovement=true;s.Update(.01f,menu);Tick(s,.3f,hz);
+    Check(s.QueuedAttack()==-1 && !s.Attacking(),"Menu must cancel queued actions");
+    s.Update(.001f,attack);Tick(s,.73f,hz);s.Update(.001f,attack);
+    Check(s.QueuedAttack()==0,"Target-change queue fixture");
+    Command change;change.nextTarget=true;s.Update(.001f,change);
+    Check(s.QueuedAttack()==-1,"Changing target must not redirect a buffered attack");
+  }
+}
+int main() {Cadence();Mobility();Preparation();Reserves();Recovery();DefensiveIdentity();BufferedAttacks();std::cout<<"PASS: class clocks, retreat collision, casting movement, empowered combat, recovery wards and buffered input.\n";}

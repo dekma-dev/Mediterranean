@@ -282,6 +282,8 @@ Gameplay opens in borderless fullscreen by default. The launcher can select wind
 
 Additional controls:
 
+Mastery update (2026-10-23): **N → Mastery** opens nine additional talents per class, unlocked along three paths at levels 5, 7 and 9. **Plan a build → Add/Remove → Review draft** lets you compare and confirm custom builds. **Clear draft** does not reset live talents. Basic/heavy inputs pressed in the final 220 ms of recovery/cooldown can queue once; **NEXT** identifies the queued slot. Saves now use version 14 and migrate versions 1–13. Use the rebuilt game for new saves. See [mastery and response](docs/mastery-and-response.md).
+
 Combat/UI update (2026-10-23): rebuild the game to use the ten-slot **1–9, 0** action bar. Drag slots to swap, or drag spell cards from **N** onto the bar. **F5** saves per-class layouts; **F9** reloads them. Only **Esc** blocks local movement/combat; other windows remain live, so enemies can still attack while you inspect equipment or talents. The fourth action is now class-specific healing, defense or sacrifice. See [combat controls](docs/combat-controls.md) for cast times and interruption rules. Existing historical checkpoints above describe their original builds.
 
 | Key | Action |

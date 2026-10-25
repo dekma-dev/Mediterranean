@@ -31,7 +31,8 @@ BuildStats Simulation::PreviewBuild(unsigned mask) const {
  return {MaxHealth()+delta(&TalentInfo::health),StrikeDamage()+delta(&TalentInfo::strike),
   HeavyDamage()+delta(&TalentInfo::heavy),DamageReduction()+delta(&TalentInfo::armor),
   MendHealing()+delta(&TalentInfo::mend),AbilityCooldown(2)-delta(&TalentInfo::dashCooldown),
-  AbilityCooldown(3)-delta(&TalentInfo::mendCooldown)};
+  AbilityCooldown(3)-delta(&TalentInfo::mendCooldown),AbilityCooldown(0)-delta(&TalentInfo::basicCooldown),
+  AbilityCooldown(1)-delta(&TalentInfo::heavyCooldown),ClassRecoveryCast(class_)/(1+BuildBonus(mask,&TalentInfo::castSpeed))};
 }
 
 const char* Simulation::LoadoutStatus(const BuildCommand& command) const {

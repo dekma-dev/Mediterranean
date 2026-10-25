@@ -67,7 +67,7 @@ Placement Place(rpg::Vec2 offset,float cameraYaw) {
 std::vector<std::int16_t> Generate(Cue cue) {
   const bool healing=cue==Cue::Mend || cue==Cue::Potion;
   const bool mystical=(cue>=Cue::Holy && cue<=Cue::Ward) || cue==Cue::Cast || cue==Cue::Mend || cue==Cue::Interrupt;
-  const float duration=cue==Cue::UiClick?.12f:cue==Cue::Mend?1.65f:healing?.95f:cue==Cue::Interrupt?.85f:
+  const float duration=cue==Cue::ReserveReady?.65f:cue==Cue::CastCancelled?.22f:cue==Cue::UiClick?.12f:cue==Cue::Mend?1.65f:healing?.95f:cue==Cue::Interrupt?.85f:
     mystical?1.05f:cue==Cue::HeavyHit?.7f:IsStep(cue)?.18f:IsLanding(cue)?.38f:cue==Cue::Jump?.3f:cue==Cue::SpellHit?.28f:.48f;
   std::vector<std::int16_t> result(size_t(duration*sampleRate));
   std::uint32_t seed=12345+unsigned(cue)*713;
@@ -80,6 +80,10 @@ std::vector<std::int16_t> Generate(Cue cue) {
     const float air=noise-low;
     float value=0;
     switch(cue) {
+    case Cue::ReserveReady:
+      value=.12f*Bell(293.665f,t)+.07f*Bell(440.f,t-.045f)+.045f*body*Decay(t,.01f,14.f);break;
+    case Cue::CastCancelled:
+      value=.18f*body*Decay(t,.008f,24.f)+.04f*air*Decay(t,.01f,32.f);break;
     case Cue::UiClick:
       value=.20f*body*Decay(t,.001f,60.f)+.12f*Metal(430,t)+.055f*air*Decay(t,.002f,95.f);
       break;
@@ -398,6 +402,8 @@ void Events::Update(const rpg::Simulation& state) {
     case K::Strike:add(event.school==rpg::ClassId::Demonologist?Cue::Rend:Cue::Strike);break;
     case K::HeavyStrike:add(event.school==rpg::ClassId::Warrior?Cue::Heavy:ClassReleaseCue(event.school));break;
     case K::UiClick:add(Cue::UiClick);break;
+    case K::ReserveReady:add(Cue::ReserveReady);break;
+    case K::CastCancelled:add(Cue::CastCancelled);break;
     case K::CastStart:add(Cue::Cast);break;
     case K::SpellCast:add(ClassReleaseCue(event.school));break;
     case K::EnemySwing:add(Cue::Enemy);break;

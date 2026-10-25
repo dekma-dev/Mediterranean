@@ -3,7 +3,8 @@
 
 namespace rpg {
 // IDs are durable save bits. Append new talents; never reorder existing ones.
-enum class Talent { WeaponTraining,Vitality,Restoration,WeaponMastery,Bulwark,Renewal,Executioner,Pursuit,Mercy,Count };
+enum class Talent { WeaponTraining,Vitality,Restoration,WeaponMastery,Bulwark,Renewal,Executioner,Pursuit,Mercy,
+ Tempo,Endurance,Concentration,Pressure,Resilience,Quickening,Overwhelming,SecondWind,Overflow,Count };
 struct TalentInfo {
  const char* name;
  const char* effect;
@@ -11,6 +12,7 @@ struct TalentInfo {
  int level;
  Talent prerequisite;
  float strike=0,heavy=0,health=0,armor=0,mend=0,mendCooldown=0,dashCooldown=0;
+ float basicCooldown=0,heavyCooldown=0,castSpeed=0;
 };
 inline constexpr std::array<TalentInfo,int(Talent::Count)> talents{{
  {"Weapon training","+3 Strike / +5 Heavy","Improve both melee attacks with any weapon, including unarmed attacks.",2,Talent::Count,3,5},
@@ -21,7 +23,16 @@ inline constexpr std::array<TalentInfo,int(Talent::Count)> talents{{
  {"Renewal","Mend cooldown: 8 seconds","Reduce the cooldown of future Mend casts from ten to eight seconds. Active cooldowns keep their remaining time.",3,Talent::Restoration,0,0,0,0,0,2},
  {"Executioner","Heavy: +25% finishing damage","Heavy strike deals 25% more damage when its victim has at most half health at contact. Choose this instead of Weapon mastery.",3,Talent::WeaponTraining},
  {"Pursuit","Dash cooldown: 3.5 seconds","Rejoin your target sooner. Future dashes recover in 3.5 seconds; range, travel and active cooldowns stay unchanged. Alternative to Bulwark.",3,Talent::Vitality,0,0,0,0,0,0,1.5f},
- {"Mercy","Mend: +20 emergency healing","Mend restores 20 extra health if you have at most 35% health before casting. With Restoration: up to 65. Alternative to Renewal.",3,Talent::Restoration}
+ {"Mercy","Recovery at low health","Improves recovery at or below 35% health.",3,Talent::Restoration},
+ {"Tempo","Basic cooldown -0.15s","Shorten future basic cooldowns. Contact and recovery still complete normally.",5,Talent::WeaponTraining,0,0,0,0,0,0,0,.15f},
+ {"Endurance","+30 maximum health","Increase maximum health without restoring health. Supports a deeper defensive build.",5,Talent::Vitality,0,0,30},
+ {"Concentration","Recovery preparation +20% speed","Prepare timed recovery faster. Instant defenses gain recovery power instead; this never shortens active casts.",5,Talent::Restoration,0,0,0,0,8,0,0,0,0,.20f},
+ {"Pressure","Heavy cooldown -0.8s","Shorten future heavy cooldowns. Existing cooldowns and committed attacks are unchanged.",7,Talent::Tempo,0,0,0,0,0,0,0,0,.8f},
+ {"Resilience","+2 damage reduction","Reduce each incoming hit by two more. Damage cannot fall below one before barriers.",7,Talent::Endurance,0,0,0,2},
+ {"Quickening","Recovery preparation +25% speed","Further accelerate timed recovery and reduce its future cooldown by one second.",7,Talent::Concentration,0,0,0,0,0,1,0,0,0,.25f},
+ {"Overwhelming","Empowered damage +20%","An empowered heavy deals twenty percent more damage. The reserve is spent on commitment, including misses.",9,Talent::Pressure},
+ {"Second wind","Guard on mobility completion","Completing a mobility action grants a small ward. Cancelled, obstructed or defeated movement grants nothing.",9,Talent::Resilience},
+ {"Overflow","Excess recovery becomes barrier","Half of direct healing beyond maximum health becomes a ward. Non-healers gain twelve barrier capacity instead.",9,Talent::Quickening}
 }};
 inline bool ValidTalent(Talent talent) { return int(talent)>=0 && int(talent)<int(Talent::Count); }
 inline bool HasTalent(unsigned build,Talent talent) {
@@ -46,8 +57,24 @@ inline bool ValidBuild(unsigned build,int level) {
  return true;
 }
 enum class BuildAction { None,Apply,Store };
+inline bool TogglePlannedTalent(unsigned& draft,Talent talent) {
+ if(!ValidTalent(talent) || !ValidBuild(draft,10)) return false;
+ unsigned next=draft^(1u<<unsigned(talent));
+ if(HasTalent(draft,talent)) {
+  bool changed;
+  do {
+   changed=false;
+   for(int i=0;i<int(Talent::Count);++i) if(HasTalent(next,Talent(i))) {
+    const auto parent=talents[i].prerequisite;
+    if(parent!=Talent::Count && !HasTalent(next,parent)) {next&=~(1u<<i);changed=true;}
+   }
+  } while(changed);
+ }
+ if(!ValidBuild(next,10)) return false;
+ draft=next;return true;
+}
 struct BuildCommand { BuildAction action=BuildAction::None; int mask=-1,slot=-1; };
-struct BuildStats { float health,strike,heavy,armor,mend,dashCooldown,mendCooldown; };
+struct BuildStats { float health,strike,heavy,armor,mend,dashCooldown,mendCooldown,basicCooldown,heavyCooldown,recoveryCast; };
 struct BuildPreset { const char* name; unsigned mask; };
 inline constexpr std::array<BuildPreset,6> buildPresets{{
  {"Weapon mastery",(1u<<0)|(1u<<3)}, {"Executioner",(1u<<0)|(1u<<6)},

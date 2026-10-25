@@ -135,5 +135,14 @@ int main() {
    "Slots cannot contain talents the champion has not earned");
  Command restart; restart.restart=true; copy.Update(.01f,restart);
  Require(copy.BuildMask()==0 && copy.Loadout(0)==-1 && copy.Loadout(2)==-1,"New expedition clears the active build and all slots");
- std::cout<<"Build previews, persistent slots, switching restrictions and save migration passed.\n";
+ unsigned draft=0;
+ Require(!TogglePlannedTalent(draft,Talent::Overwhelming) && draft==0,"Planner accepted missing ancestors");
+ for(auto node:{Talent::WeaponTraining,Talent::Tempo,Talent::Pressure,Talent::Overwhelming,Talent::Vitality})
+   Require(TogglePlannedTalent(draft,node),"Planner rejected a valid path");
+ const auto full=draft;
+ Require(!TogglePlannedTalent(draft,Talent::Restoration) && draft==full,"Planner exceeded five points or partially mutated");
+ Require(TogglePlannedTalent(draft,Talent::Tempo) && draft==((1u<<unsigned(Talent::WeaponTraining))|(1u<<unsigned(Talent::Vitality))),
+   "Removing a draft ancestor did not remove descendants");
+ Require(!TogglePlannedTalent(draft,Talent::Count),"Planner accepted invalid node");
+ std::cout<<"Build previews, draft planning, persistent slots, switching restrictions and save migration passed.\n";
 }

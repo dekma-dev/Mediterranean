@@ -32,6 +32,9 @@ public:
   const Slot& ClassSlot(int index) const { return slots_.at(index); }
   Control Focus() const { return focus_; }
   Control Hover() const { return hover_; }
+  bool Pressed(Control control) const { return pressed_==control && hover_==control; }
+  float Highlight(Control control) const { return highlights_[int(control)]; }
+  float PageAge() const { return pageAge_; }
   float Time() const { return time_; }
   float Yaw() const { return yaw_; }
   float PreviewZoom() const { return zoom_; }
@@ -55,6 +58,8 @@ private:
   bool changed_=false;
   bool closeup_=false;
   float zoom_=0,actionTime_=-1;
+  float pageAge_=0;
+  std::array<float,int(Control::None)+1> highlights_{};
   std::filesystem::path Path(rpg::ClassId id) const;
   void ReadSlots();
   void PreviewDraft();

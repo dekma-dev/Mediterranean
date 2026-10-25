@@ -165,7 +165,7 @@ XMFLOAT3 CombatEffects::SpellTracePoint(XMFLOAT3 origin,rpg::Vec2 destination,fl
     origin.z+(destination.z-origin.z)*u};
 }
 void CombatEffects::Emit(const rpg::CombatVisualEvent& event,const XMFLOAT3* spellOrigin) {
-  if(event.kind==K::UiClick || event.kind==K::CastStart) return;
+  if(event.kind==K::UiClick || event.kind==K::CastStart || event.kind==K::ReserveReady || event.kind==K::CastCancelled) return;
   const float elapsed=std::isfinite(event.elapsed)?std::clamp(event.elapsed,0.f,.05f):0;
   if (event.kind==K::DashStart) {
     CancelTrail(0);

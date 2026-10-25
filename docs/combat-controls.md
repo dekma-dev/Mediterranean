@@ -1,5 +1,7 @@
 # Combat and live interface — 2026-10-23
 
+Follow-up: [mastery and response](mastery-and-response.md) adds eighteen talents per class, draft planning, attack buffering, new recovery silhouettes and readiness/cancellation feedback. The controls below remain applicable.
+
 ## Controls
 
 Only the Esc game menu captures movement and combat controls. Character, inventory, atlas, journal, build, shop and quest windows keep keyboard movement live. Their visible rectangles still consume pointer input, preventing clicks or camera drags through buttons. Walking away from a conversation/shop closes it through the existing distance rules. Focus loss and character selection retain input suspension. Esc is not a world pause: enemies and cooldowns continue.

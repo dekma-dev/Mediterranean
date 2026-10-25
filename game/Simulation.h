@@ -44,6 +44,7 @@ struct Command {
   Vec2 movement;
   bool sprint = false, jump = false, nextTarget = false, interact = false, restart = false;
   int ability = -1;
+  bool queueAttack = false; // Physical/UI input may buffer one near-ready attack.
   int learnTalent = -1;
   bool resetTalents = false;
   BuildCommand build;
@@ -70,7 +71,7 @@ struct CombatFeedback {
 };
 
 // One-update presentation events. Never serialized or used to resolve combat.
-enum class CombatVisualKind { Strike, HeavyStrike, EnemySwing, Hit, HeavyHit, Hurt, Interrupt, Mend, Potion, DashStart, DashStop, DashImpact,SpellCast,BarrierHit,CastStart,UiClick };
+enum class CombatVisualKind { Strike, HeavyStrike, EnemySwing, Hit, HeavyHit, Hurt, Interrupt, Mend, Potion, DashStart, DashStop, DashImpact,SpellCast,BarrierHit,CastStart,UiClick,ReserveReady,CastCancelled };
 struct CombatVisualEvent {
   CombatVisualKind kind = CombatVisualKind::Hit;
   Vec2 position;
@@ -94,7 +95,8 @@ public:
   ClassId Class() const { return class_; }
   const ClassInfo& ClassInfo() const { return DescribeClass(class_); }
   TalentInfo TalentDefinition(int index) const { return ClassTalent(class_,index); }
-  SpellInfo Spell(int index) const { return ClassSpell(class_,index); }
+  SpellInfo Spell(int index) const { auto spell=ClassSpell(class_,index);
+    if(index==3) {spell.contact=RecoveryCastDuration();spell.recovery=spell.contact+.3f;} return spell; }
   const CombatStyle& CombatStyleInfo() const { return ClassCombat(class_); }
   int ClassResource() const { return classResource_; }
   bool EmpoweredReady() const { return classResource_>=CombatStyleInfo().capacity; }
@@ -129,9 +131,16 @@ public:
   float MovementDistance() const { return movementDistance_; } // excludes dash/respawn
   Vec2 MovementVelocity() const { return movementVelocity_; }
   float GroundMovementDistance() const { return groundMovementDistance_; }
-  void StopMovement() { recoveryCast_=0; movementVelocity_={}; movementDistance_=groundMovementDistance_=0; jumpBuffer_=0; dashRemaining_=dashTravelLeft_=0; dashTarget_=0; CancelAttack(); }
+  void StopMovement() { queuedAttack_=-1; queueRemaining_=0; recoveryCast_=0; movementVelocity_={}; movementDistance_=groundMovementDistance_=0; jumpBuffer_=0; dashRemaining_=dashTravelLeft_=0; dashTarget_=0; CancelAttack(); }
+  int QueuedAttack() const { return queuedAttack_; }
+  bool CanBufferAttack(int index) const {
+    if(index<0 || index>1 || health_<=0 || Dashing() || CastingRecovery() || !TargetActor() || TargetActor()->health<=0) return false;
+    const float remaining=Attacking()?(combat::Duration(HeavyAttack())-attackAge_)/AttackRate():0;
+    const float wait=std::max(remaining,cooldowns_[index]);return wait>0 && wait<=.22f;
+  }
   bool CastingRecovery() const { return recoveryCast_>0; }
-  float RecoveryProgress() const { return CastingRecovery()?1-recoveryCast_/ClassRecoveryCast(class_):0; }
+  float RecoveryCastDuration() const { return ClassRecoveryCast(class_)/(1+BuildBonus(build_,&TalentInfo::castSpeed)); }
+  float RecoveryProgress() const { return CastingRecovery()?1-recoveryCast_/RecoveryCastDuration():0; }
   bool Attacking() const { return attackAbility_>=0; }
   bool HeavyAttack() const { return attackAbility_==1; }
   float AttackSeconds() const { return Attacking()?attackAge_:-1.f; }
@@ -157,14 +166,15 @@ public:
   float StrikeBonus() const { return 3.f*(Level()-1)+BuildBonus(build_,&TalentInfo::strike); }
   float HeavyBonus() const { return 5.f*(Level()-1)+BuildBonus(build_,&TalentInfo::heavy); }
   float MendHealing() const { return ClassInfo().healing+BuildBonus(build_,&TalentInfo::mend); }
-  float RecoveryWard() const { return ClassRecoveryBarrier(class_)+(ClassHealer(class_)?0:BuildBonus(build_,&TalentInfo::mend)*.5f+(HasTalent(Talent::Mercy) && health_<=MaxHealth()*.35f?10.f:0.f)); }
+  float RecoveryWard() const { return ClassRecoveryBarrier(class_)+(ClassHealer(class_)?0:BuildBonus(build_,&TalentInfo::mend)*.5f+(HasTalent(Talent::Mercy) && health_<=MaxHealth()*.35f?10.f:0.f)+(HasTalent(Talent::Overflow)?12.f:0.f)); }
   float MendHealingNow() const { return MendHealing()+(ClassHealer(class_) && HasTalent(Talent::Mercy) && health_<=MaxHealth()*.35f?20.f:0.f); }
   float HeavyMultiplier(float health,float maximum) const {
     return HasTalent(Talent::Executioner) && maximum>0 && health>0 && health<=maximum*.5f?1.25f:1.f;
   }
   float HeavyDamageAgainst(float health,float maximum) const { return HeavyDamage()*HeavyMultiplier(health,maximum); }
   float AbilityCooldown(int index) const { return ValidSpell(index)?abilityCooldowns[index]-
-    (index==3?BuildBonus(build_,&TalentInfo::mendCooldown):index==2?BuildBonus(build_,&TalentInfo::dashCooldown):0):0; }
+    (index==3?BuildBonus(build_,&TalentInfo::mendCooldown):index==2?BuildBonus(build_,&TalentInfo::dashCooldown):
+    index==1?BuildBonus(build_,&TalentInfo::heavyCooldown):BuildBonus(build_,&TalentInfo::basicCooldown)):0; }
   int DefeatedCount() const;
   bool HasWardArmor() const { return anchorQuest_==AnchorQuest::Complete; }
   bool WardArmorEquipped() const { return inventory_.Worn(GearSlot::Chest)==Item::Ward; }
@@ -289,6 +299,9 @@ private:
   bool jumpedThisUpdate_ = false, dashedThisUpdate_ = false;
   std::array<float,4> cooldowns_{};
   int target_ = -1, gold_ = 0;
+  int queuedAttack_=-1;
+  EntityId queuedTarget_=0;
+  float queueRemaining_=0;
   unsigned build_=0;
   std::array<int,3> loadouts_{{-1,-1,-1}};
   Inventory inventory_;

@@ -6,6 +6,7 @@
 #include <uxtheme.h>
 #include <commctrl.h>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <memory>
 #include <stdexcept>
@@ -64,7 +65,7 @@ public:
     if(!load(202,stream_,art_) || !load(201,frameStream_,frame_)) return false;
     MONITORINFO monitor{sizeof(monitor)};GetMonitorInfoW(MonitorFromWindow(window_,MONITOR_DEFAULTTONEAREST),&monitor);
     const float scale=std::min({GetDpiForWindow(window_)/96.f,(monitor.rcWork.right-monitor.rcWork.left-24)/canvasWidth,(monitor.rcWork.bottom-monitor.rcWork.top-64)/canvasHeight});
-    Resize(std::max(.65f,scale),true);Refresh();SetTimer(window_,1,500,nullptr);
+    Resize(std::max(.65f,scale),true);Refresh();SetTimer(window_,1,500,nullptr);SetTimer(window_,2,33,nullptr);
     if(visible) {ShowWindow(window_,SW_SHOW);UpdateWindow(window_);SetFocus(play_);}
     return true;
   }
@@ -106,6 +107,19 @@ private:
   launch::Options options_;launch::Process process_;
   std::wstring gameName_,status_=L"Ready to enter Dawnwatch.";
   bool busy_=false,available_=false,saveAvailable_=false;float scale_=1;
+  std::array<float,3> highlights_{};
+  void AnimateControls() {
+    if(!IsWindowVisible(window_) || IsIconic(window_)) return;
+    POINT cursor{};GetCursorPos(&cursor);
+    const HWND controls[]{play_,guide_,saves_};
+    for(int i=0;i<3;++i) {
+      RECT rect{};GetWindowRect(controls[i],&rect);
+      const bool active=GetForegroundWindow()==window_ && IsWindowEnabled(controls[i]) &&
+        (PtInRect(&rect,cursor) || GetFocus()==controls[i]);
+      const float next=highlights_[i]+((active?1.f:0.f)-highlights_[i])*.35f;
+      if(std::abs(next-highlights_[i])>.001f) {highlights_[i]=next;InvalidateRect(controls[i],nullptr,FALSE);}
+    }
+  }
   void Resize(float scale,bool centre) {
     RECT bounds{0,0,LONG(std::lround(canvasWidth*scale)),LONG(std::lround(canvasHeight*scale))};
     AdjustWindowRectExForDpi(&bounds,DWORD(GetWindowLongPtrW(window_,GWL_STYLE)),FALSE,WS_EX_CONTROLPARENT,GetDpiForWindow(window_));
@@ -241,6 +255,9 @@ private:
     Skin(g,box,std::min(18.f*scale_,box.Height*.32f));
     SolidBrush wash(disabled?Color(150,18,17,16):primary?Color(pressed?180:155,111,12,19):Color(pressed?125:65,47,54,47));
     g.FillRectangle(&wash,box.X+5*scale_,box.Y+5*scale_,box.Width-10*scale_,box.Height-10*scale_);
+    const float hover=highlights_[primary?0:item.CtlID==Guide?1:2];
+    SolidBrush glint(Color(BYTE(disabled?0:42*hover),245,201,117));
+    g.FillRectangle(&glint,box.X+5*scale_,box.Y+5*scale_,box.Width-10*scale_,box.Height-10*scale_);
     const wchar_t* label=primary?(busy_?L"GAME RUNNING":L"PLAY"):item.CtlID==Guide?L"Game guide":L"Saves folder";
     Font font(primary?L"Georgia":L"Segoe UI",(primary?22:12)*scale_,FontStyleRegular,UnitPixel);SolidBrush foreground(disabled?muted:ink);StringFormat format;
     format.SetAlignment(StringAlignmentCenter);format.SetLineAlignment(StringAlignmentCenter);g.DrawString(label,-1,&font,box,&format,&foreground);
@@ -283,7 +300,7 @@ private:
       case WM_ERASEBKGND: return 1;
       case WM_SIZE: if(wparam!=SIZE_MINIMIZED) self->Layout();return 0;
       case WM_DPICHANGED: {const auto* rect=reinterpret_cast<RECT*>(lparam);SetWindowPos(window,nullptr,rect->left,rect->top,rect->right-rect->left,rect->bottom-rect->top,SWP_NOZORDER|SWP_NOACTIVATE);return 0;}
-      case WM_TIMER: self->Refresh();return 0;
+      case WM_TIMER: if(wparam==2) self->AnimateControls();else self->Refresh();return 0;
       case DM_GETDEFID: return MAKELRESULT(Play,DC_HASDEFID);
       case WM_MEASUREITEM: reinterpret_cast<MEASUREITEMSTRUCT*>(lparam)->itemHeight=UINT(28*self->scale_);return TRUE;
       case WM_DRAWITEM: self->DrawButton(*reinterpret_cast<DRAWITEMSTRUCT*>(lparam));return TRUE;
@@ -299,7 +316,7 @@ private:
           case Saves: self->Open(launch::SavePath().parent_path(),true);break;
         } return 0;
       case WM_CLOSE: self->Changed();launch::SaveSettings(self->settings_,self->options_);DestroyWindow(window);return 0;
-      case WM_DESTROY: KillTimer(window,1);PostQuitMessage(0);return 0;
+      case WM_DESTROY: KillTimer(window,1);KillTimer(window,2);PostQuitMessage(0);return 0;
     }
     return DefWindowProcW(window,message,wparam,lparam);
   }

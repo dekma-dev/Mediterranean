@@ -115,9 +115,11 @@ void Recoveries(Renderer& r,const std::filesystem::path& root) {
       for(auto& e:const_cast<std::vector<rpg::Enemy>&>(s.Enemies())) {e.position=e.home={25,25};e.windup=0;e.state=rpg::EnemyState::Idle;}
       while(s.CastingRecovery()) s.Update(.01f,{});
     }
-    Check(s.VisualEventCount()==1 && s.VisualEvents()[0].kind==K::Mend && s.VisualEvents()[0].school==id,"Recovery event identity");
+    const unsigned expected=id==ClassId::Psionic?2:1;
+    Check(s.VisualEventCount()==expected && s.VisualEvents()[0].kind==K::Mend && s.VisualEvents()[0].school==id,"Recovery event identity");
+    if(expected==2) Check(s.VisualEvents()[1].kind==K::ReserveReady,"Inner focus must announce its newly filled reserve");
     sound::Events audio;audio.Update(s);
-    Check(audio.count==1 && audio.cues[0]==sound::ClassRecoveryCue(id),"Recovery sound identity");
+    Check(audio.count==expected && audio.cues[0]==sound::ClassRecoveryCue(id),"Recovery sound identity");
     auto event=s.VisualEvents()[0];event.position={-1.25f,0};
     Stage(r,id,false,true);const auto base=Capture(r,root/(std::to_string(i)+"-recovery-base.png"));
     Pixels first;

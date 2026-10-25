@@ -386,8 +386,28 @@ void States(Renderer& r,const rpg::Simulation& state,float time) {
     const float a=std::min(1.f,state.Barrier()/12.f)*(.28f+.045f*std::sin(time*3));
     const XMFLOAT3 p{player.x,state.Height()+1,player.z};
     const auto color=state.Class()==C::Mage?XMFLOAT4{.35f,.72f,1,a}:Color(state.Class(),a);
-    for(int i=0;i<3;++i) Arc(r,p,.64f,i*tau/3+time*.18f,1.3f,.013f,color,false,.35f);
-    Arc(r,{player.x,state.Height()+.08f,player.z},.57f,0,tau,.014f,color,true);
+    const bool physical=state.Class()==C::Warrior || state.Class()==C::Engineer;
+    if(physical) {
+      // Guard plates face with the champion instead of orbiting like a spell.
+      const float facing=state.Facing(),sx=std::sin(facing),cx=std::cos(facing);
+      for(int plate=-1;plate<=1;++plate) {
+        const float side=plate*.21f;
+        const auto center=Add(p,{cx*side+sx*.46f,.04f,cx*.46f-sx*side});
+        const auto top=Add(center,{0,.23f,0}),bottom=Add(center,{0,-.26f,0});
+        r.DrawEffectStreak(top,Add(center,{cx*.09f,0,-sx*.09f}),.014f,color);
+        r.DrawEffectStreak(Add(center,{cx*.09f,0,-sx*.09f}),bottom,.014f,color);
+        r.DrawEffectStreak(bottom,Add(center,{-cx*.09f,0,sx*.09f}),.014f,color);
+        r.DrawEffectStreak(Add(center,{-cx*.09f,0,sx*.09f}),top,.014f,color);
+      }
+    } else {
+      for(int i=0;i<3;++i) Arc(r,p,.64f,i*tau/3+time*.18f,1.3f,.013f,color,false,.35f);
+      Arc(r,{player.x,state.Height()+.08f,player.z},.57f,0,tau,.014f,color,true);
+    }
+  }
+  if(state.EvasionSeconds()>0) {
+    const float alpha=std::min(1.f,state.EvasionSeconds()/.3f)*.3f;
+    for(int i=0;i<3;++i) Arc(r,{player.x,state.Height()+.15f+i*.23f,player.z},.43f,
+      state.Facing()+time*.5f+i*.8f,.8f,.012f,Color(C::Scout,alpha),true,.15f);
   }
   unsigned shown=0;
   const auto status=[&](const rpg::Enemy& enemy) {

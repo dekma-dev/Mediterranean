@@ -131,7 +131,7 @@ void Simulation::UseAbility(int index,float visualElapsed) {
     if(health_<=ClassRecoveryCost(class_)) {message_="Not enough health for the pact.";return;}
     if(ClassRecoveryCast(class_)>0) {
       if(!Grounded() || Length(movementVelocity_)>.15f) {message_="Stand still to prepare this ability.";return;}
-      recoveryCast_=ClassRecoveryCast(class_);
+      recoveryCast_=RecoveryCastDuration();
       EmitVisual(CombatVisualKind::CastStart,player_,height_,facing_);
       message_=std::string(Spell(3).name)+" casting.";
     } else CompleteRecovery();
@@ -188,7 +188,8 @@ void Simulation::CompleteRecovery() {
   if(health_<=ClassRecoveryCost(class_)) {message_="Not enough health for the pact.";return;}
   health_-=ClassRecoveryCost(class_);
   if(ClassHealer(class_)) {
-    const float healed=std::min(MendHealingNow(),MaxHealth()-health_);health_+=healed;
+    const float requested=MendHealingNow(),healed=std::min(requested,MaxHealth()-health_);health_+=healed;
+    if(HasTalent(Talent::Overflow)) barrier_=std::max(barrier_,(requested-healed)*.5f);
     if(healed>0) Emit(FeedbackKind::Heal,player_,int(healed));
   }
   const float ward=RecoveryWard();
@@ -228,7 +229,8 @@ void Simulation::ResolveAttack(float elapsed) {
     if(class_==ClassId::Necromancer) bonus+=12;
     if(class_==ClassId::Demonologist) bonus+=20;
   }
-  const float damage=std::min(enemy.health,(attackDamage_*finishing+bonus)*(enemy.exposed>0?1.25f:1.f));
+  const float mastery=attackEmpowered_ && HasTalent(Talent::Overwhelming)?1.2f:1.f;
+  const float damage=std::min(enemy.health,(attackDamage_*finishing+bonus)*mastery*(enemy.exposed>0?1.25f:1.f));
   float heal=class_==ClassId::Necromancer?damage*.15f:class_==ClassId::Bard?3.f:class_==ClassId::Priest && index==1?8.f:0.f;
   if(index==0) classResource_=std::min(CombatStyleInfo().capacity,classResource_+1);
   if(index==1) {
@@ -535,7 +537,7 @@ void Simulation::Update(float seconds,const Command& command) {
   if (!std::isfinite(seconds) || seconds<=0) return;
   const float dt=std::min(seconds,.05f);
   if(command.uiClick) EmitVisual(CombatVisualKind::UiClick,player_,height_,facing_);
-  const bool advanceAttack=Attacking(),advanceRecovery=CastingRecovery();
+  const bool advanceAttack=Attacking(),advanceRecovery=CastingRecovery(),reserveWasReady=EmpoweredReady();
   if (command.restart) { const auto name=nickname_;const auto look=appearance_;CreateCharacter(class_,name,look);return; }
   for (auto& feedback : feedback_) feedback.age+=dt;
   feedback_.erase(std::remove_if(feedback_.begin(),feedback_.end(),[](const CombatFeedback& f) { return f.age>=1.5f; }),feedback_.end());
@@ -566,10 +568,12 @@ void Simulation::Update(float seconds,const Command& command) {
   const bool moving=std::isfinite(command.movement.x) && std::isfinite(command.movement.z) &&
     std::isfinite(length) && length>.001f;
   if(CastingRecovery() && (moving || command.jump || command.haltMovement || !Grounded())) {
+    EmitVisual(CombatVisualKind::CastCancelled,player_,height_,facing_);
     recoveryCast_=0;message_="Cast interrupted by movement.";
   }
   if(HeavyAttack() && CombatStyleInfo().steadyHeavy && attackAge_<combat::StrokeStart(true) &&
       (moving || command.jump || !Grounded())) {
+    if(!PhysicalLauncher(WeaponFor(class_).form)) EmitVisual(CombatVisualKind::CastCancelled,player_,height_,facing_);
     CancelAttack();message_="Preparation interrupted by movement.";
   }
   const float pace=moving && steering?motion::DirectionalPace(
@@ -703,7 +707,13 @@ void Simulation::Update(float seconds,const Command& command) {
       potionCooldown_=3; message_="Healing potion restored health.";
     } else message_="That potion stack has moved. Select it again.";
   }
-  if(command.ability!=2 && !command.haltMovement) UseAbility(command.ability);
+  if(command.ability>=0) {queuedAttack_=-1;queueRemaining_=0;}
+  bool buffered=false;
+  if(command.queueAttack && !command.haltMovement && CanBufferAttack(command.ability)) {
+      queuedAttack_=command.ability;queuedTarget_=TargetActor()->id;queueRemaining_=.25f;buffered=true;
+      message_=std::string(Spell(command.ability).name)+" queued.";
+  }
+  if(command.ability!=2 && !command.haltMovement && !buffered) UseAbility(command.ability);
   if(Dashing()) {
     const float from=DashPhase(),step=std::min(dt,dashRemaining_);
     dashRemaining_=std::max(0.f,dashRemaining_-dt);
@@ -732,6 +742,7 @@ void Simulation::Update(float seconds,const Command& command) {
       }
     }
     if (!Dashing()) {
+      if(!blocked && !endedEarly && HasTalent(Talent::SecondWind)) barrier_=std::max(barrier_,18.f);
       EmitVisual(blocked?CombatVisualKind::DashImpact:CombatVisualKind::DashStop,
         player_,height_,facing_,0,endedEarly?0:dt-step);
       dashTarget_=0; dashTravelLeft_=0;
@@ -743,8 +754,17 @@ void Simulation::Update(float seconds,const Command& command) {
     else if (sparringRemaining_==0) EndSparring("Time complete");
   }
   UpdateCombat(dt,advanceAttack);
+  if(queuedAttack_>=0) {
+    queueRemaining_=std::max(0.f,queueRemaining_-dt);
+    const auto* target=TargetActor();
+    if(command.haltMovement || health_<=0 || !target || target->id!=queuedTarget_ || target->health<=0 || queueRemaining_==0)
+      queuedAttack_=-1;
+    else if(!Attacking() && cooldowns_[queuedAttack_]==0) {
+      const int ability=queuedAttack_;queuedAttack_=-1;UseAbility(ability);
+    }
+  }
   if(CastingRecovery()) {
-    if(damagedThisUpdate_ || health_<=0) {recoveryCast_=0;message_="Cast interrupted by damage.";}
+    if(damagedThisUpdate_ || health_<=0) {recoveryCast_=0;EmitVisual(CombatVisualKind::CastCancelled,player_,height_,facing_);message_="Cast interrupted by damage.";}
     else if(advanceRecovery) {recoveryCast_=std::max(0.f,recoveryCast_-dt);if(recoveryCast_==0) CompleteRecovery();}
   }
   if (health_>0) SeparateEnemies(dt);
@@ -764,6 +784,7 @@ void Simulation::Update(float seconds,const Command& command) {
     }
   }
   if (questDialogue_!=QuestId::None && !CanTalkToKeeper()) CloseQuestDialogue();
+  if(!reserveWasReady && EmpoweredReady() && health_>0) EmitVisual(CombatVisualKind::ReserveReady,player_,height_,facing_);
 }
 
 void Simulation::SeparateEnemies(float dt) {
@@ -901,7 +922,7 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
 
 std::string Simulation::Save() const {
   std::ostringstream out;
-  out << std::setprecision(9) << "MEDITERRANEAN 13\n" << "PROFILE " << int(class_) << ' ' << std::quoted(nickname_) << ' ' << frontierCompleted_ << ' ' << frontierActive_ << ' ' << legacyLoot_ << '\n' << player_.x << ' ' << player_.z << ' '
+  out << std::setprecision(9) << "MEDITERRANEAN 14\n" << "PROFILE " << int(class_) << ' ' << std::quoted(nickname_) << ' ' << frontierCompleted_ << ' ' << frontierActive_ << ' ' << legacyLoot_ << '\n' << player_.x << ' ' << player_.z << ' '
     << health_ << ' ' << facing_ << ' ' << static_cast<int>(quest_) << ' ' << gold_ << '\n';
   out << Potions() << ' ' << HasRewardWeapon() << ' ' << RewardWeaponEquipped() << ' ' << potionCooldown_ << '\n';
   out << static_cast<int>(anchorQuest_) << '\n';
@@ -926,7 +947,7 @@ bool Simulation::Load(const std::string& data) {
   std::istringstream input(data);
   std::string magic; int version=0, quest=0,potions=2,owned=0,equipped=0;
   Simulation candidate;
-  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>13) return false;
+  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>14) return false;
   if(version>=11) {
     std::string tag,name;int id=0,completed=0,active=0,looted=0;
     if(!(input>>tag>>id>>std::quoted(name)>>completed>>active>>looted) || tag!="PROFILE" ||
@@ -1034,7 +1055,7 @@ bool Simulation::Load(const std::string& data) {
     std::string tag; int savedBuild=0;
     if (!(input>>tag>>savedBuild) || tag!="BUILD" || savedBuild<0) return false;
     candidate.build_=unsigned(savedBuild);
-    if (version==8 && (candidate.build_>>6)!=0) return false;
+    if ((version==8 && (candidate.build_>>6)!=0) || (version<14 && (candidate.build_>>9)!=0)) return false;
   }
   // Health depends on the complete earned build, including legacy empty builds.
   if (!ValidBuild(candidate.build_,candidate.Level()) || candidate.health_>candidate.MaxHealth()) return false;
@@ -1042,7 +1063,7 @@ bool Simulation::Load(const std::string& data) {
     std::string tag;
     if (!(input>>tag) || tag!="LOADOUTS") return false;
     for (auto& mask : candidate.loadouts_)
-      if (!(input>>mask) || mask<-1 || (mask>=0 && !ValidBuild(unsigned(mask),candidate.Level()))) return false;
+      if (!(input>>mask) || mask<-1 || (mask>=0 && (!ValidBuild(unsigned(mask),candidate.Level()) || (version<14 && (unsigned(mask)>>9)!=0)))) return false;
   }
   if(version>=12) {
     std::string tag;auto& look=candidate.appearance_;

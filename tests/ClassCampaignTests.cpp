@@ -179,10 +179,95 @@ std::string Campaign(const std::string& veteran) {
  Check(s.TalentPoints()==0 && TalentCount(s.BuildMask())==5,"Level-ten build budget");Roundtrip(s);
  return s.Save();
 }
+void Mastery(const std::string& levelTen) {
+ for(int id=0;id<int(ClassId::Count);++id) for(int branch=0;branch<3;++branch) {
+  auto fixture=levelTen;const auto at=fixture.find("PROFILE ")+8;
+  fixture.replace(at,fixture.find(' ',at)-at,std::to_string(id));
+  fixture=Record(fixture,"BUILD ","BUILD 0");
+  const auto player=fixture.find('\n',fixture.find("PROFILE "))+1;
+  std::istringstream row(fixture.substr(player,fixture.find('\n',player)-player));float x,z,h,f;int q,g;row>>x>>z>>h>>f>>q>>g;
+  std::ostringstream line;line<<"0 -10 40 "<<f<<' '<<q<<' '<<g;fixture.replace(player,fixture.find('\n',player)-player,line.str());
+  Simulation s;Check(s.Load(fixture),"Mastery level ten fixture");
+  const float health=s.Health(),base=s.MaxHealth(),armor=s.DamageReduction();
+  for(int node:{branch,9+branch,12+branch,15+branch}) {Command learn;learn.learnTalent=node;s.Update(.01f,learn);Check(s.HasTalent(Talent(node)),"Mastery prerequisite chain could not be learned");}
+  Check(s.TalentPoints()==1 && s.Health()==health,"Mastery spent wrong budget or healed on learning");Roundtrip(s);
+  const auto preview=s.PreviewBuild(s.BuildMask());
+  Check(std::abs(preview.basicCooldown-s.AbilityCooldown(0))<.0001f && std::abs(preview.heavyCooldown-s.AbilityCooldown(1))<.0001f &&
+    std::abs(preview.recoveryCast-s.RecoveryCastDuration())<.0001f,"Mastery preview disagrees with simulation");
+  if(branch==0) Check(s.AbilityCooldown(0)<.76f && s.AbilityCooldown(1)<3.21f,"Tempo/Pressure did not shorten future cooldowns");
+  if(branch==1) Check(s.MaxHealth()>=base+45 && s.DamageReduction()>=armor+2,"Defensive mastery lacks real stats");
+  if(branch==2) {
+    Check(std::abs(s.RecoveryCastDuration()-ClassRecoveryCast(s.Class())/1.45f)<.0001f,"Cast speed calculation");
+    if(!ClassHealer(s.Class())) Check(s.RecoveryWard()>=ClassRecoveryBarrier(s.Class())+12,"Overflow lacks defensive capacity");
+    Command cast;cast.ability=3;s.Update(.001f,cast);
+    const float duration=s.RecoveryCastDuration();
+    for(float t=0;t<duration+.05f;t+=.01f)s.Update(.01f,{});
+    Check(!s.CastingRecovery() && s.Cooldown(3)>0,"Advanced recovery failed to finish");
+  }
+  auto old=s.Save();old.replace(14,old.find('\n')-14,"13");Simulation restored;const auto stable=restored.Save();
+  Check(!restored.Load(old) && restored.Save()==stable,"Legacy save accepted mastery bits");
+  unsigned missing=s.BuildMask()&~(1u<<branch);Check(!ValidBuild(missing,10),"Mastery without foundation was accepted");
+  Check(!ValidBuild(s.BuildMask(),4),"Advanced build accepted before level gate");
+  // Exercise capstones through actual contacts/completions, not just tooltips.
+  const auto placeEnemy=[](Simulation& actor,float range) {
+    auto& enemy=const_cast<Enemy&>(actor.Enemies()[0]);
+    enemy.health=10000;enemy.position=enemy.home={0,-10+range};enemy.state=EnemyState::Idle;
+    enemy.attackCooldown=100;enemy.windup=0;
+    Command select;select.nextTarget=true;actor.Update(.001f,select);
+  };
+  if(branch==0) {
+    Simulation plain;auto lesser=Record(s.Save(),"BUILD ","BUILD "+std::to_string(s.BuildMask()&~(1u<<unsigned(Talent::Overwhelming))));
+    Check(plain.Load(lesser),"Unempowered mastery comparison fixture");
+    float damage[2]{};int comparison=0;
+    for(auto* actor:{&plain,&s}) {
+      placeEnemy(*actor,1.8f);
+      for(int n=0;n<3000 && (!actor->EmpoweredReady() || actor->Attacking());++n) {
+        Command basic;if(!actor->Attacking() && actor->Cooldown(0)==0) basic.ability=0;actor->Update(.01f,basic);
+      }
+      Check(actor->EmpoweredReady(),"Capstone resource setup");
+      const float before=actor->Enemies()[0].health;Command heavy;heavy.ability=1;actor->Update(.001f,heavy);
+      for(float time=0;time<actor->Spell(1).contact+.02f;time+=.01f)actor->Update(.01f,{});
+      damage[comparison++]=before-actor->Enemies()[0].health;
+    }
+    Check(damage[0]>0 && std::abs(damage[1]-damage[0]*1.2f)<.01f,"Capstone empowered damage did not reach actual contact");
+  }
+  if(branch==1) {
+    const auto beforeMobility=s.Save();
+    placeEnemy(s,3.5f);Command dash;dash.ability=2;s.Update(.001f,dash);
+    Check(s.Dashing(),"Second wind mobility fixture");
+    for(int n=0;n<100 && s.Dashing();++n)s.Update(.01f,{});
+    Check(s.Barrier()>=18,"Completed mobility did not grant Second wind ward");
+    Check(s.Load(beforeMobility),"Cancelled mobility fixture");placeEnemy(s,3.5f);
+    s.Update(.001f,dash);s.StopMovement();for(int n=0;n<100;++n)s.Update(.01f,{});
+    Check(s.Barrier()==0,"Cancelled mobility granted a capstone ward");
+  }
+  if(branch==2 && ClassHealer(s.Class())) {
+    auto almost=s.Save();const auto start=almost.find('\n',almost.find("PROFILE "))+1;
+    std::ostringstream nearFull;nearFull<<"0 -10 "<<s.MaxHealth()-1<<" 0 "<<q<<' '<<g;
+    almost.replace(start,almost.find('\n',start)-start,nearFull.str());
+    Check(s.Load(almost),"Overflow fixture");
+    for(int n=0;n<1200;++n)s.Update(.01f,{});
+    const float excess=(s.MendHealingNow()-1)*.5f;Command heal;heal.ability=3;s.Update(.001f,heal);
+    for(int n=0;n<200;++n)s.Update(.01f,{});
+    Check(s.Health()==s.MaxHealth() && s.Barrier()>=excess-.01f,"Overhealing did not become a barrier");
+  }
+ }
+}
 void Captures(const std::filesystem::path& root,const std::string& levelTen) {
  Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),1280,720,L"Class campaign test",false),"Test window");
  Renderer renderer;Check(renderer.Initialize(window.GetHandle(),1280,720),"Renderer");
  Game game;game.Initialize();Check(game.RestoreSnapshot(levelTen),"Level ten game");
+ Simulation master;Check(master.Load(levelTen),"Mastery render fixture");
+ for(const auto size:{std::pair{960,600},std::pair{1280,720},std::pair{2560,1080}}) {
+  Check(renderer.Resize(size.first,size.second),"Mastery resize");
+  ui::Interface book;book.SetOnly(ui::Panel::Build);book.talentPage=1;book.selectedTalent=15;
+  renderer.BeginFrame();book.Render(renderer,master,1,false);
+  Check(renderer.Capture((root/("mastery-"+std::to_string(size.first)+".png")).wstring()) && renderer.EndFrame(false),"Mastery UI capture");
+  const ui::Layout layout(float(size.first),float(size.second));
+  const auto hit=book.Pointer(layout.x+200*layout.scale,layout.y+490*layout.scale,float(size.first),float(size.second),true,false);
+  Check(hit.action==ui::Action::SelectTalent && hit.value==15,"Mastery node hit routing");
+ }
+ Check(renderer.Resize(1280,720),"Restore capture size");
  for(const auto panel:{ui::Panel::Build,ui::Panel::Journal,ui::Panel::Map}) {
   game.OpenPanel(panel);renderer.BeginFrame();game.Render(renderer);
   Check(renderer.Capture((root/("panel-"+std::to_string(int(panel))+".png")).wstring()) && renderer.EndFrame(false),"Campaign UI capture");
@@ -225,6 +310,6 @@ void Captures(const std::filesystem::path& root,const std::string& levelTen) {
 int main() {
  const auto root=std::filesystem::current_path()/"class-campaign-check";std::filesystem::create_directories(root);
  const auto veteran=Read(std::filesystem::path(RPG_TEST_FIXTURES)/"veteran-preview.save");
- Roster();ClassCombat(veteran);const auto end=Campaign(veteran);
+ Roster();ClassCombat(veteran);const auto end=Campaign(veteran);Mastery(end);
  Captures(root,end);std::cout<<"PASS: eleven class profiles, save migration, seven playable frontier assignments, enemy squads, level ten, build budget and UI captures\n";
 }

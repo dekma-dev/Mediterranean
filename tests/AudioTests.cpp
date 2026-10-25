@@ -264,6 +264,18 @@ int main() {
   Require(events.count==1 && Has(events,sound::Cue::Ward),"Accepted defensive recovery must emit one sound");
   simulation.Update(.01f,command); events.Update(simulation);
   Require(events.count==0,"Cooldown rejection must not replay healing");
+  {
+    rpg::Simulation focus;focus.CreateCharacter(rpg::ClassId::Psionic,"Tester");
+    rpg::Command cast;cast.ability=3;focus.Update(.01f,cast);sound::Events cues;cues.Update(focus);
+    Require(Has(cues,sound::Cue::ReserveReady),"Filling a reserve must announce readiness");
+    focus.Update(.01f,{});cues.Update(focus);Require(!Has(cues,sound::Cue::ReserveReady),"Ready reserve must not repeat its cue");
+    focus.CreateCharacter(rpg::ClassId::Priest,"Tester");auto wounded=focus.Save();const auto hp=wounded.find(" 95 ");
+    Require(hp!=std::string::npos,"Priest recovery fixture");wounded.replace(hp,4," 40 ");Require(focus.Load(wounded),"Priest fixture load");
+    focus.Update(.01f,cast);cues.Update(focus);Require(Has(cues,sound::Cue::Cast),"Preparation cue missing");
+    rpg::Command move;move.movement={1,0};focus.Update(.01f,move);cues.Update(focus);
+    Require(Has(cues,sound::Cue::CastCancelled) && !Has(cues,sound::Cue::Holy),"Interrupted cast must fizzle without completion audio");
+    focus.Update(.01f,{});cues.Update(focus);Require(!Has(cues,sound::Cue::CastCancelled),"Cancelled cast replayed its cue");
+  }
   const char* duel="MEDITERRANEAN 3\n-4 5.2 100 0 1 0\n2 0 0 0\n0\n0 0 0 0\n"
     "100 -4 7 80 0 0 1 0.5 3.14159\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
   Require(simulation.Load(duel),"Combat audio fixture rejected"); events.Reset();

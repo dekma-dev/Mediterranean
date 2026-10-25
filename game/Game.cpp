@@ -121,6 +121,7 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   case ui::Action::Build: interface_.Toggle(ui::Panel::Build); break;
   case ui::Action::SelectTalent:
     interface_.selectedTalent=event.value; interface_.selectedSpell=-1;
+    interface_.talentPage=event.value/9;
     interface_.confirmTalentReset=false; interface_.InvalidateHitRegions(); break;
   case ui::Action::LearnTalent: command.learnTalent=event.value; break;
   case ui::Action::SelectSpell:
@@ -133,8 +134,24 @@ void Game::Update(double seconds,const Input& input,float wheel) {
     command.resetTalents=true; interface_.confirmTalentReset=false; interface_.InvalidateHitRegions(); break;
   case ui::Action::BuildPage:
     interface_.CancelBuildConfirmation(); interface_.loadoutsPage=!interface_.loadoutsPage;
-    interface_.previewBuild=int(simulation_.BuildMask()); interface_.selectedLoadout=0;
+    if(!interface_.planningBuild) interface_.previewBuild=int(simulation_.BuildMask());
+    interface_.selectedLoadout=0;
     interface_.InvalidateHitRegions(); break;
+  case ui::Action::PlanBuild:
+    interface_.CancelBuildConfirmation();interface_.planningBuild=!interface_.planningBuild;
+    interface_.previewBuild=int(simulation_.BuildMask());interface_.InvalidateHitRegions();break;
+  case ui::Action::EditBuild:
+    interface_.CancelBuildConfirmation();interface_.planningBuild=true;interface_.loadoutsPage=false;
+    if(interface_.previewBuild<0) interface_.previewBuild=int(simulation_.BuildMask());
+    interface_.InvalidateHitRegions();break;
+  case ui::Action::DraftTalent: {
+    if(!interface_.planningBuild || interface_.previewBuild<0) break;
+    if(event.value==-1) {interface_.previewBuild=0;interface_.InvalidateHitRegions();break;}
+    unsigned draft=unsigned(interface_.previewBuild);
+    if(rpg::TogglePlannedTalent(draft,rpg::Talent(event.value))) interface_.previewBuild=int(draft);
+    else simulation_.Notify("Draft needs its prerequisite and must fit the five-point budget.");
+    interface_.InvalidateHitRegions();break;
+  }
   case ui::Action::SelectLoadout:
     if (event.value>=0 && event.value<3) {
       interface_.CancelBuildConfirmation(); interface_.selectedLoadout=event.value;
@@ -235,6 +252,7 @@ void Game::Update(double seconds,const Input& input,float wheel) {
     (interface_.panel!=ui::Panel::Quest || !input.Focused())) command.questAction=rpg::QuestAction::Close;
   const bool wasAlive=simulation_.Health()>0;
   // Menus capture local commands, but never stop simulation time.
+  command.queueAttack=true;
   ExecuteCommand(command,dt);
   if (wasAlive && simulation_.Health()<=0) {
     CancelUiGesture(); interface_.Close(interface_.panel);

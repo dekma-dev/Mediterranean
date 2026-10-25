@@ -51,6 +51,21 @@ inline const ClassInfo& DescribeClass(ClassId id) {return classes[ValidClass(id)
 inline bool ClassHealer(ClassId id);
 inline TalentInfo ClassTalent(ClassId id,int index) {
  auto result=talents[index];
+ if(index>=9) {
+  static constexpr const char* names[11][9]={
+   {"Measured cuts","Veteran lungs","Steady guard","Relentless pressure","Tempered steel","Shield discipline","Battle fury","Unbroken advance","Iron resolve"},
+   {"Litany of blows","Templar endurance","Quiet prayer","Judicial rhythm","Sacred bastion","Swift devotion","Dawn verdict","Pilgrim's shelter","Grace overflowing"},
+   {"Quick nock","Trail endurance","Prepared escape","Hunter's rhythm","Hide armour","Fleet preparation","Perfect aim","Covered retreat","Survival reserve"},
+   {"Radiant cadence","Enduring faith","Focused prayer","Sermon of wrath","Sacred resilience","Swift benediction","Divine rebuke","Pilgrim's refuge","Abundant grace"},
+   {"Thorn rhythm","Deep roots","Still waters","Gathering storm","Ancient bark","Spring awakening","Eye of the storm","Wild shelter","Living abundance"},
+   {"Spark cadence","Astral constitution","Crystalline focus","Accelerant","Frozen mantle","Clear casting","Astral conflagration","Slipstream shelter","Frozen reserve"},
+   {"Grave cadence","Undying vessel","Bone focus","Rending rhythm","Ossified flesh","Swift binding","Soul eruption","Grave shelter","Death's reserve"},
+   {"Thought cadence","Mind over flesh","Inner stillness","Fracture rhythm","Mental fortress","Lucid focus","Mind collapse","Veiled passage","Boundless insight"},
+   {"Quick refrain","Long breath","Perfect pitch","Rising tempo","Unbroken resolve","Swift harmony","Grand crescendo","Traveller's song","Resonant abundance"},
+   {"Rapid feed","Reinforced frame","Prepared plating","Pressure regulator","Hardened rivets","Quick assembly","Overcharged shell","Safety harness","Reserve plating"},
+   {"Rending rhythm","Infernal endurance","Blood focus","Relentless ruin","Obsidian bulwark","Swift pact","Cataclysm","Sheltered onslaught","Blood reserve"}};
+  result.name=names[ValidClass(id)?int(id):0][index-9];return result;
+ }
  result.name=DescribeClass(id).nodes[index];
  // Per-class progression changes the actual stats used by attacks, protection,
  // recovery and build previews. Durable node IDs retain the shared save schema.

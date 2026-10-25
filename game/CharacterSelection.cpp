@@ -19,7 +19,7 @@ std::filesystem::path CharacterSelection::Path(rpg::ClassId id) const {
   return id==rpg::ClassId::Warrior?base_:base_.parent_path()/("hero-"+std::to_string(int(id))+".save");
 }
 void CharacterSelection::SetPage(Page page,Control focus) {
-  page_=page;focus_=focus;hover_=Control::None;CancelGesture();
+  page_=page;focus_=focus;hover_=Control::None;pageAge_=0;highlights_.fill(0);CancelGesture();
 }
 void CharacterSelection::ReadSlots() {
   for(int i=0;i<int(slots_.size());++i) {
@@ -157,6 +157,12 @@ CharacterSelection::Action CharacterSelection::Activate(Control control) {
 CharacterSelection::Action CharacterSelection::Update(float seconds,const Input& input) {
   if(!input.Focused()) {CancelGesture();hover_=Control::None;return Action::None;}
   time_=std::fmod(time_+std::clamp(seconds,0.f,.05f),600.f);
+  const float uiSeconds=std::clamp(seconds,0.f,.05f);
+  pageAge_=std::min(1.f,pageAge_+uiSeconds);
+  for(int i=0;i<int(Control::None);++i) {
+    const auto control=Control(i);const float goal=Enabled(control) && (hover_==control || focus_==control)?1.f:0.f;
+    highlights_[i]+=(goal-highlights_[i])*(1-std::exp(-14.f*uiSeconds));
+  }
   const float dt=std::clamp(seconds,0.f,.05f);
   zoom_+=(float(closeup_)-zoom_)*-std::expm1(-12.f*dt);
   if(actionTime_>=0) {actionTime_+=dt;if(actionTime_>1.6f) actionTime_=-1;}

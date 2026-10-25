@@ -81,6 +81,24 @@ inline ActionChannels SampleAction(rpg::ClassId id,ActionClip clip,float seconds
     ready.left=ready.left+ActionVector{.13f,.17f,.09f};
     cast.left={.27f,.32f,.10f}; settle.left={.20f,.24f,.08f};
     ready.open=.55f; cast.open=1; settle.open=.7f;
+    // Recovery has its own silhouette: protective bracing, evasive gathering,
+    // prayer and mechanical assembly share timing but not a universal heal pose.
+    if(id==rpg::ClassId::Warrior || id==rpg::ClassId::Paladin) {
+      ready.left={.10f,.19f,.15f};cast.left={.15f,.28f,.19f};settle.left={.12f,.21f,.12f};
+      ready.pitch=-.035f;cast.pitch=.02f;cast.hip=-.025f;ready.open=cast.open=settle.open=.15f;
+    } else if(id==rpg::ClassId::Scout) {
+      ready.left={.10f,.18f,.06f};cast.left={.20f,.27f,.15f};settle.left={.12f,.18f,.08f};
+      ready.yaw=-.09f;cast.yaw=.08f;cast.hip=-.035f;cast.open=.35f;
+    } else if(id==rpg::ClassId::Engineer) {
+      ready.left={.12f,.20f,.12f};cast.left={.24f,.28f,.18f};settle.left={.18f,.22f,.12f};
+      ready.pitch=.04f;cast.pitch=.055f;cast.open=.25f;
+    } else if(id==rpg::ClassId::Psionic) {
+      ready.left={.12f,.40f,.02f};cast.left={.14f,.43f,.08f};settle.left={.16f,.30f,.09f};
+      ready.pitch=cast.pitch=-.035f;
+    } else if(id==rpg::ClassId::Necromancer || id==rpg::ClassId::Demonologist) {
+      ready.left={.08f,.22f,.03f};cast.left={.21f,.31f,.12f};settle.left={.15f,.23f,.09f};
+      ready.roll=.035f;cast.pitch=.045f;cast.hip=-.025f;
+    }
   } else if(RangedClass(id) && !heavy) {
     // Quick attacks use a compact preparation: squeezing the full heavy
     // wind-up into 90 ms otherwise produces a visibly whipping shield/arm.
