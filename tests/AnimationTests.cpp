@@ -305,6 +305,16 @@ void TransitionRegressions() {
 }
 }
 int main() {
+  // A direction reversal must retain blend velocity at the input edge. The
+  // previous first-order filter immediately changed its slope by ~14/s.
+  animation::LocomotionController blend;
+  for(int i=0;i<1000;++i) blend.Update(.001f,.002f,1,0,0,true,0,0,true);
+  const float oldWeight=blend.weights[0];
+  blend.Update(.0001f,.0002f,-1,0,0,true,0,0,true);
+  Require(std::abs(blend.weights[0]-oldWeight)/.0001f<.1f,
+    "Reversal must begin with a continuous blend slope");
+  for(int i=0;i<250;++i) blend.Update(.001f,.002f,-1,0,0,true,0,0,true);
+  Require(blend.weights[1]>.98f,"Smooth reversal must remain responsive within 250 ms");
   RepeatTakeoffRegressions();
   ClipLibraryRegressions();
   ContactAndWeaponRegressions();

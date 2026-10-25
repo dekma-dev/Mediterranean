@@ -417,7 +417,7 @@ void Events::Update(const rpg::Simulation& state) {
     const auto p=state.Player();
     if(std::hypot(event.position.x-p.x,event.position.z-p.z)>18) continue;
     origin=event.position;
-    placed=event.kind==K::EnemySwing || event.kind==K::Hit || event.kind==K::HeavyHit || event.kind==K::Interrupt;
+    placed=event.kind==K::EnemySwing || event.kind==K::EnemyLance || event.kind==K::EnemyQuake || event.kind==K::Hit || event.kind==K::HeavyHit || event.kind==K::Interrupt;
     switch(event.kind) {
     case K::Strike:add(event.school==rpg::ClassId::Demonologist?Cue::Rend:Cue::Strike);break;
     case K::HeavyStrike:add(event.school==rpg::ClassId::Warrior?Cue::Heavy:ClassReleaseCue(event.school));break;
@@ -427,6 +427,8 @@ void Events::Update(const rpg::Simulation& state) {
     case K::CastStart:add(Cue::Cast);break;
     case K::SpellCast:add(ClassReleaseCue(event.school));break;
     case K::EnemySwing:add(Cue::Enemy);break;
+    case K::EnemyLance:add(Cue::Mind);break;
+    case K::EnemyQuake:add(Cue::HeavyHit);break;
     case K::Hit:case K::HeavyHit:
       add(rpg::DescribeClass(event.school).range>3 && event.school!=rpg::ClassId::Scout && event.school!=rpg::ClassId::Engineer?
         Cue::SpellHit:event.kind==K::HeavyHit?Cue::HeavyHit:Cue::Hit);break;

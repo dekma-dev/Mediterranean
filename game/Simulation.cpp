@@ -905,17 +905,21 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
     enemy.windup=std::max(0.f,enemy.windup-dt);
     if (enemy.windup==0) {
       const float elapsed=frameTail+afterContact;
-      EmitVisual(CombatVisualKind::EnemySwing,enemy.position,0,enemy.facing,enemy.id,elapsed);
+      if(enemy.kind!=EnemyKind::Wraith)
+        EmitVisual(CombatVisualKind::EnemySwing,enemy.position,0,enemy.facing,enemy.id,elapsed);
+      if(enemy.Boss() || enemy.kind==EnemyKind::Wraith)
+        EmitVisual(enemy.Boss()?CombatVisualKind::EnemyQuake:CombatVisualKind::EnemyLance,
+          enemy.position,0,enemy.facing,enemy.id,elapsed);
       const auto delta=Difference(player_,enemy.position);
       const float dot=distance<.001f?1.f:(std::sin(enemy.facing)*delta.x+std::cos(enemy.facing)*delta.z)/distance;
-      if (distance<=Enemy::attackReach && dot>=std::cos(Enemy::attackHalfAngle) && height_<1.5f &&
+      if (enemy.Hits(distance,dot) && height_<1.5f &&
         health_>0 && HasLineOfSight(enemy.position,player_)) {
         const bool frost=class_==ClassId::Mage && barrier_>0;
         DamagePlayer(enemy.Damage(),enemy.facing,elapsed);
         if(frost) enemy.snared=std::max(enemy.snared,2.f);
       }
       else Emit(FeedbackKind::Miss,enemy.position);
-      enemy.attackCooldown=std::max(0.f,enemy.AttackInterval()-afterContact);
+      enemy.attackCooldown=std::max(0.f,enemy.AttackInterval()*(enemy.Enraged()?.65f:1.f)-afterContact);
     }
     return;
   }
@@ -950,13 +954,14 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
   // Consume reached waypoints in the same update instead of idling for a frame.
   while (enemy.waypoint<enemy.path.size() && Length(Difference(enemy.path[enemy.waypoint],enemy.position))<.001f)
     ++enemy.waypoint;
-  const bool navigating=!(clearSight && distance<=1.6f) && remaining>.001f && enemy.waypoint<enemy.path.size();
+  const float standOff=enemy.Boss()?3.8f:enemy.kind==EnemyKind::Wraith?5.5f:1.6f;
+  const bool navigating=!(clearSight && distance<=standOff) && remaining>.001f && enemy.waypoint<enemy.path.size();
   const auto heading=navigating?Difference(enemy.path[enemy.waypoint],enemy.position):Difference(player_,enemy.position);
   const float desiredFacing=std::atan2(heading.x,heading.z);
   enemy.facing=motion::Turn(enemy.facing,desiredFacing,10.f,dt);
   const float alignment=std::max(0.f,std::cos(motion::AngleDelta(enemy.facing,desiredFacing)));
   // Close range alone is not arrival: a trunk/corner can still block the swing.
-  const float arrival=clearSight?std::max(0.f,distance-1.6f):remaining;
+  const float arrival=clearSight?std::max(0.f,distance-standOff):remaining;
   if(enemy.rooted>0) enemy.movementSpeed=0;
   float budget=motion::Travel(enemy.movementSpeed,navigating && enemy.rooted<=0?
     std::min(2.2f,arrival*8.f)*alignment*(enemy.snared>0?.45f:1.f):0.f,16.f,dt);
@@ -975,7 +980,7 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
   }
   if (enemy.waypoint==enemy.path.size()) enemy.repathTimer=0;
   const float attackFacing=std::atan2(player_.x-enemy.position.x,player_.z-enemy.position.z);
-  if (pursuing && Length(Difference(player_,enemy.position))<=2 && height_<1.5f && health_>0 && enemy.attackCooldown<=0 &&
+  if (pursuing && Length(Difference(player_,enemy.position))<=enemy.CastRange() && height_<1.5f && health_>0 && enemy.attackCooldown<=0 &&
     std::abs(motion::AngleDelta(enemy.facing,attackFacing))<.1f && HasLineOfSight(enemy.position,player_)) {
     enemy.windup=enemy.WindupDuration(); enemy.path.clear(); enemy.movementSpeed=0;
   }

@@ -64,8 +64,12 @@ void DrawScenery(Renderer& r,const rpg::WorldMap& map,bool sparring) {
         const float angle=branch*2.1f+z,dx=std::sin(angle)*.65f,dz=std::cos(angle)*.65f;
         r.DrawSegment({x,1.35f,z},{x+dx,2.5f,z+dz},.2f,.2f,timber,S::Wood);
         r.DrawSegment({x+dx*.8f,2.25f,z+dz*.8f},{x+dx*1.65f,2.9f,z+dz*1.65f},.085f,.085f,timber,S::Wood);
-        r.DrawMesh(M::Foliage,{x+dx,2.8f+float(branch)*.22f,z+dz},{2.f,2.f,1.9f},
-          {.18f+branch*.018f,.29f+branch*.02f,.105f,1},S::Leaves,angle);
+        // Layered, uneven crown lobes rather than three identical leaf balls.
+        // Keep the previous outer envelope and instance count for camera/culling.
+        const float variation=.5f+.5f*std::sin(x*1.7f+z*.9f+branch*2.3f);
+        r.DrawMesh(M::Foliage,{x+dx,2.8f+float(branch)*.22f,z+dz},
+          {1.8f+variation*.2f,1.45f+variation*.35f,1.65f+variation*.25f},
+          {.21f+branch*.014f,.30f+branch*.016f,.13f+variation*.025f,1},S::Leaves,angle);
       }
       continue;
     }

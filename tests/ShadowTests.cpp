@@ -128,6 +128,16 @@ int main() {
     Check(MaximumDifference(north,wrapped)==0,"Cloud drift must close smoothly without a wrap jump.");
   }
   const XMFLOAT4 white{.8f,.8f,.8f,1};
+  // Close upper/lower views expose leaf silhouette, back faces and material
+  // response that disappear in wide world captures.
+  for(int view=0;view<2;++view) {
+    renderer.BeginFrame();renderer.SetAtmosphereTime(0);
+    renderer.SetCamera(view?XMFLOAT3{-1.4f,.15f,-1.8f}:XMFLOAT3{1.4f,1.5f,1.8f},{0,.65f,0});
+    renderer.DrawMesh(M::Box,{0,-.05f,0},{4,.1f,4},{.38f,.32f,.24f,1},S::Ground);
+    renderer.DrawSegment({0,0,0},{0,.8f,0},.06f,.06f,{.29f,.19f,.105f,1},S::Wood);
+    renderer.DrawMesh(M::Foliage,{0,.8f,0},{1.8f,1.6f,1.7f},{.24f,.33f,.15f,1},S::Leaves,.3f);
+    Capture(renderer,view?L"foliage-underside.png":L"foliage-detail.png");
+  }
   {
     // Compare the production field against the original volume integration,
     // including skinned body/hands, rigid attachments and field-edge fallback.

@@ -43,6 +43,7 @@ inline MotionChannels SampleClip(MotionClip clip,float seconds) {
 struct LocomotionController {
   MotionChannels pose;
   std::array<float,6> weights{};
+  std::array<float,6> weightVelocities{};
   float phase=0,startAge=1,stopAge=1,landingAge=1,previousSpeed=0;
   float reverseAge=1,reverseForward=0,reverseRight=0;
   float startForward=1,startRight=0,stopForward=1,stopRight=0,lastForward=1,lastRight=0;
@@ -87,7 +88,9 @@ struct LocomotionController {
     target[4]=std::max(0.f,-turn); target[5]=std::max(0.f,turn);
     pose={};
     for(unsigned i=0;i<6;++i) {
-      weights[i]=motion::Ease(weights[i],target[i],14,dt);
+      // Carry blend velocity through changes of direction instead of snapping
+      // the rate of the torso/hip response on every input edge.
+      motion::Spring(weights[i],weightVelocities[i],target[i],24,dt);
       pose=pose+SampleClip(MotionClip(i),phase)*weights[i];
     }
     const auto directed=[](MotionChannels clip,float forward,float right) {

@@ -378,14 +378,28 @@ Geometry BuildMesh(Mesh mesh) {
       const auto up=XMVector3Cross(right,normal);
       const float width=.035f+Hash(int(leaf),3)*.03f,length=.075f+Hash(7,int(leaf))*.045f;
       const auto c=XMLoadFloat3(&center);
-      const XMVECTOR points[]={c-up*length,c-right*width,c+up*length,c+right*width,c+normal*.024f};
-      const float shade=.72f+Hash(int(leaf),11)*.28f;
+      // Six tapered edge points give each leaf a fuller blade instead of a
+      // four-corner diamond. The shallow ridge avoids a rigid paper-fold look.
+      const float curl=(Hash(int(leaf),17)-.5f)*.012f;
+      const XMVECTOR points[]={c-up*length,c-right*width-up*length*.38f,
+        c-right*width*.78f+up*length*.40f,c+up*length+normal*curl,
+        c+right*width*.78f+up*length*.40f,c+right*width-up*length*.38f,c+normal*.010f};
+      const float shade=.76f+Hash(int(leaf),11)*.24f;
+      const float age=Hash(int(leaf),23);
       for (unsigned side=0;side<2;++side) {
         const auto start=static_cast<unsigned>(g.vertices.size());
-        for (const auto& point : points) { XMFLOAT3 p; XMStoreFloat3(&p,point); g.vertices.push_back({p,{},{shade,shade,shade,1}}); }
-        for (unsigned edge=0;edge<4;++edge)
-          if (side==0) Triangle(g,start+edge,start+(edge+1)%4,start+4);
-          else Triangle(g,start+(edge+1)%4,start+edge,start+4);
+        unsigned pointIndex=0;
+        for (const auto& point : points) {
+          XMFLOAT3 p; XMStoreFloat3(&p,point);
+          const float pigment=pointIndex==6?1.f:pointIndex==0?.84f:.92f;
+          const float underside=(side?.91f:1.f)*pigment;
+          g.vertices.push_back({p,{},{shade*(.88f+.12f*age)*underside,shade*underside,
+            shade*(.74f+.14f*age)*(side?1.12f:1.f)*pigment,1}});
+          ++pointIndex;
+        }
+        for (unsigned edge=0;edge<6;++edge)
+          if (side==0) Triangle(g,start+edge,start+(edge+1)%6,start+6);
+          else Triangle(g,start+(edge+1)%6,start+edge,start+6);
       }
     }
     Normals(g); return g;
@@ -592,8 +606,11 @@ std::vector<std::uint8_t> BuildMaterialLayer(Material material,unsigned size) {
     case Material::Metal: {
       const float scratch=noise(u,v*4,32);
       const float tarnish=smooth((noise(u,v,8)-.45f)*3);
-      value=.84f+.10f*broad+.05f*scratch-.06f*tarnish; height=.00045f*scratch;
-      roughness=.27f+.18f*broad+.06f*scratch+.10f*tarnish; break;
+      const float brushed=.5f+.5f*std::sin(2*pi*(u*48+.12f*noise(u,v,8)));
+      const float pits=smooth((.24f-noise(u,v,32))*6);
+      value=.84f+.10f*broad+.035f*scratch+.015f*brushed-.06f*tarnish-.025f*pits;
+      height=.0003f*scratch+.00018f*brushed-.0006f*pits;
+      roughness=.27f+.15f*broad+.08f*scratch+.12f*tarnish+.06f*pits; break;
     }
     case Material::Hair: {
       // Swept strands, not the cloth weave previously used by the hair cap.
@@ -604,16 +621,24 @@ std::vector<std::uint8_t> BuildMaterialLayer(Material material,unsigned size) {
     case Material::Leather: {
       // Broad irregular grain and shallow creases, rather than woven cloth.
       const float grain=noise(u,v,40),creases=smooth((.32f-noise(u,v,12))*5);
-      value=.78f+.13f*broad+.07f*grain-.055f*creases;
+      const float wear=smooth((noise(u,v,8)-.52f)*3)*(1-creases);
+      value=.78f+.13f*broad+.07f*grain-.055f*creases+.025f*wear;
       height=.0008f*grain-.0014f*creases;
-      roughness=.57f+.17f*broad+.08f*creases;break;
+      roughness=.57f+.17f*broad+.08f*creases-.14f*wear;break;
     }
     case Material::Skin:
       // Low-contrast pores avoid the plastic uniform sheen without baking
       // lighting into skin or changing the selected complexion.
       value=.96f+.025f*broad+.015f*fine;
       height=.00015f*fine;roughness=.61f+.09f*broad+.025f*fine;break;
-    case Material::Leaves: value=.87f+.13f*broad; roughness=.86f; break;
+    case Material::Leaves: {
+      // Fine cuticle grain and wax variation remain in the existing mipmapped
+      // layer; avoid a repeated painted vein that would cross leaf boundaries.
+      const float grain=noise(u,v,32);
+      value=.88f+.09f*broad+.03f*grain;
+      height=.00025f*grain;
+      roughness=.65f+.18f*broad+.06f*fine;break;
+    }
     case Material::Plain: case Material::Glow: value=1; break;
     default: break;
     }

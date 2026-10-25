@@ -710,7 +710,8 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Frame(cast,{.12f,.035f,.02f,1},{.67f,.34f,.12f,1});
    c.Gradient({cast.x+3,cast.y+3,214*std::clamp(1-target.windup/target.WindupDuration(),0.f,1.f),13},
      {.76f,.30f,.11f,1},{.32f,.055f,.02f,1});
-   c.Center(cast.x,cast.y+3,cast.w,"Incoming strike / "+Seconds(target.windup)+"s",11,ink);
+   c.Center(cast.x,cast.y+3,cast.w,std::string(target.AttackName())+" / "+Seconds(target.windup)+"s",11,ink);
+   c.Center(cast.x-30,cast.y-14,cast.w+60,std::string(target.Enraged()?"ENRAGED - ":"")+target.Counterplay(),10,ink);
    regions_.push_back({cast,{},false});
   }
   int badge=0;

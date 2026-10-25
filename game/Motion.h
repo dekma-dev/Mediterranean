@@ -68,6 +68,25 @@ inline float Travel(float& speed,float target,float response,float dt) {
   speed+=(target-speed)*change;
   return std::max(0.f,distance);
 }
+// Presentation-only displacement history, in world space. Projection must use
+// the current heading: differentiating local velocity would invent acceleration
+// just because an actor rotated. Teleports/death must not produce a body kick.
+struct MovementSample {
+  float x=0,z=0,vx=0,vz=0;
+  float forward=0,right=0,acceleration=0,lateralAcceleration=0;
+  void Reset(float px,float pz) { *this={}; x=px; z=pz; }
+  void Update(float px,float pz,float heading,float dt,bool alive) {
+    if (!std::isfinite(dt) || dt<=0) return;
+    const float dx=px-x,dz=pz-z,distance=std::hypot(dx,dz);
+    if (!alive || distance>.85f) { Reset(px,pz); return; }
+    const float nextX=dx/dt,nextZ=dz/dt,c=std::cos(heading),s=std::sin(heading);
+    forward=distance>1e-6f?(s*dx+c*dz)/distance:0;
+    right=distance>1e-6f?(c*dx-s*dz)/distance:0;
+    acceleration=((nextX-vx)*s+(nextZ-vz)*c)/dt;
+    lateralAcceleration=((nextX-vx)*c-(nextZ-vz)*s)/dt;
+    vx=nextX; vz=nextZ; x=px; z=pz;
+  }
+};
 struct Actor {
   float facing=0,phase=0,gait=0,attack=0;
   float turnVelocity=0,gaitVelocity=0,attackVelocity=0;

@@ -24,6 +24,59 @@ bool HasFeedback(const rpg::Simulation& game,rpg::FeedbackKind kind) {
 }
 
 int main() {
+  // Controlled encounter fixtures exercise real contact resolution, not only
+  // shape helpers. Other enemies are disabled to isolate each ability.
+  for(int hz:{30,60,144,1000}) for(int scenario=0;scenario<6;++scenario) {
+    rpg::Simulation fight; Require(fight.Load(duel),"Special-attack fixture");
+    auto& foes=const_cast<std::vector<rpg::Enemy>&>(fight.Enemies());
+    for(auto& foe:foes) {foe.health=0;foe.state=rpg::EnemyState::Dead;}
+    auto& foe=foes[0];foe.kind=scenario<4?rpg::EnemyKind::Captain:rpg::EnemyKind::Wraith;
+    foe.rank=scenario<4?1:0;foe.health=foe.MaxHealth();foe.state=rpg::EnemyState::Pursuing;
+    const float distance=scenario==0?4.f:scenario==3?6.2f:scenario>=4?5.f:1.8f;
+    foe.position=foe.home={fight.Player().x,fight.Player().z+distance};
+    foe.facing=(scenario==2 || scenario==4)?3.14159265f:0.f;
+    foe.windup=.5f;foe.attackCooldown=0;
+    const auto position=foe.position;
+    int releases=0;
+    for(float elapsed=0;elapsed<.51f-1e-6f;) {
+      const float dt=std::min(1.f/hz,.51f-elapsed);fight.Update(dt,{});elapsed+=dt;
+      for(std::size_t i=0;i<fight.VisualEventCount();++i)
+        releases+=fight.VisualEvents()[i].kind==(foe.Boss()?rpg::CombatVisualKind::EnemyQuake:rpg::CombatVisualKind::EnemyLance);
+    }
+    const bool hit=scenario==0 || scenario==2 || scenario==4;
+    Require((fight.Health()<100)==hit,"Boss ring/inner flank or ranged lance hit geometry differs across rates");
+    if(hit) Require(std::abs(fight.Health()-(100-foe.Damage()))<.001f,"Special attack must hit exactly once");
+    Require(releases==1,"Enemy special must emit exactly one release event, even when dodged");
+    Require(foe.position.x==position.x && foe.position.z==position.z,"Cast must hold its committed position");
+  }
+  {
+    rpg::Enemy boss;boss.kind=rpg::EnemyKind::Captain;boss.rank=2;boss.health=boss.MaxHealth();
+    const float damage=boss.Damage(),windup=boss.WindupDuration();
+    boss.health=boss.MaxHealth()*.39f;
+    Require(boss.Enraged() && boss.Damage()>damage && boss.WindupDuration()==windup,
+      "Enrage must increase pressure without shortening an already visible warning");
+    rpg::Enemy reaver;reaver.kind=rpg::EnemyKind::Reaver;
+    Require(reaver.Hits(3.f,0.f) && !reaver.Hits(3.f,-1.f),"Reaver cleave must cover sides but leave its rear safe");
+    rpg::Simulation caster;Require(caster.Load(duel),"Ranged acquisition fixture");
+    auto& foes=const_cast<std::vector<rpg::Enemy>&>(caster.Enemies());
+    foes[0].kind=rpg::EnemyKind::Wraith;foes[0].position=foes[0].home={-4,10.2f};
+    foes[0].facing=3.14159265f;
+    BeginSwing(caster);
+    Require(std::hypot(caster.Player().x-foes[0].position.x,caster.Player().z-foes[0].position.z)>4.9f,
+      "Veil Hunter must actually cast at range rather than run into melee");
+    rpg::Simulation interrupt;Require(interrupt.Load(duel),"Boss interruption fixture");
+    auto& captain=const_cast<std::vector<rpg::Enemy>&>(interrupt.Enemies())[0];
+    captain.kind=rpg::EnemyKind::Captain;captain.rank=1;captain.health=captain.MaxHealth();
+    captain.windup=1.5f;captain.state=rpg::EnemyState::Pursuing;
+    rpg::Command heavy;heavy.nextTarget=true;heavy.ability=1;interrupt.Update(.01f,heavy);
+    for(int i=0;i<10;++i) interrupt.Update(.05f,{});
+    Require(captain.health<captain.MaxHealth() && captain.windup==0 && interrupt.Health()==100,
+      "A timed heavy must still interrupt a boss cast before it resolves");
+    captain.health=captain.MaxHealth()*.3f;captain.attackCooldown=0;captain.windup=.01f;
+    interrupt.Update(.01f,{});
+    Require(std::abs(captain.attackCooldown-captain.AttackInterval()*.65f)<.001f,
+      "Enraged boss recovery must actually shorten in the simulation");
+  }
   {
     bool passed=true;
     const auto check=[&](bool value,const char* message) {

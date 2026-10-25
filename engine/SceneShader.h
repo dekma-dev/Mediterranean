@@ -424,8 +424,20 @@ float4 PSMain(VOut i) : SV_TARGET {
  float3 sunlight=eyeAndHud.w<0?float3(1,.88,.70)*2.15:Daylight();
  float3 specular=fresnel*distribution*masking/max(.004,4*nv*max(diffuse,.001));
  float3 diffuseWeight=(1-fresnel)*(1-metal);
- float3 result=base*diffuseWeight*(ambient*cavity+sunlight*diffuse*visibility);
+ float3 diffuseLight=diffuse;
+ if (i.material==9) {
+  // A shallow, shadow-respecting diffusion approximation softens skin's
+  // terminator. It is not screen-space SSS or a thickness/transmission model.
+  float wrapped=saturate((dot(n,lightDir)+.28)/1.28)/1.28;
+  diffuseLight=lerp(diffuse.xxx,wrapped.xxx,float3(.28,.16,.09));
+ }
+ float clothSheen=i.material==6?.22*pow(1-nv,5):0;
+ diffuseWeight*=1-clothSheen;
+ float3 result=base*diffuseWeight*(ambient*cavity+sunlight*diffuseLight*visibility);
  result+=specular*sunlight*diffuse*visibility*3.14159265;
+ // Soft fiber grazing response distinguishes cloth from coated leather/metal.
+ // Diffuse is attenuated as the sheen increases; no extra texture fetch.
+ result+=sqrt(base)*clothSheen*(ambient*cavity+sunlight*diffuse*visibility)*.45;
  // Low-frequency sky/ground reflection supplies metal in shadow without
  // pretending the diffuse term is reflected light. No extra texture fetch.
  float reflectedUp=saturate(reflect(-view,n).y*.5+.5);

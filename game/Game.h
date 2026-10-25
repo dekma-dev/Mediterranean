@@ -65,6 +65,7 @@ private:
   double atmosphereTime_=0;
   motion::Actor playerPose_;
   std::vector<motion::Actor> enemyPoses_;
+  std::vector<motion::MovementSample> enemyMovement_;
   animation::State playerAnimation_;
   std::vector<animation::State> enemyAnimations_;
   facial::State playerFace_,keeperFace_,merchantFace_;

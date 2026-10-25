@@ -376,18 +376,27 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
     if (i==enemies.size() && !wasSparring && simulation_.Sparring()) {
       enemyPoses_[i].Reset(enemy.facing); enemyAnimations_[i].Reset(float(enemy.id)*.37f);
       enemyFeet_[i].Reset(enemy.position,enemy.facing);
+      enemyMovement_[i].Reset(enemy.position.x,enemy.position.z);
     }
     const float strike=EnemyStrike(enemy,simulation_.Health()>0 && (i<enemies.size() || simulation_.Sparring()));
     const float turnRate=motion::AngleDelta(enemyPoses_[i].facing,enemy.facing)/dt;
     // Enemy heading is already smoothed by simulation, then frozen for attacks.
     // Use it exactly so the character always faces the displayed damage cone.
     enemyPoses_[i].Update(enemy.facing,enemy.movementDistance,true,enemy.health>0,strike,dt,true);
-    enemyAnimations_[i].Update(dt,0,0,enemy.movementDistance,enemy.health>0,strike);
+    auto& movement=enemyMovement_[i];
+    movement.Update(enemy.position.x,enemy.position.z,enemy.facing,dt,enemy.health>0);
+    enemyAnimations_[i].Update(dt,0,0,enemy.movementDistance,enemy.health>0,strike,0,0,movement.acceleration);
+    motion::Spring(enemyAnimations_[i].pose.bank,enemyAnimations_[i].bankVelocity,
+      enemy.health>0?std::clamp(movement.lateralAcceleration/50.f,-1.f,1.f):0.f,18.f,dt);
     applyImpacts(enemyAnimations_[i],enemy.id,enemy.health>0);
     enemyAnimations_[i].pose.attackSeconds=EnemyAttackSeconds(enemy,simulation_.Health()>0 && (i<enemies.size() || simulation_.Sparring()));
     enemyAnimations_[i].pose.heavyAttack=enemy.kind==rpg::EnemyKind::Captain;
+    if(enemy.kind==rpg::EnemyKind::Wraith) {
+      enemyAnimations_[i].pose.attackSeconds=-1;
+      enemyAnimations_[i].pose.cast=enemyPoses_[i].attack;
+    }
     enemyFeet_[i].Update(dt,enemy.position,enemy.facing,true,enemy.health>0,enemyAnimations_[i].pose);
-    enemyAnimations_[i].locomotion.Update(dt,enemy.movementDistance,1,0,turnRate,true,0,0,enemy.health>0);
+    enemyAnimations_[i].locomotion.Update(dt,enemy.movementDistance,movement.forward,movement.right,turnRate,true,0,0,enemy.health>0);
     enemyAnimations_[i].pose.motion=enemyAnimations_[i].locomotion.pose;
   }
   UpdateFaces(dt);
@@ -411,7 +420,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   for (std::size_t i=0;i<enemyPoses_.size();++i) {
     const auto& enemy=i<enemies.size()?enemies[i]:simulation_.SparringOpponent();
     track(enemy.id,enemy.position,0,enemyPoses_[i],enemyAnimations_[i].pose,false,
-      simulation_.Health()>0 && enemy.health>0 && (i<enemies.size() || simulation_.Sparring()));
+      simulation_.Health()>0 && enemy.health>0 && enemy.kind!=rpg::EnemyKind::Wraith && (i<enemies.size() || simulation_.Sparring()));
   }
   UpdateCamera(dt);
 }
@@ -467,12 +476,14 @@ void Game::ResetMotion() {
   enemyAnimations_.resize(enemyPoses_.size());
   enemyFaces_.resize(enemyPoses_.size());
   enemyFeet_.resize(enemyPoses_.size());
+  enemyMovement_.resize(enemyPoses_.size());
   for (std::size_t i=0;i<enemyPoses_.size();++i) {
     const auto& enemy=i<simulation_.Enemies().size()?simulation_.Enemies()[i]:simulation_.SparringOpponent();
     enemyPoses_[i].Reset(enemy.facing);
     enemyAnimations_[i].Reset(float(enemy.id)*.37f);
     enemyFaces_[i].Reset(enemy.id+16);
     enemyFeet_[i].Reset(enemy.position,enemy.facing);
+    enemyMovement_[i].Reset(enemy.position.x,enemy.position.z);
     enemyPoses_[i].attack=EnemyStrike(enemy,simulation_.Health()>0 &&
       (i<simulation_.Enemies().size() || simulation_.Sparring()));
   }
@@ -533,10 +544,12 @@ void Game::Render(Renderer& renderer,bool showInterface) {
     }
     const bool captain=enemy.kind==rpg::EnemyKind::Captain;
     CharacterOutfit enemyOutfit; enemyOutfit.armor=captain; enemyOutfit.helm=captain;
+    if(enemy.kind==rpg::EnemyKind::Wraith) {enemyOutfit.weapon=false;enemyOutfit.cloak=true;}
+    if(enemy.Boss()) {enemyOutfit.shoulders=true;enemyOutfit.cloak=true;enemyOutfit.gloves=true;}
     const auto& pose=enemyPoses_[i];
     DrawCharacter(renderer,enemy.position,0,pose.facing,
       enemy.hitFlash>0?XMFLOAT4{1,.7f,.55f,1}:enemy.kind==rpg::EnemyKind::Trainer?XMFLOAT4{.55f,.46f,.22f,1}:enemy.kind==rpg::EnemyKind::Wraith?XMFLOAT4{.35f,.30f,.61f,1}:enemy.kind==rpg::EnemyKind::Reaver?XMFLOAT4{.53f,.34f,.19f,1}:captain?XMFLOAT4{.36f,.19f,.48f,1}:XMFLOAT4{.65f,.2f,.25f,1},
-      pose.attack,pose.gait,enemyOutfit,enemyAnimations_[i].pose,std::uint64_t(enemy.id)+16);
+      enemy.kind==rpg::EnemyKind::Wraith?0.f:pose.attack,pose.gait,enemyOutfit,enemyAnimations_[i].pose,std::uint64_t(enemy.id)+16);
     if (enemy.windup>0 && simulation_.Health()>0) {
       const float progress=1-enemy.windup/enemy.WindupDuration();
       const XMFLOAT4 warning{1,.55f*(1-progress),.12f,.68f};
@@ -544,16 +557,25 @@ void Game::Render(Renderer& renderer,bool showInterface) {
         return {enemy.position.x+std::sin(angle)*radius,.045f,enemy.position.z+std::cos(angle)*radius};
       };
       for (int segment=0;segment<32;++segment) {
-        const float a=enemy.facing-rpg::Enemy::attackHalfAngle+segment*rpg::Enemy::attackHalfAngle/16;
-        const float b=a+rpg::Enemy::attackHalfAngle/16,r=rpg::Enemy::attackReach;
+        const float a=enemy.facing-enemy.HalfAngle()+segment*enemy.HalfAngle()/16;
+        const float b=a+enemy.HalfAngle()/16,r=enemy.Reach();
         renderer.DrawEffectRibbon(point(a,r-.025f),point(a,r+.025f),point(b,r+.025f),point(b,r-.025f),warning);
       }
       for (float side : {-1.f,1.f}) {
-        const float angle=enemy.facing+side*rpg::Enemy::attackHalfAngle;
-        const auto a=point(angle,.24f),b=point(angle,rpg::Enemy::attackReach);
+        const float angle=enemy.facing+side*enemy.HalfAngle();
+        const auto a=point(angle,.24f),b=point(angle,enemy.Reach());
         const float x=std::cos(angle)*.018f,z=-std::sin(angle)*.018f;
         renderer.DrawEffectRibbon({a.x-x,a.y,a.z-z},{a.x+x,a.y,a.z+z},
           {b.x+x,b.y,b.z+z},{b.x-x,b.y,b.z-z},warning);
+      }
+      if (enemy.Boss()) for(int segment=0;segment<64;++segment) {
+        const float a=segment*motion::tau/64,b=(segment+1)*motion::tau/64;
+        for(float radius : {rpg::Enemy::shockInner,rpg::Enemy::shockOuter})
+          renderer.DrawEffectRibbon(point(a,radius-.035f),point(a,radius+.035f),
+            point(b,radius+.035f),point(b,radius-.035f),warning);
+        // A faint annulus makes the dangerous band distinct from its safe centre.
+        renderer.DrawEffectRibbon(point(a,rpg::Enemy::shockInner),point(a,rpg::Enemy::shockOuter),
+          point(b,rpg::Enemy::shockOuter),point(b,rpg::Enemy::shockInner),{1,.12f,.06f,.10f+.12f*progress});
       }
     }
     if (i==simulation_.Target()) {

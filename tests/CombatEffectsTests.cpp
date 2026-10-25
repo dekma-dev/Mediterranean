@@ -200,12 +200,32 @@ int main() {
   Win32Window window; Require(window.Create(GetModuleHandle(nullptr),960,720,L"combat effects checks",false),"Hidden effect window failed");
   Renderer renderer;
   if (!renderer.Initialize(window.GetHandle(),960,720)) { std::wcerr<<renderer.Error()<<L'\n'; Require(false,"Effect renderer initialization failed"); }
+  for(auto kind:{rpg::EnemyKind::Captain,rpg::EnemyKind::Wraith,rpg::EnemyKind::Reaver}) {
+    Game encounter;Require(encounter.RestoreSnapshot(duel),"Enemy warning capture fixture");
+    auto& foe=const_cast<std::vector<rpg::Enemy>&>(encounter.State().Enemies())[0];
+    foe.kind=kind;foe.rank=kind==rpg::EnemyKind::Captain?1:0;
+    foe.health=foe.MaxHealth();foe.windup=foe.WindupDuration();
+    rpg::Command select;select.nextTarget=true;encounter.ExecuteCommand(select,.01f);
+    encounter.SetCameraOrbit(.5f,.65f,11);
+    renderer.BeginFrame();encounter.Render(renderer);
+    Capture(renderer,kind==rpg::EnemyKind::Captain?L"boss-warning.png":kind==rpg::EnemyKind::Wraith?L"lance-warning.png":L"cleave-warning.png");
+  }
   const auto scene=[&]() {
     renderer.BeginFrame(); renderer.SetCamera({0,1,-4},{0,1,0});
     renderer.DrawMesh(visual::Mesh::Box,{0,1,0},{1.6f,1.6f,.3f},{.12f,.12f,.12f,1},visual::Material::Plain);
   };
   scene(); const auto base=Capture(renderer,L"effects-depth-reference.png");
   const auto baseDraws=renderer.LastDrawCalls()-renderer.CloudLightUpdates();
+  for(auto kind:{K::EnemyLance,K::EnemyQuake}) {
+    CombatEffects special;special.Emit({kind,{0,0},0,0,100});special.Advance(.05f);
+    renderer.BeginFrame();renderer.SetCamera({8,9,-10},{0,0,1});
+    special.Render(renderer);
+    Require(renderer.EffectVertices()>0 && renderer.EffectVertices()<3000,"Enemy special effect exceeds its fixed geometry budget");
+    Capture(renderer,kind==K::EnemyLance?L"enemy-lance.png":L"enemy-doomquake.png");
+    for(int i=0;i<12;++i) special.Advance(.05f);
+    scene();special.Render(renderer);
+    Require(renderer.EffectVertices()==0 && renderer.EndFrame(false),"Enemy spell effect failed to expire");
+  }
   scene(); renderer.DrawEffectGlow({0,1,1},.3f,{1,.7f,.2f,1}); const auto hidden=Capture(renderer,L"effects-occluded.png");
   Require(Difference(base,hidden)==0,"Opaque scenery must occlude effects completely");
   scene(); renderer.DrawEffectGlow({0,1,-1},.3f,{1,.7f,.2f,1}); const auto visible=Capture(renderer,L"effects-visible.png");

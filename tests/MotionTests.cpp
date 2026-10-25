@@ -292,6 +292,25 @@ void TransitionRegressions() {
 }
 }
 int main() {
+  for (int hz : {30,60,144,1000}) {
+    motion::MovementSample sample; sample.Reset(0,0);
+    const float dt=1.f/hz;
+    sample.Update(dt,0,0,dt,true);
+    Require(std::abs(sample.right-1)<1e-5f && std::abs(sample.forward)<1e-5f,
+      "Sideways enemy displacement must select side steps");
+    sample.Update(2*dt,0,motion::tau/4,dt,true);
+    Require(std::abs(sample.forward-1)<1e-5f && std::abs(sample.acceleration)<1e-4f &&
+      std::abs(sample.lateralAcceleration)<1e-4f,"Turning alone must not invent acceleration");
+    sample.Update(2*dt,0,motion::tau/4,dt,true);
+    Require(sample.acceleration<0 && sample.forward==0 && sample.right==0,
+      "Stopping must produce braking lean without a phantom travel direction");
+    sample.Update(20,20,0,dt,true);
+    Require(sample.acceleration==0 && sample.vx==0,"Teleport must clear motion history");
+    sample.Update(20,20-dt,0,dt,true);
+    Require(sample.forward<-.999f,"Backward displacement must select backward steps");
+    sample.Update(20,20,0,dt,false);
+    Require(sample.forward==0 && sample.acceleration==0,"Death must clear movement history");
+  }
   TerrainTraction();
   PivotTraction();
   RmbBodySteering();

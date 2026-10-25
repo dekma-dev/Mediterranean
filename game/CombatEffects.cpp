@@ -318,6 +318,27 @@ void CombatEffects::Render(Renderer& renderer) const {
   for (const auto& burst : bursts_) {
     if (burst.age>=BurstLife(burst.event.kind)) continue;
     const auto& e=burst.event;
+    if(e.kind==K::EnemyQuake || e.kind==K::EnemyLance) {
+      const float fade=std::pow(Unit(1-burst.age/.35f),2.f);
+      const auto point=[&](float angle,float radius,float y) -> XMFLOAT3 {
+        return {e.position.x+std::sin(angle)*radius,y,e.position.z+std::cos(angle)*radius};
+      };
+      if(e.kind==K::EnemyQuake) {
+        for(float radius:{rpg::Enemy::shockInner,rpg::Enemy::shockOuter})
+          renderer.DrawEffectRing({e.position.x,.07f,e.position.z},radius,{1,.27f,.06f,fade});
+        for(int i=0;i<24;++i) {
+          const float angle=i*motion::tau/24;
+          renderer.DrawEffectGlow(point(angle,4.2f,.15f+burst.age*1.6f),.18f,{1,.37f,.08f,fade});
+        }
+      } else {
+        const auto start=point(e.facing,.25f,1.05f),end=point(e.facing,7.f,1.05f);
+        const float x=std::cos(e.facing)*.12f,z=-std::sin(e.facing)*.12f;
+        renderer.DrawEffectRibbon({start.x-x,start.y,start.z-z},{start.x+x,start.y,start.z+z},
+          {end.x+x,end.y,end.z+z},{end.x-x,end.y,end.z-z},{.58f,.35f,1,fade});
+        renderer.DrawEffectGlow(end,.3f,{.75f,.62f,1,fade});
+      }
+      continue;
+    }
     if(e.kind==K::CastStart) continue;
     if(e.kind==K::SpellCast) {
       classfx::Projectile(renderer,e,burst.spellOrigin,burst.age);
