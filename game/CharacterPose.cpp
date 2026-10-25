@@ -94,6 +94,10 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   const float bank=animation::Signed(dynamics.bank)*(1-air)*(1-burst);
   pose.bodyShift=support*.032f+bank*.018f;
   pose.upperRoll=-support*.035f-bank*.08f+dynamics.motion.roll*clipWeight;
+  // Lateral contacts roll away from the blow and twist the shoulders slightly.
+  // This remains above the pelvis; the existing limb IK retains foot support.
+  pose.upperRoll-=animation::Signed(dynamics.hitSide)*.10f;
+  pose.upperYaw+=animation::Signed(dynamics.hitSide)*.07f;
   // The shoulders counter the planted-leg transfer; descending opens the
   // chest and lowers the hips before the existing impact compression.
   pose.upperYaw+=animation::Signed((sourceFeet[0].z-sourceFeet[1].z)/.6f)*.072f*(1-swing)*contactWeight;

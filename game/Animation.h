@@ -14,6 +14,7 @@ inline float SmoothStep(float value) { const float t=Unit(value); return t*t*(3-
 struct Foot { float x=0,y=.17f,z=0,yaw=0; };
 struct Sample {
   float breath=0,sway=0,air=0,rise=0,landing=0,hit=0,travel=0;
+  float hitSide=0;
   std::array<Foot,2> feet{};
   bool feetActive=false;
   float lean=0;
@@ -80,6 +81,7 @@ struct State {
   ActionController actions;
   float phase=0,airBlend=0,riseBlend=0,travelBlend=0;
   float landingAge=2,landingStrength=0,hitAge=2,hitCarry=0;
+  float lateralCarry=0,lateralImpulse=0;
   float restWeight=1;
   float castAge=2,leanVelocity=0,riseVelocity=0,travelVelocity=0;
   float bankVelocity=0;
@@ -94,6 +96,7 @@ struct State {
   }
   void RefreshRecoil() {
     pose.hit=RecoilAt(hitAge);
+    pose.hitSide=LateralAt(hitAge);
     const float rest=restWeight*(1-pose.hit);
     pose.breath=std::sin(phase)*rest; pose.sway=std::sin(phase*.5f)*rest;
   }
@@ -101,8 +104,12 @@ struct State {
   // and this frame's end. Sample the old reaction at contact, not at either
   // frame boundary, so two hits in one frame preserve the same recoil as two
   // separate updates. The event stream remains owned by the simulation.
-  void ApplyImpact(float elapsed) {
+  float LateralAt(float age) const {
+    return age>1?0:Signed(lateralCarry*std::exp(-24*age)+lateralImpulse*Pulse(age,.065f));
+  }
+  void ApplyImpact(float elapsed,float side=0) {
     if (!std::isfinite(elapsed) || elapsed<0) return;
+    lateralCarry=LateralAt(std::max(0.f,hitAge-elapsed));lateralImpulse=Signed(side);
     hitCarry=RecoilAt(std::max(0.f,hitAge-elapsed)); hitAge=elapsed;
     RefreshRecoil();
   }

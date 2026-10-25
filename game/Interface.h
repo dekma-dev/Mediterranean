@@ -1,5 +1,6 @@
 #pragma once
 #include "game/Simulation.h"
+#include "game/HealthTrail.h"
 #include <vector>
 #include <cstdint>
 class Renderer;
@@ -7,7 +8,7 @@ namespace ui {
 enum class LoadingStage { World,Chronicles,Sound,Entering };
 void RenderLoading(Renderer& renderer,LoadingStage stage);
 enum class Panel { None,Menu,Character,Inventory,Map,Journal,Merchant,Build,Quest };
-enum class Action { None,Hotbar,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview,MusicVolume,EffectsVolume,Build,SelectTalent,LearnTalent,QuestConfirm,QuestPage,SelectSpell,ConfirmTalentReset,ResetTalents,CancelTalentReset,BuildPage,SelectLoadout,SelectBuildPreset,RequestBuildApply,RequestBuildStore,ConfirmBuild,CancelBuild,PlanBuild,EditBuild,DraftTalent,CharacterSelection,SelectJournal,InspectStat,InspectStatus };
+enum class Action { None,Hotbar,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview,MusicVolume,EffectsVolume,Build,SelectTalent,LearnTalent,QuestConfirm,QuestPage,SelectSpell,ConfirmTalentReset,ResetTalents,CancelTalentReset,BuildPage,SelectLoadout,SelectBuildPreset,RequestBuildApply,RequestBuildStore,ConfirmBuild,CancelBuild,PlanBuild,EditBuild,DraftTalent,CharacterSelection,SelectJournal,InspectStat,InspectStatus,SelectThreat };
 using Item=rpg::Item;
 struct Rect { float x,y,w,h; bool Contains(float px,float py) const { return px>=x && py>=y && px<x+w && py<y+h; } };
 struct Layout {
@@ -59,6 +60,7 @@ public:
   void InvalidateHitRegions() { regions_.clear(); renderedState_=~std::uint64_t(0); }
   bool Dragging() const { return dragging_; }
   void Render(Renderer& renderer,const rpg::Simulation& simulation,float time,bool debug);
+  void ResetCombatFeedback() { playerHealth_.Reset();targetHealth_.Reset(); }
   bool CapturesMovement() const { return panel==Panel::Menu; }
   // Layouts are independent per class and saved with expedition settings.
   std::string SaveHotbars() const;
@@ -99,6 +101,7 @@ public:
   bool audioAvailable=false;
   rpg::Vec2 waypoint{},pendingWaypoint{};
 private:
+  HealthTrail playerHealth_,targetHealth_;
   std::array<std::array<int,hotbarSlots>,int(rpg::ClassId::Count)> hotbars_=[] {
     std::array<std::array<int,hotbarSlots>,int(rpg::ClassId::Count)> bars{};
     for(auto& bar:bars) bar={0,1,2,3,4,5,6,7,-1,-1,5,6,7,3,4,-1,-1,-1,-1,-1}; return bars;

@@ -592,7 +592,11 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    statusTips.push_back({name,description,value});
  };
  renderedClass_=s.Class();
- const float frameSeconds=std::clamp(time-lastRenderTime_,0.f,.05f);lastRenderTime_=time;
+ const float healthSeconds=time-lastRenderTime_;
+ const float frameSeconds=std::clamp(healthSeconds,0.f,.05f);lastRenderTime_=time;
+ playerHealth_.Update(s.Health(),s.MaxHealth(),0,healthSeconds);
+ if(const auto* target=s.TargetActor()) targetHealth_.Update(target->health,target->MaxHealth(),target->id,healthSeconds);
+ else targetHealth_.Reset();
  if(std::hypot(mouseX_-hoverX_,mouseY_-hoverY_)>3) hoverTime_=0;
  else hoverTime_=std::min(1.f,hoverTime_+frameSeconds);
  hoverX_=mouseX_;hoverY_=mouseY_;
@@ -650,12 +654,19 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  if(combatLayout) {
   const auto incoming=ReadIncomingAttacks(s);
   if(incoming.count) {
-   const Rect board{438,24,400,27+incoming.count*48.f};
+     const Rect board{438,s.Sparring() || s.SparringReportTime()>0?205.f:24.f,400,27+incoming.count*48.f};
    c.Frame(board,{.045f,.035f,.03f,.91f},border);
-   c.Banner({board.x+55,board.y-5,290,26},"INCOMING ATTACKS",14);
+   c.Banner({board.x+55,board.y-5,290,26},"INCOMING ATTACKS / SELECT",13);
+   regions_.push_back({board,{},false});
    for(unsigned i=0;i<incoming.count;++i) {
     const auto& row=incoming.rows[i];const auto& enemy=*row.enemy;
     const float y=board.y+27+i*48;
+    const Rect hit{board.x+5,y-2,390,45};
+    const bool selected=s.TargetActor() && s.TargetActor()->id==enemy.id;
+    if(hit.Contains(mouseX_,mouseY_) || selected)
+      c.RectFill(hit,selected?Color{.42f,.28f,.10f,.30f}:Color{.45f,.38f,.23f,.18f});
+    if(selected) c.Line(hit.x,y,hit.x,y+36,2,gold);
+    regions_.push_back({hit,{Action::SelectThreat,int(enemy.id)},true});
     const Color accent=enemy.Interruptible()?Color{.95f,.52f,.18f,1}:Color{.76f,.51f,.95f,1};
     c.Text(board.x+9,y,enemy.AttackName(),14,ink);
     c.Text(board.x+170,y,enemy.Boss()?(enemy.Enraged()?"BOSS / ENRAGED":"BOSS"):enemy.Name(),10,muted);
@@ -665,7 +676,6 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.RectFill({board.x+9,y+17,382*std::clamp(1-enemy.windup/enemy.WindupDuration(),0.f,1.f),3},accent);
     c.Text(board.x+9,y+23,row.threatens?enemy.Counterplay():"CLEAR NOW - WATCH THE WARNING",10,row.threatens?accent:muted);
    }
-   regions_.push_back({board,{},false});
   }
  }
  const float ux=combatLayout?330.f:18.f,uy=combatLayout?458.f:23.f;
@@ -674,6 +684,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  c.Banner({ux+49,uy,208,26},s.Nickname(),15);
  c.Portrait(ux+29,uy+36,false,s.Level());
  c.Frame({ux+58,uy+30,189,20},{.035f,.075f,.035f,1});
+ c.Gradient({ux+61,uy+33,183*playerHealth_.trail,14},{.82f,.59f,.24f,1},{.43f,.23f,.08f,1});
  c.Gradient({ux+61,uy+33,183*std::clamp(s.Health()/s.MaxHealth(),0.f,1.f),14},
    {.49f,.76f,.22f,1},{.12f,.31f,.075f,1});
  c.Center(ux+60,uy+31,185,std::to_string(int(s.Health()))+" / "+std::to_string(int(s.MaxHealth()))+
@@ -718,6 +729,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Frame({tx,ty+8,244,66},{.085f,.045f,.035f,.94f},{.46f,.36f,.20f,1});
   c.Banner({tx+2,ty,226,26},target.Name(),14); c.Portrait(tx+253,ty+36,true,target.kind==rpg::EnemyKind::Captain?3:1);
   c.Frame({tx+9,ty+30,223,20},{.10f,.025f,.015f,1});
+  c.Gradient({tx+12,ty+33,217*targetHealth_.trail,14},{.90f,.69f,.32f,1},{.49f,.29f,.10f,1});
   c.Gradient({tx+12,ty+33,217*std::clamp(target.health/target.MaxHealth(),0.f,1.f),14},
     {.76f,.35f,.16f,1},{.35f,.075f,.04f,1});
   c.Center(tx+10,ty+31,221,std::to_string(int(std::ceil(target.health)))+" / "+std::to_string(int(target.MaxHealth()))+

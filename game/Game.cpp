@@ -110,6 +110,7 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   rpg::Command command;
   command.uiClick=event.action!=ui::Action::None || previousUi!=interface_.StateKey();
   switch (event.action) {
+  case ui::Action::SelectThreat: if(event.value>0) command.selectThreat=rpg::EntityId(event.value); break;
   case ui::Action::MusicVolume: interface_.musicVolume=std::clamp(interface_.musicVolume+event.value,0,100); break;
   case ui::Action::EffectsVolume: interface_.effectsVolume=std::clamp(interface_.effectsVolume+event.value,0,100); break;
   case ui::Action::Close: interface_.Close(static_cast<ui::Panel>(event.value)); break;
@@ -317,13 +318,13 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
     simulation_.Health()>0,simulation_.AttackFlash()*5,dt,simulation_.Dashing() || simulation_.DashedThisUpdate(),
     simulation_.Attacking()?42.f:22.f);
   const auto velocity=simulation_.MovementVelocity();
-  const auto applyImpacts=[&](animation::State& state,rpg::EntityId actor,bool alive) {
+  const auto applyImpacts=[&](animation::State& state,rpg::EntityId actor,bool alive,float facing) {
     if (!alive) return;
     for (std::size_t i=0;i<simulation_.VisualEventCount();++i) {
       const auto& event=simulation_.VisualEvents()[i];
       if (event.actor==actor && (event.kind==rpg::CombatVisualKind::Hurt ||
           event.kind==rpg::CombatVisualKind::Hit || event.kind==rpg::CombatVisualKind::HeavyHit))
-        state.ApplyImpact(std::clamp(event.elapsed,0.f,dt));
+        state.ApplyImpact(std::clamp(event.elapsed,0.f,dt),std::sin(event.facing-facing));
     }
   };
   bool castStarted=false,dashImpact=false,dashFinished=false;
@@ -341,7 +342,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   playerAnimation_.Update(dt,simulation_.Height(),simulation_.VerticalSpeed(),simulation_.MovementDistance(),
     simulation_.Health()>0,playerPose_.attack,
     simulation_.LandingSpeed(),simulation_.LandingElapsed(),forwardAcceleration,castStarted);
-  applyImpacts(playerAnimation_,0,simulation_.Health()>0);
+  applyImpacts(playerAnimation_,0,simulation_.Health()>0,playerPose_.facing);
   playerAnimation_.UpdateDash(dt,simulation_.Dashing(),simulation_.DashPhase(),dashImpact,simulation_.Health()>0,dashFinished,dashEndElapsed);
   playerAnimation_.pose.attackSeconds=simulation_.AttackSeconds();
   playerAnimation_.pose.retreat=simulation_.RetreatMobility();
@@ -398,7 +399,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
     enemyAnimations_[i].Update(dt,0,0,enemy.movementDistance,enemy.health>0,strike,0,0,movement.acceleration);
     motion::Spring(enemyAnimations_[i].pose.bank,enemyAnimations_[i].bankVelocity,
       enemy.health>0?std::clamp(movement.lateralAcceleration/50.f,-1.f,1.f):0.f,18.f,dt);
-    applyImpacts(enemyAnimations_[i],enemy.id,enemy.health>0);
+    applyImpacts(enemyAnimations_[i],enemy.id,enemy.health>0,enemy.facing);
     const float actionSeconds=EnemyAttackSeconds(enemy,active,releaseAge);
     enemyAnimations_[i].pose.attackSeconds=actionSeconds;
     enemyAnimations_[i].pose.heavyAttack=enemy.kind==rpg::EnemyKind::Captain || enemy.kind==rpg::EnemyKind::Reaver;
@@ -483,6 +484,7 @@ void Game::SetCameraOrbit(float yaw,float pitch,float distance) {
   UpdateCamera(0,true);
 }
 void Game::ResetMotion() {
+  interface_.ResetCombatFeedback();
   ++audioGeneration_;
   effects_.Reset();
   playerPose_.Reset(simulation_.Facing());

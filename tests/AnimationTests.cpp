@@ -305,6 +305,26 @@ void TransitionRegressions() {
 }
 }
 int main() {
+  for(float side:{-1.f,1.f}) {
+    float reference=0;
+    for(int hz:{30,60,144,1000}) {
+      animation::State reaction;reaction.ApplyImpact(0,side);
+      for(int frame=0;frame<hz;++frame) reaction.Update(1.f/hz,0,0,0,true,0);
+      Require(std::abs(reaction.pose.hitSide)<.0001f,"Directional recoil must settle");
+      reaction.Reset();reaction.ApplyImpact(0,side);
+      // Equal-time sampling, including a short final step.
+      float time=0;
+      while(time<.1f) {const float dt=std::min(1.f/hz,.1f-time);reaction.Update(dt,0,0,0,true,0);time+=dt;}
+      Require(reaction.pose.hitSide*side>.8f,"Side impact must produce a signed shoulder response");
+      if(reference!=0) Require(std::abs(reaction.pose.hitSide-reference)<.0001f,"Directional impact depends on refresh rate");
+      reference=reaction.pose.hitSide;
+      const float before=reaction.pose.hitSide;reaction.ApplyImpact(0,-side);
+      Require(std::abs(reaction.pose.hitSide-before)<.00001f,"Opposing contact must preserve the existing recoil at onset");
+      reaction.Update(.05f,0,0,0,true,0);
+      Require(std::isfinite(reaction.pose.hitSide) && std::abs(reaction.pose.hitSide)<=1,"Repeated reactions must remain bounded");
+      reaction.Update(.01f,0,0,0,false,0);Require(reaction.pose.hitSide==0,"Defeat must clear directional recoil");
+    }
+  }
   float referenceLag=0,referenceLean=0;
   for(int hz:{1000,144,60,30}) {
     animation::LocomotionController turn;

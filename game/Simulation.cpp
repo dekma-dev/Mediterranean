@@ -712,6 +712,13 @@ void Simulation::Update(float seconds,const Command& command) {
   };
   // Selection is resolved before availability and activation, including Tab+3.
   if (command.nextTarget) SelectTarget();
+  if(command.selectThreat) {
+    // A UI row can expire between rendering and input. Revalidate identity and
+    // visibility; never reinterpret its former row number as another enemy.
+    for(std::size_t i=0;i<enemies_.size();++i)
+      if(enemies_[i].id==command.selectThreat && VisibleEnemyCast(enemies_[i])) target_=int(i);
+    if(sparring_ && trainer_.id==command.selectThreat && VisibleEnemyCast(trainer_)) target_=int(enemies_.size());
+  }
   const bool dashMotion=Dashing() || (command.ability==2 && !Attacking() && cooldowns_[2]==0 &&
     !command.haltMovement && CheckDashTarget()==DashCheck::Ready);
   if (command.haltMovement || dashMotion) movementVelocity_={};

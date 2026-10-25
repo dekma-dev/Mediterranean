@@ -24,6 +24,25 @@ bool HasFeedback(const rpg::Simulation& game,rpg::FeedbackKind kind) {
 }
 
 int main() {
+  {
+    rpg::Simulation selection;
+    auto& enemies=const_cast<std::vector<rpg::Enemy>&>(selection.Enemies());
+    auto& caster=enemies[0];caster.position=caster.home={0,-8};caster.state=rpg::EnemyState::Pursuing;
+    caster.windup=.5f;caster.facing=3.14159265f;
+    rpg::Command click;click.selectThreat=caster.id;selection.Update(.001f,click);
+    Require(selection.TargetActor() && selection.TargetActor()->id==caster.id,"Incoming selection must target the identified caster");
+    auto& second=enemies[1];second.position=second.home={1,-8};second.state=rpg::EnemyState::Pursuing;
+    second.windup=.7f;click.selectThreat=second.id;selection.Update(.001f,click);
+    Require(selection.TargetActor()->id==second.id,"Incoming selection must not depend on row ordering");
+    caster.windup=0;caster.attackCooldown=2;click.selectThreat=caster.id;selection.Update(.001f,click);
+    Require(selection.TargetActor()->id==second.id,"An expired row must not change the current target");
+    caster.windup=.5f;caster.position={25,25};selection.Update(.001f,click);
+    Require(selection.TargetActor()->id==second.id,"A distant stale row must not select its actor");
+    caster.position={-8,-4};selection.Update(.001f,click);
+    Require(selection.TargetActor()->id==second.id,"A caster behind a building must not be selected from a stale row");
+    click.selectThreat=999999;selection.Update(.001f,click);
+    Require(selection.TargetActor()->id==second.id,"Unknown caster identity must be ignored");
+  }
   float retreatReference=-1;
   for(float z:{-8.f,-5.1f}) {
     rpg::Simulation corner;Require(corner.Load(duel),"Retreat obstacle fixture");

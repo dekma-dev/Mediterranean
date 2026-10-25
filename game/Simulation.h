@@ -57,6 +57,7 @@ struct Enemy {
 struct Command {
   Vec2 movement;
   bool sprint = false, jump = false, nextTarget = false, interact = false, restart = false;
+  EntityId selectThreat=0; // Explicit caster identity from the incoming-attack HUD.
   int ability = -1;
   bool queueAttack = false; // Physical/UI input may buffer one near-ready attack.
   int learnTalent = -1;

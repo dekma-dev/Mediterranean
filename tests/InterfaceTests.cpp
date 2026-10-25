@@ -15,6 +15,23 @@
 #include <sstream>
 
 void Require(bool value,const char* message) { if (!value) { std::cerr<<message<<'\n'; std::exit(1); } }
+void HealthTrailChecks() {
+  float reference=-1;
+  for(int hz:{30,60,144,1000}) {
+    ui::HealthTrail meter;meter.Update(100,100,1,0);meter.Update(40,100,1,0);
+    Require(meter.value==.4f && meter.trail==1,"Damage must update health immediately and retain the previous fill");
+    for(int i=0;i<hz;++i) meter.Update(40,100,1,1.f/hz);
+    Require(meter.trail>=.4f && meter.trail<.403f,"Damage trail must settle promptly without undershoot");
+    if(reference>=0) Require(std::abs(meter.trail-reference)<.00001f,"Damage trail depends on refresh rate");
+    reference=meter.trail;
+    meter.Update(70,100,1,.01f);Require(meter.trail==.7f,"Healing must not retain old damage");
+    meter.Update(20,100,2,.01f);Require(meter.trail==.2f,"Target changes must reset old damage");
+    meter.Update(10,100,2,0);meter.Update(10,100,2,1);
+    Require(meter.trail==.1f,"Hidden HUD or suspended rendering must not replay stale damage");
+    meter.Update(0,100,2,.01f);Require(meter.trail==0,"Death must clear the health trail");
+    meter.Reset();Require(!meter.initialized,"Restoring gameplay must reset presentation history");
+  }
+}
 std::string Fixture(const char* name) {
   std::ifstream input(std::string(RPG_TEST_FIXTURES)+"/"+name); std::ostringstream data; data<<input.rdbuf();
   Require(bool(input),"Missing test fixture."); return data.str();
@@ -143,6 +160,7 @@ void InterruptedInputRegressions(Win32Window& window,Renderer& renderer) {
 }
 
 int main() {
+  HealthTrailChecks();
   RelativeMouseRegressions();
   {
     Input input; Input::Frame frame; frame.focused=true; frame.relativeMouse=true; input.Update(frame);
@@ -1343,13 +1361,35 @@ int main() {
     Require(renderer.Capture(L"incoming-attacks-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),"Incoming attack capture");
     const ui::Layout layout(float(size.first),float(size.second));
     const auto event=hud.Pointer(layout.x+500*layout.scale,layout.y+60*layout.scale,float(size.first),float(size.second),true,false);
-    Require(event.action==ui::Action::None && hud.PointerOverUi() && state.Save()==before,"Incoming panel must be read-only");
+    Require(event.action==ui::Action::SelectThreat && event.value==102 && hud.PointerOverUi() && state.Save()==before,
+      "Incoming row must return its caster identity without changing simulation during rendering");
+    rpg::Command select;select.nextTarget=true;state.Update(.001f,select);
+    renderer.BeginFrame();hud.Render(renderer,state,.01f,false);Require(renderer.EndFrame(false),"Damage trail baseline");
+    auto* target=const_cast<rpg::Enemy*>(state.TargetActor());Require(target!=nullptr,"Damage trail target fixture");
+    target->health*=.45f;
+    renderer.BeginFrame();hud.Render(renderer,state,.02f,false);
+    Require(renderer.Capture(L"health-damage-trail-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),"Damage trail capture");
     enemies[0].health=0;enemies[1].position={30,30};enemies[2].windup=0;
     Require(ui::ReadIncomingAttacks(state).count==0,"Dead, distant and expired casts must disappear");
     renderer.BeginFrame();hud.Render(renderer,state,0,false);Require(renderer.EndFrame(false),"Incoming expiry redraw");
     Require(!hud.PointerOverUi(),"Expired incoming rows must release pointer regions");
   }
   const auto loadingRoot=std::filesystem::current_path()/"loading-check";
+  {
+    rpg::Simulation sparring;
+    Require(sparring.Load("MEDITERRANEAN 3\n12 -3.8 140 0 3 90\n5 1 1 0\n4\n0 0 0 0\n"
+      "100 -4 7 0 0 1 3 0 0\n101 4 9 0 0 1 3 0 0\n102 0 12 0 0 1 3 0 0\n"),"Sparring warning fixture");
+    rpg::Command interact;interact.interact=true;sparring.Update(.01f,interact);
+    auto& trainer=const_cast<rpg::Enemy&>(sparring.SparringOpponent());
+    trainer.windup=.5f;trainer.state=rpg::EnemyState::Pursuing;
+    ui::Interface hud;Require(renderer.Resize(1280,720),"Sparring HUD resize");
+    renderer.BeginFrame();hud.Render(renderer,sparring,0,false);
+    Require(renderer.Capture(L"sparring-incoming-layout.png") && renderer.EndFrame(false),"Sparring incoming capture");
+    hud.Pointer(500,220,1280,720,false,false);
+    Require(hud.PointerOverUi(),"Sparring warnings must move below the training score panel");
+    hud.Pointer(500,60,1280,720,false,false);
+    Require(!hud.PointerOverUi(),"Relocated warnings must release their old hit region");
+  }
   std::filesystem::create_directories(loadingRoot);
   const auto textureBytes=renderer.InterfaceBytes();
   for(const auto size:{std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {

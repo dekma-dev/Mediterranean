@@ -1,5 +1,11 @@
 # Mediterranean Roadmap
 
+Directional impact checkpoint (2026-10-26): player/enemy hit presentation now adds signed shoulder roll/twist from accepted contact direction. Repeated contacts carry the previous response through onset; existing recoil, limb IK and combat clocks remain intact. Continue authored whole-body hit/recovery clips and live motion acceptance; this is a bounded procedural layer, not a replacement animation library.
+
+Incoming-caster selection checkpoint (2026-10-26): combat warning rows now select their caster through an identity-based command, with hover/selection feedback and active-cast/range/line-of-sight revalidation. This connects encounter readability to interruption decisions without changing attack clocks. Continue live overlap/input acceptance and the larger R2/R3/R5 character, animation and artwork milestones.
+
+Combat health feedback checkpoint (2026-10-25): player/target health bars retain a short amber damage trail while the main fill and numeric values update immediately. Healing, target changes, death, long hidden-HUD gaps and gameplay resets discard stale history. Incoming warnings move below the sparring score/report panel. Continue live readability checks and the broader authored-character/UI artwork milestones; this is presentation feedback, not reference-level art completion.
+
 Ranged tactics checkpoint (2026-10-25): Veil Hunters now regain space during recovery with target-facing back/side steps, bounded local obstacle probes and root/snare handling. They remain catchable and stop for committed casts; this advances R3/R6 movement/combat distinction. Continue live class/build balance, authored enemy silhouettes and additional encounter objectives. Manual check 267 covers pursuit, corners and cast transitions.
 
 Enemy anticipation checkpoint (2026-10-25): spatial attack-onset sound now complements ground warnings and the incoming-cast HUD, with a separate boss timbre. One-shot timing, save/load and bounded PCM checks pass in Release/Debug. Continue class/creature-specific sound identities and live mix acceptance alongside authored animation and asset production; these synthesized accents do not establish recorded-orchestral or reference-game audio quality.

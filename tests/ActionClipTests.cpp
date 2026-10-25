@@ -174,6 +174,12 @@ void Captures() {
   const auto root=std::filesystem::current_path()/"action-clip-check";std::filesystem::create_directories(root);
   Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),960,720,L"Class action checks",false),"Hidden action window");
   Renderer renderer;Check(renderer.Initialize(window.GetHandle(),960,720),"Action renderer");
+  for(float side:{-1.f,1.f}) {
+    animation::State impact;impact.ApplyImpact(0,side);impact.Update(.05f,0,0,0,true,0);
+    renderer.BeginFrame();renderer.SetCamera({2.2f,1.7f,3.5f},{0,1.0f,0});
+    DrawCharacter(renderer,{0,0},0,0,{.36f,.45f,.60f,1},0,0,CharacterOutfit{},impact.pose);
+    Check(renderer.Capture((root/(side<0?"left-impact.png":"right-impact.png")).wstring()) && renderer.EndFrame(false),"Directional impact capture");
+  }
   for(int id=0;id<int(ClassId::Count);++id) for(int phase=0;phase<8;++phase) {
     const auto type=ClassId(id);const auto clip=phase==6?ActionClip::Opening:phase==5?ActionClip::Signature:phase==4?ActionClip::Technique:phase==3?ActionClip::Restore:ActionClip::Heavy;
     const float release=RangedClass(type)?combat::StrokeStart(clip!=ActionClip::Opening):combat::Contact(clip!=ActionClip::Opening);
