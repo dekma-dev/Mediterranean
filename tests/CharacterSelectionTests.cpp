@@ -258,6 +258,20 @@ void Render(const std::filesystem::path& root,const std::string& veteran) {
   for(int n=0;n<12;++n) d.Step(game);
   renderer.BeginFrame();game.Render(renderer);
   Check(renderer.Capture((root/"creation-action.png").wstring()) && renderer.EndFrame(false),"Action preview capture");
+  Check(game.Selection().PreviewAbility()==0,"First preview must use basic attack");
+  d.Click(game,Control::Pose);
+  Check(game.Selection().PreviewAbility()==1,"Second preview must use heavy attack");
+  d.Click(game,Control::Pose);
+  Check(game.Selection().PreviewAbility()==5,"Third preview must use class technique, not potion");
+  const float previewDuration=animation::ActionDuration(animation::ActionClip::Technique)/(rpg::ClassAttackRate(game.Selection().Hero().Class(),true)*.8f);
+  for(int n=0;n<int(60*previewDuration)+12;++n) d.Step(game);
+  Check(game.Selection().PreviewAction()<0,"Technique preview never settles");
+  d.Click(game,Control::Pose);
+  Check(game.Selection().PreviewAbility()==6,"Signature missing from preview cycle");
+  d.Click(game,Control::Pose);
+  Check(game.Selection().PreviewAbility()==7,"Setup attack missing from preview cycle");
+  d.Click(game,Control::Pose);
+  Check(game.Selection().PreviewAbility()==0,"Preview cycle does not wrap");
   d.Click(game,Control::Right);d.Click(game,Control::ResetView);
   Check(game.Selection().Yaw()==0 && game.Selection().PreviewAction()<0 && !game.Selection().Closeup() &&
     game.Selection().Hero().Save()==draft && game.Selection().DraftName()==draftName,"Preview controls changed the draft or failed reset");

@@ -12,7 +12,7 @@ struct SpellInfo {
  std::array<Talent,3> upgrades;
 };
 // Shared book/hotbar metadata. Simulation owns dynamic values and validation.
-inline constexpr std::array<SpellInfo,6> spells{{
+inline constexpr std::array<SpellInfo,8> spells{{
  {"Strike","1","A quick weapon cut. Damage lands at contact, after the wind-up. Moving or changing target does not redirect a committed strike.",
   "Living enemy / line of sight",.9f,2.5f,.18f,.52f,{Talent::WeaponTraining,Talent::WeaponMastery,Talent::Count}},
  {"Heavy strike","2","A deliberate weapon blow. A successful contact interrupts an enemy's unfinished attack. Leaving melee range makes the blow miss.",
@@ -22,7 +22,9 @@ inline constexpr std::array<SpellInfo,6> spells{{
  {"Mend","4","Restore your own health immediately. Healing is capped at maximum health. Casting at full health consumes no cooldown.",
   "Self / missing health",10.f,0,0,0,{Talent::Restoration,Talent::Renewal,Talent::Mercy}},
  {"Potion","5","","",0,0,0,0,{Talent::Count,Talent::Count,Talent::Count}},
- {"Technique","6","A committed class technique.","Living enemy / line of sight",12,2.5f,.30f,.76f,{Talent::WeaponTraining,Talent::WeaponMastery,Talent::Count}}
+ {"Technique","6","A committed class technique.","Living enemy / line of sight",12,2.5f,.30f,.76f,{Talent::WeaponTraining,Talent::WeaponMastery,Talent::Count}},
+ {"Signature","7","Spend a full class reserve on a signature attack.","Full reserve / living enemy",18,2.5f,.30f,.76f,{Talent::WeaponTraining,Talent::WeaponMastery,Talent::Overwhelming}},
+ {"Opening","8","Build reserve with a class setup attack.","Living enemy / line of sight",8,2.5f,.18f,.52f,{Talent::WeaponTraining,Talent::WeaponMastery,Talent::Count}}
 }};
 inline bool ValidSpell(int index) { return index>=0 && index!=4 && index<int(spells.size()); }
 }

@@ -77,6 +77,24 @@ void ClipLibraryRegressions() {
     for(int i=0;i<hz;++i) pivot.Update(1.f/hz,0,0,0,2,false,1,1,true);
     Require(pivot.phase==phase,"Airborne turning must not trigger planted pivot steps");
   }
+  // The start/catch layer must follow travel, not pitch forward for every direction.
+  for(float direction:{-1.f,1.f}) {
+    animation::LocomotionController c;
+    for(int i=0;i<12;++i) c.Update(.01f,.02f,direction,0,0,true,0,0,true);
+    Require(c.startForward==direction,"Start push lost travel direction");
+    c.Update(.01f,0,0,0,0,true,0,0,true);
+    Require(c.stopForward==direction,"Stop catch lost last travel direction");
+    c.Update(.01f,0,0,0,0,true,0,0,true);
+    Require(c.stopForward==direction,"Idle input redirected active stop clip");
+  }
+  {
+    animation::LocomotionController reverse;
+    for(int i=0;i<60;++i) reverse.Update(.01f,.03f,1,0,0,true,0,0,true);
+    reverse.Update(.01f,.03f,-1,0,0,true,0,0,true);
+    Require(reverse.reverseAge==0 && reverse.reverseForward==1,"Reversal must catch weight along old travel");
+    for(int i=0;i<100;++i) reverse.Update(.01f,.03f,-1,0,0,true,0,0,true);
+    Require(reverse.reverseAge>.99f,"Sustained travel retriggered the reversal catch");
+  }
   const float directions[][2]={{1,0},{-1,0},{0,-1},{0,1}};
   {
     animation::LocomotionController taps;

@@ -31,7 +31,7 @@ void CharacterSelection::ReadSlots() {
 void CharacterSelection::Open(const std::filesystem::path& file,rpg::ClassId selected) {
   base_=file;file_=file;class_=int(selected)>=0 && selected<rpg::ClassId::Count?selected:rpg::ClassId::Warrior;
   draftName_.clear();look_={};notice_.clear();
-  time_=yaw_=width_=height_=zoom_=0;closeup_=false;actionTime_=-1;SetPage(Page::Roster,Control::Enter);Refresh();
+  time_=yaw_=width_=height_=zoom_=0;closeup_=false;actionTime_=-1;previewAbility_=-1;previewController_.Reset();SetPage(Page::Roster,Control::Enter);Refresh();
   focus_=status_==Status::Saved?Control::Enter:status_==Status::New?Control::Create:Control::Refresh;
 }
 void CharacterSelection::Refresh() {
@@ -101,7 +101,7 @@ void CharacterSelection::CreateProfile() {
 CharacterSelection::Action CharacterSelection::Activate(Control control) {
   if(!Enabled(control)) return Action::None;
   if(control>=Control::Class0 && control<=Control::Class10) {
-    actionTime_=-1;
+    actionTime_=-1;previewAbility_=-1;previewController_.Reset();
     class_=rpg::ClassId(int(control)-int(Control::Class0));Refresh();
     if(page_==Page::Class) {PreviewDraft();focus_=Enabled(Control::Next)?Control::Next:control;}
     else focus_=status_==Status::Saved?Control::Enter:status_==Status::New?Control::Create:Control::Refresh;
@@ -109,8 +109,8 @@ CharacterSelection::Action CharacterSelection::Activate(Control control) {
   }
   switch(control) {
   case Control::Closeup:closeup_=!closeup_;break;
-  case Control::Pose:closeup_=false;actionTime_=0;break;
-  case Control::ResetView:closeup_=false;yaw_=0;actionTime_=-1;break;
+  case Control::Pose:closeup_=false;previewAbility_=previewAbility_==0?1:previewAbility_==1?5:previewAbility_==5?6:previewAbility_==6?7:0;actionTime_=0;break;
+  case Control::ResetView:closeup_=false;yaw_=0;actionTime_=-1;previewAbility_=-1;previewController_.Reset();break;
   case Control::Name:break;
   case Control::Hero:focus_=Control::Enter;break;
   case Control::Enter: {
@@ -165,7 +165,11 @@ CharacterSelection::Action CharacterSelection::Update(float seconds,const Input&
   }
   const float dt=std::clamp(seconds,0.f,.05f);
   zoom_+=(float(closeup_)-zoom_)*-std::expm1(-12.f*dt);
-  if(actionTime_>=0) {actionTime_+=dt;if(actionTime_>1.6f) actionTime_=-1;}
+  if(actionTime_>=0) {
+    actionTime_+=dt*rpg::ClassAttackRate(class_,previewAbility_!=0 && previewAbility_!=7)*(previewAbility_==7?.85f:previewAbility_==6?.7f:previewAbility_==5?.8f:1.f);
+    if(actionTime_>=animation::ActionDuration((previewAbility_==0 || previewAbility_==7)?animation::ActionClip::Basic:animation::ActionClip::Heavy)) actionTime_=-1;
+  }
+  previewController_.Update(dt,class_,actionTime_,previewAbility_!=0 && previewAbility_!=7,-1,true,previewAbility_==5,previewAbility_==6,previewAbility_==7);
   const bool resized=width_!=input.Width() || height_!=input.Height();width_=input.Width();height_=input.Height();
   if(resized || input.Pressed(VK_F11)) {CancelGesture();hover_=Control::None;return Action::None;}
   const Layout layout(width_,height_);hover_=Control::None;

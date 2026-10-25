@@ -21,7 +21,7 @@ float Size(ActionChannels a) {
 }
 Sample Motion(ClassId id,ActionClip clip,float t,int layer=0) {
   Sample result; result.action=SampleAction(id,clip,t);
-  if(clip!=ActionClip::Restore && !RangedClass(id)) { result.attackSeconds=t; result.heavyAttack=clip==ActionClip::Heavy || clip==ActionClip::Technique; }
+  if(clip!=ActionClip::Restore && !RangedClass(id)) { result.attackSeconds=t; result.heavyAttack=clip==ActionClip::Heavy || clip==ActionClip::Technique || clip==ActionClip::Signature; }
   if(clip==ActionClip::Restore && id==ClassId::Warrior) result.cast=Gesture(t,.18f,.72f);
   if(layer==1) { result.air=.8f; result.rise=.5f; result.bank=.4f; }
   if(layer==2) { result.landing=.65f; result.lean=.5f; }
@@ -34,7 +34,7 @@ void ClipsAndRig() {
   std::set<std::string> names;
   for(int id=0;id<int(ClassId::Count);++id) {
     names.insert(classActionClips[id].name);
-    for(auto clip:{ActionClip::Basic,ActionClip::Heavy,ActionClip::Restore,ActionClip::Technique}) {
+    for(auto clip:{ActionClip::Basic,ActionClip::Heavy,ActionClip::Restore,ActionClip::Technique,ActionClip::Signature,ActionClip::Opening}) {
       const auto type=ClassId(id);const float end=ActionDuration(clip);
       Check(Size(SampleAction(type,clip,0))==0 && Size(SampleAction(type,clip,end))==0,"Clip endpoints must return to the movement layer");
       Check(Size(SampleAction(type,clip,.00001f))/.00001f<.08f &&
@@ -142,10 +142,10 @@ void Captures() {
   const auto root=std::filesystem::current_path()/"action-clip-check";std::filesystem::create_directories(root);
   Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),960,720,L"Class action checks",false),"Hidden action window");
   Renderer renderer;Check(renderer.Initialize(window.GetHandle(),960,720),"Action renderer");
-  for(int id=0;id<int(ClassId::Count);++id) for(int phase=0;phase<5;++phase) {
-    const auto type=ClassId(id);const auto clip=phase==4?ActionClip::Technique:phase==3?ActionClip::Restore:ActionClip::Heavy;
-    const float release=RangedClass(type)?combat::StrokeStart(true):combat::Contact(true);
-    const float t=phase==0?release*.65f:phase==1?release:phase==2?release+.09f:phase==4?release:.18f;
+  for(int id=0;id<int(ClassId::Count);++id) for(int phase=0;phase<7;++phase) {
+    const auto type=ClassId(id);const auto clip=phase==6?ActionClip::Opening:phase==5?ActionClip::Signature:phase==4?ActionClip::Technique:phase==3?ActionClip::Restore:ActionClip::Heavy;
+    const float release=RangedClass(type)?combat::StrokeStart(clip!=ActionClip::Opening):combat::Contact(clip!=ActionClip::Opening);
+    const float t=phase==0?release*.65f:phase==1?release:phase==2?release+.09f:phase>=4?release:.18f;
     auto sample=Motion(type,clip,t);sample.face.focus=.5f;
     const auto& color=rpg::DescribeClass(type).color;
     renderer.BeginFrame();renderer.SetCamera({2.2f,1.7f,3.5f},{0,1.0f,0});

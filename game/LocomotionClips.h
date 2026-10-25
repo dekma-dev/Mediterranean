@@ -44,6 +44,8 @@ struct LocomotionController {
   MotionChannels pose;
   std::array<float,6> weights{};
   float phase=0,startAge=1,stopAge=1,landingAge=1,previousSpeed=0;
+  float reverseAge=1,reverseForward=0,reverseRight=0;
+  float startForward=1,startRight=0,stopForward=1,stopRight=0,lastForward=1,lastRight=0;
   bool airborne=false;
   void Reset() { *this={}; }
   void Update(float dt,float travel,float forward,float right,float turnRate,bool grounded,float vertical,float height,bool alive,float landingElapsed=0) {
@@ -57,15 +59,21 @@ struct LocomotionController {
     vertical=std::isfinite(vertical)?vertical:0; height=std::isfinite(height)?height:0;
     const float speed=grounded?travel/dt:0;
     startAge=std::min(1.f,startAge+dt); stopAge=std::min(1.f,stopAge+dt); landingAge=std::min(1.f,landingAge+dt);
+    reverseAge=std::min(1.f,reverseAge+dt);
+    if(grounded && !airborne && speed>.5f && previousSpeed>.5f && reverseAge>=.32f &&
+       forward*lastForward+right*lastRight<-.25f) {
+      reverseAge=0;reverseForward=lastForward;reverseRight=lastRight;
+    }
     if(grounded && !airborne) {
       // Rapid taps must not discard/restart a nonzero one-shot. Let existing
       // pushes and catches settle while the responsive directional blend changes.
-      if(speed>.15f && previousSpeed<=.15f && startAge>=.28f) startAge=0;
-      if(speed<=.15f && previousSpeed>.15f && stopAge>=.32f) stopAge=0;
+      if(speed>.15f && previousSpeed<=.15f && startAge>=.28f) {startAge=0;startForward=forward;startRight=right;}
+      if(speed<=.15f && previousSpeed>.15f && stopAge>=.32f) {stopAge=0;stopForward=lastForward;stopRight=lastRight;}
     }
     // Let a current push/catch finish through takeoff; cancelling it here
     // would discard its hip offset on the first airborne frame.
     if(grounded && airborne) landingAge=std::isfinite(landingElapsed)?std::clamp(landingElapsed,0.f,dt):0;
+    if(grounded && speed>.15f) {lastForward=forward;lastRight=right;}
     airborne=!grounded; previousSpeed=speed;
     // Pivot steps need a cadence even without translation. Blend out their
     // contribution during travel so strafing does not double the foot cycle.
@@ -82,7 +90,15 @@ struct LocomotionController {
       weights[i]=motion::Ease(weights[i],target[i],14,dt);
       pose=pose+SampleClip(MotionClip(i),phase)*weights[i];
     }
-    pose=pose+SampleClip(MotionClip::Start,startAge)+SampleClip(MotionClip::Stop,stopAge);
+    const auto directed=[](MotionChannels clip,float forward,float right) {
+      const float pitch=clip.pitch;clip.pitch*=forward;clip.roll-=pitch*right;
+      return clip;
+    };
+    pose=pose+directed(SampleClip(MotionClip::Start,startAge),startForward,startRight)+
+      directed(SampleClip(MotionClip::Stop,stopAge),stopForward,stopRight);
+    // A rapid reversal catches weight along the old direction while the
+    // directional gait blends toward the new one. It never moves the actor.
+    pose=pose+directed(SampleClip(MotionClip::Stop,reverseAge),reverseForward,reverseRight)*.65f;
     if(!grounded) {
       const float air=std::clamp(height/.25f,0.f,1.f);
       const float rise=std::clamp(vertical/motion::jumpSpeed,-1.f,1.f);

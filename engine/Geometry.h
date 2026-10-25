@@ -8,7 +8,7 @@
 namespace visual {
 enum class ShadowMode { Cast, None };
 inline constexpr unsigned materialSize=128,shadowSize=1024,shadowLayers=2;
-enum class Mesh : unsigned { Box, Roof, Sphere, Rock, Trunk, Foliage, Torso, Limb, Blade, Crystal, Terrain, Cliff, Head, Boot, Hair, Grass, Barrel,Arch,Canopy,Masonry,Cloak,Body,BodyMedium,BodyFar,Feature,Palm,Finger,HeadMedium,HeadFar,HairLow,BootLow,SphereLow,TorsoLow,LimbLow,Hand,HandMirrored,HandMedium,HandMirroredMedium,HandFar,HandMirroredFar,WeaponMace,WeaponHandbow,WeaponScepter,WeaponGroveStaff,WeaponAstralStaff,WeaponAshStaff,WeaponFocus,WeaponBaton,WeaponPistol,WeaponCleaver,Count };
+enum class Mesh : unsigned { Box, Roof, Sphere, Rock, Trunk, Foliage, Torso, Limb, Blade, Crystal, Terrain, Cliff, Head, Boot, Hair, Grass, Barrel,Arch,Canopy,Masonry,Cloak,Body,BodyMedium,BodyFar,Feature,Palm,Finger,HeadMedium,HeadFar,HairLow,BootLow,SphereLow,TorsoLow,LimbLow,Hand,HandMirrored,HandMedium,HandMirroredMedium,HandFar,HandMirroredFar,CoatPanel,WeaponMace,WeaponHandbow,WeaponScepter,WeaponGroveStaff,WeaponAstralStaff,WeaponAshStaff,WeaponFocus,WeaponBaton,WeaponPistol,WeaponCleaver,Count };
 inline bool IsBodyMesh(Mesh mesh) { return mesh>=Mesh::Body && mesh<=Mesh::BodyFar; }
 inline bool IsHandMesh(Mesh mesh) { return mesh>=Mesh::Hand && mesh<=Mesh::HandMirroredFar; }
 inline bool IsHeadMesh(Mesh mesh) { return mesh==Mesh::Head || mesh==Mesh::HeadMedium || mesh==Mesh::HeadFar; }

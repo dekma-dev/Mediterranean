@@ -117,13 +117,14 @@ const Enemy* Simulation::DashTargetActor() const {
 void Simulation::UseAbility(int index,float visualElapsed) {
   if (!ValidSpell(index) || health_<=0) return;
   if (cooldowns_[index]>0) { message_="That ability is cooling down."; return; }
+  if (index==6 && !EmpoweredReady()) {message_="Build a full class reserve first.";return;}
   if (Dashing()) { message_="Finish the dash before using another ability."; return; }
   if (CastingRecovery()) {message_="Finish or interrupt the current cast.";return;}
   if (Attacking()) { message_="Finish the weapon recovery before using another ability."; return; }
-  if ((index<2 || index==5) && PhysicalLauncher(WeaponFor(class_).form) && inventory_.Worn(GearSlot::Weapon)==Item::None) {
+  if ((index<2 || index>=5) && PhysicalLauncher(WeaponFor(class_).form) && inventory_.Worn(GearSlot::Weapon)==Item::None) {
     message_="Equip your class weapon before firing."; return;
   }
-  if ((index==1 || index==5) && CombatStyleInfo().steadyHeavy && (!Grounded() || Length(movementVelocity_)>.15f)) {
+  if ((index==1 || index==5 || index==6) && CombatStyleInfo().steadyHeavy && (!Grounded() || Length(movementVelocity_)>.15f)) {
     message_="Stand still to prepare this heavy attack.";return;
   }
   if (index==3) {
@@ -176,6 +177,11 @@ void Simulation::UseAbility(int index,float visualElapsed) {
     attackEmpowered_=index==1 && EmpoweredReady();
     if(attackEmpowered_) classResource_=0;
     attackDamage_=index==0?StrikeDamage():HeavyDamage();
+    if(index==7) attackDamage_=StrikeDamage()*.9f;
+    if(index==6) {
+      classResource_=0;attackDamage_*=class_==ClassId::Demonologist?1.6f:1.1f;
+      if(class_==ClassId::Demonologist) health_-=std::min(12.f,std::max(0.f,health_-1));
+    }
     if(index==5) {
       attackDamage_*=class_==ClassId::Demonologist?.85f:.65f;
       if(class_==ClassId::Demonologist) health_-=std::min(6.f,std::max(0.f,health_-1));
@@ -234,7 +240,12 @@ void Simulation::ResolveAttack(float elapsed) {
     if(class_==ClassId::Demonologist) bonus+=20;
   }
   if(index==5 && class_==ClassId::Mage && (enemy.snared>0 || enemy.rooted>0)) bonus+=HeavyDamage()*.45f;
-  const float mastery=attackEmpowered_ && HasTalent(Talent::Overwhelming)?1.2f:1.f;
+  if(index==6) {
+    if(class_==ClassId::Warrior && enemy.health<=enemy.MaxHealth()*.5f) bonus+=attackDamage_;
+    if(class_==ClassId::Scout && enemy.rooted>0) bonus+=HeavyDamage()*.7f;
+    if(class_==ClassId::Mage && (enemy.snared>0 || enemy.rooted>0)) {bonus+=attackDamage_;enemy.snared=enemy.rooted=0;}
+  }
+  const float mastery=(attackEmpowered_ || index==6) && HasTalent(Talent::Overwhelming)?1.2f:1.f;
   const float damage=std::min(enemy.health,(attackDamage_*finishing+bonus)*mastery*(enemy.exposed>0?1.25f:1.f));
   float heal=class_==ClassId::Necromancer?damage*.15f:class_==ClassId::Bard?3.f:class_==ClassId::Priest && index==1?8.f:0.f;
   if(index==5) {
@@ -250,6 +261,34 @@ void Simulation::ResolveAttack(float elapsed) {
     case ClassId::Psionic: enemy.stunned=std::max(enemy.stunned,1.5f);break;
     case ClassId::Bard: enemy.exposed=std::max(enemy.exposed,4.f);break;
     case ClassId::Engineer: enemy.exposed=std::max(enemy.exposed,6.f);break;
+    default:break;
+    }
+  }
+  if(index==6) {
+    switch(class_) {
+    case ClassId::Paladin: barrier_=std::max(barrier_,40.f);break;
+    case ClassId::Scout: cooldowns_[2]=0;break;
+    case ClassId::Priest: heal=30;barrier_=std::max(barrier_,10.f);break;
+    case ClassId::Druid: enemy.rooted=std::max(enemy.rooted,4.f);enemy.snared=std::max(enemy.snared,6.f);break;
+    case ClassId::Necromancer: heal=damage*.8f;break;
+    case ClassId::Psionic: enemy.stunned=std::max(enemy.stunned,2.5f);break;
+    case ClassId::Bard: cooldowns_[0]=0;cooldowns_[5]=std::max(0.f,cooldowns_[5]-5);break;
+    case ClassId::Engineer: enemy.exposed=std::max(enemy.exposed,8.f);break;
+    case ClassId::Demonologist: barrier_=std::max(barrier_,25.f);break;
+    default:break;
+    }
+  }
+  if(index==7) {
+    const int gain=class_==ClassId::Priest || class_==ClassId::Mage?2:1;
+    classResource_=std::min(CombatStyleInfo().capacity,classResource_+gain);
+    switch(class_) {
+    case ClassId::Warrior: enemy.exposed=std::max(enemy.exposed,3.f);break;
+    case ClassId::Paladin: barrier_=std::max(barrier_,12.f);break;
+    case ClassId::Scout: case ClassId::Engineer: enemy.snared=std::max(enemy.snared,class_==ClassId::Scout?2.f:3.f);break;
+    case ClassId::Druid: enemy.rooted=std::max(enemy.rooted,1.f);break;
+    case ClassId::Necromancer: barrier_=std::max(barrier_,damage*.5f);break;
+    case ClassId::Bard: cooldowns_[2]=std::max(0.f,cooldowns_[2]-2);break;
+    case ClassId::Demonologist: if(enemy.health<=enemy.MaxHealth()*.5f) heal=damage*.5f;break;
     default:break;
     }
   }
@@ -280,15 +319,15 @@ void Simulation::ResolveAttack(float elapsed) {
   enemy.health-=damage;
   if (trainingTarget) sparringDealt_+=int(damage);
   Emit(FeedbackKind::Damage,enemy.position,static_cast<int>(damage));
-  EmitVisual(index==0?CombatVisualKind::Hit:CombatVisualKind::HeavyHit,enemy.position,1.25f,facing_,enemy.id,elapsed);
+  EmitVisual((index==0 || index==7)?CombatVisualKind::Hit:CombatVisualKind::HeavyHit,enemy.position,1.25f,facing_,enemy.id,elapsed);
   enemy.hitFlash=std::max(0.f,.2f-elapsed); enemy.damagedThisUpdate=true; attackFlash_=.2f;
   message_=attackEmpowered_?CombatStyleInfo().payoff:"Hit.";
   enemy.state=EnemyState::Pursuing;
-  if ((index==1 || (index==5 && (class_==ClassId::Psionic || class_==ClassId::Bard))) && enemy.windup>0) {
+  if ((index==1 || ((index==6 || index==7) && class_==ClassId::Psionic) || (index==5 && (class_==ClassId::Psionic || class_==ClassId::Bard))) && enemy.windup>0) {
     enemy.windup=0; enemy.attackCooldown=class_==ClassId::Psionic?1.5f:.8f;
     Emit(FeedbackKind::Interrupt,enemy.position);
     EmitVisual(CombatVisualKind::Interrupt,enemy.position,1.4f,facing_,enemy.id,elapsed);
-    message_="Heavy strike interrupted the enemy attack.";
+    message_=std::string(Spell(index).name)+" interrupted the enemy attack.";
   }
   if (enemy.health<=0) {
     if (TargetActor() && TargetActor()->id==enemy.id) target_=-1;
@@ -348,11 +387,12 @@ void Simulation::UpdateCombat(float dt,bool advanceAttack) {
 const char* Simulation::AbilityStatus(int index) const {
   if (!ValidSpell(index) || health_<=0) return "DISABLED";
   if (cooldowns_[index]>0) return "COOLDOWN";
+  if (index==6 && !EmpoweredReady()) return "LOW RESERVE";
   if (Dashing()) return "DASHING";
   if (CastingRecovery()) return "CASTING";
   if (Attacking()) return "RECOVERING";
-  if ((index<2 || index==5) && PhysicalLauncher(WeaponFor(class_).form) && inventory_.Worn(GearSlot::Weapon)==Item::None) return "NO WEAPON";
-  if((index==1 || index==5) && CombatStyleInfo().steadyHeavy && (!Grounded() || Length(movementVelocity_)>.15f)) return "STAND STILL";
+  if ((index<2 || index>=5) && PhysicalLauncher(WeaponFor(class_).form) && inventory_.Worn(GearSlot::Weapon)==Item::None) return "NO WEAPON";
+  if((index==1 || index==5 || index==6) && CombatStyleInfo().steadyHeavy && (!Grounded() || Length(movementVelocity_)>.15f)) return "STAND STILL";
   if (index==3) {
     if(ClassHealer(class_) && health_>=MaxHealth()) return "FULL HEALTH";
     if(health_<=ClassRecoveryCost(class_)) return "LOW HEALTH";
@@ -943,7 +983,7 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
 
 std::string Simulation::Save() const {
   std::ostringstream out;
-  out << std::setprecision(9) << "MEDITERRANEAN 15\n" << "PROFILE " << int(class_) << ' ' << std::quoted(nickname_) << ' ' << frontierCompleted_ << ' ' << frontierActive_ << ' ' << legacyLoot_ << '\n' << player_.x << ' ' << player_.z << ' '
+  out << std::setprecision(9) << "MEDITERRANEAN 17\n" << "PROFILE " << int(class_) << ' ' << std::quoted(nickname_) << ' ' << frontierCompleted_ << ' ' << frontierActive_ << ' ' << legacyLoot_ << '\n' << player_.x << ' ' << player_.z << ' '
     << health_ << ' ' << facing_ << ' ' << static_cast<int>(quest_) << ' ' << gold_ << '\n';
   out << Potions() << ' ' << HasRewardWeapon() << ' ' << RewardWeaponEquipped() << ' ' << potionCooldown_ << '\n';
   out << static_cast<int>(anchorQuest_) << '\n';
@@ -961,6 +1001,8 @@ std::string Simulation::Save() const {
   out<<"APPEARANCE "<<appearance_.skin<<' '<<appearance_.hair<<' '<<appearance_.dye<<'\n';
   out<<"SURVEY "<<surveyMask_<<'\n';
   out<<"TECHNIQUE "<<cooldowns_[5]<<'\n';
+  out<<"SIGNATURE "<<cooldowns_[6]<<'\n';
+  out<<"OPENING "<<cooldowns_[7]<<'\n';
   return out.str();
 }
 
@@ -969,7 +1011,7 @@ bool Simulation::Load(const std::string& data) {
   std::istringstream input(data);
   std::string magic; int version=0, quest=0,potions=2,owned=0,equipped=0;
   Simulation candidate;
-  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>15) return false;
+  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>17) return false;
   if(version>=11) {
     std::string tag,name;int id=0,completed=0,active=0,looted=0;
     if(!(input>>tag>>id>>std::quoted(name)>>completed>>active>>looted) || tag!="PROFILE" ||
@@ -1101,6 +1143,14 @@ bool Simulation::Load(const std::string& data) {
   if(version>=15) {
     std::string tag;
     if(!(input>>tag>>candidate.cooldowns_[5]) || tag!="TECHNIQUE" || !valid(candidate.cooldowns_[5],0,spells[5].cooldown)) return false;
+  }
+  if(version>=16) {
+    std::string tag;
+    if(!(input>>tag>>candidate.cooldowns_[6]) || tag!="SIGNATURE" || !valid(candidate.cooldowns_[6],0,spells[6].cooldown)) return false;
+  }
+  if(version>=17) {
+    std::string tag;
+    if(!(input>>tag>>candidate.cooldowns_[7]) || tag!="OPENING" || !valid(candidate.cooldowns_[7],0,spells[7].cooldown)) return false;
   }
   input >> std::ws;
   if (!input.eof()) return false;

@@ -1,6 +1,7 @@
 #pragma once
 #include "game/Interface.h"
 #include "engine/Input.h"
+#include "game/ActionClips.h"
 #include <filesystem>
 
 namespace ui {
@@ -40,6 +41,8 @@ public:
   float PreviewZoom() const { return zoom_; }
   bool Closeup() const { return closeup_; }
   float PreviewAction() const { return actionTime_; }
+  int PreviewAbility() const { return previewAbility_; }
+  const animation::ActionChannels& PreviewPose() const { return previewController_.pose; }
   const std::string& DraftName() const { return draftName_; }
   const std::string& Notice() const { return notice_; }
   bool Changed() const { return changed_; }
@@ -58,6 +61,8 @@ private:
   bool changed_=false;
   bool closeup_=false;
   float zoom_=0,actionTime_=-1;
+  int previewAbility_=-1;
+  animation::ActionController previewController_;
   float pageAge_=0;
   std::array<float,int(Control::None)+1> highlights_{};
   std::filesystem::path Path(rpg::ClassId id) const;

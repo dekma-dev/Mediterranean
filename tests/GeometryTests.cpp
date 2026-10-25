@@ -42,6 +42,8 @@ int main() {
     }
     Check(std::abs(prepared.radiusScale-std::max({x,y,z}))<.00001f,"Optimized transform changed culling bounds.");
   }
+  const auto coat=visual::BuildMesh(visual::Mesh::CoatPanel);
+  Check(coat.vertices.size()==198 && coat.indices.size()==960,"Coat panel must retain bounded two-sided topology");
   std::size_t bytes=0,triangles=0,weaponBytes=0,weaponTriangles=0;
   for (unsigned mesh=0;mesh<static_cast<unsigned>(visual::Mesh::Count);++mesh) {
     const auto g=visual::BuildMesh(static_cast<visual::Mesh>(mesh));

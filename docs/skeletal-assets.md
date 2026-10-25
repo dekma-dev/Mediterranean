@@ -71,8 +71,15 @@ Conversion reflects position/normal Z and reverses each triangle's winding. `Def
 
 The original six-vertex/four-triangle `hinge-mesh.glb` exercises fixed, mixed and fully weighted rows. Tests verify rest-pose preservation, skin-order indexing, converted winding, exact midpoint positions and inverse-transpose normal handling under nonuniform scale. Malformed mode, node transforms, attribute types/counts, weights, joints, indices and normals reject. The inspector prints mesh counts and a CPU-deformed clip midpoint vertex.
 
-UVs, tangents, textures/materials, additional influence sets, byte/32-bit indices, normalized integer weights and general editor exports remain unsupported. No fixture geometry is connected to the player or GPU yet.
+UVs, tangents, textures/materials, additional influence sets, byte/32-bit indices, normalized integer weights and general editor exports remain unsupported. The fixture now has a GPU preview adapter; it is not connected to the playable character.
 
 Schema reference: [Khronos mesh primitive schema](https://github.com/KhronosGroup/glTF/blob/main/specification/2.0/schema/mesh.primitive.schema.json).
 
 Palette validation regression: the public CPU reference rejects non-affine skin matrices and nonpositive/near-zero determinants (threshold 1e-12), in addition to non-finite or over-budget values. Affine homogeneous components permit the same 1e-6 rounding tolerance as inverse binds; point deformation never divides by W per influence. Tests cover projective/singular/reflected palettes and accepted rounding without position drift.
+
+
+## Bounded GPU preview (2026-10-25)
+
+`tools/BodyAssetAdapter.h` converts validated imported geometry and palettes into the existing DirectX11 body path. The preview supports at most ten joints; the offline importer still supports 64. Oversized skeletons reject explicitly. Renderer initialization consumes the optional geometry synchronously and uses it for all three body LOD slots. This is a preview restriction, not authored LOD generation or support for mixed imported characters. Pose conversion allocates for validation and is not intended for the gameplay hot path.
+
+`ImportedBodyTests` compares four animated GPU poses against separately baked CPU geometry, checks visible deformation and D3D diagnostics, and rejects invalid geometry/palettes. The comparison uses an untextured material: the GPU retains bind-space procedural texture coordinates, whereas a baked reference changes those coordinates. Preview culling uses conservative palette-transformed bounds. UV materials, a production skeleton and an authored playable hero remain open.

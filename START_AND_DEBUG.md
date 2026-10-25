@@ -1,5 +1,9 @@
 # Starting and Debugging Mediterranean
 
+Setup/coat update (2026-10-25): fresh **8** casts the class setup attack; existing layouts can bind it from the seventh card in **N**. Compare moving Scout/Mage/Engineer preparation with planted heavy spells. In character creation, **Try next art** now cycles five attacks. Inspect cloth classes' coat panels while walking, reversing and jumping. Current saves write version 17 and read versions 1–16; use the rebuilt executable after saving. See [class openings](docs/class-openings.md), manual checks 238–239.
+
+Signature/motion update (2026-10-25): current Visual Studio Debug and Ninja Debug/Release builds include six class arts. On a fresh layout, **7** casts the signature after basic attacks fill your class reserve. Existing layouts are kept: drag the sixth art from **N** to a slot. Signature and empowered heavy compete for that reserve. Character creation's **Try next art** cycles basic, heavy, technique and signature. Compare backward/sideways starts/stops, carrying posture, hair and boot detail. Saves now write version 16 (read versions 1–15); use the rebuilt executable after saving. Details: [class signatures](docs/class-signatures.md), manual checks 236–237.
+
 Load-notification repair (2026-10-23): successful F9/character loads now clear inventory and merchant notices, including the inventory toast timer and its mouse blocker. After sorting/equipping, load immediately and check camera orbit over the former notice area. Failed loads retain the current session. See manual check 221.
 
 Terrain performance check (2026-10-23): run `build-ninja-release/NavigationTests.exe --surface-benchmark` to compare the current surface-query workload. It also checks exact equivalence against the original calculation and writes no player saves. This measures CPU sampling cost rather than game FPS; walk over path/dock edges to check unchanged traction and footsteps.

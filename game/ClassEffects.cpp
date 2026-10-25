@@ -70,7 +70,7 @@ void Projectile(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,floa
   const auto point=[&](float u) { return CombatEffects::SpellTracePoint(origin,e.destination,Unit(u),arc); };
   auto c=Color(e.school,fade*.72f);
   const auto head=point(t);
-  if(e.technique && e.school==C::Mage) {
+  if((e.technique || e.signature) && e.school==C::Mage) {
     c={.35f,.78f,1.f,fade*.8f};
     r.DrawEffectStreak(point(t-.17f),head,.035f,c);
     for(int n=0;n<3;++n) r.DrawEffectStreak(Add(head,{(n-1)*.05f,.06f,0}),point(t-.07f),.012f,c);
@@ -133,21 +133,38 @@ void Projectile(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,floa
       r.DrawEffectGlow(ember,.025f,Color(e.school,fade*.7f));
     }
   }
-  if(e.empowered) Arc(r,head,.23f,age*12,pi*1.5f,.014f,Color(e.school,fade*.55f));
+  if(e.empowered || e.signature) Arc(r,head,.23f,age*12,pi*1.5f,.014f,Color(e.school,fade*.55f));
 }
 void Impact(Renderer& r,const rpg::CombatVisualEvent& e,float age) {
   const float phase=Unit(age/.48f),fade=(1-phase)*(1-phase);
   const float flash=std::pow(1-Unit(age/.095f),2.f);
   const float size=(e.heavy?1.1f:.72f)*(e.empowered?1.2f:1);
   const XMFLOAT3 p{e.position.x-std::sin(e.facing)*.34f,e.height,e.position.z-std::cos(e.facing)*.34f};
-  auto c=Color(e.school,fade*.8f);
+  auto c=(e.technique || e.signature) && e.school==C::Mage?XMFLOAT4{.35f,.78f,1.f,fade*.8f}:Color(e.school,fade*.8f);
+  if(e.opening) {
+    for(int n=0;n<3;++n) {
+      const float angle=n*tau/3+e.facing;
+      Ray(r,p,angle,.10f+phase*.2f,.22f+phase*.4f,.012f,c);
+    }
+  }
+  if(e.signature) {
+    // Class-colored paired crescents and rising motes mark the spent reserve.
+    // Fixed segment counts keep contact cost independent of frame rate.
+    const XMFLOAT3 ground{e.position.x,.06f,e.position.z};
+    for(int side=0;side<2;++side) Arc(r,ground,.35f+phase*.85f,side*pi+phase*2,pi*.7f,.024f,c,true);
+    for(int n=0;n<6;++n) {
+      const float angle=n*tau/6;
+      const auto mote=Add(p,{std::cos(angle)*phase*.65f,phase*.65f,std::sin(angle)*phase*.65f});
+      r.DrawEffectStreak(mote,Add(mote,{0,.12f,0}),.018f,c);
+    }
+  }
   if(e.technique) {
     if(e.school==C::Mage) c={.35f,.78f,1.f,fade*.8f};
     const XMFLOAT3 ground{e.position.x,.055f,e.position.z};
     // A short broken seal identifies the tactical contact without hiding feet.
     for(int n=0;n<3;++n) Arc(r,ground,.42f+phase*.30f,n*tau/3+phase,.65f,.012f,c,true);
   }
-  if(e.technique && e.school==C::Mage) {
+  if((e.technique || e.signature) && e.school==C::Mage) {
     for(int n=0;n<8;++n) Ray(r,p,n*tau/8,.10f+phase*.18f,.28f+phase*.65f,.016f,c);
     r.DrawEffectGlow(p,.28f,{.6f,.88f,1.f,flash*.65f});return;
   }
@@ -360,7 +377,7 @@ void Prepare(Renderer& r,const rpg::Simulation& state,XMFLOAT3 p) {
   const float progress=state.CastingRecovery()?state.RecoveryProgress():state.AttackSeconds()/combat::StrokeStart(state.HeavyAttack());
   if(progress<=0 || progress>=1) return;
   const float alpha=std::sin(progress*pi*.5f)*.55f;
-  const auto id=state.Class();const auto c=state.TechniqueAttack() && id==C::Mage?XMFLOAT4{.35f,.78f,1.f,alpha}:Color(id,alpha);
+  const auto id=state.Class();const auto c=(state.TechniqueAttack() || state.SignatureAttack()) && id==C::Mage?XMFLOAT4{.35f,.78f,1.f,alpha}:Color(id,alpha);
   if((id==C::Scout || id==C::Engineer) && !state.CastingRecovery()) {
     if(!state.HeavyAttack()) return;
     // Compact sight brackets at the weapon; no premature muzzle flash.

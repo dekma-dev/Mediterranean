@@ -199,6 +199,14 @@ int main() {
     r.BeginFrame();r.SetCamera({0,2,-4},{0,1,0});classfx::Impact(r,e,.12f);
     Check(r.EffectVertices()>0 && r.EffectVertices()<5000,"Technique impact exceeded bounded geometry");
     Capture(r,root/(std::to_string(id)+"-technique.png"));
+    e.technique=false;e.signature=true;
+    r.BeginFrame();r.SetCamera({0,2,-4},{0,1,0});classfx::Impact(r,e,.12f);
+    Check(r.EffectVertices()>0 && r.EffectVertices()<5000,"Signature impact exceeded bounded geometry");
+    Capture(r,root/(std::to_string(id)+"-signature.png"));
+    e.signature=false;e.opening=true;e.heavy=false;e.kind=CombatVisualKind::Hit;
+    r.BeginFrame();r.SetCamera({0,2,-4},{0,1,0});classfx::Impact(r,e,.12f);
+    Check(r.EffectVertices()>0 && r.EffectVertices()<5000,"Opening impact exceeded bounded geometry");
+    Capture(r,root/(std::to_string(id)+"-opening.png"));
   }
   Captures(r,root);Recoveries(r,root);LiveStates(r,root);SchoolHues(r,root);
   Check(sizeof(CombatEffects)<=16384,"Class effects exceeded the fixed CPU budget");

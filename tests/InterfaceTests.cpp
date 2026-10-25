@@ -222,6 +222,14 @@ int main() {
   const auto bindings=screen.SaveHotbars();ui::Interface copied;
   Require(copied.LoadHotbars(bindings) && copied.SaveHotbars()==bindings,"Hotbar bindings round trip");
   Require(!copied.LoadHotbars(bindings+"junk") && copied.SaveHotbars()==bindings,"Malformed settings must preserve bindings");
+  {
+    std::string legacy="HOTBARS 3\n";
+    for(int id=0;id<int(rpg::ClassId::Count);++id) legacy+="0 1 2 3 4 5 6 -1 -1 -1\n";
+    ui::Interface migrated;Require(migrated.LoadHotbars(legacy),"Version 3 hotbar rejected");
+    Require(migrated.HotbarSpell(7,rpg::ClassId::Mage)==-1,"Migration overwrote an existing empty binding");
+    migrated.AssignHotbar(7,9,rpg::ClassId::Mage);ui::Interface reload;
+    Require(reload.LoadHotbars(migrated.SaveHotbars()) && reload.HotbarSpell(9,rpg::ClassId::Mage)==7,"Setup binding did not persist");
+  }
   screen.MoveHotbar(9,0,rpg::ClassId::Warrior);
 
   screen.Escape(); Require(screen.panel==ui::Panel::Menu && screen.CapturesMovement(),"Escape must open the menu and capture commands.");
@@ -772,9 +780,9 @@ int main() {
         "Right-click must not learn a talent");
       Require(click(1159,73).action==ui::Action::Close && click(1159,73).value==int(ui::Panel::Build),
         "Build close button must identify its modal panel");
-      for(int card=0;card<5;++card) {
-        const int spell=card==4?5:card;
-        const auto inspect=click(210+card*138.f,183);
+      for(int card=0;card<7;++card) {
+        const int spell=card>=4?card+1:card;
+        const auto inspect=click(210+(card%4)*173.f,164+(card/4)*30.f);
         Require(inspect.action==ui::Action::SelectSpell && inspect.value==spell,
           "Each foundation spell must open inspection, not cast through the modal");
         screen.selectedSpell=spell;

@@ -124,12 +124,37 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       const float side=i==0?-1.f:1.f;
       const auto& leg=pose.legs[i]; const auto& arm=pose.arms[i];
       const auto knee=world(leg.joint),ankle=world(leg.end);
+      const bool coat=outfit.classId==rpg::ClassId::Priest || outfit.classId==rpg::ClassId::Druid ||
+        outfit.classId==rpg::ClassId::Mage || outfit.classId==rpg::ClassId::Necromancer ||
+        outfit.classId==rpg::ClassId::Psionic || outfit.classId==rpg::ClassId::Bard;
+      if(outfit.tunic && coat) {
+        auto cloth=color;
+        if(outfit.appearance.dye) {const auto& dye=rpg::tunicDyes[outfit.appearance.dye];cloth={dye.r,dye.g,dye.b,1};}
+        else {cloth.x*=.65f;cloth.y*=.65f;cloth.z*=.65f;}
+        auto hem=knee;hem.y-=.04f;
+        const auto waist=world(leg.root);
+        // Split panels follow the solved thighs: walking/jumping retains a
+        // leg opening instead of stretching one rigid skirt across both legs.
+        for(float side:{-1.f,1.f}) renderer.DrawMeshBetween(M::CoatPanel,hem,waist,.33f,.23f,cloth,S::Cloth,
+          {side*std::sin(yaw),0,side*std::cos(yaw)});
+      }
       const float bootYaw=yaw+pose.footYaw[i];
       const XMFLOAT3 foot{ankle.x+std::sin(bootYaw)*.035f,ankle.y-.035f,ankle.z+std::cos(bootYaw)*.035f};
       renderer.DrawMesh(M::Boot,foot,{.23f,.24f,.37f},outfit.boots?leather:skin,outfit.boots?S::Cloth:S::Skin,bootYaw);
       if (outfit.boots) {
         renderer.DrawMesh(M::Boot,{foot.x,foot.y-.105f,foot.z},{.24f,.035f,.38f},{.09f,.075f,.05f,1},S::Cloth,bootYaw);
         renderer.DrawSegment({knee.x,knee.y-.025f,knee.z},{knee.x,knee.y+.025f,knee.z},.245f,.26f,{.39f,.29f,.15f,1},S::Cloth);
+      }
+      if(outfit.boots) {
+        const float sine=std::sin(bootYaw),cosine=std::cos(bootYaw);
+        // Two narrow welts and a brass clasp break up the plain boot shaft.
+        for(int strap=0;strap<2;++strap) {
+          const float t=.25f+strap*.22f;
+          XMFLOAT3 band{ankle.x+(knee.x-ankle.x)*t,ankle.y+(knee.y-ankle.y)*t,ankle.z+(knee.z-ankle.z)*t};
+          renderer.DrawMesh(M::Limb,band,{.215f,.025f,.225f},{.16f,.105f,.065f,1},S::Cloth,bootYaw);
+          band.x+=sine*.115f;band.z+=cosine*.115f;
+          renderer.DrawMesh(M::Box,band,{.035f,.032f,.016f},{.50f,.37f,.18f,1},S::Metal,bootYaw);
+        }
       }
       const auto elbow=world(arm.joint),hand=world(arm.end);
       const auto handColor=outfit.gloves?leather:skin;

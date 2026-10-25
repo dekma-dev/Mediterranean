@@ -273,4 +273,89 @@ void Techniques() {
   }
   Check(names.size()==unsigned(ClassId::Count),"Technique names must be class-specific");
 }
-int main() {Cadence();Mobility();Preparation();Reserves();Recovery();DefensiveIdentity();BufferedAttacks();Techniques();std::cout<<"PASS: class clocks, retreat collision, casting movement, empowered combat, recovery wards and buffered input.\n";}
+void Signatures() {
+  std::set<std::string> names;
+  for(int id=0;id<int(ClassId::Count);++id) for(int hz:{30,144,1000}) {
+    Simulation s;Duel(s,ClassId(id));Command cast;cast.ability=6;
+    s.Update(.001f,cast);
+    Check(!s.Attacking() && s.Cooldown(6)==0 && std::string(s.AbilityStatus(6))=="LOW RESERVE","Unfunded signature accepted");
+    auto& enemy=const_cast<Enemy&>(s.Enemies()[0]);
+    for(int hit=0;hit<s.CombatStyleInfo().capacity;++hit) {
+      enemy.health=80;enemy.windup=0;enemy.attackCooldown=100;
+      Command basic;basic.ability=0;s.Update(.001f,basic);
+      Tick(s,std::max(s.Spell(0).recovery,s.AbilityCooldown(0))+.02f,hz);
+    }
+    Check(s.EmpoweredReady(),"Signature reserve setup");
+    enemy.health=80;enemy.windup=0;enemy.attackCooldown=100;
+    auto invalid=s;const_cast<Enemy&>(invalid.Enemies()[0]).position={50,50};invalid.Update(.001f,cast);
+    Check(!invalid.Attacking() && invalid.EmpoweredReady() && invalid.Cooldown(6)==0,"Out-of-range signature spent reserve");
+    names.insert(s.Spell(6).name);
+    auto cancel=s;cancel.Update(.001f,cast);cancel.StopMovement();Tick(cancel,4,hz);
+    Check(cancel.ClassResource()==0 && cancel.Cooldown(6)>0 && cancel.Enemies()[0].health==80,"Cancelled signature refunded or hit later");
+    const float before=enemy.health;
+    if(ClassId(id)==ClassId::Mage) enemy.rooted=2;
+    s.Update(.001f,cast);
+    Check(s.SignatureAttack() && s.Cooldown(6)>17 && s.ClassResource()==0,"Signature commitment failed");
+    enemy.attackCooldown=1.4f;
+    Simulation loaded;Check(loaded.Load(s.Save()) && loaded.Cooldown(6)==s.Cooldown(6) && !loaded.Attacking(),"Signature save replayed contact or lost cooldown");
+    enemy.attackCooldown=100;
+    std::vector<CombatVisualEvent> events;
+    Tick(s,s.Spell(6).contact-.002f,hz,&events);Check(enemy.health==before,"Signature damaged before contact");
+    Tick(s,.004f,hz,&events);Check(enemy.health<before,"Signature contact missing");
+    int hits=0;for(const auto& e:events) if(e.kind==CombatVisualKind::HeavyHit) {++hits;Check(e.signature && !e.technique,"Signature event identity lost");}
+    Check(hits==1,"Signature duplicated contact");
+    if(ClassId(id)==ClassId::Mage) Check(enemy.rooted==0 && before-enemy.health>=std::min(before,s.HeavyDamage()*2.2f)-.01f,"Glacial shatter failed to consume control for burst");
+    if(ClassId(id)==ClassId::Paladin) Check(s.Barrier()==40,"Dawn verdict ward");
+    if(ClassId(id)==ClassId::Priest) Check(s.Barrier()==10,"Sanctuary ward");
+    if(ClassId(id)==ClassId::Druid) Check(enemy.rooted>3.9f && enemy.snared>5.9f,"Wild judgement control");
+    if(ClassId(id)==ClassId::Psionic) Check(enemy.stunned>2.4f,"Mind prison stun");
+    if(ClassId(id)==ClassId::Engineer) Check(enemy.exposed>7.9f,"Overload exposure");
+    if(ClassId(id)==ClassId::Demonologist) Check(s.Barrier()==25,"Infernal bargain ward");
+  }
+  Check(names.size()==unsigned(ClassId::Count),"Signatures lack distinct class names");
+  Simulation s;const auto stable=s.Save();auto legacy=stable;legacy.erase(legacy.find("SIGNATURE "));legacy.replace(14,legacy.find('\n')-14,"15");
+  Check(s.Load(legacy) && s.Cooldown(6)==0,"Version 15 signature migration");
+  for(const char* value:{"-1","19","nan","inf",""}) {
+    auto bad=stable;const auto at=bad.find("SIGNATURE ");bad.replace(at,bad.find('\n',at)-at,std::string("SIGNATURE ")+value);
+    Check(!s.Load(bad) && s.Save()==stable,"Malformed signature cooldown did not reject atomically");
+  }
+}
+void Openings() {
+  std::set<std::string> names;
+  for(int id=0;id<int(ClassId::Count);++id) for(int hz:{30,60,144,1000}) {
+    Simulation s;Duel(s,ClassId(id));
+    auto& enemy=const_cast<Enemy&>(s.Enemies()[0]);enemy.windup=0;enemy.attackCooldown=1.4f;
+    names.insert(s.Spell(7).name);
+    Command c;c.ability=7;s.Update(.001f,c);
+    Check(s.OpeningAttack() && !s.HeavyAttack() && s.Cooldown(7)>7.9f,"Setup cast or basic clock missing");
+    Check(enemy.health==80 && s.ClassResource()==0,"Setup rewards granted before contact");
+    Simulation loaded;Check(loaded.Load(s.Save()) && loaded.Cooldown(7)==s.Cooldown(7) && !loaded.Attacking(),"Setup save replay/lost cooldown");
+    std::vector<CombatVisualEvent> events;
+    Tick(s,s.Spell(7).contact-.002f,hz,&events);Check(enemy.health==80,"Setup attack landed early");
+    Tick(s,.004f,hz,&events);Check(enemy.health<80,"Setup contact missing");
+    Check(s.ClassResource()==(ClassId(id)==ClassId::Priest || ClassId(id)==ClassId::Mage?2:1),"Setup reserve gain incorrect");
+    int contacts=0;for(const auto& e:events) if(e.kind==CombatVisualKind::Hit) {++contacts;Check(e.opening && !e.heavy && !e.signature,"Setup effect identity lost");}
+    Check(contacts==1,"Setup contact duplicated");
+    if(ClassId(id)==ClassId::Warrior) Check(enemy.exposed>2.9f,"Rending cut exposure missing");
+    if(ClassId(id)==ClassId::Paladin) Check(s.Barrier()==12,"Oath strike ward missing");
+    if(ClassId(id)==ClassId::Scout || ClassId(id)==ClassId::Engineer) Check(enemy.snared>1.9f,"Setup slow missing");
+    if(ClassId(id)==ClassId::Druid) Check(enemy.rooted>.9f,"Thorn dart root missing");
+    if(ClassId(id)==ClassId::Necromancer) Check(s.Barrier()>0,"Grave touch ward missing");
+    const float after=enemy.health;Tick(s,.1f,hz);Check(enemy.health==after,"Setup contact repeated later");
+    Simulation cancelled;Duel(cancelled,ClassId(id));cancelled.Update(.001f,c);cancelled.StopMovement();Tick(cancelled,1,hz);
+    Check(cancelled.ClassResource()==0 && cancelled.Enemies()[0].health==80 && cancelled.Cooldown(7)>0,"Cancelled setup rewarded/refunded");
+  }
+  for(auto id:{ClassId::Scout,ClassId::Mage,ClassId::Engineer}) {
+    Simulation s;Duel(s,id);Command c;c.ability=7;c.movement={1,0};s.Update(.01f,c);
+    Check(s.OpeningAttack(),"Mobile setup incorrectly requires planted heavy stance");
+    c.ability=-1;s.Update(.01f,c);Check(s.OpeningAttack(),"Moving cancelled mobile setup");
+  }
+  Check(names.size()==unsigned(ClassId::Count),"Setup names must differ by class");
+  Simulation s;const auto stable=s.Save();auto legacy=stable;legacy.erase(legacy.find("OPENING "));legacy.replace(14,legacy.find('\n')-14,"16");
+  Check(s.Load(legacy) && s.Cooldown(7)==0,"Version 16 setup migration");
+  for(const char* v:{"-1","9","nan","inf",""}) {
+    auto bad=stable;const auto at=bad.find("OPENING ");bad.replace(at,bad.find('\n',at)-at,std::string("OPENING ")+v);
+    Check(!s.Load(bad) && s.Save()==stable,"Invalid setup cooldown must reject atomically");
+  }
+}
+int main() {Cadence();Mobility();Preparation();Reserves();Recovery();DefensiveIdentity();BufferedAttacks();Techniques();Signatures();Openings();std::cout<<"PASS: class clocks, retreat collision, casting movement, empowered combat, recovery wards and buffered input.\n";}

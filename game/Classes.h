@@ -145,6 +145,40 @@ inline float ClassRecoveryBarrier(ClassId id) {
 inline SpellInfo ClassSpell(ClassId id,int index) {
  if(!ValidSpell(index)) return spells[0];
  auto result=spells[index];const auto& info=DescribeClass(id);
+ if(index==7) {
+  static constexpr const char* names[]={"Rending cut","Oath strike","Trail shot","Guiding light","Thorn dart","Kindle","Grave touch","Thought spike","Upbeat","Tracer round","Predator claw"};
+  static constexpr const char* effects[]={
+   "90% basic damage, one Rage and three seconds of exposure.",
+   "90% basic damage, one Conviction and a 12-point ward.",
+   "90% basic damage, one Focus and a two-second slow. Can be fired while moving.",
+   "90% basic damage and two Faith on contact.",
+   "90% basic damage, one Bloom and a one-second root.",
+   "90% basic damage and two Embers on contact. Can be cast while moving.",
+   "90% basic damage, one Soul and a ward equal to half the damage dealt.",
+   "90% basic damage, one Insight; interrupts a pending enemy attack.",
+   "90% basic damage, one Tempo; removes two seconds from escape cooldown.",
+   "90% basic damage, one Pressure and a three-second slow. Can be fired while moving.",
+   "90% basic damage, one Fury; heals for half the damage if the target was at half health or less."};
+  const int n=ValidClass(id)?int(id):0;result.name=names[n];result.description=effects[n];result.range=info.range;
+  const float rate=ClassAttackRate(id,false)*.85f;result.contact/=rate;result.recovery/=rate;return result;
+ }
+ if(index==6) {
+  static constexpr const char* names[]={"Execution","Dawn verdict","Deadeye","Sanctuary strike","Wild judgement","Glacial shatter","Soul eclipse","Mind prison","Grand finale","Overload round","Infernal bargain"};
+  static constexpr const char* effects[]={
+   "Consumes full Rage: 110% heavy damage, doubled against enemies at half health or below.",
+   "Consumes full Conviction: 110% heavy damage and a 40-point ward on contact.",
+   "Consumes full Focus: 110% heavy damage, plus 70% against rooted targets; refreshes escape on contact.",
+   "Consumes full Faith: 110% heavy damage, heals 30 and grants a 10-point ward on contact.",
+   "Consumes full Bloom: 110% heavy damage, roots for four seconds and slows for six.",
+   "Consumes full Embers: 110% heavy damage; consumes an existing slow or root for double damage.",
+   "Consumes full Souls: 110% heavy damage and restores 80% of damage dealt.",
+   "Consumes full Insight: 110% heavy damage; interrupts and stuns for 2.5 seconds.",
+   "Consumes full Tempo: 110% heavy damage; refreshes the basic attack and reduces technique cooldown by five seconds.",
+   "Consumes full Pressure: 110% heavy damage; exposes the target for eight seconds.",
+   "Consumes full Fury and up to 12 health: 160% heavy damage; grants a 25-point ward on contact."};
+  const int n=ValidClass(id)?int(id):0;result.name=names[n];result.description=effects[n];result.range=info.range;
+  const float rate=ClassAttackRate(id,true)*.7f;result.contact/=rate;result.recovery/=rate;return result;
+ }
  if(index==5) {
   static constexpr const char* names[]={"Hamstring","Radiant seal","Pinning arrow","Absolution","Briar grasp","Winter lance","Soul harvest","Mind fracture","Dissonance","Armor piercer","Blood rend"};
   static constexpr const char* effects[]={

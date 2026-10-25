@@ -79,6 +79,10 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   pose.upperPitch+=dynamics.motion.pitch*clipWeight;
   pose.upperYaw=animation::Signed(dynamics.bank)*.08f;
   pose.upperYaw+=dynamics.motion.yaw*clipWeight;
+  const float carrying=(1-air)*(1-burst)*(1-swing)*(1-hit)*(1-animation::Unit(dynamics.action.open));
+  if(rpg::PhysicalLauncher(form)) {pose.upperYaw-=.045f*carrying;pose.upperPitch+=.02f*carrying;}
+  else if(rpg::StaffWeapon(form)) {pose.upperYaw+=.025f*carrying;pose.upperPitch-=.018f*carrying;}
+  else if(form==rpg::WeaponForm::Cleaver) {pose.bodyLift-=.012f*carrying;pose.upperPitch+=.025f*carrying;}
   const float departure=animation::Unit(dynamics.departure);
   const float contactWeight=dynamics.feetActive?1.f:departure;
   const auto& sourceFeet=dynamics.feetActive?dynamics.feet:dynamics.departureFeet;

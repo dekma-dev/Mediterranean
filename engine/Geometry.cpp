@@ -228,6 +228,26 @@ Geometry BuildMesh(Mesh mesh) {
   if(mesh>=Mesh::WeaponMace && mesh<=Mesh::WeaponCleaver) return Equipment(mesh);
   if (IsBodyMesh(mesh)) return CharacterBody(unsigned(mesh)-unsigned(Mesh::Body)).mesh;
   if (IsHandMesh(mesh)) return CharacterHand((unsigned(mesh)-unsigned(Mesh::Hand))/2,(unsigned(mesh)-unsigned(Mesh::Hand))%2!=0).mesh;
+  if (mesh==Mesh::CoatPanel) {
+    Geometry g;
+    constexpr unsigned rows=10,columns=8,stride=columns+1,sideVertices=(rows+1)*stride;
+    for(unsigned side=0;side<2;++side) {
+      for(unsigned row=0;row<=rows;++row) for(unsigned column=0;column<=columns;++column) {
+        const float t=float(row)/rows,u=2.f*column/columns-1;
+        const float pleat=.045f*std::cos(u*3*3.14159265f)*t;
+        const XMFLOAT3 p{u*(.36f+.14f*t),.5f-t,.72f+.18f*(1-u*u)+pleat};
+        const bool trim=column==0 || column==columns || row==rows;
+        const float shade=1-.12f*t+.04f*std::cos(u*3*3.14159265f);
+        g.vertices.push_back({p,{},trim?XMFLOAT4{.72f,.57f,.33f,1}:XMFLOAT4{shade,shade,shade,1}});
+      }
+      for(unsigned row=0;row<rows;++row) for(unsigned column=0;column<columns;++column) {
+        const unsigned a=side*sideVertices+row*stride+column,b=a+1,c=b+stride,d=a+stride;
+        if(side==0) {Triangle(g,a,b,c);Triangle(g,a,c,d);}
+        else {Triangle(g,a,c,b);Triangle(g,a,d,c);}
+      }
+    }
+    Normals(g);return g;
+  }
   if (mesh==Mesh::Cloak) {
     Geometry g;
     // One continuous flared sheet, shared smooth normals and a separate back
@@ -363,7 +383,18 @@ Geometry BuildMesh(Mesh mesh) {
   }
   if (mesh==Mesh::Hair || mesh==Mesh::HairLow) {
     auto g=Lathe({{.17f,.46f,.45f},{.24f,.45f,.44f},{.32f,.43f,.42f},{.39f,.39f,.38f},{.46f,.30f,.30f},{.51f,.19f,.19f}},mesh==Mesh::Hair?32:12);
-    for (auto& v : g.vertices) if (v.position.z>0) v.position.z=std::min(v.position.z,.36f);
+    for (auto& v : g.vertices) {
+      auto& p=v.position;
+      const float angle=std::atan2(p.x,p.z),lower=std::clamp((.34f-p.y)/.17f,0.f,1.f);
+      const float back=std::clamp((.18f-p.z)/.50f,0.f,1.f);
+      // A swept, uneven hairline and longer nape replace the straight cap edge.
+      p.y-=lower*(.20f*back+.018f*std::sin(angle*3+.6f));
+      const float lock=std::sin(angle*11+p.y*13);
+      const float relief=.009f*lock*std::clamp((.51f-p.y)/.15f,0.f,1.f);
+      p.x+=std::sin(angle)*relief;p.z+=std::cos(angle)*relief;
+      if(p.z>0) p.z=std::min(p.z,.36f+.012f*std::sin(p.x*12));
+      const float shade=.88f+.10f*(lock*.5f+.5f);v.color={shade,shade,shade,1};
+    }
     Normals(g); return g;
   }
   if (IsHeadMesh(mesh)) {

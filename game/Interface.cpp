@@ -38,6 +38,8 @@ std::string Number(float value) {
  std::ostringstream text; text<<std::setprecision(4)<<value; return text.str();
 }
 std::string SpellEffect(const rpg::Simulation& s,int ability) {
+ if (ability==7) return Number(s.StrikeDamage()*.9f)+" damage / builds reserve";
+ if (ability==6) return Number(s.HeavyDamage()*(s.Class()==rpg::ClassId::Demonologist?1.6f:1.1f))+" base damage / full reserve";
  if (ability==5) return Number(s.HeavyDamage()*(s.Class()==rpg::ClassId::Demonologist?.85f:.65f))+" base damage / tactical contact";
  if (ability==0) return Number(s.StrikeDamage())+" base damage";
  if (ability==1) return Number(s.HeavyDamage())+" base damage"+
@@ -281,7 +283,14 @@ void AbilityArtwork(Canvas& c,Rect rect,int ability,rpg::ClassId id=rpg::ClassId
   else if(id==rpg::ClassId::Scout) PaintedIcon(c,rect,22);
   else Icon(c,rect,Item::Shield,1,id);
  }
- else if(ability==5) ClassSigil(c,rect,id,1);
+ else if(ability>=5) {
+  ClassSigil(c,rect,id,1);
+  if(ability==6) for(float side:{0.f,1.f}) {
+   const float x=rect.x+2+side*(rect.w-4);
+   c.Line(x,rect.y+2,x,rect.y+rect.h-2,1.5f,gold);
+   c.Line(rect.x+2,rect.y+2+side*(rect.h-4),rect.x+rect.w-2,rect.y+2+side*(rect.h-4),1.5f,gold);
+  }
+ }
  else if(ability==4) PaintedIcon(c,rect,11);
  else if(ability==1 && (id==rpg::ClassId::Warrior || id==rpg::ClassId::Paladin || id==rpg::ClassId::Demonologist)) PaintedIcon(c,rect,24);
  else {
@@ -449,9 +458,9 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
   const auto p=c.P(326,112);
   if(renderer.BeginPortrait(p.x,p.y,464*c.layout.scale/renderer.Width(),490*c.layout.scale/renderer.Height(),selection.PreviewZoom())) {
    auto pose=animation::Idle(selection.Time());
-   if(selection.PreviewAction()>=0) {
-    pose.action=animation::SampleAction(hero.Class(),animation::ActionClip::Heavy,selection.PreviewAction());
-    if(!animation::RangedClass(hero.Class())) {pose.attackSeconds=selection.PreviewAction();pose.heavyAttack=true;}
+   pose.action=selection.PreviewPose();
+   if(selection.PreviewAction()>=0 && !animation::RangedClass(hero.Class())) {
+    pose.attackSeconds=selection.PreviewAction();pose.heavyAttack=selection.PreviewAbility()!=0 && selection.PreviewAbility()!=7;
    }
    DrawCharacter(renderer,{0,0},0,selection.Yaw(),{info.color[0],info.color[1],info.color[2],1},0,0,
      CharacterOutfit::From(hero.Items(),hero.Class(),hero.Look()),pose);
@@ -460,6 +469,7 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  } else c.Center(326,353,464,"Character unavailable",22,muted);
  c.Center(326,565,464,roster && !saved?"An unclaimed calling":hero.Nickname(),22,ink);
  c.Center(438,613,144,"Rotate character",13,muted);
+ if(selection.PreviewAbility()>=0) c.Center(326,593,464,hero.Spell(selection.PreviewAbility()).name,13,gold);
  const auto button=[&](C control,const char* label) {
   const auto a=CharacterSelection::Bounds(control);
   const bool enabled=selection.Enabled(control),focused=selection.Focus()==control,hover=selection.Hover()==control;
@@ -473,7 +483,7 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  };
  button(C::Left,"<");button(C::Right,">");
  button(C::Closeup,selection.Closeup()?"Full figure":"Face close-up");
- button(C::Pose,"Class action");button(C::ResetView,"Reset view");
+ button(C::Pose,"Try next art");button(C::ResetView,"Reset view");
  if(!roster) {
   for(int step=0;step<2;++step) {
    const Rect tab{330+232.f*step,104,224,30};
@@ -504,13 +514,14 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
   if(!customize) {
    c.Wrap(842,240,350,std::string(hero.CombatStyleInfo().resource)+" / "+hero.CombatStyleInfo().payoff,14,ink,3);
    c.Text(842,292,"STARTING ARTS",11,gold);
-   for(int i=0;i<4;++i) {
-    const Rect r{842+180.f*(i%2),313+54.f*(i/2),170,47};
-    c.Frame(r,dark,border);AbilityArtwork(c,{r.x+5,r.y+6,34,34},i,hero.Class());
-    c.Wrap(r.x+46,r.y+8,118,hero.Spell(i).name,13,ink,2);
+   for(int i=0;i<7;++i) {
+    const int ability=i>=4?i+1:i;
+    const Rect r{842+180.f*(i%2),313+33.f*(i/2),170,31};
+    c.Frame(r,dark,border);AbilityArtwork(c,{r.x+5,r.y+4,23,23},ability,hero.Class());
+    c.Wrap(r.x+34,r.y+3,131,hero.Spell(ability).name,11,ink,2);
    }
-   c.Text(842,429,"TALENT PATHS  /  N IN GAME",11,gold);
-   c.Wrap(842,451,350,std::string(info.branches[0])+"  /  "+info.branches[1]+"  /  "+info.branches[2],14,ink,2);
+   c.Text(842,447,"TALENT PATHS  /  N IN GAME",11,gold);
+   c.Wrap(842,465,350,std::string(info.branches[0])+"  /  "+info.branches[1]+"  /  "+info.branches[2],14,ink,2);
    c.Text(842,490,"18 talents / 3 paths / 5 earned choices",12,gold);
    c.Text(842,510,"Health "+std::to_string(int(hero.MaxHealth()))+"  /  Range "+Number(info.range)+" m",12,muted);
    button(C::Next,selection.ClassSlot(int(selection.SelectedClass())).status==Status::New?"Appearance & name":"Class slot occupied");
@@ -1068,15 +1079,15 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     return;
    }
    c.Text(148,136,"SPELLBOOK / inspect or drag an ability to the action bar",11,muted);
-   for(int card=0;card<5;++card) {
-    const int i=card==4?5:card;
-    const Rect spellSlot{148+card*138.f,157,132,52};
+   for(int card=0;card<7;++card) {
+    const int i=card>=4?card+1:card;
+    const Rect spellSlot{148+(card%4)*173.f,151+(card/4)*30.f,167,28};
     c.Frame(spellSlot,selectedSpell==i?Color{.12f,.23f,.20f,1}:dark,selectedSpell==i?gold:border);
-    AbilityArtwork(c,{spellSlot.x+6,spellSlot.y+6,39,39},i,s.Class());
-    c.FitText(spellSlot.x+50,spellSlot.y+10,76,s.Spell(i).name,12,ink);
+    AbilityArtwork(c,{spellSlot.x+3,spellSlot.y+3,21,21},i,s.Class());
+    c.FitText(spellSlot.x+29,spellSlot.y+1,132,s.Spell(i).name,12,ink);
     std::string bindings;
     for(int binding=0;binding<10;++binding) if(HotbarSpell(binding,s.Class())==i) {if(!bindings.empty()) bindings+="/";bindings+=binding==9?"0":std::to_string(binding+1);}
-    c.FitText(spellSlot.x+50,spellSlot.y+30,76,(bindings.empty()?"Unbound":"Key "+bindings)+" / "+Number(s.AbilityCooldown(i))+"s",11,muted);
+    c.FitText(spellSlot.x+29,spellSlot.y+14,132,(bindings.empty()?"Unbound":"Key "+bindings)+" / "+Number(s.AbilityCooldown(i))+"s",10,muted);
     regions_.push_back({spellSlot,{Action::SelectSpell,i},true});
    }
    const auto& branches=s.ClassInfo().branches;
@@ -1127,7 +1138,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    } else if (rpg::ValidSpell(selectedSpell)) {
     const auto& spell=s.Spell(selectedSpell);
     AbilityArtwork(c,{874,166,48,48},selectedSpell,s.Class());
-    c.Text(937,175,selectedSpell==5?"CLASS TECHNIQUE":"FOUNDATION SPELL",13,gold);
+    c.Text(937,175,selectedSpell==7?"SETUP SPELL":selectedSpell==6?"SIGNATURE SPELL":selectedSpell==5?"CLASS TECHNIQUE":"FOUNDATION SPELL",13,gold);
     c.Text(937,198,"Drag the card to bind / level 1",11,muted);
     c.Text(874,231,spell.name,22,ink);
     c.Wrap(874,264,258,SpellEffect(s,selectedSpell),14,gold,2);
@@ -1135,7 +1146,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
       " basic hits fill the reserve. "+style.payoff:spell.description,13,muted,5);
     c.Text(874,413,"Cooldown "+Number(s.AbilityCooldown(selectedSpell))+"s / "+
       (spell.range>0?Number(spell.range)+" m":"self"),13,ink);
-    c.Text(874,435,(selectedSpell<2 || selectedSpell==5)?"Contact "+Number(spell.contact)+"s / recovery "+Number(spell.recovery)+"s":
+    c.Text(874,435,(selectedSpell<2 || selectedSpell>=5)?"Contact "+Number(spell.contact)+"s / recovery "+Number(spell.recovery)+"s":
       selectedSpell==2?Number(s.RetreatMobility()?style.retreatDistance:3.5f)+" m travel / "+Number(s.MobilityDuration())+"s burst":
       (spell.contact>0?Number(spell.contact)+"s stationary preparation":"Instant defense"),12,muted);
     c.Text(874,457,selectedSpell==1 && style.steadyHeavy?"Stand still until release":spell.targeting,12,muted);

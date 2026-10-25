@@ -64,7 +64,7 @@ public:
     std::swap(hotbars_[int(id)][from],hotbars_[int(id)][to]);
   }
   void AssignHotbar(int spell,int to,rpg::ClassId id) {
-    if(spell<0 || spell>5 || to<0 || to>=10 || !rpg::ValidClass(id)) return;
+    if(spell<0 || spell>7 || to<0 || to>=10 || !rpg::ValidClass(id)) return;
     hotbars_[int(id)][to]=spell;
   }
   // Central panels share one window; only the Esc menu captures movement.
@@ -93,7 +93,7 @@ public:
 private:
   std::array<std::array<int,10>,int(rpg::ClassId::Count)> hotbars_=[] {
     std::array<std::array<int,10>,int(rpg::ClassId::Count)> bars{};
-    for(auto& bar:bars) bar={0,1,2,3,4,5,-1,-1,-1,-1}; return bars;
+    for(auto& bar:bars) bar={0,1,2,3,4,5,6,7,-1,-1}; return bars;
   }();
   rpg::ClassId renderedClass_=rpg::ClassId::Warrior;
   int dragSpell_=-1,dragHotbar_=-1;
