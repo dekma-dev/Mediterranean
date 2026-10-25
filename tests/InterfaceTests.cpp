@@ -758,6 +758,16 @@ int main() {
     Require(std::abs(screen.pendingWaypoint.x)<.001f && std::abs(screen.pendingWaypoint.z)<.001f,"Waypoint coordinates must match the world map.");
     screen.hasWaypoint=true; screen.waypoint={0,0}; click(160,366);
     Require(!simulation.CanStand(screen.pendingWaypoint) && screen.waypoint.x==0 && screen.waypoint.z==0,"Invalid map candidate must preserve the existing waypoint.");
+    const auto beforeSurvey=simulation.Save();
+    for(bool blocked:{false,true}) {
+      screen.Pointer(layout.x+(blocked?160.f:477.5f)*layout.scale,layout.y+366*layout.scale,
+        float(size.first),float(size.second),false,false);
+      renderer.BeginFrame();screen.Render(renderer,simulation,0,false);
+      Require(renderer.Capture(std::wstring(blocked?L"atlas-blocked-":L"atlas-survey-")+std::to_wstring(size.first)+L".png") &&
+        renderer.EndFrame(false),"Atlas survey capture");
+      Require(screen.hasWaypoint && screen.waypoint.x==0 && screen.waypoint.z==0 && simulation.Save()==beforeSurvey,
+        "Survey hover must preserve the waypoint and gameplay state");
+    }
     screen.Pointer(layout.x+477.5f*layout.scale,layout.y+366*layout.scale,float(size.first),float(size.second),false,true);
     Require(!screen.hasWaypoint,"Right-clicking the atlas must clear a waypoint.");
 
@@ -983,6 +993,10 @@ int main() {
     Require(simulation.Items().Bag()[0].count==3 && simulation.Items().Bag()[second].count==1,"Selling one leaves the other potion stack intact.");
     const auto reclaim=click(613,469);
     Require(reclaim.action==ui::Action::Buyback && reclaim.value==int(rpg::Item::Potion),"Scaled buyback shelf must route to the correct item.");
+    const auto beforeBuybackHover=simulation.Save();
+    renderer.BeginFrame();screen.Render(renderer,simulation,0,false);
+    Require(renderer.Capture(L"merchant-buyback-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),"Buyback comparison tooltip capture");
+    Require(simulation.Save()==beforeBuybackHover,"Buyback tooltip must not reclaim or charge for an item");
     command={}; command.trade={rpg::TradeAction::Buyback,rpg::Item(reclaim.value)}; simulation.Update(.01f,command); render();
     Require(simulation.Potions()==5 && simulation.BuybackCount(rpg::Item::Potion)==0 && click(613,469).action==ui::Action::None,
       "Reclaimed items must disappear from the buyback shelf without leaving a clickable stale entry.");
@@ -1168,6 +1182,39 @@ int main() {
     clickAt(598,483);Require(std::abs(game.EffectsVolume()-.5f)<.001f,"Effects midpoint must reach the game mixer level");
     clickAt(508,483);Require(game.EffectsVolume()==0,"Effects mute mark must reach the game mixer level");
     clickAt(767,473);Require(std::abs(game.EffectsVolume()-.1f)<.001f,"Increment button must unmute effects after meter use");
+  }
+  for(const auto size:{std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
+    Require(renderer.Resize(size.first,size.second),"Character stats resize");
+    rpg::Simulation hero;ui::Interface sheet;sheet.Show(ui::Panel::Character);
+    const auto saved=hero.Save();const ui::Layout layout(float(size.first),float(size.second));
+    renderer.BeginFrame();sheet.Render(renderer,hero,0,false);Require(renderer.EndFrame(false),"Character stats layout");
+    const std::pair<float,float> points[]={{370,190},{370,280},{335,350},{400,350},{370,440}};
+    int stat=0;
+    for(const auto point:points) {
+      const auto event=sheet.Pointer(layout.x+point.first*layout.scale,layout.y+point.second*layout.scale,
+        float(size.first),float(size.second),true,false);
+      Require(event.action==ui::Action::None,"Inspecting a stat must not issue a gameplay command");
+      renderer.BeginFrame();sheet.Render(renderer,hero,0,false);
+      Require(renderer.Capture(L"character-stat-"+std::to_wstring(stat++)+L"-"+std::to_wstring(size.first)+L".png") &&
+        renderer.EndFrame(false),"Character stat tooltip capture");
+      Require(hero.Save()==saved,"Character stat tooltip changed gameplay");
+    }
+    const auto build=sheet.Pointer(layout.x+370*layout.scale,layout.y+557*layout.scale,
+      float(size.first),float(size.second),true,false);
+    Require(build.action==ui::Action::Build,"Character sheet talent shortcut must open Build");
+  }
+  for(const auto size:{std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
+    Require(renderer.Resize(size.first,size.second),"Attack bar resize");
+    for(int ability:{0,1,5,7}) {
+      rpg::Simulation fighter;Require(fighter.Load(Fixture("combat-preview.save")),"Attack bar fixture");
+      rpg::Command cast;cast.nextTarget=true;cast.ability=ability;fighter.Update(.01f,cast);
+      Require(fighter.Attacking() && fighter.AttackAbility()==ability,"HUD must retain the exact active ability identity");
+      const auto before=fighter.Save();ui::Interface hud;
+      renderer.BeginFrame();hud.Render(renderer,fighter,0,false);
+      Require(renderer.Capture(L"attack-bar-"+std::to_wstring(ability)+L"-"+std::to_wstring(size.first)+L".png") &&
+        renderer.EndFrame(false),"Attack bar capture");
+      Require(fighter.Save()==before,"Attack bar rendering must not advance or cast an attack");
+    }
   }
   const auto loadingRoot=std::filesystem::current_path()/"loading-check";
   std::filesystem::create_directories(loadingRoot);

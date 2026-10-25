@@ -142,6 +142,7 @@ public:
   float RecoveryCastDuration() const { return ClassRecoveryCast(class_)/(1+BuildBonus(build_,&TalentInfo::castSpeed)); }
   float RecoveryProgress() const { return CastingRecovery()?1-recoveryCast_/RecoveryCastDuration():0; }
   bool Attacking() const { return attackAbility_>=0; }
+  int AttackAbility() const { return attackAbility_; }
   bool OpeningAttack() const { return attackAbility_==7; }
   bool SignatureAttack() const { return attackAbility_==6; }
   bool TechniqueAttack() const { return attackAbility_==5; }

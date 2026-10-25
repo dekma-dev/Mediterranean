@@ -1,5 +1,15 @@
 # Mediterranean Roadmap
 
+Combat HUD checkpoint (2026-10-25): active spell names now match techniques/signatures/setups instead of falling back to basic/heavy labels. Cast bars show phase, remaining time and contact mark with fitted columns; recovery casts share the layout. Continue R5 live combat readability acceptance (manual check 252).
+
+Quest dialogue UI checkpoint (2026-10-25): reading and objective progress are visible, completed/ready stages have accent cues, and reward/status labels fit their cards. Continue R5 live readability acceptance (manual check 251).
+
+Character sheet UI checkpoint (2026-10-25): live stat explanations clarify base damage versus conditional effects and flat armor reduction. A direct talent shortcut connects equipment inspection to build planning. Scaled capture/input tests cover five stat cards. Continue R5 live readability acceptance (manual check 250).
+
+Atlas UI checkpoint (2026-10-25): map hover now previews area, distance and waypoint validity with an ink reticle; a separate destination card keeps the active marker readable. Three-resolution hover/capture checks preserve existing map interaction. Continue R5 live readability acceptance (manual check 249).
+
+Merchant UI checkpoint (2026-10-25): offer stock/availability is clearer, long labels fit card bounds, and buyback supports full item comparison tooltips with held counts and reclaim status. Three-resolution input/capture coverage and Release/Debug trading checks pass. Continue R5 live readability acceptance (manual check 248).
+
 Menu UI checkpoint (2026-10-25): Escape now has direct segmented volume selection, mute feedback and navigation shortcuts. Scaled pointer and game-level mixer checks cover the new controls. Continue R5 live readability and audible acceptance (manual check 247).
 
 Journal UI checkpoint (2026-10-25): chapters are browsable with parchment selection, explicit locked/completed states, reward history and current-objective navigation. Three-size capture/input coverage is in place. Continue R5 live readability acceptance, including journal check 246.

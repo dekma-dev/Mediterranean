@@ -746,9 +746,10 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  }
  if(s.EvasionSeconds()>0) c.Center(505,565,270,"EVASION / "+Seconds(s.EvasionSeconds())+"s",12,classAccent);
  if(s.CastingRecovery()) {
-   c.Frame({505,588,270,23},dark,gold);
-   c.Gradient({508,591,264*s.RecoveryProgress(),17},{.55f,.64f,.35f,1},{.2f,.32f,.18f,1});
-   c.Center(508,591,264,std::string(s.Spell(3).name)+" / "+Seconds(s.RecoveryCastDuration()*(1-s.RecoveryProgress()))+"s",12,ink);
+   c.Frame({440,594,400,20},dark,gold);
+   c.Gradient({443,597,394*s.RecoveryProgress(),14},{.55f,.64f,.35f,1},{.2f,.32f,.18f,1});
+   c.FitText(450,597,232,s.Spell(3).name,12,ink);
+   c.FitText(688,597,144,"Casting / "+Seconds(s.RecoveryCastDuration()*(1-s.RecoveryProgress()))+"s",11,ink);
  }
  // A second row contains real navigation tools, leaving the primary bindings intact.
  if (panel==Panel::None) {
@@ -764,9 +765,15 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    const float contact=combat::Contact(s.HeavyAttack());
    const char* phase=s.AttackSeconds()<combat::StrokeStart(s.HeavyAttack())?"Wind-up":
      s.AttackSeconds()<contact?(s.ClassInfo().range>3?"Release":"Swing"):"Recovery";
-   c.Frame({505,588,270,23},{.035f,.065f,.065f,.97f});
-   c.Gradient({508,591,264*s.AttackProgress(),17},{.27f,.48f,.49f,1},{.10f,.22f,.26f,1});
-   c.Center(508,591,264,std::string(s.Spell(s.HeavyAttack()?1:0).name)+" / "+phase,12);
+   const float duration=combat::Duration(s.HeavyAttack());
+   const float remaining=std::max(0.f,(duration-s.AttackSeconds())/s.AttackRate());
+   c.Frame({440,594,400,20},{.035f,.065f,.065f,.97f});
+   c.Gradient({443,597,394*std::clamp(s.AttackProgress(),0.f,1.f),14},
+     s.AttackSeconds()<contact?Color{.27f,.48f,.49f,1}:Color{.40f,.34f,.20f,1},{.10f,.17f,.16f,1});
+   c.FitText(450,597,232,s.Spell(s.AttackAbility()).name,12,ink);
+   c.FitText(688,597,144,std::string(phase)+" / "+Seconds(remaining)+"s",11,ink);
+   const float releaseX=443+394*contact/duration;
+   c.Line(releaseX,594,releaseX,597,1.5f,gold);
   }
  }
  if (s.TalentPoints()>0) {
@@ -844,6 +851,13 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   const auto potions=std::to_string(s.Potions()); c.Text(422-c.Width(potions,14),527,potions,14,ink);
   int wornCount=0; for(int i=0;i<rpg::Inventory::gearCount;++i) wornCount+=s.Items().Worn(rpg::GearSlot(i))!=Item::None;
   c.Center(310,572,120,std::to_string(wornCount)+" / "+std::to_string(rpg::Inventory::gearCount)+" slots equipped",10,muted);
+  button({314,546,112,22},"Talents  /  N",Action::Build);
+  const Rect statCards[]={{310,160,120,66},{312,260,116,49},{312,314,56,80},{372,314,56,80},{310,407,120,73}};
+  for(int i=0;i<5;++i) {
+   const auto rect=statCards[i];
+   if(rect.Contains(mouseX_,mouseY_)) c.Line(rect.x+1,rect.y+4,rect.x+1,rect.y+rect.h-4,1,gold);
+   regions_.push_back({rect,{Action::InspectStat,i},false});
+  }
  }
  if (inventoryOpen) {
   blockWindow({994,196,276,452}); c.Banner({1023,186,218,31},"Bag",19); close({1239,201,24,24},Panel::Inventory);
@@ -911,13 +925,18 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    const auto& offer=rpg::shopOffers[i]; const auto info=s.ItemDefinition(offer.item); const float y=196+i*70.f;
    c.Frame({487,y,471,66},{.065f,.11f,.06f,1}); c.Frame({496,y+10,43,46},{.11f,.20f,.14f,1},gold);
    Icon(c,{500,y+14,35,38},offer.item,1,s.Class());
-   c.Text(550,y+6,info.name,16,ink);
-   c.Text(550,y+28,"Stock "+std::to_string(s.ShopStock(i))+" / "+std::to_string(offer.stock)+"   |   "+info.type,11,muted);
+   c.FitText(550,y+6,292,info.name,16,ink);
+   c.FitText(550,y+28,292,"Stock "+std::to_string(s.ShopStock(i))+" / "+std::to_string(offer.stock)+"   |   "+info.type,11,muted);
    const bool available=std::string(s.PurchaseStatus(i))=="Available";
-   c.Text(550,y+45,available?(offer.item==Item::Potion?"Restores 40 health.":"Protection +"+std::to_string(int(info.armor))+" while equipped."):s.PurchaseStatus(i),12,available?ink:gold);
+   c.FitText(550,y+45,292,available?(offer.item==Item::Potion?"Restores up to 40 health.":"Protection +"+std::to_string(int(info.armor))+" while equipped."):s.PurchaseStatus(i),12,available?ink:gold);
    button({854,y+12,92,30},"Buy "+std::to_string(offer.price)+" g",Action::Purchase,i,available);
+   c.RectFill({854,y+49,92,3},{.18f,.14f,.08f,1});
+   c.RectFill({854,y+49,92*std::clamp(s.ShopStock(i)/float(std::max(1,offer.stock)),0.f,1.f),3},gold);
+   if(!available) c.Line(489,y+8,489,y+58,2,{.69f,.34f,.18f,1});
   }
-  c.Text(490,418,"BUYBACK",13,gold); c.Text(590,418,"Click an item to reclaim one at its sale price",12,muted);
+  int heldItems=0;for(int i=0;i<int(Item::Count);++i) heldItems+=s.BuybackCount(Item(i));
+  c.Text(490,418,"BUYBACK",13,gold);
+  c.FitText(590,418,368,heldItems?std::to_string(heldItems)+" held / hover to compare, click to reclaim":"Nothing sold yet / sold items appear below",12,muted);
   for (int i=0;i<int(Item::Count);++i) {
    const auto item=Item(i); const int count=s.BuybackCount(item);
    const Rect rect{490+(i%9)*51.f,447+(i/9)*66.f,43,45};
@@ -929,7 +948,8 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Center(rect.x,rect.y+50,rect.w,std::to_string(rpg::SellPrice(item))+" g",12,gold);
    regions_.push_back({rect,{Action::Buyback,i},available});
   }
-  c.Wrap(490,582,465,merchantNotice.empty()?"Unequip gear before selling. Buyback is saved until reclaimed or R resets the expedition.":merchantNotice,12,ink,2);
+  c.Gradient({487,578,471,39},{.31f,.22f,.10f,.20f},{.05f,.04f,.025f,.12f});
+  c.Wrap(496,583,451,merchantNotice.empty()?"Unequip gear before selling. Buyback is saved until reclaimed or R resets the expedition.":merchantNotice,12,ink,2);
   c.Text(490,624,"E or X closes trade. C opens your equipment.",12,muted);
  } else if (panel==Panel::Quest) {
   // Conversations block pointer input within their window, while movement stays live.
@@ -944,6 +964,9 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Text(40,164,quest.title,titleSize,ink);
   const char* heading=stage==rpg::QuestStage::Offer?"QUEST OFFER":stage==rpg::QuestStage::Progress?"IN PROGRESS":
     stage==rpg::QuestStage::TurnIn?"READY TO COMPLETE":"QUEST COMPLETED";
+  const Color questAccent=stage==rpg::QuestStage::TurnIn || stage==rpg::QuestStage::Complete?
+    Color{.57f,.80f,.38f,1}:gold;
+  c.Line(34,153,448,153,1,questAccent);
   c.Parchment({32,195,416,174});
   const Color manuscript{.22f,.145f,.075f,1};
   c.Text(40,202,heading,11,manuscript);
@@ -957,7 +980,9 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    button({40,374,73,25},"Previous",Action::QuestPage,-1,questPage>0);
    c.Center(130,380,220,"Page "+std::to_string(questPage+1)+" / "+std::to_string(pages),12,muted);
    button({367,374,73,25},"Next",Action::QuestPage,1,questPage+1<pages);
-  }
+  } else c.Center(130,380,220,"Complete passage / 1 page",12,muted);
+  c.RectFill({130,398,220,2},{.19f,.15f,.09f,1});
+  c.RectFill({130,398,220*(questPage+1)/float(pages),2},gold);
   c.Frame({34,408,414,66},{.045f,.085f,.07f,1});
   const int required=id==rpg::QuestId::Patrol?1:3;
   const bool survey=id==rpg::QuestId::Watch9;
@@ -966,21 +991,23 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Text(46,416,std::string("OBJECTIVES  /  ")+(survey?"Bearings ":"Enemies ")+std::to_string(progress)+" / "+std::to_string(required)+
     (id==rpg::QuestId::Anchor && s.AnchorState()>=rpg::AnchorQuest::Return?"  /  Anchor stable":""),12,gold);
   c.Wrap(46,436,390,quest.objective,14,ink,2);
+  c.RectFill({46,471,390,2},{.18f,.16f,.10f,1});
+  c.RectFill({46,471,390*std::clamp(progress/float(required),0.f,1.f),2},questAccent);
   c.Frame({34,484,414,70},{.07f,.12f,.08f,1},gold);
   if (quest.item!=rpg::Item::None && rpg::ValidItem(quest.item)) {
    Icon(c,{46,496,42,45},quest.item,1,s.Class());
-   c.Text(100,492,std::string(stage==rpg::QuestStage::Complete?"RECEIVED  /  ":"REWARD  /  ")+
+   c.FitText(100,492,334,std::string(stage==rpg::QuestStage::Complete?"RECEIVED  /  ":"REWARD  /  ")+
      std::to_string(quest.gold)+" gold  /  "+std::to_string(quest.experience)+" XP",13,gold);
-   c.Text(100,512,s.ItemDefinition(quest.item).name,16,ink);
+   c.FitText(100,512,334,s.ItemDefinition(quest.item).name,16,ink);
    const auto& item=Describe(quest.item);
    const auto stats=item.slot==rpg::GearSlot::Weapon?
      "Base strike "+std::to_string(int(item.strike))+" / Heavy "+std::to_string(int(item.heavy))+"  -  In your bag":
      "Protection "+std::to_string(int(item.armor))+"  -  Equipped on completion";
-   c.Text(100,534,stats,11,muted);
+   c.FitText(100,534,334,stats,11,muted);
   } else { c.Text(48,499,"FIELD EXPERIENCE",13,gold); c.Text(48,523,std::to_string(quest.experience)+" XP / class progression",18,ink); }
   const auto action=s.QuestPrimaryAction();
   const std::string status=s.QuestConfirmStatus();
-  c.Wrap(40,561,400,status=="READY"?"Read the assignment and rewards before confirming.":status,13,muted,1);
+  c.FitText(40,561,400,status=="READY"?"Read the assignment and rewards before confirming.":status,13,muted);
   if (action!=rpg::QuestAction::None) {
    button({38,590,160,34},stage==rpg::QuestStage::Offer?"Decline":"Later",Action::Close,int(Panel::Quest));
    button({242,590,202,34},stage==rpg::QuestStage::Offer?"Accept quest":"Complete quest",
@@ -1237,13 +1264,35 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   if (map) {
    const Rect mapRect{155,126,645,480}; c.Frame({151,122,653,488}); Atlas(c,s,mapRect,false,hasWaypoint,waypoint);
    regions_.push_back({mapRect,{Action::PlaceWaypoint},true});
+   const bool surveying=mapRect.Contains(mouseX_,mouseY_);
+   const float depth=rpg::WorldMap::surveyDepth,span=depth*mapRect.w/mapRect.h;
+   const rpg::Vec2 surveyed{(mouseX_-mapRect.x)/mapRect.w*span-span*.5f,
+     (.5f-(mouseY_-mapRect.y)/mapRect.h)*depth};
+   const bool accessible=surveying && s.CanStand(surveyed);
+   const Color surveyInk=accessible?Color{.22f,.31f,.18f,1}:Color{.51f,.19f,.10f,1};
+   c.Frame({151,82,653,32},{.07f,.06f,.04f,1});
+   if(surveying) {
+    c.FitText(164,90,626,std::string(s.Map().AreaName(surveyed))+" / "+
+      std::to_string(int(std::ceil(std::hypot(s.Player().x-surveyed.x,s.Player().z-surveyed.z))))+
+      " m away / "+(accessible?"Click to mark":"Cannot place a waypoint here"),13,accessible?ink:Color{1,.65f,.43f,1});
+    // Keep the survey reticle inside the paper even at the sheet edges.
+    const float px=std::clamp(mouseX_,mapRect.x+8,mapRect.x+mapRect.w-8);
+    const float py=std::clamp(mouseY_,mapRect.y+8,mapRect.y+mapRect.h-8);
+    c.Line(px-6,py,px-2,py,1,surveyInk);c.Line(px+2,py,px+6,py,1,surveyInk);
+    c.Line(px,py-6,px,py-2,1,surveyInk);c.Line(px,py+2,px,py+6,1,surveyInk);
+   } else c.FitText(164,90,626,"Survey the parchment to inspect an area and place a waypoint.",13,muted);
    c.Text(833,134,"DAWNWATCH ISLAND",18,gold); c.Text(833,166,"Hand-drawn island survey",14,muted);
    c.Wrap(833,207,286,s.Objective(),17,ink,4);
    const std::pair<Color,const char*> legend[]={{{.68f,.87f,1,1},"Your position and facing"},{gold,"Keeper / quest objective"},{{.72f,.20f,.15f,1},"Living raider"},{{.59f,.38f,.84f,1},"Astral anchor"},{{.35f,.72f,.76f,1},"Sparring post"},{{.95f,.57f,.22f,1},"Quartermaster"}};
    for (int i=0;i<6;++i) { c.Oval(842,320+i*27.f,4,4,legend[i].first); c.Text(858,309+i*27.f,legend[i].second,15,muted); }
-   c.Wrap(833,486,286,"Click traversable ground to place a waypoint. Right-click to clear it.",15,ink,3);
+   c.Frame({827,478,298,75},{.07f,.06f,.04f,1});
+   c.Text(840,489,hasWaypoint?"MARKED DESTINATION":"YOUR BEARINGS",11,gold);
+   const auto bearing=hasWaypoint?waypoint:s.Player();
+   c.FitText(840,509,272,s.Map().AreaName(bearing),16,ink);
+   c.FitText(840,533,272,hasWaypoint?std::to_string(int(std::ceil(std::hypot(s.Player().x-waypoint.x,s.Player().z-waypoint.z))))+
+     " m straight-line distance":"Click ground to mark / right-click to clear",11,muted);
    if (hasWaypoint) button({833,562,286,39},"Clear waypoint",Action::ClearWaypoint);
-   c.Text(156,619,"Roads and markers follow the playable map. Island: 58 x 62 m.",13,muted);
+   c.Text(156,619,"Markers guide you; they do not move your character automatically.",13,muted);
   } else {
    const int current=std::clamp(int(s.CurrentQuest())-int(rpg::QuestId::Patrol),0,rpg::frontierQuestCount+1);
    const int selected=journalSelection>=0 && journalSelection<rpg::frontierQuestCount+2?journalSelection:current;
@@ -1286,8 +1335,26 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  }
  // Reverse hit order matches pointer dispatch: covered cells never leak tooltips.
  for (auto it=regions_.rbegin();!dragging_ && it!=regions_.rend();++it) if (it->rect.Contains(mouseX_,mouseY_)) {
-  if (it->event.action==Action::SelectItem || it->event.action==Action::Purchase) {
+  if(it->event.action==Action::InspectStat) {
+   const int stat=it->event.value;
+   const char* titles[]={"Vitality","Armor protection","Basic attack","Heavy attack","Character progression"};
+   const std::string values[]={Number(s.Health())+" / "+Number(s.MaxHealth())+" health",
+     Number(s.DamageReduction())+" damage reduction",Number(s.StrikeDamage())+" base damage",
+     Number(s.HeavyDamage())+" base damage","Level "+std::to_string(s.Level())+" / "+std::to_string(rpg::levelCap)};
+   const std::string details[]={"Maximum health includes your class and learned talents. Learning a health talent does not heal you.",
+     "Flat damage reduction from your class, worn armor and learned talents. This is not a percentage.",
+     "Your weapon, class and learned talents contribute to this value. Conditional combat effects can change a hit's final damage.",
+     "Your weapon, class and learned talents contribute to this value. Class reserve and conditional combat effects can change the final hit.",
+     s.Level()==rpg::levelCap?"You have reached the current level cap. Open Talents to review or plan your build.":
+       std::to_string(s.NextLevelExperience()-s.Experience())+" XP remaining to the next level. Open Talents to review your available upgrades."};
+   const float y=std::clamp(it->rect.y,120.f,470.f);
+   c.Window({458,y,306,204});c.FitText(474,y+15,274,titles[stat],19,gold);
+   c.Line(474,y+45,748,y+45,1,border);c.FitText(474,y+58,274,values[stat],16,ink);
+   c.Wrap(474,y+91,274,details[stat],13,muted,5);
+   c.Text(474,y+178,"Live character values / read-only",11,gold);
+  } else if (it->event.action==Action::SelectItem || it->event.action==Action::Purchase || it->event.action==Action::Buyback) {
    const bool purchase=it->event.action==Action::Purchase;
+   const bool buyback=it->event.action==Action::Buyback;
    const Item item=purchase?rpg::shopOffers[it->event.value].item:static_cast<Item>(it->event.value);
    if (!rpg::ValidItem(item)) break;
    const auto info=s.ItemDefinition(item); const auto summary=SummarizeItem(s,item);
@@ -1301,17 +1368,14 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Wrap(x+14,y+99,281,summary.comparison,13,comparison,2);
    c.Wrap(x+14,y+142,281,info.description,12,muted,3);
    const std::string quantity=it->bag>=0?"Stack "+std::to_string(s.Items().Bag()[it->bag].count):"Owned "+std::to_string(s.Items().Count(item));
-   c.Text(x+14,y+198,purchase?"Price "+std::to_string(rpg::shopOffers[it->event.value].price)+" gold":quantity+"   |   Sell "+std::to_string(rpg::SellPrice(item))+" gold each",12,gold);
+   c.FitText(x+14,y+198,281,purchase?"Price "+std::to_string(rpg::shopOffers[it->event.value].price)+" gold":buyback?
+     "Reclaim "+std::to_string(rpg::SellPrice(item))+" gold / Held "+std::to_string(s.BuybackCount(item)):
+     quantity+"   |   Sell "+std::to_string(rpg::SellPrice(item))+" gold each",12,gold);
    const std::string action=purchase?(it->enabled?"Click Buy to purchase one":s.PurchaseStatus(it->event.value)):
+     buyback?(it->enabled?"Click to reclaim one into your bag":s.TradeStatus({rpg::TradeAction::Buyback,item})):
      s.Health()<=0?"Recover before using equipment/items":item==Item::Potion?(s.Health()>=s.MaxHealth()?"Health is full":s.PotionCooldown()>0?"Potion is cooling down":"Right-click: drink  /  Drag: move"):
      Equipped(s,item)?"Right-click: remove  /  Drag: move":"Right-click: equip  /  Drag: move";
    c.FitText(x+14,y+221,281,action,12,ink);
-  } else if (it->event.action==Action::Buyback) {
-   const auto item=Item(it->event.value); const float x=std::clamp(mouseX_-140,475.f,659.f);
-   c.Window({x,312,309,116}); c.FitText(x+14,322,281,s.ItemDefinition(item).name,17,gold);
-   c.Text(x+14,351,"Held: "+std::to_string(s.BuybackCount(item))+"  /  "+std::to_string(rpg::SellPrice(item))+" gold each",13,ink);
-   const auto status=s.TradeStatus({rpg::TradeAction::Buyback,item});
-   c.Text(x+14,390,std::string(status)=="Available"?"Click to reclaim one into your bag":status,12,muted);
   } else if (panel!=Panel::Merchant && it->event.action==Action::Hotbar && hoverTime_>.35f && !dragging_) {
    const int ability=HotbarSpell(it->event.value,s.Class());if(ability<0) break; const bool potion=ability==4;
    const std::string detail=potion?"Restores up to 40 health.":SpellEffect(s,ability);
