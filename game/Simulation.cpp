@@ -859,16 +859,19 @@ void Simulation::Update(float seconds,const Command& command) {
 void Simulation::SeparateEnemies(float dt) {
   for (std::size_t i=0;i<enemies_.size();++i) for (std::size_t j=i+1;j<enemies_.size();++j) {
     auto& a=enemies_[i]; auto& b=enemies_[j];
-    if (a.health<=0 || b.health<=0 || a.windup>0 || b.windup>0) continue;
+    if (a.health<=0 || b.health<=0) continue;
+    const bool moveA=a.windup<=0 && a.rooted<=0 && a.stunned<=0;
+    const bool moveB=b.windup<=0 && b.rooted<=0 && b.stunned<=0;
+    if(!moveA && !moveB) continue;
     auto delta=Difference(a.position,b.position);
     const float distance=Length(delta);
     if (distance>=.9f) continue;
     if (distance<.0001f) delta={1,0};
     else { delta.x/=distance; delta.z/=distance; }
-    const float correction=std::min((.9f-distance)*.5f,1.5f*dt);
+    const float correction=std::min((.9f-distance)/(moveA && moveB?2.f:1.f),1.5f*dt);
     const auto beforeA=a.position,beforeB=b.position;
-    Move(a.position,{delta.x*correction,delta.z*correction},.45f);
-    Move(b.position,{-delta.x*correction,-delta.z*correction},.45f);
+    if(moveA) Move(a.position,{delta.x*correction,delta.z*correction},.45f);
+    if(moveB) Move(b.position,{-delta.x*correction,-delta.z*correction},.45f);
     a.movementDistance+=Length(Difference(a.position,beforeA));
     b.movementDistance+=Length(Difference(b.position,beforeB));
   }
@@ -889,6 +892,54 @@ void Simulation::UpdateEnemy(Enemy& enemy,float dt,float frameTail) {
     dt=tail;
   }
 }
+void Simulation::MoveEnemy(Enemy& enemy,Vec2 displacement) {
+  const float step=Length(displacement);
+  if(step<.000001f) return;
+  // Steer only the moving actor. Committed casts, roots and other actors' poses
+  // must never be displaced by a neighbour's collision response.
+  constexpr float spacing=.9f;
+  const auto clear=[&](Vec2 delta) {
+    const float lengthSquared=delta.x*delta.x+delta.z*delta.z;
+    const auto blocked=[&](const Enemy& other) {
+      if(other.id==enemy.id || other.health<=0) return false;
+      const auto relative=Difference(other.position,enemy.position);
+      const float initial=relative.x*relative.x+relative.z*relative.z;
+      const float t=std::clamp((relative.x*delta.x+relative.z*delta.z)/lengthSquared,0.f,1.f);
+      const float x=relative.x-delta.x*t,z=relative.z-delta.z*t;
+      // Legacy overlapping placements can separate naturally, but cannot
+      // squeeze farther together. Swept tests also reject crossing an actor.
+      return x*x+z*z+1e-7f<std::min(spacing*spacing,initial);
+    };
+    for(const auto& other:enemies_) if(blocked(other)) return false;
+    return !sparring_ || !blocked(trainer_);
+  };
+  const float heading=std::atan2(displacement.x,displacement.z);
+  const float probe=std::max(step,.40f);
+  if(clear({displacement.x/step*probe,displacement.z/step*probe})) {
+    Vec2 candidate=enemy.position;Move(candidate,displacement,.45f);
+    const auto actual=Difference(candidate,enemy.position);
+    if(Length(actual)<.000001f || clear(actual)) {enemy.position=candidate;return;}
+  }
+  const float preferred=(enemy.id&1)?1.f:-1.f;
+  for(float offset:{0.f,preferred*.35f,-preferred*.35f,preferred*.7f,-preferred*.7f,
+                    preferred*1.05f,-preferred*1.05f,preferred*1.5707963f,-preferred*1.5707963f}) {
+    const Vec2 direction{std::sin(heading+offset),std::cos(heading+offset)};
+    const Vec2 ahead{direction.x*probe,direction.z*probe};
+    if(!clear(ahead)) continue;
+    const Vec2 destination{enemy.position.x+ahead.x,enemy.position.z+ahead.z};
+    if(!map_.CanTravel(enemy.position,destination,.45f)) continue;
+    Move(enemy.position,{direction.x*step,direction.z*step},.45f);
+    return;
+  }
+  // A wall may invalidate the look-ahead while the requested short step is
+  // still safe. Preserve the existing world slide only when no actor blocks it.
+  if(clear(displacement)) {
+    Vec2 candidate=enemy.position;Move(candidate,displacement,.45f);
+    const auto actual=Difference(candidate,enemy.position);
+    if(Length(actual)>.000001f && clear(actual)) enemy.position=candidate;
+  }
+}
+
 void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
   if (enemy.health<=0) { enemy.state=EnemyState::Dead; enemy.windup=enemy.movementSpeed=0; return; }
   if (health_<=0) return;
@@ -955,7 +1006,7 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
     if(clear && room>.00001f && travel>0) {
       const auto before=enemy.position;const auto delta=Difference(retreat,before);
       const float step=std::min(travel,room);
-      Move(enemy.position,{delta.x/room*step,delta.z/room*step},.45f);
+      MoveEnemy(enemy,{delta.x/room*step,delta.z/room*step});
       enemy.movementDistance+=Length(Difference(enemy.position,before));
     }
     enemy.path.clear();enemy.waypoint=0;enemy.repathTimer=0;
@@ -1010,7 +1061,7 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
     if (length<.001f) { ++enemy.waypoint; continue; }
     const float step=std::min(length,budget);
     const auto before=enemy.position;
-    Move(enemy.position,{direction.x/length*step,direction.z/length*step},.45f);
+    MoveEnemy(enemy,{direction.x/length*step,direction.z/length*step});
     const float travel=Length(Difference(enemy.position,before));
     enemy.movementDistance+=travel; budget-=step;
     if (travel<step*.5f) { enemy.movementSpeed=0; enemy.repathTimer=0; break; }

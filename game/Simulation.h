@@ -287,6 +287,7 @@ private:
   bool HasLineOfSight(Vec2 from, Vec2 to) const;
   void UpdateEnemy(Enemy& enemy, float dt,float frameTail);
   void AdvanceEnemy(Enemy& enemy,float dt,float frameTail);
+  void MoveEnemy(Enemy& enemy,Vec2 displacement);
   void SeparateEnemies(float dt);
   void Emit(FeedbackKind kind,Vec2 position,int amount = 0);
   void RestoreForLevel(int previousLevel);

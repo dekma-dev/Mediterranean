@@ -24,6 +24,50 @@ bool HasFeedback(const rpg::Simulation& game,rpg::FeedbackKind kind) {
 }
 
 int main() {
+  for(int control=0;control<3;++control) for(bool bothPinned:{false,true}) {
+    rpg::Simulation overlap;Require(overlap.Load(duel),"Overlap recovery fixture");
+    auto& actors=const_cast<std::vector<rpg::Enemy>&>(overlap.Enemies());
+    for(auto& actor:actors) {actor.health=0;actor.state=rpg::EnemyState::Dead;}
+    for(int i=0;i<2;++i) {
+      actors[i].health=80;actors[i].state=rpg::EnemyState::Pursuing;
+      actors[i].position=actors[i].home={-4+i*.3f,6.6f};actors[i].attackCooldown=10;
+      if(i==0 || bothPinned) {
+        if(control==0) actors[i].rooted=10;
+        if(control==1) actors[i].stunned=10;
+        if(control==2) actors[i].windup=10;
+      }
+    }
+    const auto a=actors[0].position,b=actors[1].position;
+    for(int frame=0;frame<10;++frame) overlap.Update(.01f,{});
+    Require(actors[0].position.x==a.x && actors[0].position.z==a.z,"Overlap recovery displaced a locked actor");
+    if(bothPinned) Require(actors[1].position.x==b.x && actors[1].position.z==b.z,"Two locked actors must remain planted");
+    else Require(actors[1].position.x>b.x+.1f,"Free actor must recover overlap beside a locked actor");
+  }
+  for(int hz:{30,60,144,1000}) for(bool corpse:{false,true}) {
+    rpg::Simulation crowd;Require(crowd.Load(duel),"Crowd fixture");
+    auto& actors=const_cast<std::vector<rpg::Enemy>&>(crowd.Enemies());
+    for(auto& actor:actors) {actor.health=0;actor.state=rpg::EnemyState::Dead;}
+    auto& anchor=actors[0];anchor.position=anchor.home={-4,6.8f};
+    anchor.health=corpse?0:80;anchor.state=corpse?rpg::EnemyState::Dead:rpg::EnemyState::Pursuing;
+    anchor.rooted=10;anchor.attackCooldown=10;
+    auto& approaching=actors[1];approaching.position=approaching.home={-4,8.2f};
+    approaching.health=80;approaching.state=rpg::EnemyState::Pursuing;approaching.attackCooldown=10;
+    approaching.facing=3.14159265f;
+    float lateral=0;
+    for(int frame=0;frame<hz*3;++frame) {
+      const auto before=approaching.position;crowd.Update(1.f/hz,{});
+      const float dx=approaching.position.x-anchor.position.x,dz=approaching.position.z-anchor.position.z;
+      if(!corpse) Require(dx*dx+dz*dz>=.9f*.9f-.0001f,"Pursuit crossed a living actor footprint");
+      Require(anchor.position.x==-4 && anchor.position.z==6.8f,"Avoidance pushed a rooted neighbour");
+      Require(crowd.Map().CanTravel(before,approaching.position,.45f),"Avoidance crossed static geometry");
+      const float sx=approaching.position.x-before.x,sz=approaching.position.z-before.z;
+      Require(std::sqrt(sx*sx+sz*sz)<=2.21f/hz,"Avoidance teleported or exceeded movement budget");
+      lateral=std::max(lateral,std::abs(approaching.position.x+4));
+    }
+    const float dx=approaching.position.x+4,dz=approaching.position.z-5.2f;
+    Require(std::sqrt(dx*dx+dz*dz)<1.85f,"Approaching enemy failed to flank and reach melee range");
+    Require(corpse?lateral<.001f:lateral>.7f,"Dead actors must not block; living actors must cause a flank");
+  }
   {
     rpg::Simulation selection;
     auto& enemies=const_cast<std::vector<rpg::Enemy>&>(selection.Enemies());
