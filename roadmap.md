@@ -1,5 +1,15 @@
 # Mediterranean Roadmap
 
+Guardian set checkpoint (2026-10-26): authored chest, independent shoulders and waist plates now replace corresponding procedural pieces. Keep gear-slot ownership during further body adoption; reward chest fallback no longer restores removed Warrior shoulders. Next: body/rig integration and arm-aware articulation for the imported plates, with full-class customization preserved. Current equipment is rigidly attached to the existing torso pose.
+
+Authored player adoption (2026-10-26): Warrior chest geometry now comes from collection03 Dawnwarden, retaining chest removal, class identity and torso motion. Continue bounded exports of the newer authored body and gear, then extend the native skin palette/mesh path for its 26-joint rig. Existing motion GLBs contain animation only; they are not ready-to-render characters. Preserve source hashes and keep class customization/removable equipment throughout adoption.
+
+Entrance UI hierarchy follow-up (2026-10-26): quiet inset rows and consolidated stats now reduce competing gold frames. Selection, focus, pressing and page reveal remain distinct; launcher animation advances using elapsed time. Next visual improvement must address the hero's authored anatomy, clothing and materials rather than continuing to change only interface borders.
+
+Environment/entrance checkpoint (2026-10-26): authored pine shoots, building palette isolation and peeling foundation plaster are integrated; accepted Blender source matches runtime exports. Launcher and creation screens gain quieter bronze emphasis and ambient light without additional art textures. Next large environment step is still navigable terrain height and site composition; UI refinement does not replace the procedural player mesh with production character art. See docs/blender-assets.md and manual checks 283–284.
+
+Localization (2026-10-26): Russian-default/English selection is available in Esc settings and persists across launches. Finish authored translations for quest prose, class descriptions and remaining dynamic messages; audit each panel in both languages and replace compositional phrase fallback with explicit full-message keys where Russian grammar requires it.
+
 Landscape composition follow-up (2026-10-26): rounded wooded ridge silhouettes now replace distant square platforms; grass is clustered and plaster/canvas are more subdued. See docs/environment-art-direction.md and manual check 281. Next substantial step remains playable elevation integrated with collision, navigation, feet/camera and saved positions; current peripheral ridges are decorative. Authored pine branch silhouettes and building texture fidelity still need improvement.
 
 

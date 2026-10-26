@@ -54,14 +54,15 @@ int main() {
       Check(std::abs(v.position.x)<=.501f && std::abs(v.position.z)<=.501f &&
         v.position.y>=-.501f && v.position.y<=.531f,"Helmet must retain its fitted head envelope");
   }
-  std::size_t bytes=0,triangles=0,weaponBytes=0,weaponTriangles=0,armorBytes=0,armorTriangles=0,ridgeBytes=0,ridgeTriangles=0;
+  std::size_t bytes=0,triangles=0,weaponBytes=0,weaponTriangles=0,armorBytes=0,armorTriangles=0,ridgeBytes=0,ridgeTriangles=0,authoredGearBytes=0,authoredGearTriangles=0;
   for (unsigned mesh=0;mesh<static_cast<unsigned>(visual::Mesh::Count);++mesh) {
     const auto g=visual::BuildMesh(static_cast<visual::Mesh>(mesh));
     Check(!g.vertices.empty() && !g.indices.empty() && g.indices.size()%3==0,"Missing or incomplete mesh.");
     // The separately budgeted weighted body is covered by SkinningTests.
     if(!visual::IsBodyMesh(static_cast<visual::Mesh>(mesh)) && !visual::IsHandMesh(static_cast<visual::Mesh>(mesh))) {
       const auto cost=g.vertices.size()*sizeof(visual::Vertex)+g.indices.size()*sizeof(std::uint32_t);
-      if(mesh==unsigned(visual::Mesh::Ridge)) {ridgeBytes+=cost;ridgeTriangles+=g.indices.size()/3;}
+      if(mesh>=unsigned(visual::Mesh::GuardShoulderLeft)) {authoredGearBytes+=cost;authoredGearTriangles+=g.indices.size()/3;}
+      else if(mesh==unsigned(visual::Mesh::Ridge)) {ridgeBytes+=cost;ridgeTriangles+=g.indices.size()/3;}
       else if(mesh>=unsigned(visual::Mesh::GuardCuirass) && mesh<=unsigned(visual::Mesh::GuardCloak)) {armorBytes+=cost;armorTriangles+=g.indices.size()/3;}
       else if(mesh>=unsigned(visual::Mesh::WeaponMace) && mesh<=unsigned(visual::Mesh::WeaponCleaver)) {weaponBytes+=cost;weaponTriangles+=g.indices.size()/3;}
       else {bytes+=cost;triangles+=g.indices.size()/3;}
@@ -85,12 +86,14 @@ int main() {
       }
     }
   }
+  Check(authoredGearBytes<=160*1024 && authoredGearTriangles<=3400,"Authored shoulder/fauld geometry exceeded its dedicated budget");
+  std::cout<<"Authored shoulder/fauld: "<<authoredGearBytes<<" bytes / "<<authoredGearTriangles<<" triangles\n";
   Check(bytes<=640*1024 && triangles<=16000,"Reusable mesh library exceeded its startup geometry budget.");
   Check(ridgeBytes<=20*1024 && ridgeTriangles<=512,"Shared landscape ridge exceeded its dedicated 20 KiB / 512 triangle budget");
   std::cout<<"Landscape ridge: "<<ridgeBytes<<" bytes / "<<ridgeTriangles<<" triangles\n";
   std::cout<<"Guard armor: "<<armorBytes<<" bytes / "<<armorTriangles<<" triangles\n";
   Check(armorBytes<=320*1024 && armorTriangles<=8500,"Guard outfit exceeded its bounded shared geometry budget");
-  for(auto mesh:{visual::Mesh::GuardCuirass,visual::Mesh::GuardPlate}) {
+  for(auto mesh:{visual::Mesh::GuardCuirass,visual::Mesh::GuardPlate,visual::Mesh::GuardShoulderLeft,visual::Mesh::GuardShoulderRight,visual::Mesh::GuardFauld}) {
     const auto high=visual::BuildMesh(mesh),low=visual::BuildMesh(visual::AttachmentMesh(mesh,1));
     Check(low.indices.size()<high.indices.size()/2,"Guard armor must reduce topology at distance");
     for(const auto& v:high.vertices) Check(std::abs(v.position.x)<=.51f && std::abs(v.position.y)<=.51f && std::abs(v.position.z)<=.51f,

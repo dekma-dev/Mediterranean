@@ -1,3 +1,4 @@
+#include "game/Localization.h"
 #include <Windows.h>
 #include <shellapi.h>
 #include <fstream>
@@ -8,6 +9,7 @@
 #include "launcher/LaunchSupport.h"
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
+  localization::Initialize(launch::Directory());
   // Process-local DPI awareness keeps fullscreen and UI pixels crisp. This does
   // not change the monitor resolution, scaling preference or any system setting.
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);

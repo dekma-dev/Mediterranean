@@ -1,5 +1,13 @@
 # Dawnwatch environment direction
 
+## Authored material follow-up (2026-10-26)
+
+Accepted the separately reviewed Blender candidate after checking both source copies against their original hashes. Highland pine uses exposed branches and irregular needle shoots; distant exports thin whole shoots. Weathered building materials remain isolated from actors. Runtime plaster gains height-limited peeling and exposed masonry with derivative-filtered mortar. Native review captures: `build-ninja-release/art-direction-review`.
+
+This is an incremental environment pass: flat walkable ground, sparse settlement composition, coarse foliage and current actor silhouettes still limit resemblance to the reference. It is not a complete realistic environment.
+
+Validation: Release and Visual Studio Debug builds succeeded. AuthoredAssetTests, CharacterSelectionTests, LauncherUiTests, FrontierExpansionTests, ShadowTests, InterfaceTests and GeometryTests passed; final caption/child-window fixes passed the three localization/creation/launcher suites. Full native smoke exited 0. Stationary hidden 1280x720 benchmark: CPU p50/p95 1.342/2.692 ms, GPU p50 1.305 ms (12 observations), working set 294 MiB. This run overlapped development activity and is not a controlled before/after comparison or interactive FPS guarantee.
+
 Reference review: 2026-10-26. Local references in `C:/Users/Хозяин/Videos/NVIDIA/Allods  Online`: loc1.jpg, loc2.avif, map1–3.jpg and character/creature plates 1–5. Also inspected the existing opening contact sheet from allods_fight_interface.mp4; this was not a new complete frame-by-frame video review.
 
 ## Direction

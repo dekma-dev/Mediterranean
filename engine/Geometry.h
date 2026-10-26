@@ -8,7 +8,7 @@
 namespace visual {
 enum class ShadowMode { Cast, None };
 inline constexpr unsigned materialSize=128,shadowSize=1024,shadowLayers=2;
-enum class Mesh : unsigned { Box, Roof, Sphere, Rock, Trunk, Foliage, Torso, Limb, Blade, Crystal, Terrain, Cliff, Head, Boot, Hair, Grass, Barrel,Arch,Canopy,Masonry,Cloak,Body,BodyMedium,BodyFar,Feature,Palm,Finger,HeadMedium,HeadFar,HairLow,BootLow,SphereLow,TorsoLow,LimbLow,Hand,HandMirrored,HandMedium,HandMirroredMedium,HandFar,HandMirroredFar,CoatPanel,Helm,HelmLow,Pauldron,PauldronLow,GuardCuirass,GuardCuirassLow,GuardPlate,GuardPlateLow,GuardCloak,WeaponMace,WeaponHandbow,WeaponScepter,WeaponGroveStaff,WeaponAstralStaff,WeaponAshStaff,WeaponFocus,WeaponBaton,WeaponPistol,WeaponCleaver,Ridge,Count };
+enum class Mesh : unsigned { Box, Roof, Sphere, Rock, Trunk, Foliage, Torso, Limb, Blade, Crystal, Terrain, Cliff, Head, Boot, Hair, Grass, Barrel,Arch,Canopy,Masonry,Cloak,Body,BodyMedium,BodyFar,Feature,Palm,Finger,HeadMedium,HeadFar,HairLow,BootLow,SphereLow,TorsoLow,LimbLow,Hand,HandMirrored,HandMedium,HandMirroredMedium,HandFar,HandMirroredFar,CoatPanel,Helm,HelmLow,Pauldron,PauldronLow,GuardCuirass,GuardCuirassLow,GuardPlate,GuardPlateLow,GuardCloak,WeaponMace,WeaponHandbow,WeaponScepter,WeaponGroveStaff,WeaponAstralStaff,WeaponAshStaff,WeaponFocus,WeaponBaton,WeaponPistol,WeaponCleaver,Ridge,GuardShoulderLeft,GuardShoulderLeftLow,GuardShoulderRight,GuardShoulderRightLow,GuardFauld,GuardFauldLow,Count };
 inline bool IsBodyMesh(Mesh mesh) { return mesh>=Mesh::Body && mesh<=Mesh::BodyFar; }
 inline bool IsHandMesh(Mesh mesh) { return mesh>=Mesh::Hand && mesh<=Mesh::HandMirroredFar; }
 inline bool IsHeadMesh(Mesh mesh) { return mesh==Mesh::Head || mesh==Mesh::HeadMedium || mesh==Mesh::HeadFar; }
@@ -21,6 +21,9 @@ inline Mesh AttachmentMesh(Mesh mesh,unsigned level) {
     case Mesh::Pauldron: return Mesh::PauldronLow;
     case Mesh::GuardCuirass: return Mesh::GuardCuirassLow;
     case Mesh::GuardPlate: return Mesh::GuardPlateLow;
+    case Mesh::GuardShoulderLeft: return Mesh::GuardShoulderLeftLow;
+    case Mesh::GuardShoulderRight: return Mesh::GuardShoulderRightLow;
+    case Mesh::GuardFauld: return Mesh::GuardFauldLow;
     case Mesh::Boot: return Mesh::BootLow;
     case Mesh::Sphere: return Mesh::SphereLow;
     case Mesh::Torso: return Mesh::TorsoLow;

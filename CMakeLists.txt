@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 project(RPGNative LANGUAGES CXX RC)
 
+if(MSVC)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/utf-8>)
+endif()
+
 if (NOT WIN32)
   message(FATAL_ERROR "Mediterranean requires Windows and DirectX 11.")
 endif()
@@ -74,7 +78,22 @@ add_custom_command(OUTPUT "${blade_header}"
   COMMENT "Validating and embedding the authored blade mesh"
   VERBATIM)
 # One producer shared by the client and standalone geometry checks.
-add_custom_target(EmbeddedMeshes DEPENDS "${blade_header}")
+set(armor_headers "")
+foreach(detail IN ITEMS Cuirass CuirassLow ShoulderLeft ShoulderLeftLow ShoulderRight ShoulderRightLow Fauld FauldLow)
+  string(REGEX REPLACE "([a-z])([A-Z])" "\\1-\\2" armor_name "${detail}")
+  string(TOLOWER "${armor_name}" armor_name)
+  set(armor_name "guardian-${armor_name}")
+  set(armor_source "${CMAKE_CURRENT_SOURCE_DIR}/assets/characters/${armor_name}.obj")
+  set(armor_header "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>/${detail}.generated.h")
+  add_custom_command(OUTPUT "${armor_header}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>"
+    COMMAND $<TARGET_FILE:MeshAssetCompiler> "${armor_source}" "${armor_header}" ${detail}
+    DEPENDS MeshAssetCompiler "${armor_source}"
+    COMMENT "Embedding authored guardian armor"
+    VERBATIM)
+  list(APPEND armor_headers "${armor_header}")
+endforeach()
+add_custom_target(EmbeddedMeshes DEPENDS "${blade_header}" ${armor_headers})
 
 add_library(MediterraneanClient STATIC
   "${scene_shader_header}"
@@ -146,6 +165,10 @@ set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT RPGNative)
 
 include(CTest)
 if (BUILD_TESTING)
+  add_executable(LocalizationTests tests/LocalizationTests.cpp)
+  target_include_directories(LocalizationTests PRIVATE .)
+  add_test(NAME LocalizationTests COMMAND LocalizationTests)
+
   add_executable(AuthoredAssetTests tests/AuthoredAssetTests.cpp)
   target_link_libraries(AuthoredAssetTests PRIVATE MediterraneanClient)
   add_test(NAME AuthoredAssetTests COMMAND AuthoredAssetTests)

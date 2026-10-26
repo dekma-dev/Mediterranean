@@ -3,6 +3,7 @@
 #include "game/HandPose.h"
 #include "game/WeaponVisual.h"
 #include "game/ClassClothing.h"
+#include "game/ArmorPose.h"
 #include "engine/Renderer.h"
 #include "platform/Win32Window.h"
 #include <cstdlib>
@@ -210,14 +211,49 @@ void ClothingContracts() {
     silhouettes.insert(signature);
     outfit.tunic=false;outfit.shoulders=false;outfit.belt=false;
     Check(clothing::Build(outfit).count==0,"Unequipped fittings remain visible");
-    outfit.shoulders=true;Check(clothing::Build(outfit).count==8,"Shoulder ownership depends on chest equipment");
+    const unsigned shoulderParts=i==int(ClassId::Warrior)?2u:8u;
+      outfit.shoulders=true;Check(clothing::Build(outfit).count==shoulderParts,"Shoulder ownership depends on chest equipment");
     outfit.appearance.dye=2;const auto dyed=clothing::Build(outfit);
-    Check(dyed.count==8,"Dye changed garment topology");
+    Check(dyed.count==shoulderParts,"Dye changed garment topology");
   }
   Check(silhouettes.size()==std::size_t(ClassId::Count),"Class clothing shares identical geometry");
 }
+void ShoulderArticulation() {
+  CharacterPose pose{};
+  for(unsigned arm=0;arm<2;++arm) {
+    const float side=arm==0?1.f:-1.f;
+    pose.arms[arm].root={side*.305f,1.43f,0};
+    pose.arms[arm].joint={side*.305f,1.15f,0};
+    XMFLOAT3 origin;
+    XMStoreFloat3(&origin,XMVector3TransformCoord(XMVectorZero(),GuardianShoulderTransform(pose,arm)));
+    Check(Distance(origin,{side*.34f,1.48f,0})<.00001f,"Resting shoulder lost authored socket");
+  }
+  XMFLOAT3 previous{};
+  for(int n=0;n<=180;++n) {
+    const float angle=n*XM_PI/180;
+    for(unsigned arm=0;arm<2;++arm) {
+      const float side=arm==0?1.f:-1.f;
+      pose.arms[arm].joint={side*(.305f+.28f*std::sin(angle)),1.43f-.28f*std::cos(angle),0};
+    }
+    XMFLOAT3 left,right,tip;
+    XMStoreFloat3(&left,XMVector3TransformCoord(XMVectorZero(),GuardianShoulderTransform(pose,0)));
+    XMStoreFloat3(&right,XMVector3TransformCoord(XMVectorZero(),GuardianShoulderTransform(pose,1)));
+    Check(Distance(left,{-right.x,right.y,right.z})<.00001f,"Shoulder hinges are not mirrored");
+    XMStoreFloat3(&tip,XMVector3TransformCoord(XMVectorSet(.15f,0,0,1),GuardianShoulderTransform(pose,0)));
+    Check(std::isfinite(tip.x) && tip.y>1.4f && tip.y<1.7f,"Shoulder escaped bounded hinge");
+    if(n) Check(Distance(tip,previous)<.01f,"Shoulder hinge snaps during arm elevation");
+    previous=tip;
+  }
+  const auto before=GuardianShoulderTransform(pose,0);
+  pose.upperPitch=.35f;pose.upperRoll=-.2f;pose.upperYaw=.7f;pose.bodyLift=.12f;pose.bodyShift=.04f;
+  for(auto& arm:pose.arms) {arm.root=pose.UpperPoint(arm.root);arm.joint=pose.UpperPoint(arm.joint);}
+  XMFLOAT3 local,actual;
+  XMStoreFloat3(&local,XMVector3TransformCoord(XMVectorSet(.1f,.02f,0,1),before));
+  XMStoreFloat3(&actual,XMVector3TransformCoord(XMVectorSet(.1f,.02f,0,1),GuardianShoulderTransform(pose,0)));
+  Check(Distance(actual,pose.UpperPoint(local))<.00001f,"Torso movement applied twice to shoulder articulation");
+}
 }
 int main() {
-  CatalogAndPersistence();LaunchContracts();ShapesAndSockets();ClothingContracts();Captures();
+  CatalogAndPersistence();LaunchContracts();ShapesAndSockets();ClothingContracts();ShoulderArticulation();Captures();
   std::cout<<"PASS: class equipment identity, migration/trade, timed launcher release, fitted geometry, grips, clothing ownership and 101 GPU views\n";
 }

@@ -1,3 +1,4 @@
+#include "game/Localization.h"
 #include "launcher/LaunchSupport.h"
 #include "game/UiSkin.h"
 #include <gdiplus.h>
@@ -16,16 +17,26 @@ using namespace Gdiplus;
 constexpr int Play=1001,Display=1002,Size=1003,Guide=1005,Saves=1006;
 constexpr float canvasWidth=940,canvasHeight=590;
 const Color background(255,24,24,18),panel(255,29,25,22),gold(255,211,179,111),ink(255,242,228,201),muted(255,191,177,153);
+std::wstring Localized(const wchar_t* input) {
+  const int length=int(wcslen(input));
+  std::string utf8(WideCharToMultiByte(CP_UTF8,0,input,length,nullptr,0,nullptr,nullptr), '\0');
+  WideCharToMultiByte(CP_UTF8,0,input,length,utf8.data(),int(utf8.size()),nullptr,nullptr);
+  const auto translated=localization::Translate(utf8);
+  std::wstring wide(MultiByteToWideChar(CP_UTF8,0,translated.data(),int(translated.size()),nullptr,0), L'\0');
+  MultiByteToWideChar(CP_UTF8,0,translated.data(),int(translated.size()),wide.data(),int(wide.size()));
+  return wide;
+}
 void Text(Graphics& g,const wchar_t* text,float x,float y,float width,float height,float size,Color color,const wchar_t* family=L"Segoe UI",INT style=FontStyleRegular) {
   Font font(family,size,style,UnitPixel);SolidBrush brush(color);StringFormat format;
   format.SetTrimming(StringTrimmingEllipsisCharacter);
-  g.DrawString(text,-1,&font,RectF(x,y,width,height),&format,&brush);
+  g.DrawString(Localized(text).c_str(),-1,&font,RectF(x,y,width,height),&format,&brush);
 }
 class Launcher {
 public:
   ~Launcher() {if(window_ && IsWindow(window_)) DestroyWindow(window_);if(font_) DeleteObject(font_);if(brush_) DeleteObject(brush_);}
   bool Create(HINSTANCE instance,bool visible) {
     directory_=launch::Directory();if(directory_.empty()) return false;
+    localization::Initialize(directory_);
     game_=directory_/L"RPGNative.exe";settings_=directory_/L"launcher-settings.ini";
     gameName_=launch::InstanceName(directory_,L"game");
     if(!launch::LoadSettings(settings_,options_)) status_=L"Saved launch settings could not be read. Defaults are selected.";
@@ -33,7 +44,7 @@ public:
     WNDCLASSEXW wc{sizeof(wc)};wc.lpfnWndProc=Procedure;wc.hInstance=instance;wc.lpszClassName=L"MediterraneanLauncherWindow";
     wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);wc.hIcon=LoadIconW(nullptr,IDI_APPLICATION);
     if(!RegisterClassExW(&wc) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) return false;
-    window_=CreateWindowExW(WS_EX_CONTROLPARENT,wc.lpszClassName,L"Mediterranean Launcher",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX,
+    window_=CreateWindowExW(WS_EX_CONTROLPARENT,wc.lpszClassName,L"Mediterranean Launcher",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX|WS_CLIPCHILDREN,
       CW_USEDEFAULT,CW_USEDEFAULT,940,590,nullptr,nullptr,instance,this);
     if(!window_) return false;
     const auto make=[&](const wchar_t* kind,const wchar_t* label,int id,DWORD style) {
@@ -108,15 +119,24 @@ private:
   std::wstring gameName_,status_=L"Ready to enter Dawnwatch.";
   bool busy_=false,available_=false,saveAvailable_=false;float scale_=1;
   std::array<float,3> highlights_{};
+  std::unique_ptr<Bitmap> backbuffer_;
+  float ambience_=0;unsigned ambienceFrames_=0;
+  ULONGLONG animationTick_=GetTickCount64();
   void AnimateControls() {
+    const auto now=GetTickCount64();
+    const float elapsed=std::min(.1f,float(now-animationTick_)*.001f);animationTick_=now;
     if(!IsWindowVisible(window_) || IsIconic(window_)) return;
+    if(GetForegroundWindow()==window_) {
+      ambience_=std::fmod(ambience_+elapsed,600.f);
+      if(++ambienceFrames_%2==0) InvalidateRect(window_,nullptr,FALSE);
+    }
     POINT cursor{};GetCursorPos(&cursor);
     const HWND controls[]{play_,guide_,saves_};
     for(int i=0;i<3;++i) {
       RECT rect{};GetWindowRect(controls[i],&rect);
       const bool active=GetForegroundWindow()==window_ && IsWindowEnabled(controls[i]) &&
         (PtInRect(&rect,cursor) || GetFocus()==controls[i]);
-      const float next=highlights_[i]+((active?1.f:0.f)-highlights_[i])*.35f;
+      const float next=highlights_[i]+((active?1.f:0.f)-highlights_[i])*(-std::expm1(-12.f*elapsed));
       if(std::abs(next-highlights_[i])>.001f) {highlights_[i]=next;InvalidateRect(controls[i],nullptr,FALSE);}
     }
   }
@@ -188,26 +208,46 @@ private:
     },center);
   }
   void Paint(HDC dc) {
-    Graphics g(dc);g.ScaleTransform(scale_,scale_);g.SetSmoothingMode(SmoothingModeAntiAlias);g.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
+    RECT rect{};GetClientRect(window_,&rect);
+    if(rect.right<=0 || rect.bottom<=0) return;
+    if(!backbuffer_ || backbuffer_->GetWidth()!=UINT(rect.right) || backbuffer_->GetHeight()!=UINT(rect.bottom))
+      backbuffer_=std::make_unique<Bitmap>(rect.right,rect.bottom,PixelFormat32bppPARGB);
+    {Graphics offscreen(backbuffer_.get());PaintScene(offscreen);}
+    Graphics target(dc);target.DrawImage(backbuffer_.get(),0,0);
+  }
+  void PaintScene(Graphics& g) {g.ScaleTransform(scale_,scale_);g.SetSmoothingMode(SmoothingModeAntiAlias);g.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
     SolidBrush base(background);g.FillRectangle(&base,0.f,0.f,canvasWidth,canvasHeight);
     if(art_) {g.SetInterpolationMode(InterpolationModeHighQualityBicubic);g.DrawImage(art_.get(),RectF(10,10,920,570));}
     LinearGradientBrush shade(RectF(10,10,920,150),Color(240,10,9,8),Color(0,10,9,8),LinearGradientModeVertical);
     shade.SetWrapMode(WrapModeTileFlipXY);g.FillRectangle(&shade,10,10,920,150);
+    // Local candle warmth on the stone; the camera and text stay still.
+    for(int side=0;side<2;++side) {
+      GraphicsPath pool;pool.AddEllipse(140.f+side*420,175.f,230.f,300.f);
+      PathGradientBrush light(&pool);light.SetCenterColor(Color(BYTE(15+5*std::sin(ambience_*1.7f+side)),203,139,67));
+      Color edge(0,203,139,67);INT count=1;light.SetSurroundColors(&edge,&count);g.FillPath(&light,&pool);
+    }
+    for(int i=0;i<12;++i) {
+      const float x=100+float(i*73%450)+std::sin(ambience_*.18f+i)*6;
+      const float y=170+std::fmod(i*41.f+ambience_*(2+i%3),210.f);
+      SolidBrush mote(Color(35,211,190,150));g.FillEllipse(&mote,x,y,1.1f,1.1f);
+    }
     Skin(g,RectF(9,9,922,572),42,false);
     Text(g,L"MEDITERRANEAN",45,29,650,45,34,gold,L"Georgia");
     Text(g,L"T H E   D A W N W A T C H   C H R O N I C L E",47,76,530,22,11,ink,L"Georgia");
     Skin(g,RectF(610,118,298,406),30);
-    Skin(g,RectF(636,102,247,42),19);
-    Text(g,L"Prepare your journey",654,113,218,27,17,ink,L"Georgia");
+    Pen divider(Color(160,130,114,85),1);
+    g.DrawLine(&divider,636.f,155.f,886.f,155.f);
+    Text(g,L"Prepare your journey",636,122,250,27,19,ink,L"Georgia");
     Text(g,L"I.   DISPLAY",636,180,250,24,12,gold,L"Georgia");
     Text(g,L"II.  WINDOW SIZE",636,256,250,24,12,gold,L"Georgia");
     Text(g,L"THE HERO'S CHRONICLE",636,337,255,22,12,gold,L"Georgia");
     Text(g,saveAvailable_?L"Your saved heroes await in the hall.\nChoose a character after launching.":L"Eleven callings await in the hall.\nCreate a hero after launching.",636,369,249,35,12,ink);
-    Skin(g,RectF(42,390,540,132),28);
-    Text(g,L"DAWNWATCH",64,408,480,42,29,gold,L"Georgia");
-    Text(g,L"At the edge of the known world, your chronicle begins.",66,453,490,26,15,ink,L"Georgia");
-    Text(g,L"Eleven classes  /  Twelve assignments  /  Ten levels",66,489,490,24,12,muted);
-    Skin(g,RectF(29,537,882,33),12);
+    Skin(g,RectF(42,418,540,104),22);
+    Text(g,L"DAWNWATCH",64,433,480,34,25,gold,L"Georgia");
+    Text(g,L"At the edge of the known world, your chronicle begins.",66,470,490,24,13,ink,L"Georgia");
+    Text(g,L"Eleven classes  /  Twelve assignments  /  Ten levels",66,497,490,20,11,muted);
+    SolidBrush statusBed(Color(225,17,19,20));g.FillRectangle(&statusBed,29.f,537.f,882.f,33.f);
+    g.DrawLine(&divider,29.f,537.f,911.f,537.f);
     const wchar_t* state=!available_?L"BUILD MISSING":busy_?L"GAME RUNNING":L"READY TO PLAY";
     const auto stateColor=!available_?Color(255,246,157,117):busy_?gold:Color(255,179,210,156);
     Text(g,state,45,547,158,19,11,stateColor,L"Segoe UI",FontStyleBold);
@@ -246,21 +286,23 @@ private:
       if(item.itemID!=UINT(-1)) SendMessageW(item.hwndItem,CB_GETLBTEXT,item.itemID,reinterpret_cast<LPARAM>(label));
       Font font(L"Segoe UI",14*scale_,FontStyleRegular,UnitPixel);SolidBrush foreground(IsWindowEnabled(item.hwndItem)?ink:muted);
       StringFormat format;format.SetLineAlignment(StringAlignmentCenter);format.SetTrimming(StringTrimmingEllipsisCharacter);
-      g.DrawString(label,-1,&font,RectF(item.rcItem.left+7*scale_,float(item.rcItem.top),item.rcItem.right-item.rcItem.left-10*scale_,float(item.rcItem.bottom-item.rcItem.top)),&format,&foreground);
+      g.DrawString(Localized(label).c_str(),-1,&font,RectF(item.rcItem.left+7*scale_,float(item.rcItem.top),item.rcItem.right-item.rcItem.left-10*scale_,float(item.rcItem.bottom-item.rcItem.top)),&format,&foreground);
       if(item.itemState&ODS_FOCUS) {RECT focus=item.rcItem;InflateRect(&focus,-2,-2);DrawFocusRect(item.hDC,&focus);}
       return;
     }
     const bool primary=item.CtlID==Play,disabled=(item.itemState&ODS_DISABLED)!=0,pressed=(item.itemState&ODS_SELECTED)!=0;
     const RectF box(float(item.rcItem.left),float(item.rcItem.top),float(item.rcItem.right-item.rcItem.left),float(item.rcItem.bottom-item.rcItem.top));
     Skin(g,box,std::min(18.f*scale_,box.Height*.32f));
-    SolidBrush wash(disabled?Color(150,18,17,16):primary?Color(pressed?180:155,111,12,19):Color(pressed?125:65,47,54,47));
+    SolidBrush wash(disabled?Color(150,18,17,16):primary?Color(pressed?180:155,77,57,34):Color(pressed?125:65,38,42,43));
     g.FillRectangle(&wash,box.X+5*scale_,box.Y+5*scale_,box.Width-10*scale_,box.Height-10*scale_);
     const float hover=highlights_[primary?0:item.CtlID==Guide?1:2];
-    SolidBrush glint(Color(BYTE(disabled?0:42*hover),245,201,117));
+    SolidBrush glint(Color(BYTE(disabled?0:27*hover),245,201,117));
     g.FillRectangle(&glint,box.X+5*scale_,box.Y+5*scale_,box.Width-10*scale_,box.Height-10*scale_);
     const wchar_t* label=primary?(busy_?L"GAME RUNNING":L"PLAY"):item.CtlID==Guide?L"Game guide":L"Saves folder";
     Font font(primary?L"Georgia":L"Segoe UI",(primary?22:12)*scale_,FontStyleRegular,UnitPixel);SolidBrush foreground(disabled?muted:ink);StringFormat format;
-    format.SetAlignment(StringAlignmentCenter);format.SetLineAlignment(StringAlignmentCenter);g.DrawString(label,-1,&font,box,&format,&foreground);
+    format.SetAlignment(StringAlignmentCenter);format.SetLineAlignment(StringAlignmentCenter);
+    RectF labelBox=box;if(pressed) labelBox.Y+=1.5f*scale_;
+    g.DrawString(Localized(label).c_str(),-1,&font,labelBox,&format,&foreground);
     if(item.itemState&ODS_FOCUS) {RECT focus=item.rcItem;InflateRect(&focus,-4,-4);DrawFocusRect(item.hDC,&focus);}
   }
   bool Capture(const std::filesystem::path& path) {

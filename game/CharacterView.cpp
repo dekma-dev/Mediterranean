@@ -4,6 +4,7 @@
 #include "game/HandPose.h"
 #include "game/WeaponVisual.h"
 #include "game/ClassClothing.h"
+#include "game/ArmorPose.h"
 #include "engine/Renderer.h"
 #include <cmath>
 #include <algorithm>
@@ -49,6 +50,12 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
     const auto fittings=clothing::Build(outfit);
     for(unsigned n=0;n<fittings.count;++n) {
       const auto& fitting=fittings.parts[n];
+      if(fitting.mesh==M::GuardShoulderLeft || fitting.mesh==M::GuardShoulderRight) {
+        const unsigned arm=fitting.mesh==M::GuardShoulderLeft?0u:1u;
+        renderer.DrawMeshTransformed(fitting.mesh,GuardianShoulderTransform(pose,arm)*actorTransform,
+          fitting.color,fitting.material,visual::ShadowMode::Cast,2);
+        continue;
+      }
       part(fitting.mesh,fitting.position.x,fitting.position.y,fitting.position.z,
         fitting.scale,fitting.color,fitting.material,2);
     }
@@ -87,14 +94,8 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       part(M::Torso,0,1.29f,.20f,{.09f,.14f,.02f},{.21f,.37f,.43f,1},S::Metal);
     }
     if(guard && outfit.tunic) {
-      for(int band=0;band<3;++band)
-        part(M::GuardPlate,0,1.07f-band*.05f,.15f,{.43f+band*.016f,.085f,.14f},{.8f,.86f,.93f,1},S::Metal);
+      part(M::GuardFauld,0,1.03f,0,{1,1,1},{.8f,.86f,.93f,1},S::Metal);
       part(M::Torso,0,1.51f,-.005f,{.25f,.085f,.25f},{.24f,.22f,.17f,1},S::Leather);
-    }
-    if(guard && outfit.shoulders) for(float side:{-1.f,1.f}) {
-      for(int layer=0;layer<2;++layer)
-        part(M::GuardPlate,side*(.33f+layer*.015f),1.45f-layer*.065f,.09f,
-          {.28f,.14f,.24f},{.79f,.85f,.91f,1},S::Metal);
     }
     head(M::Head,0,1.76f,.012f,{.265f,.31f,.26f},skin,S::Skin);
     if (!outfit.helm) head(M::Hair,0,1.76f,.012f,{.267f,.31f,.262f},hairTint,S::Hair);
@@ -248,7 +249,7 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
           {.16f,.16f,.09f},steel,S::Metal,yaw+pose.upperYaw,pose.upperPitch,visual::ShadowMode::Cast,pose.upperRoll);
       }
     }
-    if (outfit.armor && !outfit.shoulders) {
+    if (outfit.armor && !outfit.shoulders && !guard) {
       const auto guardColor=outfit.shoulders?leather:steel;
       const auto guardMaterial=outfit.shoulders?S::Leather:S::Metal;
       for (float side : {-1.f,1.f}) {

@@ -1,3 +1,4 @@
+#include "game/Localization.h"
 #include "game/Game.h"
 #include "game/ProfileStorage.h"
 
@@ -114,6 +115,10 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   switch (event.action) {
   case ui::Action::SelectThreat: if(event.value>0) command.selectThreat=rpg::EntityId(event.value); break;
   case ui::Action::SelectActor: if(event.value>0) command.selectActor=rpg::EntityId(event.value); break;
+  case ui::Action::Language:
+    interface_.InvalidateHitRegions();
+    interface_.menuNotice=localization::Select(event.value==0?localization::Language::Russian:localization::Language::English)?"":"Could not save language preference.";
+    break;
   case ui::Action::MusicVolume: interface_.musicVolume=std::clamp(interface_.musicVolume+event.value,0,100); break;
   case ui::Action::EffectsVolume: interface_.effectsVolume=std::clamp(interface_.effectsVolume+event.value,0,100); break;
   case ui::Action::Close: interface_.Close(static_cast<ui::Panel>(event.value)); break;

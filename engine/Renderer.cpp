@@ -1,3 +1,4 @@
+#include "game/Localization.h"
 #include "engine/Utf8.h"
 #include "engine/Renderer.h"
 #include "game/WorldMap.h"
@@ -921,7 +922,8 @@ bool Renderer::ValidateDebugMessages() {
  return true;
 }
 
-float Renderer::TextWidth(const std::string& text,float size) const {
+float Renderer::TextWidth(const std::string& source,float size) const {
+ const auto text=localization::Translate(source);
  float line=0,width=0;
  for (std::size_t offset=0;offset<text.size();) {
   const auto ch=text::Next(text,offset);
@@ -979,7 +981,8 @@ void Renderer::DrawRoundMapArtwork(float x,float y,float width,float height) {
   hud_.insert(hud_.end(),{center,vertex(std::cos(a),std::sin(a)),vertex(std::cos(b),std::sin(b))});
  }
 }
-void Renderer::DrawText(float x,float y,const std::string& text,const XMFLOAT4& color,float size) {
+void Renderer::DrawText(float x,float y,const std::string& source,const XMFLOAT4& color,float size) {
+ const auto text=localization::Translate(source);
  const float start=x,scale=size*.5f,dx=32*scale/width_,dy=32*scale/height_;
  for (std::size_t offset=0;offset<text.size();) {
   const auto ch=text::Next(text,offset);

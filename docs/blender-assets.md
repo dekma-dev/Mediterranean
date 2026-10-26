@@ -1,5 +1,13 @@
 # Blender collection in the native renderer
 
+## Accepted environment refinement (2026-10-26)
+
+The reviewed v2 candidate is synchronized to the tracked source and local authoring copy: SHA-256 `5338426256f932d6be3db4fb83132adc9cae08cf9038bf7cf1b0713ebbb5f30c`. Original sources/exports remain in `.blender-local/environment-backup-20261026`; both original source hashes were checked before replacement.
+
+Existing pine attachments now carry irregular needle shoots instead of opaque conical boughs. Whole shoot groups thin before distant export: 4570/1648/728 triangles. Cottage, inn and tower use object-linked weathered timber/limewash/slate/stone materials. Archive record hashes confirm all seven actors, oak and dead tree are unchanged. The archive is 12,655,740 bytes.
+
+The reproducible exporter is `scripts/export-authored-collection.py`, with `assets/authored/collection01.sources.json`. Run Blender in background on the tracked source with `--python scripts/export-authored-collection.py`. Building/running does not require Blender. The refinement script writes a separate candidate and refuses an already-refined collection; do not rerun it on the accepted source.
+
 ## Source ownership and future use
 
 The user designated this collection as the foundation for future model work on 2026-10-26. Develop all thirteen models rather than making duplicate primitive substitutes. The tracked source and `.blender-local/collection-01/Mediterranean_Collection_01.blend` were byte-identical at inspection (SHA-256 `6ccab74fa14ea87f9760ec0ab4e92d8ea5e939fd844d71c0fbede1cbd83d0d93`). The adjacent `.blend1` is a prior backup. Recheck for newer user edits before exporting or running generation scripts. The local contact sheet is an earlier Blender preview, not proof of current engine appearance.
@@ -57,3 +65,13 @@ Defeated skeleton/orc/revenant enemies retain their authored mesh: a 1.05-second
 Authored enemies now consume the existing smoothed action and impact channels through `game/AuthoredActorMotion.h`. Torso pitch/twist/roll, hip offset and independent arm lift/opening supplement the simple gait and weapon swing. Arm transforms inherit the torso transform; upper-body gestures leave the planted leg chains unchanged. Color and shadow rendering share the same bounded, finite palette. The game remains authoritative for accepted actions, interruption, contact and damage timing; rendering does not run another action clock. Wildlife and neutral residents retain their previous default poses.
 
 `AuthoredAssetTests` captures neutral/action/hit views of Ash sentry, Ironjaw and Oathless in `authored-combat-check`, checks deformation at every LOD, planted lower legs and invalid-channel sanitization. This recovers presentation previously lost during model substitution; it is not a replacement for artist-authored skeletal clips or production skin weights. Inspect shoulder, cloak, shield and weapon clearance during live attacks (manual check 277).
+
+## Collection 03 model adoption
+
+The editable collection and embedded archive now include the locally refined Collection 03 versions of all seven actors, Elder oak and Blighted elder. Highland pine, Hearth cottage, Moon inn and Border watch retain the newer accepted environment versions; their twelve runtime LOD records are byte-identical to the preceding archive. Both editable source copies are synchronized. The previous source and exports are backed up locally under `.blender-local/collection-02/runtime-integration/before-integration`.
+
+The 13-model archive contains 39 meshes and occupies 13,001,708 bytes. High-resolution source detail remains editable in Blender; runtime exports omit individual fur/hair strands, stitches, abrasion curves and disconnected chainmail rings, whose minimum geometry exceeds the native budget. Representative shader colors feed the existing native material layers. This remains an approximation of Blender shading, not a texture bake.
+
+The reproducible export script is local and ignored: `.blender-local/collection-02/runtime-integration/export-runtime.py`. Run it with Blender in background mode against `assets/authored/collection01.blend`; it writes candidate exports into its runtime-integration directory and validates size limits before writing. `check_runtime.py` in the parent directory checks the archive and preserved environment records before adoption. Do not rerun the older exporter against the refined source without the detail exclusions.
+
+World roles and the native procedural presentation rig remain in place. The separate Collection 03 Blender rigs and action library are not connected to gameplay by this model update. Playable characters retain their customizable equipment-aware renderer, including the separately adopted guardian cuirass; this update does not replace every player class with the guardian body.

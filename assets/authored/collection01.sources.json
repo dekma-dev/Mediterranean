@@ -1,0 +1,158 @@
+[
+  {
+    "name": "01 • Dawnwarden",
+    "category": "Human / armored guardian",
+    "collection": "01 • Dawnwarden",
+    "root": "01 • Dawnwarden | ROOT",
+    "center": [
+      0.0,
+      0.0
+    ],
+    "objects": 171,
+    "display_scale": 1.13
+  },
+  {
+    "name": "02 • Moonweaver",
+    "category": "Human / spellcaster",
+    "collection": "02 • Moonweaver",
+    "root": "02 • Moonweaver | ROOT",
+    "center": [
+      4.8,
+      0.0
+    ],
+    "objects": 136,
+    "display_scale": 1.08
+  },
+  {
+    "name": "03 • Ironjaw",
+    "category": "Orc / warlord",
+    "collection": "03 • Ironjaw",
+    "root": "03 • Ironjaw | ROOT",
+    "center": [
+      9.6,
+      0.0
+    ],
+    "objects": 159,
+    "display_scale": 1.08
+  },
+  {
+    "name": "04 • Oathless",
+    "category": "Undead / revenant",
+    "collection": "04 • Oathless",
+    "root": "04 • Oathless | ROOT",
+    "center": [
+      14.399999999999999,
+      0.0
+    ],
+    "objects": 162,
+    "display_scale": 1.13
+  },
+  {
+    "name": "05 • Ash sentry",
+    "category": "Undead / skeleton",
+    "collection": "05 • Ash sentry",
+    "root": "05 • Ash sentry | ROOT",
+    "center": [
+      0.0,
+      5.1
+    ],
+    "objects": 109,
+    "display_scale": 1.15
+  },
+  {
+    "name": "06 • Frostfang",
+    "category": "Beast / dire wolf",
+    "collection": "06 • Frostfang",
+    "root": "06 • Frostfang | ROOT",
+    "center": [
+      4.8,
+      5.1
+    ],
+    "objects": 174,
+    "display_scale": 1.32
+  },
+  {
+    "name": "07 • Thornback",
+    "category": "Beast / wild boar",
+    "collection": "07 • Thornback",
+    "root": "07 • Thornback | ROOT",
+    "center": [
+      9.6,
+      5.1
+    ],
+    "objects": 135,
+    "display_scale": 1.32
+  },
+  {
+    "name": "08 • Elder oak",
+    "category": "Nature / broadleaf tree",
+    "collection": "08 • Elder oak",
+    "root": "08 • Elder oak | ROOT",
+    "center": [
+      14.399999999999999,
+      5.1
+    ],
+    "objects": 766,
+    "display_scale": 0.91
+  },
+  {
+    "name": "09 • Highland pine",
+    "category": "Nature / conifer tree",
+    "collection": "09 • Highland pine",
+    "root": "09 • Highland pine | ROOT",
+    "center": [
+      0.0,
+      10.2
+    ],
+    "objects": 254,
+    "display_scale": 0.82
+  },
+  {
+    "name": "10 • Blighted elder",
+    "category": "Nature / dead tree",
+    "collection": "10 • Blighted elder",
+    "root": "10 • Blighted elder | ROOT",
+    "center": [
+      4.8,
+      10.2
+    ],
+    "objects": 89,
+    "display_scale": 0.98
+  },
+  {
+    "name": "11 • Hearth cottage",
+    "category": "Architecture / dwelling",
+    "collection": "11 • Hearth cottage",
+    "root": "11 • Hearth cottage | ROOT",
+    "center": [
+      9.6,
+      10.2
+    ],
+    "objects": 324,
+    "display_scale": 0.85
+  },
+  {
+    "name": "12 • Moon inn",
+    "category": "Architecture / tavern",
+    "collection": "12 • Moon inn",
+    "root": "12 • Moon inn | ROOT",
+    "center": [
+      14.399999999999999,
+      10.2
+    ],
+    "objects": 371,
+    "display_scale": 0.75
+  },
+  {
+    "name": "13 • Border watch",
+    "category": "Architecture / tower",
+    "collection": "13 • Border watch",
+    "root": "13 • Border watch | ROOT",
+    "center": [
+      0.0,
+      15.299999999999999
+    ],
+    "objects": 298,
+    "display_scale": 0.94
+  }
+]

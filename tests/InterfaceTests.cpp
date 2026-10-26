@@ -1,3 +1,4 @@
+#include "game/Localization.h"
 #include "game/Game.h"
 #include "tests/DashFixture.h"
 #include "tests/QuestFixture.h"
@@ -840,6 +841,13 @@ int main() {
       Require(effects.action==ui::Action::EffectsVolume && effects.value==level*10-screen.effectsVolume,
         "Effects meter must map every scaled mark to the requested level");
     }
+    Require(click(735,512).action==ui::Action::Language && click(735,512).value==1,
+      "English selector must remain clickable at every UI scale");
+    localization::language=localization::Language::English;
+    renderer.BeginFrame();screen.Render(renderer,simulation,0,false);
+    Require(renderer.Capture(L"menu-english-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),"English menu capture");
+    Require(click(630,512).action==ui::Action::Language && click(630,512).value==0,"Russian selector");
+    localization::language=localization::Language::Russian;
     const auto beforeMenu=simulation.Save();
     const int savedMusic=screen.musicVolume,savedEffects=screen.effectsVolume;
     const bool savedAudio=screen.audioAvailable;

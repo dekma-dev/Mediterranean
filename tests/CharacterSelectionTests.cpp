@@ -184,7 +184,7 @@ void Render(const std::filesystem::path& root,const std::string& veteran) {
       returning.OpenPanel(ui::Panel::Menu);renderer.BeginFrame();returning.Render(renderer);
       Check(renderer.Capture((root/"return-to-roster-menu.png").wstring()) && renderer.EndFrame(false),"Return menu render");
       const ui::Layout layout(float(driver.frame.width),float(driver.frame.height));
-      driver.frame.client={LONG(layout.x+640*layout.scale),LONG(layout.y+522*layout.scale)};
+      driver.frame.client={LONG(layout.x+640*layout.scale),LONG(layout.y+556*layout.scale)};
       driver.frame.down[VK_LBUTTON]=true;driver.Step(returning);
     };
     const auto generation=returning.AudioGeneration();returnClick();

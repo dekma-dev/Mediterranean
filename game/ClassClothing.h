@@ -39,7 +39,7 @@ inline Fittings Build(const CharacterOutfit& outfit) {
       add(M::Torso,side*.18f,1.45f,.11f,{.065f,.16f,.06f},hide,S::Leather);
       add(M::Sphere,side*.18f,1.46f,.145f,{.026f,.026f,.013f},brass,S::Metal);
     }
-    add(M::Blade,0,1.32f,.227f,{.045f,.19f,.015f},brass,S::Metal);break;
+    add(M::Blade,0,1.32f,.266f,{.035f,.14f,.012f},brass,S::Metal);break;
    case rpg::ClassId::Paladin:
     chest(0,1.25f,{.24f,.43f,.035f},fabric,S::Cloth);
     chest(0,1.32f,{.055f,.19f,.055f},brass,S::Metal);
@@ -84,7 +84,10 @@ inline Fittings Build(const CharacterOutfit& outfit) {
    for(int n=0;n<4;++n) chest(side*.052f,1.13f+n*.075f,{.018f,.018f,.028f},brass,S::Metal);
   }
  }
- if(outfit.shoulders) {
+ if(outfit.shoulders && outfit.classId==rpg::ClassId::Warrior) {
+  for(float side:{-1.f,1.f}) add(side>0?M::GuardShoulderLeft:M::GuardShoulderRight,side*.34f,1.48f,0,{1,1,1},{.79f,.85f,.91f,1},S::Metal);
+ }
+ if(outfit.shoulders && outfit.classId!=rpg::ClassId::Warrior) {
   const bool plate=outfit.classId==rpg::ClassId::Warrior || outfit.classId==rpg::ClassId::Paladin || outfit.classId==rpg::ClassId::Engineer;
   const bool spines=outfit.classId==rpg::ClassId::Druid || outfit.classId==rpg::ClassId::Necromancer || outfit.classId==rpg::ClassId::Demonologist;
   for(float side:{-1.f,1.f}) {

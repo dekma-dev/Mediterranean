@@ -1,3 +1,5 @@
+#include "game/Localization.h"
+#include "engine/Utf8.h"
 #include "game/Interface.h"
 #include "game/CharacterView.h"
 #include "game/CharacterSelection.h"
@@ -101,10 +103,22 @@ struct Canvas {
    Line(a.x+5,a.y+a.h-3,a.x+a.w-5,a.y+a.h-3,1,{line.x,line.y,line.z,.6f});
   }
  }
+ // Quiet inset used inside major windows: reserve ornate borders for hierarchy.
+ void Inset(Rect a,float warmth=0,bool selected=false) {
+  Art(a,Renderer::UiArt::Frame,{.30f,.30f,.70f,.70f},{.55f,.59f,.61f,1});
+  Gradient(a,{.035f,.04f,.045f,.40f},{.015f,.018f,.02f,.66f});
+  Gradient(a,{.56f,.43f,.26f,.10f*warmth},{.10f,.11f,.12f,0});
+  Line(a.x,a.y,a.x+a.w,a.y,1,{.02f,.02f,.018f,.9f});
+  Line(a.x,a.y+a.h,a.x+a.w,a.y+a.h,1,{.42f,.37f,.28f,.40f});
+  if(selected) {
+   Line(a.x+1,a.y+3,a.x+1,a.y+a.h-3,2,{.72f,.58f,.34f,1});
+   Line(a.x+3,a.y+3,a.x+3,a.y+a.h-3,1,{.22f,.16f,.09f,1});
+  }
+ }
  void Button(Rect a,bool enabled=true,bool highlight=false,bool primary=false) {
   Skin(a,std::min(16.f,a.h*.32f),enabled?Color{1,1,1,1}:Color{.48f,.48f,.48f,1});
   const float edge=std::min(6.f,a.h*.14f);
-  const Color tint=primary?Color{.46f,.025f,.035f,highlight?.78f:.65f}:Color{.19f,.22f,.19f,highlight?.62f:.24f};
+  const Color tint=primary?Color{.30f,.22f,.13f,highlight?.78f:.65f}:Color{.15f,.17f,.18f,highlight?.62f:.24f};
   RectFill({a.x+edge,a.y+edge,a.w-2*edge,a.h-2*edge},enabled?tint:Color{0,0,0,.3f});
   Gradient({a.x+edge,a.y+edge,a.w-2*edge,a.h-2*edge},
     {1,.85f,.57f,enabled?.075f:.025f},{0,0,0,.24f});
@@ -127,7 +141,7 @@ struct Canvas {
   size*=std::min(1.f,width/std::max(1.f,Width(s,size)));Text(x+(width-Width(s,size))*.5f,y,s,size,c);
  }
  void Wrap(float x,float y,float width,const std::string& text,float size=16,Color c=muted,int maxLines=3) {
-  std::istringstream paragraphs(text); std::string paragraph; int row=0;
+  std::istringstream paragraphs(localization::Translate(text)); std::string paragraph; int row=0;
   while (row<maxLines && std::getline(paragraphs,paragraph)) {
    std::istringstream words(paragraph); std::string word,line;
    while (words>>word) {
@@ -143,7 +157,7 @@ struct Canvas {
  }
  std::vector<std::string> Lines(float width,const std::string& text,float size) const {
   std::vector<std::string> result;
-  std::istringstream paragraphs(text); std::string paragraph;
+  std::istringstream paragraphs(localization::Translate(text)); std::string paragraph;
   while (std::getline(paragraphs,paragraph)) {
    std::istringstream words(paragraph); std::string word,line;
    while (words>>word) {
@@ -151,7 +165,9 @@ struct Canvas {
     if (Width(candidate,size)>width && !line.empty()) { result.push_back(line); line.clear(); }
     // Keep unusually long authored words inside the dialogue frame as well.
     if (Width(word,size)>width) {
-     for (char ch : word) {
+     for (std::size_t offset=0;offset<word.size();) {
+      const auto begin=offset; text::Next(word,offset);
+      const auto ch=word.substr(begin,offset-begin);
       if (!line.empty() && Width(line+ch,size)>width) { result.push_back(line); line.clear(); }
       line+=ch;
      }
@@ -434,7 +450,7 @@ void RenderLoading(Renderer& renderer,LoadingStage stage) {
  c.Art({0,0,1280,720},Renderer::UiArt::Hall);
  c.Gradient({0,0,1280,300},{.01f,.008f,.006f,.92f},{.01f,.008f,.006f,0});
  c.Gradient({0,390,1280,330},{.01f,.008f,.006f,0},{.01f,.008f,.006f,.96f});
- c.Center(0,58,1280,"MEDITERRANEAN",40,{1,.85f,.54f,1});
+ c.Center(0,58,1280,"MEDITERRANEAN",40,{.86f,.79f,.64f,1});
  c.Center(0,115,1280,"T H E   D A W N W A T C H   C H R O N I C L E",13,ink);
  c.Window({270,466,740,186});
  c.Banner({390,449,500,38},"Beyond the weathered gates",22);
@@ -460,10 +476,17 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  const auto page=selection.Screen();const bool roster=page==Page::Roster,customize=page==Page::Customize;
  const bool valid=!roster || selection.State()!=Status::Unreadable,saved=selection.State()==Status::Saved;
  const auto& hero=selection.Hero();const auto& info=hero.ClassInfo();
+ localization::playerName=hero.Nickname();
  renderer.DrawHudRect(0,0,1,1,{.017f,.016f,.014f,1});
  c.Art({0,0,1280,720},Renderer::UiArt::Hall);
  c.Gradient({0,0,1280,132},{.015f,.012f,.01f,.9f},{.015f,.012f,.01f,0});
  c.Gradient({0,628,1280,92},{.015f,.012f,.01f,0},{.015f,.012f,.01f,.94f});
+ // Candle warmth on the stone stays behind the model and the readable panels.
+ for(int side=0;side<2;++side) {
+   const float strength=.022f+.007f*std::sin(selection.Time()*1.7f+side);
+   for(int ring=5;ring>0;--ring)
+     c.Oval(393+side*413.f,356,ring*17.f,ring*26.f,{.68f,.40f,.17f,strength/5});
+ }
  // Sparse warm dust catches the hall light without competing with the live hero.
  for(int i=0;i<18;++i) {
    const float t=selection.Time(),x=320+std::fmod(i*91.f+t*(2+i%3),470.f);
@@ -471,13 +494,15 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
    const float a=.09f+.08f*std::sin(t*.8f+i);
    c.Oval(x,y,1.1f,1.1f,{.95f,.76f,.43f,a});
  }
- c.Text(66,35,"MEDITERRANEAN",34,{1,.85f,.54f,1});
+ c.Text(66,35,"MEDITERRANEAN",34,{.86f,.79f,.64f,1});
  c.Text(68,80,"T H E   D A W N W A T C H   C H R O N I C L E",11,ink);
  c.Text(842,46,roster?"YOUR CHARACTERS":customize?"GIVE YOUR HERO AN IDENTITY":"CHOOSE YOUR CALLING",customize?17.f:20.f,ink);
  c.Text(842,79,roster?"Dawnwatch  /  Local campaign":customize?"CREATE  /  II. Appearance & name":"CREATE  /  I. Class & talents",13,gold);
  c.Window({64,144,222,480});c.Banner({74,133,202,36},roster?"The company":"The eleven callings",16);
  c.Window({814,140,400,510});c.Banner({852,129,324,36},roster?"Hero's chronicle":customize?"A name for the ages":"Choose a path",19);
  if(valid) {
+  if(selection.PreviewZoom()<.5f) for(int ring=5;ring>0;--ring)
+    c.Oval(558,548,ring*15.f,ring*2.8f,{.015f,.012f,.01f,.07f*(1-selection.PreviewZoom()*2)});
   const auto p=c.P(326,112);
   if(renderer.BeginPortrait(p.x,p.y,464*c.layout.scale/renderer.Width(),490*c.layout.scale/renderer.Height(),selection.PreviewZoom())) {
    auto pose=animation::Idle(selection.Time());
@@ -502,9 +527,9 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  if(selection.PreviewAbility()>=0) c.Center(326,593,464,hero.Spell(selection.PreviewAbility()).name,13,gold);
  const auto button=[&](C control,const char* label) {
   const auto a=CharacterSelection::Bounds(control);
-  const bool enabled=selection.Enabled(control),focused=selection.Focus()==control,hover=selection.Hover()==control;
+  const bool enabled=selection.Enabled(control),focused=selection.Focus()==control;
   const bool primary=control==C::Enter || control==C::Next || control==C::Confirm || control==C::Create;
-  c.Button(a,enabled,focused || hover,primary);
+  c.Button(a,enabled,focused,primary);
   const float highlight=selection.Highlight(control);
   if(enabled) c.Gradient({a.x+5,a.y+4,a.w-10,a.h-8},{.96f,.72f,.36f,.14f*highlight},{.6f,.36f,.12f,.03f*highlight});
   const float depression=selection.Pressed(control)?1.5f:0;
@@ -552,13 +577,15 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
    if(view==View::Overview) {
     const char* labels[]={"VITALITY","ARMOR","REACH"};
     const std::string values[]={std::to_string(int(hero.MaxHealth())),Number(hero.DamageReduction()),Number(info.range)+" m"};
+    c.Inset({842,291,350,65});
     for(int stat=0;stat<3;++stat) {
-      const Rect r{842+119.f*stat,291,112,65};c.Frame(r,dark,border);
+      const Rect r{842+119.f*stat,291,112,65};
+      if(stat) c.Line(r.x-4,302,r.x-4,345,1,{.32f,.29f,.23f,.7f});
       c.Center(r.x,r.y+10,r.w,labels[stat],10,gold);c.Center(r.x,r.y+29,r.w,values[stat],23,ink);
     }
     c.Text(842,376,"Calling: "+std::string(info.name),14,gold);
     c.Wrap(842,399,350,info.identity,16,ink,3);
-    c.Frame({842,458,350,61},dark,border);
+    c.Inset({842,458,350,61});
     c.Text(855,469,hero.CombatStyleInfo().resource,15,gold);
     c.Wrap(855,490,324,hero.CombatStyleInfo().payoff,12,ink,2);
    } else if(view==View::Arts) {
@@ -573,7 +600,7 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
     }
     c.Text(842,338,"Select an art / pose preview only",11,muted);
     const auto spell=hero.Spell(selected);
-    c.Frame({842,357,350,162},dark,border);
+    c.Inset({842,357,350,162});
     AbilityArtwork(c,{854,368,40,40},selected,hero.Class());
     c.Text(904,369,spell.name,std::min(19.f,19.f*274/std::max(1.f,c.Width(spell.name,19))),ink);
     c.Wrap(904,393,274,spell.targeting,10,gold,2);
@@ -612,6 +639,7 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
      const auto control=C(int(first)+index);const auto a=CharacterSelection::Bounds(control);const auto& swatch=palette[index];
      c.Button(a,true,selection.Hover()==control || selection.Focus()==control,index==selected);
      c.RectFill({a.x+7,a.y+6,a.w-14,a.h-12},swatch.r==0?Color{info.color[0],info.color[1],info.color[2],1}:Color{swatch.r,swatch.g,swatch.b,1});
+     c.Gradient({a.x+7,a.y+6,a.w-14,a.h-12},{1,.94f,.83f,.12f},{0,0,0,.40f});
      if(index==selected) c.Line(a.x+6,a.y+a.h-3,a.x+a.w-6,a.y+a.h-3,2,gold);
     }
     button(left,"<");button(right,">");
@@ -626,7 +654,9 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  for(int i=0;i<int(rpg::ClassId::Count);++i) {
   const auto control=C(int(C::Class0)+i);const auto a=CharacterSelection::Bounds(control);const bool selected=int(selection.SelectedClass())==i;
   const auto& slot=selection.ClassSlot(i);
-  c.Button(a,selection.Enabled(control),selected || selection.Hover()==control || selection.Focus()==control,selected);
+  const float warmth=selection.Highlight(control);
+  c.Inset(a,warmth,selected);
+  if(selection.Focus()==control) c.Line(a.x+7,a.y+a.h-3,a.x+a.w-7,a.y+a.h-3,1,gold);
   ClassSigil(c,{a.x+4,a.y+4,25,25},rpg::ClassId(i));
   if(roster && slot.status==Status::Saved) {
    const float size=std::min(12.f,12.f*139.f/std::max(1.f,c.Width(slot.name,12)));
@@ -640,10 +670,11 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  c.Text(84,594,customize?"Back to change your class":"One hero per class",11,muted);
  if(!selection.Notice().empty()) c.Wrap(842,650,350,selection.Notice(),12,gold,3);
  c.Text(72,699,"Tab  Select     Enter  Confirm     Arrow keys  Rotate     F11  Display",11,muted);
- if(selection.PageAge()<.16f) c.RectFill({814,140,400,510},{.045f,.03f,.02f,.28f*(1-selection.PageAge()/.16f)});
+ if(selection.PageAge()<.24f) c.RectFill({822,168,384,466},{.025f,.026f,.028f,.24f*std::pow(1-selection.PageAge()/.24f,2.f)});
 }
 
 void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bool debug,float cameraYaw) {
+ localization::playerName=s.Nickname();
  Canvas c(renderer); regions_.clear();
  struct StatusTip { std::string name,description,value; };
  std::vector<StatusTip> statusTips;
@@ -1207,7 +1238,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  } else if (panel!=Panel::None) {
   if(panel==Panel::Menu) {c.RectFill({0,0,1280,720},{0,0,0,.16f}); regions_.clear();}
   if (panel==Panel::Menu) {
-   c.Window({476,148,328,492}); c.Banner({490,137,300,34},"MEDITERRANEAN",20);
+   c.Window({476,148,328,538}); c.Banner({490,137,300,34},"MEDITERRANEAN",20);
    c.Center(476,177,328,"Dawnwatch expedition",12,muted);
    button({496,197,288,34},"Return to game  /  Esc",Action::Close);
    button({496,241,139,32},"Character  /  C",Action::Character); button({645,241,139,32},"Inventory  /  I",Action::Inventory);
@@ -1236,10 +1267,13 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    volumeMeter(461,"Effects",effectsVolume,Action::EffectsVolume);
    button({712,461,30,25},"-",Action::EffectsVolume,-10,effectsVolume>0);
    button({752,461,30,25},"+",Action::EffectsVolume,10,effectsVolume<100);
-   button({496,506,288,32},"Save & choose character",Action::CharacterSelection);
-   button({496,546,288,32},"Exit to desktop",Action::Quit);
-   c.Center(476,586,328,audioAvailable?"Click a meter to set volume; first mark mutes.":"Audio unavailable / levels retained",11,muted);
-   if (!menuNotice.empty()) c.Wrap(496,603,288,menuNotice,11,gold,2);
+   c.Text(500,502,"Language",13,ink);
+   button({586,498,94,28},"Русский",Action::Language,0,localization::language!=localization::Language::Russian);
+   button({690,498,94,28},"English",Action::Language,1,localization::language!=localization::Language::English);
+   button({496,540,288,32},"Save & choose character",Action::CharacterSelection);
+   button({496,580,288,32},"Exit to desktop",Action::Quit);
+   c.Center(476,624,328,audioAvailable?"Click a meter to set volume; first mark mutes.":"Audio unavailable / levels retained",11,muted);
+   if (!menuNotice.empty()) c.Wrap(496,649,288,menuNotice,11,gold,2);
    return;
   }
   if (panel==Panel::Build) {

@@ -21,6 +21,10 @@ int main() {
   const auto& library=authored::Collection();std::size_t triangles=0,bytes=0;
   for(const auto& m:library) {triangles+=m.geometry.indices.size()/3;bytes+=m.geometry.vertices.size()*40+m.geometry.indices.size()*4;}
   Check(bytes<authored::archiveBudget,"Authored geometry budget");
+  const auto pine=unsigned(authored::Asset::Pine)*authored::lodCount;
+  Check(library[pine+1].geometry.indices.size()<library[pine].geometry.indices.size()*.6 &&
+        library[pine+2].geometry.indices.size()<library[pine+1].geometry.indices.size()*.6,
+        "Pine needle shoots must reduce at both distant LODs");
   for(auto size:{std::size_t(0),std::size_t(15),source.size()-1})Reject(source.substr(0,size));
   auto bad=source;Put(bad,0,0u);Reject(bad);
   bad=source;Put(bad,4,2u);Reject(bad);

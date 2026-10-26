@@ -1,9 +1,17 @@
+#include "FauldLow.generated.h"
+#include "Fauld.generated.h"
+#include "ShoulderRightLow.generated.h"
+#include "ShoulderRight.generated.h"
+#include "ShoulderLeftLow.generated.h"
+#include "ShoulderLeft.generated.h"
 #include "engine/Geometry.h"
 #include "engine/Landscape.h"
 #include "game/WorldMap.h"
 #include "engine/Skinning.h"
 #include "engine/HandSkinning.h"
 #include "Blade.generated.h"
+#include "Cuirass.generated.h"
+#include "CuirassLow.generated.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -303,7 +311,14 @@ float Hash(int x,int y) {
 }
 
 Geometry BuildMesh(Mesh mesh) {
-  if(mesh==Mesh::GuardCuirass || mesh==Mesh::GuardCuirassLow) return GuardArmor(true,mesh==Mesh::GuardCuirassLow);
+  if(mesh==Mesh::GuardShoulderLeft) return compiled_mesh::ShoulderLeft();
+  if(mesh==Mesh::GuardShoulderLeftLow) return compiled_mesh::ShoulderLeftLow();
+  if(mesh==Mesh::GuardShoulderRight) return compiled_mesh::ShoulderRight();
+  if(mesh==Mesh::GuardShoulderRightLow) return compiled_mesh::ShoulderRightLow();
+  if(mesh==Mesh::GuardFauld) return compiled_mesh::Fauld();
+  if(mesh==Mesh::GuardFauldLow) return compiled_mesh::FauldLow();
+  if(mesh==Mesh::GuardCuirass) return compiled_mesh::Cuirass();
+  if(mesh==Mesh::GuardCuirassLow) return compiled_mesh::CuirassLow();
   if(mesh==Mesh::GuardPlate || mesh==Mesh::GuardPlateLow) return GuardArmor(false,mesh==Mesh::GuardPlateLow);
   if(mesh>=Mesh::WeaponMace && mesh<=Mesh::WeaponCleaver) return Equipment(mesh);
   if (IsBodyMesh(mesh)) return CharacterBody(unsigned(mesh)-unsigned(Mesh::Body)).mesh;

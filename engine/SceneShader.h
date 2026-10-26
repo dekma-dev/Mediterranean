@@ -412,6 +412,24 @@ float4 PSMain(VOut i) : SV_TARGET {
   albedo=lerp(dot(albedo,float3(.2126,.7152,.0722)).xxx,albedo,.70)*.91;
   albedo=lerp(albedo,albedo*float3(.63,.66,.53),stain*.65);
   albedo*=1-.065*smoothstep(.55,.85,streak);
+  // Broken limewash exposes rough masonry near damp foundations. Project on
+  // the dominant wall plane, with derivative-filtered joints at distant LODs.
+  float2 wall=float2(abs(geometric.x)>abs(geometric.z)?i.wp.z:i.wp.x,i.wp.y);
+  float erosion=Noise(wall*2.7+float2(13,4));
+  float peeled=(1-smoothstep(.25,1.35,i.wp.y))*smoothstep(.42,.64,erosion);
+  float2 courses=wall*float2(2.4,4.8);
+  courses.x+=floor(courses.y)*.5;
+  float2 cell=frac(courses);
+  float joint=min(min(cell.x,1-cell.x),min(cell.y,1-cell.y));
+  float filter=max(max(fwidth(courses.x),fwidth(courses.y)),.018);
+  float face=smoothstep(.045-filter,.08+filter,joint);
+  float variation=Hash(floor(courses));
+  float3 masonry=lerp(float3(.20,.205,.18),lerp(float3(.31,.32,.29),float3(.44,.42,.36),variation),face);
+  albedo=lerp(albedo,masonry,peeled*.85);
+  float wearHeight=peeled*(face*.007-.01);
+  heightDerivative+=float2(ddx(wearHeight),ddy(wearHeight));
+  roughness=max(roughness,.91);
+  cavity*=1-peeled*(1-face)*.22;
  }
  // Convert the texture height derivative into a world-space surface gradient.
  // This works for rotated/nonuniform parts without stored tangent vertices.

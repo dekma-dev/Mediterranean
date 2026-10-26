@@ -1,0 +1,106 @@
+{
+  "source": "D:\\Mediterranean\\.blender-local\\collection-02\\collection-03\\Mediterranean_Collection_03_Animated.blend",
+  "sha256": "8759c2166f3b97f96a58f6926895a4adab78e522da1d38a63ebdec73da59ad25",
+  "objects": [
+    "REWORK | shaped breastplate 18432 quads",
+    "REWORK | shaped backplate",
+    "REWORK | articulated shoulder sheet",
+    "REWORK | shoulder fastening",
+    "REWORK | shoulder fastening.001",
+    "REWORK | articulated shoulder sheet.001",
+    "REWORK | shoulder fastening.002",
+    "REWORK | shoulder fastening.003",
+    "REWORK | articulated shoulder sheet.002",
+    "REWORK | shoulder fastening.004",
+    "REWORK | shoulder fastening.005",
+    "REWORK | articulated shoulder sheet.003",
+    "REWORK | shoulder fastening.006",
+    "REWORK | shoulder fastening.007",
+    "REWORK | articulated shoulder sheet.004",
+    "REWORK | shoulder fastening.008",
+    "REWORK | shoulder fastening.009",
+    "REWORK | articulated shoulder sheet.005",
+    "REWORK | shoulder fastening.010",
+    "REWORK | shoulder fastening.011",
+    "REWORK | articulated shoulder sheet.006",
+    "REWORK | shoulder fastening.012",
+    "REWORK | shoulder fastening.013",
+    "REWORK | articulated shoulder sheet.007",
+    "REWORK | shoulder fastening.014",
+    "REWORK | shoulder fastening.015",
+    "REWORK | articulated waist lame",
+    "REWORK | waist sliding rivet",
+    "REWORK | waist sliding rivet.001",
+    "REWORK | articulated waist lame.001",
+    "REWORK | waist sliding rivet.002",
+    "REWORK | waist sliding rivet.003",
+    "REWORK | articulated waist lame.002",
+    "REWORK | waist sliding rivet.004",
+    "REWORK | waist sliding rivet.005",
+    "REWORK | articulated waist lame.003",
+    "REWORK | waist sliding rivet.006",
+    "REWORK | waist sliding rivet.007",
+    "REWORK | turned plate edge | skinned",
+    "REWORK | turned plate edge.001 | skinned",
+    "REWORK | arm opening rolled edge | skinned",
+    "REWORK | arm opening rolled edge.001 | skinned",
+    "REWORK | turned plate edge.002 | skinned",
+    "REWORK | turned plate edge.003 | skinned",
+    "REWORK | arm opening rolled edge.002 | skinned",
+    "REWORK | arm opening rolled edge.003 | skinned",
+    "REWORK | shoulder rolled hem | skinned",
+    "REWORK | shoulder rolled hem.001 | skinned",
+    "REWORK | shoulder rolled hem.002 | skinned",
+    "REWORK | shoulder rolled hem.003 | skinned",
+    "REWORK | shoulder rolled hem.004 | skinned",
+    "REWORK | shoulder rolled hem.005 | skinned",
+    "REWORK | shoulder rolled hem.006 | skinned",
+    "REWORK | shoulder rolled hem.007 | skinned",
+    "REWORK | waist rolled edge | skinned",
+    "REWORK | waist rolled edge.001 | skinned",
+    "REWORK | waist rolled edge.002 | skinned",
+    "REWORK | waist rolled edge.003 | skinned"
+  ],
+  "lods": [
+    {
+      "name": "guardian-cuirass",
+      "vertices": 976,
+      "triangles": 1799
+    },
+    {
+      "name": "guardian-cuirass-low",
+      "vertices": 300,
+      "triangles": 480
+    },
+    {
+      "name": "guardian-shoulder-left",
+      "vertices": 502,
+      "triangles": 900
+    },
+    {
+      "name": "guardian-shoulder-left-low",
+      "vertices": 162,
+      "triangles": 220
+    },
+    {
+      "name": "guardian-shoulder-right",
+      "vertices": 502,
+      "triangles": 900
+    },
+    {
+      "name": "guardian-shoulder-right-low",
+      "vertices": 162,
+      "triangles": 220
+    },
+    {
+      "name": "guardian-fauld",
+      "vertices": 509,
+      "triangles": 899
+    },
+    {
+      "name": "guardian-fauld-low",
+      "vertices": 162,
+      "triangles": 220
+    }
+  ]
+}
