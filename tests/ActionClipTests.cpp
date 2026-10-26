@@ -115,6 +115,7 @@ void Controller() {
     Check(Distance(CombatEffects::SpellTracePoint(palm,target,std::numeric_limits<float>::quiet_NaN()),palm)<.00001f,
       "Invalid trace age must not poison effect geometry");
   }
+  std::array<ActionChannels,int(ClassId::Count)> cancellationReference{};
   for(int hz:{30,60,144,1000}) for(int id=0;id<int(ClassId::Count);++id) {
     ActionController c;float time=0;
     while(time<.21f-1e-6f) {const float dt=std::min(1.f/hz,.21f-time);time+=dt;c.Update(dt,ClassId(id),time,true,2,true);}
@@ -122,20 +123,38 @@ void Controller() {
     Check(Size(accepted-SampleAction(ClassId(id),ActionClip::Heavy,.21f))<.0001f,"Action phase drifted from the accepted attack clock");
     time=0;
     while(time<.08f-1e-6f) {const float dt=std::min(1.f/hz,.08f-time);time+=dt;c.Update(dt,ClassId(id),-1,false,2,true);}
-    Check(Size(c.pose-accepted*.5f)<.0001f,"Interrupted release differs with refresh rate");
+    if(hz==30) cancellationReference[id]=c.pose;
+    else Check(Size(c.pose-cancellationReference[id])<.001f,"Interrupted release differs with refresh rate");
+    Check(Size(c.pose)<Size(accepted)+.5f,"Cancelled action gained excessive momentum");
     while(time<.16f-1e-6f) {const float dt=std::min(1.f/hz,.16f-time);time+=dt;c.Update(dt,ClassId(id),-1,false,2,true);}
     Check(Size(c.pose)<.0001f,"Cancelled clip did not return to locomotion");
     c.Update(.01f,ClassId(id),.2f,true,2,true);
     c.Update(.01f,ClassId(id),-1,false,2,false);Check(Size(c.pose)==0,"Death retained an action pose");
   }
-  ActionController c;c.Update(.01f,ClassId::Mage,.21f,true,2,true);const auto before=c.pose;
+  ActionController c;c.Update(.01f,ClassId::Mage,.21f,true,2,true);const auto before=c.pose,beforeVelocity=c.velocity;
   c.Update(.001f,ClassId::Mage,-1,false,0,true);
-  Check(Size(c.pose-before)<.003f,"A replacement action snapped the previous gesture away");
+  Check(Size((c.pose-before)*1000-beforeVelocity)<.25f,"A replacement action lost outgoing gesture velocity");
   c.Reset();Check(Size(c.pose)==0,"Load/reset must clear the action layer");
   c.Update(.01f,ClassId::Engineer,.21f,true,2,true);
-  const auto held=c.pose;
+  const auto held=c.pose,previousVelocity=c.velocity;
   c.Update(.0001f,ClassId::Engineer,-1,false,2,true);
-  Check(Size(c.pose-held)<.000001f,"Cancellation must begin without an acceleration kick");
+  Check(Size((c.pose-held)*10000-previousVelocity)<.025f,"Cancellation must retain outgoing action velocity");
+  for(int id=0;id<int(ClassId::Count);++id) for(float stop:{.08f,.16f,.24f,.35f,.50f}) {
+    ActionController action;const auto type=ClassId(id);
+    action.Update(.01f,type,stop,true,2,true);
+    auto last=action.pose;const auto outgoing=action.velocity;
+    action.Update(.0001f,type,-1,false,2,true);
+    Check(Size((action.pose-last)*10000-outgoing)<.04f,"Interrupted class gesture lost momentum");
+    for(int tick=0;tick<180;++tick) {
+      last=action.pose;action.Update(.001f,type,-1,false,2,true);
+      Check(std::isfinite(Size(action.pose)) && Size(action.pose-last)<.04f,"Inertial recovery snapped or diverged");
+      Sample sample;sample.action=action.pose;
+      const auto rig=BuildCharacterPose(0,0,false,sample,rpg::WeaponFor(type).form);
+      for(const auto& arm:rig.arms) Check(std::abs(Distance(arm.root,arm.joint)-CharacterPose::upperArm)<.00001f &&
+        std::abs(Distance(arm.joint,arm.end)-CharacterPose::forearm)<.00001f,"Inertial recovery stretched the arm");
+    }
+    Check(Size(action.pose)<.0001f && Size(action.velocity)<.0001f,"Inertial recovery retained residual motion");
+  }
 }
 std::string Fixture(ClassId id) {
   const std::string duel="MEDITERRANEAN 3\n-4 5.2 50 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
@@ -174,6 +193,14 @@ void Captures() {
   const auto root=std::filesystem::current_path()/"action-clip-check";std::filesystem::create_directories(root);
   Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),960,720,L"Class action checks",false),"Hidden action window");
   Renderer renderer;Check(renderer.Initialize(window.GetHandle(),960,720),"Action renderer");
+  ActionController recovery;recovery.Update(.01f,ClassId::Mage,.16f,true,2,true);
+  for(int frame=0;frame<5;++frame) {
+    if(frame) recovery.Update(.04f,ClassId::Mage,-1,false,2,true);
+    Sample sample;sample.action=recovery.pose;
+    renderer.BeginFrame();renderer.SetCamera({2.2f,1.7f,3.5f},{0,1.0f,0});
+    DrawCharacter(renderer,{0,0},0,0,{.3f,.4f,.65f,1},0,0,CharacterOutfit::From(rpg::Inventory{},ClassId::Mage),sample);
+    Check(renderer.Capture((root/("cancel-recovery-"+std::to_string(frame)+".png")).wstring()) && renderer.EndFrame(false),"Inertial action recovery capture");
+  }
   for(float side:{-1.f,1.f}) {
     animation::State impact;impact.ApplyImpact(0,side);impact.Update(.05f,0,0,0,true,0);
     renderer.BeginFrame();renderer.SetCamera({2.2f,1.7f,3.5f},{0,1.0f,0});

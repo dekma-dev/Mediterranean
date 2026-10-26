@@ -224,7 +224,7 @@ inline ActionChannels SampleBossGesture(unsigned attack,float seconds) {
   return pose;
 }
 struct ActionController {
-  ActionChannels pose,releasePose;
+  ActionChannels pose,velocity,releasePose,releaseVelocity;
   float lastSeconds=-1,releaseAge=1;
   ActionClip lastClip=ActionClip::Basic;
   rpg::ClassId lastClass=rpg::ClassId::Warrior;
@@ -238,19 +238,34 @@ struct ActionController {
     const float seconds=attackSeconds>=0?attackSeconds:healSeconds;
     const bool active=std::isfinite(seconds) && seconds>=0 && seconds<ActionDuration(clip);
     const bool changed=lastSeconds>=0 && (!active || id!=lastClass || clip!=lastClip || variant!=lastVariant || seconds+.00001f<lastSeconds);
+    const float rate=active && !changed && lastSeconds>=0?std::clamp((seconds-lastSeconds)/dt,0.f,8.f):1.f;
+    const auto sample=[&](float age) {
+      auto result=active?SampleAction(id,clip,age):ActionChannels{};
+      if(active && attackSeconds>=0 && variant>=0) result=result+SampleBossGesture(unsigned(variant),age);
+      return result;
+    };
+    const auto derivative=[&](float age) {
+      constexpr float epsilon=.0002f;
+      return (sample(age+epsilon)-sample(age-epsilon))*(rate/(2*epsilon));
+    };
     if(changed && (lastSeconds+dt<ActionDuration(lastClip)-.0001f || (active && clip!=lastClip))) {
-      releasePose=pose; releaseAge=0;
+      // Inertialize the difference from the new track at this frame's start.
+      // Preserve outgoing velocity as well as position: freezing the cancelled
+      // hand before fading it back to guard creates a visible mechanical stop.
+      const float start=seconds-dt*rate;
+      releasePose=pose-sample(start);releaseVelocity=velocity-derivative(start);releaseAge=0;
     }
     releaseAge=std::min(.16f,releaseAge+dt);
-    pose=active?SampleAction(id,clip,seconds):ActionChannels{};
-    if(active && attackSeconds>=0 && variant>=0) pose=pose+SampleBossGesture(unsigned(variant),seconds);
-    // An interrupted gesture settles even when a menu has taken input. A new
-    // action crossfades out the previous pose without postponing its hit clock.
+    pose=sample(seconds);velocity=derivative(seconds);
+    // Zero-ended quintic position/velocity offsets settle within 160 ms,
+    // including repeated interruptions. The destination's clock never pauses.
     const float t=releaseAge/.16f;
-    // Quintic fade has zero velocity and acceleration at both ends, avoiding
-    // the abrupt acceleration of a cubic cancellation envelope.
-    const float carry=1-t*t*t*(t*(t*6-15)+10);
-    if(carry>0) pose=pose*(1-carry)+releasePose*carry;
+    const float t2=t*t,t3=t2*t,t4=t3*t,t5=t4*t;
+    const float carry=1-10*t3+15*t4-6*t5;
+    const float drift=t-6*t3+8*t4-3*t5;
+    pose=pose+releasePose*carry+releaseVelocity*(.16f*drift);
+    velocity=velocity+releasePose*((-30*t2+60*t3-30*t4)/.16f)+
+      releaseVelocity*(1-18*t2+32*t3-15*t4);
     lastSeconds=active?seconds:-1; lastClip=clip; lastClass=id;lastVariant=variant;
   }
 };
