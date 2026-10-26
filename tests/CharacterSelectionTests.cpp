@@ -220,6 +220,41 @@ void Render(const std::filesystem::path& root,const std::string& veteran) {
   game.ChooseCharacter(root/("empty-"+std::to_string(GetTickCount64())+".save"));renderer.BeginFrame();game.Render(renderer);
   Check(renderer.Capture((root/"selection-first.png").wstring()) && renderer.EndFrame(false),"First-character render");
   Driver d;d.Step(game);d.Click(game,Control::Create);d.Click(game,Control::Class5);
+  const auto frozenWorld=game.State().Save();
+  for(int classIndex=0;classIndex<int(rpg::ClassId::Count);++classIndex) {
+    d.Click(game,Control(int(Control::Class0)+classIndex));
+    const auto untouched=game.Selection().Hero().Save();
+    d.Click(game,Control::Arts);
+    Check(game.Selection().CallingScreen()==Selection::CallingView::Arts && !game.Selection().Enabled(Control::Branch0),"Art view exposes hidden branch controls");
+    for(int art=0;art<7;++art) {
+      d.Click(game,Control(int(Control::Art0)+art));
+      Check(game.Selection().PreviewAbility()==Selection::previewArts[art] && game.Selection().PreviewAction()>=0,"Art click previews wrong ability");
+      // Slow caster signature clips can outlast four seconds at their class rate.
+      for(int step=0;step<900 && game.Selection().PreviewAction()>=0;++step) d.Step(game);
+      Check(game.Selection().PreviewAction()<0,"Art preview never settles");
+      Check(game.Selection().Hero().Save()==untouched,"Art preview mutates hero");
+      Check(game.State().Save()==frozenWorld,"Art preview mutates world");
+    }
+    d.Click(game,Control::Talents);
+    Check(!game.Selection().Enabled(Control::Art0),"Hidden art remains interactive");
+    for(int branch=0;branch<3;++branch) {
+      d.Click(game,Control(int(Control::Branch0)+branch));
+      Check(game.Selection().CallingBranch()==branch,"Talent path selection failed");
+    }
+  }
+  d.Click(game,Control::Class5);
+  for(const auto size:{std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
+    d.frame.width=size.first;d.frame.height=size.second;d.Step(game);
+    Check(renderer.Resize(size.first,size.second),"Calling view resize");
+    for(int view=0;view<3;++view) {
+      d.Click(game,Control(int(Control::Overview)+view));
+      if(view==1) d.Click(game,Control::Art5);
+      if(view==2) d.Click(game,Control::Branch1);
+      renderer.BeginFrame();game.Render(renderer);
+      Check(renderer.Capture((root/("calling-"+std::to_string(view)+"-"+std::to_string(size.first)+".png")).wstring()) && renderer.EndFrame(false),"Calling view capture");
+    }
+  }
+  d.frame.width=1280;d.frame.height=720;d.Step(game);d.Click(game,Control::Overview);d.Click(game,Control::ResetView);
   for(int stage=0;stage<2;++stage) {
     if(stage) {d.Click(game,Control::Next);d.frame.down[VK_SHIFT]=true;d.Key(game,'E');d.frame.down[VK_SHIFT]=false;
       for(int key:{'L','A','R','A'}) d.Key(game,key);d.Key(game,VK_RETURN);d.Click(game,Control::HairRight);d.Click(game,Control::DyeRight);}

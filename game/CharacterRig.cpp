@@ -59,5 +59,12 @@ visual::BodyPalette BuildCharacterRig(const CharacterPose& pose,const CharacterO
   if(!outfit.tunic) cloth={.61f,.58f,.46f,float(visual::Material::Cloth)};
   result.colors={outfit.armor?steel:cloth,cloth,outfit.armor?steel:skin,
     outfit.trousers?trousers:skin,outfit.boots?leather:outfit.trousers?trousers:skin,skin};
+  if(outfit.classId==rpg::ClassId::Warrior) {
+    // The guard's harness sits over a dark padded arming garment. Its sleeves
+    // cover the forearms; removing the chest piece still exposes bare skin.
+    if(outfit.tunic) {result.colors[1]={.19f,.22f,.23f,float(visual::Material::Cloth)};
+      result.colors[2]={.17f,.18f,.17f,float(visual::Material::Cloth)};}
+    if(outfit.trousers) result.colors[3]={.13f,.15f,.16f,float(visual::Material::Cloth)};
+  }
   return result;
 }

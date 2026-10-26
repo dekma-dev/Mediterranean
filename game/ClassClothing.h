@@ -33,8 +33,13 @@ inline Fittings Build(const CharacterOutfit& outfit) {
  if(outfit.tunic) {
   switch(outfit.classId) {
    case rpg::ClassId::Warrior:
-    for(int n=0;n<4;++n) chest(-.14f+n*.09f,1.36f-n*.065f,{.09f,.09f,.035f},hide,S::Leather);
-    chest(-.05f,1.29f,{.065f,.075f,.045f},iron,S::Metal);break;
+    add(M::GuardCuirass,0,1.25f,0,{1,1,1},outfit.armor?C{1,.98f,.88f,1}:C{.78f,.83f,.89f,1},S::Metal);
+    // Riveted shoulder straps and a restrained vertical heraldic clasp.
+    for(float side:{-1.f,1.f}) {
+      add(M::Torso,side*.18f,1.45f,.11f,{.065f,.16f,.06f},hide,S::Leather);
+      add(M::Sphere,side*.18f,1.46f,.145f,{.026f,.026f,.013f},brass,S::Metal);
+    }
+    add(M::Blade,0,1.32f,.227f,{.045f,.19f,.015f},brass,S::Metal);break;
    case rpg::ClassId::Paladin:
     chest(0,1.25f,{.24f,.43f,.035f},fabric,S::Cloth);
     chest(0,1.32f,{.055f,.19f,.055f},brass,S::Metal);
@@ -71,7 +76,7 @@ inline Fittings Build(const CharacterOutfit& outfit) {
  }
  // Layered closure, collar lining and small paired rivets read at portrait
  // distance. These remain torso-bound and obey the existing attachment LOD.
- if(outfit.tunic) {
+ if(outfit.tunic && outfit.classId!=rpg::ClassId::Warrior) {
   const bool armored=outfit.classId==rpg::ClassId::Warrior || outfit.classId==rpg::ClassId::Paladin || outfit.classId==rpg::ClassId::Engineer;
   for(float side:{-1.f,1.f}) {
    chest(side*.045f,1.26f,{.012f,.34f,.018f},armored?iron:hide,armored?S::Metal:S::Leather);

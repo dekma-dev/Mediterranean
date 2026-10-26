@@ -11,11 +11,12 @@ class CharacterSelection {
 public:
   enum class Status { New, Saved, Unreadable };
   enum class Page { Roster, Class, Customize };
+  enum class CallingView { Overview, Arts, Talents };
   enum class Control { Hero, Enter, Refresh, Quit, Left, Right, Name,
     Class0,Class1,Class2,Class3,Class4,Class5,Class6,Class7,Class8,Class9,Class10,
     Create,Next,Back,Cancel,Confirm,SkinLeft,SkinRight,HairLeft,HairRight,DyeLeft,DyeRight,
     Skin0,Skin1,Skin2,Skin3,Skin4,Hair0,Hair1,Hair2,Hair3,Hair4,Dye0,Dye1,Dye2,Dye3,Dye4,
-    Closeup,Pose,ResetView,None };
+    Closeup,Pose,ResetView,Overview,Arts,Talents,Art0,Art1,Art2,Art3,Art4,Art5,Art6,Branch0,Branch1,Branch2,None };
   enum class Action { None, Enter, Quit };
   struct Slot { Status status=Status::New; std::string name; int level=1; };
   void Open(const std::filesystem::path& file,rpg::ClassId selected=rpg::ClassId::Warrior);
@@ -30,6 +31,9 @@ public:
   const std::string& Snapshot() const { return snapshot_; }
   Status State() const { return status_; }
   Page Screen() const { return page_; }
+  CallingView CallingScreen() const { return callingView_; }
+  int CallingBranch() const { return branch_; }
+  static constexpr std::array<int,7> previewArts{0,1,2,3,5,6,7};
   const Slot& ClassSlot(int index) const { return slots_.at(index); }
   Control Focus() const { return focus_; }
   Control Hover() const { return hover_; }
@@ -51,6 +55,8 @@ private:
   rpg::ClassId class_=rpg::ClassId::Warrior;
   std::array<Slot,int(rpg::ClassId::Count)> slots_;
   Page page_=Page::Roster;
+  CallingView callingView_=CallingView::Overview;
+  int branch_=0;
   rpg::Appearance look_;
   std::string draftName_,notice_;
   rpg::Simulation hero_;

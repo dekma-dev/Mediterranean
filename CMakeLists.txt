@@ -81,6 +81,7 @@ add_library(MediterraneanClient STATIC
   engine/Engine.cpp
   engine/Audio.cpp
   engine/Renderer.cpp
+  engine/AuthoredAssets.cpp
   engine/GpuTimer.cpp
   engine/Geometry.cpp
   engine/Skinning.cpp
@@ -107,6 +108,9 @@ add_dependencies(MediterraneanClient EmbeddedMeshes)
 # Embed artwork in every native client host (including offscreen test hosts).
 # Resource include paths make RC independent of the build working directory.
 target_sources(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/UiArtwork.rc")
+target_sources(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/Collection.rc")
+set_source_files_properties(assets/authored/Collection.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/collection01.masset")
+target_include_directories(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored")
 target_include_directories(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui")
 add_library(LaunchSupport STATIC launcher/LaunchSupport.cpp)
 target_include_directories(LaunchSupport PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -122,6 +126,8 @@ endif()
 add_executable(RPGNative WIN32 main.cpp)
 target_link_libraries(RPGNative PRIVATE MediterraneanClient LaunchSupport)
 add_dependencies(MediterraneanLauncher RPGNative)
+add_executable(MediterraneanAssetReview tools/AssetReview.cpp)
+target_link_libraries(MediterraneanAssetReview PRIVATE MediterraneanClient)
 
 target_include_directories(MediterraneanClient PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
@@ -140,6 +146,9 @@ set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT RPGNative)
 
 include(CTest)
 if (BUILD_TESTING)
+  add_executable(AuthoredAssetTests tests/AuthoredAssetTests.cpp)
+  target_link_libraries(AuthoredAssetTests PRIVATE MediterraneanClient)
+  add_test(NAME AuthoredAssetTests COMMAND AuthoredAssetTests)
   add_executable(ImportedBodyTests tests/ImportedBodyTests.cpp)
   target_link_libraries(ImportedBodyTests PRIVATE MediterraneanClient GltfRigImport)
   target_compile_definitions(ImportedBodyTests PRIVATE RPG_MESH_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/assets/characters/hinge-mesh.glb")

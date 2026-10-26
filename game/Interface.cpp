@@ -465,9 +465,16 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
   if(renderer.BeginPortrait(p.x,p.y,464*c.layout.scale/renderer.Width(),490*c.layout.scale/renderer.Height(),selection.PreviewZoom())) {
    auto pose=animation::Idle(selection.Time());
    pose.action=selection.PreviewPose();
-   if(selection.PreviewAction()>=0 && !animation::RangedClass(hero.Class())) {
+   if(selection.PreviewAction()>=0 && selection.PreviewAbility()!=2 && selection.PreviewAbility()!=3 && !animation::RangedClass(hero.Class())) {
     pose.attackSeconds=selection.PreviewAction();pose.heavyAttack=selection.PreviewAbility()!=0 && selection.PreviewAbility()!=7;
    }
+   if(selection.PreviewAction()>=0 && selection.PreviewAbility()==2) {
+    pose.dashPhase=std::clamp(selection.PreviewAction()/.34f,0.f,1.f);
+    pose.dash=motion::DashSpeed(pose.dashPhase);pose.dashBrake=animation::DashBrake(pose.dashPhase)*(1-animation::SmoothStep((selection.PreviewAction()-.34f)/.16f));
+    pose.retreat=hero.RetreatMobility();
+   }
+   if(selection.PreviewAction()>=0 && selection.PreviewAbility()==3 && hero.Class()==rpg::ClassId::Warrior)
+    pose.cast=animation::Gesture(selection.PreviewAction(),.18f,.72f);
    DrawCharacter(renderer,{0,0},0,selection.Yaw(),{info.color[0],info.color[1],info.color[2],1},0,0,
      CharacterOutfit::From(hero.Items(),hero.Class(),hero.Look()),pose);
    renderer.EndPortrait();
@@ -518,18 +525,60 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  } else {
   ClassSigil(c,{842,181,46,46},hero.Class());c.Text(900,182,info.name,22,ink);c.Text(900,213,info.role,12,gold);
   if(!customize) {
-   c.Wrap(842,240,350,std::string(hero.CombatStyleInfo().resource)+" / "+hero.CombatStyleInfo().payoff,14,ink,3);
-   c.Text(842,292,"STARTING ARTS",11,gold);
-   for(int i=0;i<7;++i) {
-    const int ability=i>=4?i+1:i;
-    const Rect r{842+180.f*(i%2),313+33.f*(i/2),170,31};
-    c.Frame(r,dark,border);AbilityArtwork(c,{r.x+5,r.y+4,23,23},ability,hero.Class());
-    c.Wrap(r.x+34,r.y+3,131,hero.Spell(ability).name,11,ink,2);
+   using View=CharacterSelection::CallingView;
+   const auto view=selection.CallingScreen();
+   for(int tab=0;tab<3;++tab) {
+    const auto control=C(int(C::Overview)+tab);const auto r=CharacterSelection::Bounds(control);
+    button(control,tab==0?"Overview":tab==1?"Battle arts":"Talent paths");
+    if(int(view)==tab) c.Line(r.x+6,r.y+r.h-4,r.x+r.w-6,r.y+r.h-4,2,gold);
    }
-   c.Text(842,447,"TALENT PATHS  /  N IN GAME",11,gold);
-   c.Wrap(842,465,350,std::string(info.branches[0])+"  /  "+info.branches[1]+"  /  "+info.branches[2],14,ink,2);
-   c.Text(842,490,"18 talents / 3 paths / 5 earned choices",12,gold);
-   c.Text(842,510,"Health "+std::to_string(int(hero.MaxHealth()))+"  /  Range "+Number(info.range)+" m",12,muted);
+   if(view==View::Overview) {
+    const char* labels[]={"VITALITY","ARMOR","REACH"};
+    const std::string values[]={std::to_string(int(hero.MaxHealth())),Number(hero.DamageReduction()),Number(info.range)+" m"};
+    for(int stat=0;stat<3;++stat) {
+      const Rect r{842+119.f*stat,291,112,65};c.Frame(r,dark,border);
+      c.Center(r.x,r.y+10,r.w,labels[stat],10,gold);c.Center(r.x,r.y+29,r.w,values[stat],23,ink);
+    }
+    c.Text(842,376,"Calling: "+std::string(info.name),14,gold);
+    c.Wrap(842,399,350,info.identity,16,ink,3);
+    c.Frame({842,458,350,61},dark,border);
+    c.Text(855,469,hero.CombatStyleInfo().resource,15,gold);
+    c.Wrap(855,490,324,hero.CombatStyleInfo().payoff,12,ink,2);
+   } else if(view==View::Arts) {
+    const int selected=rpg::ValidSpell(selection.PreviewAbility())?selection.PreviewAbility():0;
+    for(int i=0;i<7;++i) {
+      const int ability=CharacterSelection::previewArts[i];const auto control=C(int(C::Art0)+i);
+      const auto r=CharacterSelection::Bounds(control);const bool chosen=selected==ability;
+      c.Button(r,true,selection.Focus()==control || selection.Hover()==control,chosen);
+      AbilityArtwork(c,{r.x+5,r.y+5,r.w-10,r.h-10},ability,hero.Class());
+      c.Text(r.x+4,r.y+3,hero.Spell(ability).key,10,ink);
+      if(chosen) c.Line(r.x+4,r.y+r.h-3,r.x+r.w-4,r.y+r.h-3,2,gold);
+    }
+    c.Text(842,338,"Select an art / pose preview only",11,muted);
+    const auto spell=hero.Spell(selected);
+    c.Frame({842,357,350,162},dark,border);
+    AbilityArtwork(c,{854,368,40,40},selected,hero.Class());
+    c.Text(904,369,spell.name,std::min(19.f,19.f*274/std::max(1.f,c.Width(spell.name,19))),ink);
+    c.Wrap(904,393,274,spell.targeting,10,gold,2);
+    c.Wrap(854,421,326,spell.description,13,ink,4);
+    c.Line(854,490,1180,490,1,border);
+    c.Text(854,499,"CD "+Number(hero.AbilityCooldown(selected))+" s",11,gold);
+    c.Text(967,499,spell.range>0?"Range "+Number(spell.range)+" m":"Self",11,gold);
+    c.Text(1083,499,"Key "+std::string(spell.key),11,gold);
+   } else {
+    const int branch=selection.CallingBranch();
+    for(int i=0;i<3;++i) {
+      const auto control=C(int(C::Branch0)+i);const auto r=CharacterSelection::Bounds(control);
+      c.Button(r,true,selection.Focus()==control || selection.Hover()==control,i==branch);
+      c.Center(r.x,r.y+8,r.w,info.branches[i],std::min(13.f,13.f*(r.w-10)/std::max(1.f,c.Width(info.branches[i],13))),i==branch?ink:muted);
+    }
+    for(int row=0;row<6;++row) {
+      const auto talent=hero.TalentDefinition(row*3+branch);const Rect r{842,322+32.f*row,350,30};
+      c.Frame(r,dark,border);c.Center(r.x+3,r.y+8,39,"Lv "+std::to_string(talent.level),10,gold);
+      c.Text(r.x+49,r.y+2,talent.name,std::min(14.f,14.f*290/std::max(1.f,c.Width(talent.name,14))),ink);
+      c.Text(r.x+49,r.y+17,talent.effect,std::min(11.f,11.f*290/std::max(1.f,c.Width(talent.effect,11))),muted);
+    }
+   }
    button(C::Next,selection.ClassSlot(int(selection.SelectedClass())).status==Status::New?"Appearance & name":"Class slot occupied");
   } else {
    c.Text(842,241,"HERO'S NAME",11,gold);const auto a=CharacterSelection::Bounds(C::Name);

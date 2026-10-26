@@ -195,6 +195,9 @@ void ClothingContracts() {
     Simulation hero;Check(hero.CreateCharacter(ClassId(i),"Tester"),"Clothing hero");
     auto outfit=CharacterOutfit::From(hero.Items(),ClassId(i));
     const auto all=clothing::Build(outfit);
+    unsigned cuirasses=0;
+    for(unsigned n=0;n<all.count;++n) cuirasses+=all.parts[n].mesh==visual::Mesh::GuardCuirass;
+    Check(cuirasses==(ClassId(i)==ClassId::Warrior?1u:0u),"Guard harness must belong only to the equipped Warrior chest");
     Check(all.count>0 && all.count<48,"Class fittings missing or over budget");
     std::string signature;
     for(unsigned n=0;n<all.count;++n) {

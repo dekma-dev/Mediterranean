@@ -130,8 +130,14 @@ bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
  static_assert(sizeof(visual::HandPalette)==1024 && sizeof(handPalettes_)==65536,"Hand palettes must match HLSL and the D3D11 constant limit.");
  std::vector<Vertex> vertices; std::vector<std::uint32_t> indices;
  std::vector<visual::SkinInfluence> influences;
+ const authored::Library* authoredMeshes=nullptr;
+ try { authoredMeshes=&authored::Collection(); }
+ catch(const std::exception& exception) {
+  const std::string message=exception.what();error_=L"Blender collection: "+std::wstring(message.begin(),message.end());return false;
+ }
  for (unsigned i=0;i<meshCount;++i) {
-  auto mesh=previewBody && visual::IsBodyMesh(static_cast<visual::Mesh>(i))?previewBody->mesh:visual::BuildMesh(static_cast<visual::Mesh>(i));
+  auto mesh=i>=authored::firstMesh?(*authoredMeshes)[i-authored::firstMesh].geometry:
+    previewBody && visual::IsBodyMesh(static_cast<visual::Mesh>(i))?previewBody->mesh:visual::BuildMesh(static_cast<visual::Mesh>(i));
   auto& range=meshes_[i]; range.start=static_cast<UINT>(indices.size()); range.count=static_cast<UINT>(mesh.indices.size());
   for (auto index : mesh.indices) indices.push_back(index+static_cast<UINT>(vertices.size()));
   for (const auto& v : mesh.vertices) range.radius=std::max(range.radius,std::sqrt(v.position.x*v.position.x+v.position.y*v.position.y+v.position.z*v.position.z));
@@ -145,6 +151,11 @@ bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
     const auto& weights=visual::CharacterHand(index/2,index%2!=0).influences;
     influences.insert(influences.end(),weights.begin(),weights.end());
   } else influences.resize(vertices.size());
+ }
+ // A LOD swap must retain a conservative bound for every reduction level.
+ for(unsigned a=0;a<authored::assetCount;++a) {
+  float radius=0;for(unsigned lod=0;lod<authored::lodCount;++lod)radius=std::max(radius,meshes_[authored::firstMesh+a*authored::lodCount+lod].radius);
+  for(unsigned lod=0;lod<authored::lodCount;++lod)meshes_[authored::firstMesh+a*authored::lodCount+lod].radius=radius;
  }
  D3D11_BUFFER_DESC b{}; b.ByteWidth=static_cast<UINT>(vertices.size()*sizeof(Vertex));
  b.Usage=D3D11_USAGE_IMMUTABLE; b.BindFlags=D3D11_BIND_VERTEX_BUFFER;
@@ -360,6 +371,12 @@ void Renderer::Draw(const XMMATRIX& world,const XMMATRIX& vp,const XMFLOAT4& col
  context_->UpdateSubresource(constants_.Get(),0,nullptr,&data,0,0);
  context_->OMSetDepthStencilState(hud?depthOff_.Get():depthOn_.Get(),0); context_->Draw(count,start);
 }
+void Renderer::DrawAuthoredAsset(authored::Asset asset,const XMFLOAT3& position,const XMFLOAT3& scale,float yaw,unsigned detail) {
+ if(unsigned(asset)>=authored::assetCount || scale.x<=0 || scale.y<=0 || scale.z<=0) return;
+ const unsigned selected=authored::Slot(asset,detail>=3?0:std::min(detail,2u));
+ DrawMesh(visual::Mesh(selected),position,scale,{1,1,1,1},visual::Material::Count,yaw);
+ world_[selected].back().reserved=detail<3?1:0;world_[selected].back().body=255;
+}
 void Renderer::DrawMarkerBox(const XMFLOAT3& p,const XMFLOAT3& s,const XMFLOAT4& color,float yaw) {
  DrawMesh(visual::Mesh::Box,p,s,color,visual::Material::Plain,yaw,0,visual::ShadowMode::None);
 }
@@ -384,9 +401,10 @@ void Renderer::DrawMesh(visual::Mesh mesh,const XMFLOAT3& p,const XMFLOAT3& s,co
  Queue(mesh,XMMatrixScaling(s.x,s.y,s.z)*XMMatrixRotationX(pitch)*XMMatrixRotationZ(roll)*XMMatrixRotationY(yaw)*
   XMMatrixTranslation(p.x,p.y,p.z),color,material,shadow,maxDetail);
 }
-void Renderer::DrawCloak(const XMFLOAT3& shoulder,float yaw,float pitch,float roll,float side,float back) {
- DrawMesh(visual::Mesh::Cloak,shoulder,{1,1,1},{1,1,1,1},visual::Material::Cloth,yaw,pitch,visual::ShadowMode::Cast,roll);
- auto& item=world_[static_cast<unsigned>(visual::Mesh::Cloak)].back();
+void Renderer::DrawCloak(const XMFLOAT3& shoulder,float yaw,float pitch,float roll,float side,float back,bool guard) {
+ const auto mesh=guard?visual::Mesh::GuardCloak:visual::Mesh::Cloak;
+ DrawMesh(mesh,shoulder,{1,1,1},{1,1,1,1},visual::Material::Cloth,yaw,pitch,visual::ShadowMode::Cast,roll);
+ auto& item=world_[static_cast<unsigned>(mesh)].back();
  item.instance.surface.z=std::isfinite(side)?std::clamp(side,-.20f,.20f):0;
  // Positive w identifies cloth. Both shadow and color use the same deformation.
  item.instance.surface.w=.001f+(std::isfinite(back)?std::clamp(back,0.f,.35f):0);
@@ -507,6 +525,19 @@ bool Renderer::FlushWorld() {
     if(retained!=i) batch[retained]=item;
     ++retained;
    }
+  }
+  batch.resize(retained);
+ }
+ // Resolve LOD after replaying cached scenery, against this frame's camera.
+ for(unsigned a=0;a<authored::assetCount;++a) {
+  const unsigned slot=authored::firstMesh+a*authored::lodCount;
+  auto& batch=world_[slot];std::size_t retained=0;
+  for(const auto& item:batch) {
+   const auto p=item.center;
+   const float distance=std::sqrt((p.x-eye_.x)*(p.x-eye_.x)+(p.y-eye_.y)*(p.y-eye_.y)+(p.z-eye_.z)*(p.z-eye_.z));
+   const float pixels=item.radius*2*projectionScale*height_*.5f/std::max(.1f,distance);
+   const unsigned level=item.reserved || portrait_?0:authored::SelectLod(pixels);
+   if(level) world_[slot+level].push_back(item);else batch[retained++]=item;
   }
   batch.resize(retained);
  }

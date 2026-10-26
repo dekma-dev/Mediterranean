@@ -18,6 +18,7 @@ CharacterOutfit CharacterOutfit::From(const rpg::Inventory& inventory,rpg::Class
 void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::XMFLOAT4 color,float swing,float gait,CharacterOutfit outfit,animation::Sample dynamics,std::uint64_t actor) {
  using namespace DirectX; using M=visual::Mesh; using S=visual::Material;
     const auto form=rpg::WeaponFor(outfit.classId).form;
+    const bool guard=outfit.classId==rpg::ClassId::Warrior;
     const auto pose=BuildCharacterPose(swing,gait,outfit.shield,dynamics,form);
     const auto& tone=rpg::skinTones[outfit.appearance.skin];
     const auto& hair=rpg::hairColors[outfit.appearance.hair];
@@ -33,7 +34,10 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
     const auto part=[&](M mesh,float x,float h,float z,XMFLOAT3 scale,XMFLOAT4 tint,S material,unsigned maxDetail=2) {
       renderer.DrawMesh(mesh,upper({x,h,z}),scale,tint,material,yaw+pose.upperYaw,pose.upperPitch,visual::ShadowMode::Cast,pose.upperRoll,maxDetail);
     };
-    const auto headTransform=pose.HeadTransform()*XMMatrixRotationY(yaw)*XMMatrixTranslation(p.x,base,p.z);
+    // A smaller, slightly longer head proportion makes the guard less toy-like.
+    // Apply the same neck-centred transform to skin, features, hair and helmet.
+    const auto headFit=guard?XMMatrixTranslation(0,-1.61f,0)*XMMatrixScaling(.92f,.97f,.92f)*XMMatrixTranslation(0,1.61f,0):XMMatrixIdentity();
+    const auto headTransform=headFit*pose.HeadTransform()*XMMatrixRotationY(yaw)*XMMatrixTranslation(p.x,base,p.z);
     const auto actorTransform=XMMatrixRotationY(yaw)*XMMatrixTranslation(p.x,base,p.z);
     const auto head=[&](M mesh,float x,float h,float z,XMFLOAT3 scale,XMFLOAT4 tint,S material,float roll=0.f,unsigned maxDetail=3) {
       const unsigned detail=maxDetail==3?(mesh==M::Feature?1u:2u):maxDetail;
@@ -59,19 +63,19 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
     }
     if (outfit.cloak) {
       renderer.DrawCloak(upper({0,1.49f,-.19f}),yaw+pose.upperYaw,pose.upperPitch,pose.upperRoll,
-        dynamics.clothSide,dynamics.clothBack);
+        dynamics.clothSide,dynamics.clothBack,guard);
       for (float side : {-1.f,1.f})
         part(M::Torso,side*.13f,1.49f,.015f,{.12f,.09f,.39f},{.12f,.24f,.36f,1},S::Cloth);
       part(M::Sphere,0,1.48f,.195f,{.09f,.065f,.03f},{.72f,.54f,.24f,1},S::Metal);
     }
-    if (outfit.tunic) {
+    if (outfit.tunic && !guard) {
       const XMFLOAT3 seam[]={{0,1.02f,.15f},{0,1.064f,.16f},{0,1.198f,.183f},{0,1.371f,.175f},{0,1.448f,.145f}};
       for (int i=0;i<4;++i) renderer.DrawMeshBetween(M::Box,
         upper(seam[i]),upper(seam[i+1]),
         .022f,.009f,{.63f,.50f,.25f,1},S::Cloth,{std::sin(yaw),0,std::cos(yaw)});
       part(M::Torso,0,1.51f,0,{.25f,.065f,.24f},leather,S::Leather);
     }
-    if (outfit.armor) {
+    if (outfit.armor && !guard) {
       // Overlapping abdominal lames and fasteners give the cuirass real relief.
       for(int plate=0;plate<3;++plate) {
         const float h=1.04f+plate*.065f;
@@ -81,6 +85,16 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       }
       part(M::Torso,0,1.29f,.18f,{.17f,.22f,.035f},{.68f,.53f,.26f,1},S::Metal);
       part(M::Torso,0,1.29f,.20f,{.09f,.14f,.02f},{.21f,.37f,.43f,1},S::Metal);
+    }
+    if(guard && outfit.tunic) {
+      for(int band=0;band<3;++band)
+        part(M::GuardPlate,0,1.07f-band*.05f,.15f,{.43f+band*.016f,.085f,.14f},{.8f,.86f,.93f,1},S::Metal);
+      part(M::Torso,0,1.51f,-.005f,{.25f,.085f,.25f},{.24f,.22f,.17f,1},S::Leather);
+    }
+    if(guard && outfit.shoulders) for(float side:{-1.f,1.f}) {
+      for(int layer=0;layer<2;++layer)
+        part(M::GuardPlate,side*(.33f+layer*.015f),1.45f-layer*.065f,.09f,
+          {.28f,.14f,.24f},{.79f,.85f,.91f,1},S::Metal);
     }
     head(M::Head,0,1.76f,.012f,{.265f,.31f,.26f},skin,S::Skin);
     if (!outfit.helm) head(M::Hair,0,1.76f,.012f,{.267f,.31f,.262f},hairTint,S::Hair);
@@ -157,6 +171,30 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
         }
       }
       const auto elbow=world(arm.joint),hand=world(arm.end);
+      if(guard) {
+        const XMFLOAT3 forward{std::sin(yaw),0,std::cos(yaw)};
+        const auto offset=[&](XMFLOAT3 a,float depth) {return XMFLOAT3{a.x+forward.x*depth,a.y,a.z+forward.z*depth};};
+        const auto along=[](XMFLOAT3 a,XMFLOAT3 b,float t) {return XMFLOAT3{a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t,a.z+(b.z-a.z)*t};};
+        if(outfit.trousers && outfit.tunic) {
+          const auto hip=world(leg.root);
+          // Split weathered tabard hangs below the articulated waist plates.
+          // Each half follows its thigh, retaining the opening during a stride.
+          auto cloth=XMFLOAT4{.31f,.105f,.065f,1};
+          if(outfit.appearance.dye) {const auto& dye=rpg::tunicDyes[outfit.appearance.dye];cloth={dye.r,dye.g,dye.b,1};}
+          renderer.DrawMeshBetween(M::CoatPanel,offset(along(hip,knee,.95f),-.01f),offset(hip,-.01f),
+            .22f,.17f,cloth,S::Cloth,forward);
+          renderer.DrawMeshBetween(M::GuardPlate,offset(along(hip,knee,.54f),.13f),offset(along(hip,knee,.04f),.14f),
+            .235f,.18f,{.74f,.81f,.89f,1},S::Metal,forward);
+        }
+        if(outfit.boots) {
+          renderer.DrawMeshBetween(M::GuardPlate,offset(along(ankle,knee,.12f),.07f),offset(along(ankle,knee,.87f),.08f),
+            .19f,.19f,{.79f,.85f,.91f,1},S::Metal,forward);
+          renderer.DrawMesh(M::GuardPlate,offset(knee,.10f),{.22f,.19f,.22f},{.83f,.88f,.94f,1},S::Metal,yaw);
+        }
+        if(outfit.gloves)
+          renderer.DrawMeshBetween(M::GuardPlate,offset(along(hand,elbow,.12f),.055f),offset(along(hand,elbow,.80f),.055f),
+            .17f,.17f,{.79f,.85f,.91f,1},S::Metal,forward);
+      }
       const auto handColor=outfit.gloves?leather:skin;
       const auto handMaterial=outfit.gloves?S::Leather:S::Skin;
       const auto fingers=BuildHandPose(pose,side>0?1u:0u,outfit.weapon,outfit.shield,pose.handCast);
@@ -172,7 +210,7 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       XMFLOAT3 facing; XMStoreFloat3(&facing,lateral);
       renderer.DrawMeshBetween(M::Finger,wristStart,handPoint({0,-.03f,-.043f}),.072f,.067f,handColor,handMaterial,facing);
       renderer.DrawHand(handFrame,BuildHandRig(fingers),fingers.mirrored,handColor,handMaterial);
-      if(outfit.armor) {
+      if(outfit.armor && !guard) {
         renderer.DrawMesh(M::Torso,{knee.x+std::sin(yaw)*.105f,knee.y,knee.z+std::cos(yaw)*.105f},
           {.22f,.24f,.075f},steel,S::Metal,yaw);
       }
@@ -184,8 +222,17 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
         if(form==rpg::WeaponForm::Blade) {
           weaponPart(M::Blade,.53f,{.12f,.86f,.07f},blade,S::Metal);
           weaponPart(M::Limb,.005f,{.065f,.19f,.065f},leather,S::Leather);
-          weaponPart(M::Box,.10f,{.26f,.045f,.055f},blade,S::Metal);
-          weaponPart(M::Sphere,-.11f,{.08f,.08f,.08f},blade,S::Metal);
+          if(guard) {
+            for(float wing:{-1.f,1.f}) renderer.DrawMeshTransformed(M::Blade,
+              XMMatrixScaling(.055f,.17f,.05f)*XMMatrixRotationZ(wing*1.35f)*XMMatrixTranslation(wing*.095f,.10f,0)*weaponFrame,
+              {.69f,.53f,.29f,1},S::Metal);
+            for(int ring=0;ring<6;++ring) weaponPart(M::Limb,-.075f+ring*.027f,{.069f,.009f,.069f},{.36f,.27f,.16f,1},S::Leather);
+            weaponPart(M::Crystal,-.12f,{.085f,.12f,.065f},{.67f,.49f,.25f,1},S::Metal);
+            weaponPart(M::Torso,.17f,{.13f,.12f,.07f},{.65f,.49f,.26f,1},S::Metal);
+          } else {
+            weaponPart(M::Box,.10f,{.26f,.045f,.055f},blade,S::Metal);
+            weaponPart(M::Sphere,-.11f,{.08f,.08f,.08f},blade,S::Metal);
+          }
         } else renderer.DrawMeshTransformed(WeaponMesh(form),weaponFrame,
           outfit.rewardWeapon?XMFLOAT4{1,.92f,.70f,1}:XMFLOAT4{.88f,.91f,.94f,1},S::Metal);
       }

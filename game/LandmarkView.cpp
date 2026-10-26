@@ -28,6 +28,15 @@ void Lantern(Renderer& r,float x,float y,float z) {
 }
 
 void DrawBuilding(Renderer& r,const rpg::Obstacle& o) {
+  if(o.role==rpg::BuildingRole::Homestead || o.role==rpg::BuildingRole::WatchHall) {
+    const bool inn=o.role==rpg::BuildingRole::WatchHall;
+    const auto asset=inn?authored::Asset::Inn:authored::Asset::Cottage;
+    const auto& bounds=authored::Collection()[unsigned(asset)*authored::lodCount].bounds;
+    const float height=std::min(o.height/(inn?2.55f:1.8f),(o.CameraHeight()-.05f)/bounds.maximum.y);
+    r.DrawAuthoredAsset(asset,{o.center.x,0,o.center.z},
+      {o.halfX/(inn?1.4f:1.1f),height,o.halfZ/.95f},DirectX::XM_PI);
+    return;
+  }
   const float x=o.center.x,z=o.center.z,roofHeight=o.RoofHeight();
   const auto style=StyleFor(o.role);
   const bool store=o.role==rpg::BuildingRole::Storehouse;

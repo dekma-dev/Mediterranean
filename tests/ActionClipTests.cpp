@@ -193,6 +193,15 @@ void Captures() {
   const auto root=std::filesystem::current_path()/"action-clip-check";std::filesystem::create_directories(root);
   Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),960,720,L"Class action checks",false),"Hidden action window");
   Renderer renderer;Check(renderer.Initialize(window.GetHandle(),960,720),"Action renderer");
+  for(int view=0;view<4;++view) {
+    auto outfit=CharacterOutfit::From(rpg::Inventory{},ClassId::Warrior);
+    outfit.helm=view==3;outfit.armor=view==3;outfit.shield=view==3;
+    Sample sample;
+    if(view==2) {sample=Motion(ClassId::Warrior,ActionClip::Heavy,.24f);}
+    renderer.BeginFrame();renderer.SetCamera(view==1?XMFLOAT3{-2.2f,1.7f,-3.5f}:XMFLOAT3{2.2f,1.7f,3.5f},{0,1.0f,0});
+    DrawCharacter(renderer,{0,0},0,0,{.40f,.45f,.50f,1},0,0,outfit,sample,1);
+    Check(renderer.Capture((root/("guard-study-"+std::to_string(view)+".png")).wstring()) && renderer.EndFrame(false),"Guard visual study capture");
+  }
   ActionController recovery;recovery.Update(.01f,ClassId::Mage,.16f,true,2,true);
   for(int frame=0;frame<5;++frame) {
     if(frame) recovery.Update(.04f,ClassId::Mage,-1,false,2,true);

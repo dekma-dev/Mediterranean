@@ -1,5 +1,6 @@
 #pragma once
 #include "engine/Geometry.h"
+#include "engine/AuthoredAssets.h"
 #include <array>
 
 class Renderer;
@@ -35,6 +36,6 @@ public:
 private:
   friend class ::Renderer;
   bool ready_=false;
-  std::array<std::vector<SceneItem>,static_cast<unsigned>(Mesh::Count)> batches_;
+  std::array<std::vector<SceneItem>,authored::totalMeshes> batches_;
 };
 }

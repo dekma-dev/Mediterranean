@@ -41,7 +41,7 @@ public:
   void DrawMesh(visual::Mesh mesh,const DirectX::XMFLOAT3& position,const DirectX::XMFLOAT3& scale,
     const DirectX::XMFLOAT4& color,visual::Material material,float yaw = 0,float pitch = 0,
     visual::ShadowMode shadow = visual::ShadowMode::Cast,float roll = 0,unsigned maxDetail=2);
-  void DrawCloak(const DirectX::XMFLOAT3& shoulder,float yaw,float pitch,float roll,float side,float back);
+  void DrawCloak(const DirectX::XMFLOAT3& shoulder,float yaw,float pitch,float roll,float side,float back,bool guard=false);
   void DrawMeshTransformed(visual::Mesh mesh,const DirectX::XMMATRIX& transform,
     const DirectX::XMFLOAT4& color,visual::Material material,visual::ShadowMode shadow=visual::ShadowMode::Cast,unsigned maxDetail=2) {
     Queue(mesh,transform,color,material,shadow,maxDetail);
@@ -62,6 +62,9 @@ public:
   };
   [[nodiscard]] AttachmentScope AttachToBody(unsigned body) { return {*this,body}; }
   void SetAttachmentLodEnabled(bool enabled) { attachmentLodEnabled_=enabled; }
+  // detail=3 chooses a camera-dependent LOD; 0..2 force a review level.
+  void DrawAuthoredAsset(authored::Asset asset,const DirectX::XMFLOAT3& position,
+    const DirectX::XMFLOAT3& scale={1,1,1},float yaw=0,unsigned detail=3);
   // Remapped/omitted queued world attachments, excluding portraits.
   const std::array<unsigned,2>& AttachmentLodCounts() const { return attachmentLodCounts_; }
   const std::array<unsigned,2>& LastAttachmentLodCounts() const { return lastAttachmentLodCounts_; }
@@ -125,7 +128,7 @@ private:
   void EffectBillboard(DirectX::XMFLOAT3 center,float radius,DirectX::XMFLOAT4 color,float shape);
   void Queue(visual::Mesh mesh,const DirectX::XMMATRIX& world,const DirectX::XMFLOAT4& color,visual::Material material,
     visual::ShadowMode shadow = visual::ShadowMode::Cast,unsigned maxDetail=2);
-  static constexpr unsigned meshCount = static_cast<unsigned>(visual::Mesh::Count);
+  static constexpr unsigned meshCount = authored::totalMeshes;
   static constexpr unsigned maxInstances = 4096;
   using Instance=visual::SceneInstance;
   using Item=visual::SceneItem;

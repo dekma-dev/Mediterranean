@@ -31,6 +31,7 @@ void CharacterSelection::ReadSlots() {
 void CharacterSelection::Open(const std::filesystem::path& file,rpg::ClassId selected) {
   base_=file;file_=file;class_=int(selected)>=0 && selected<rpg::ClassId::Count?selected:rpg::ClassId::Warrior;
   draftName_.clear();look_={};notice_.clear();
+  callingView_=CallingView::Overview;branch_=0;
   time_=yaw_=width_=height_=zoom_=0;closeup_=false;actionTime_=-1;previewAbility_=-1;previewController_.Reset();SetPage(Page::Roster,Control::Enter);Refresh();
   focus_=status_==Status::Saved?Control::Enter:status_==Status::New?Control::Create:Control::Refresh;
 }
@@ -44,6 +45,9 @@ void CharacterSelection::PreviewDraft() {
   hero_.CreateCharacter(class_,rpg::ValidCharacterName(name)?name:rpg::DescribeClass(class_).title,look_);
 }
 Rect CharacterSelection::Bounds(Control control) {
+  if(control>=Control::Overview && control<=Control::Talents) return {842+118.f*(int(control)-int(Control::Overview)),240,114,30};
+  if(control>=Control::Art0 && control<=Control::Art6) return {842+50.f*(int(control)-int(Control::Art0)),284,46,48};
+  if(control>=Control::Branch0 && control<=Control::Branch2) return {842+118.f*(int(control)-int(Control::Branch0)),284,114,30};
   if(control>=Control::Skin0 && control<=Control::Dye4) {
     const int n=int(control)-int(Control::Skin0);
     return {888+52.f*(n%5),348+58.f*(n/5),46,34};
@@ -69,6 +73,9 @@ Rect CharacterSelection::Bounds(Control control) {
 }
 bool CharacterSelection::Enabled(Control control) const {
   if(control==Control::None) return false;
+  if(control>=Control::Overview && control<=Control::Talents) return page_==Page::Class;
+  if(control>=Control::Art0 && control<=Control::Art6) return page_==Page::Class && callingView_==CallingView::Arts;
+  if(control>=Control::Branch0 && control<=Control::Branch2) return page_==Page::Class && callingView_==CallingView::Talents;
   if(control==Control::Closeup || control==Control::Pose || control==Control::ResetView)
     return page_!=Page::Roster || status_!=Status::Unreadable;
   if(control>=Control::Skin0 && control<=Control::Dye4) return page_==Page::Customize;
@@ -100,6 +107,13 @@ void CharacterSelection::CreateProfile() {
 }
 CharacterSelection::Action CharacterSelection::Activate(Control control) {
   if(!Enabled(control)) return Action::None;
+  if(control>=Control::Overview && control<=Control::Talents) {
+    callingView_=CallingView(int(control)-int(Control::Overview));CancelGesture();return Action::None;
+  }
+  if(control>=Control::Branch0 && control<=Control::Branch2) {branch_=int(control)-int(Control::Branch0);return Action::None;}
+  if(control>=Control::Art0 && control<=Control::Art6) {
+    closeup_=false;previewAbility_=previewArts[int(control)-int(Control::Art0)];actionTime_=0;return Action::None;
+  }
   if(control>=Control::Class0 && control<=Control::Class10) {
     actionTime_=-1;previewAbility_=-1;previewController_.Reset();
     class_=rpg::ClassId(int(control)-int(Control::Class0));Refresh();
@@ -166,10 +180,13 @@ CharacterSelection::Action CharacterSelection::Update(float seconds,const Input&
   const float dt=std::clamp(seconds,0.f,.05f);
   zoom_+=(float(closeup_)-zoom_)*-std::expm1(-12.f*dt);
   if(actionTime_>=0) {
-    actionTime_+=dt*rpg::ClassAttackRate(class_,previewAbility_!=0 && previewAbility_!=7)*(previewAbility_==7?.85f:previewAbility_==6?.7f:previewAbility_==5?.8f:1.f);
-    if(actionTime_>=animation::ActionDuration((previewAbility_==0 || previewAbility_==7)?animation::ActionClip::Basic:animation::ActionClip::Heavy)) actionTime_=-1;
+    const bool utility=previewAbility_==2 || previewAbility_==3;
+    actionTime_+=dt*(utility?1.f:rpg::ClassAttackRate(class_,previewAbility_!=0 && previewAbility_!=7)*(previewAbility_==7?.85f:previewAbility_==6?.7f:previewAbility_==5?.8f:1.f));
+    const float duration=previewAbility_==2?.50f:previewAbility_==3?.72f:animation::ActionDuration((previewAbility_==0 || previewAbility_==7)?animation::ActionClip::Basic:animation::ActionClip::Heavy);
+    if(actionTime_>=duration) actionTime_=-1;
   }
-  previewController_.Update(dt,class_,actionTime_,previewAbility_!=0 && previewAbility_!=7,-1,true,previewAbility_==5,previewAbility_==6,previewAbility_==7);
+  previewController_.Update(dt,class_,previewAbility_==2 || previewAbility_==3?-1:actionTime_,previewAbility_!=0 && previewAbility_!=7,
+    previewAbility_==3?actionTime_:-1,true,previewAbility_==5,previewAbility_==6,previewAbility_==7);
   const bool resized=width_!=input.Width() || height_!=input.Height();width_=input.Width();height_=input.Height();
   if(resized || input.Pressed(VK_F11)) {CancelGesture();hover_=Control::None;return Action::None;}
   const Layout layout(width_,height_);hover_=Control::None;

@@ -54,6 +54,83 @@ void Normals(Geometry& g) {
 }
 // Each row is height, horizontal radius, depth radius. Shared ring vertices give
 // smooth curved surfaces without storing a separate model for every body part.
+Geometry GuardArmor(bool cuirass,bool low) {
+  Geometry g;
+  // Original fitted harness, authored in metres around its attachment origin.
+  // The breastplate has a narrow waist, rib volume, a central keel and rolled
+  // neckline. The smaller plate is a curved, tapered limb/waist guard.
+  const std::vector<XMFLOAT3> profile=cuirass?std::vector<XMFLOAT3>{
+    {-.25f,.236f,.165f},{-.242f,.242f,.172f},{-.228f,.231f,.163f},
+    {-.18f,.222f,.163f},{-.11f,.247f,.185f},{-.025f,.286f,.201f},
+    {.06f,.298f,.199f},{.13f,.284f,.180f},{.20f,.236f,.142f},
+    {.225f,.209f,.125f},{.234f,.212f,.132f},{.242f,.207f,.127f}}:
+    std::vector<XMFLOAT3>{{-.5f,.22f,.20f},{-.475f,.27f,.25f},{-.43f,.27f,.23f},
+    {-.20f,.44f,.28f},{.12f,.5f,.30f},{.40f,.43f,.26f},{.47f,.43f,.28f},{.5f,.41f,.25f}};
+  const unsigned columns=low?12:32,stride=columns+1,rows=unsigned(profile.size());
+  const float arc=cuirass?pi:1.55f;
+  for(unsigned shell=0;shell<2;++shell) {
+    for(unsigned row=0;row<rows;++row) for(unsigned col=0;col<=columns;++col) {
+      const auto r=profile[row];const float angle=-arc+2*arc*col/columns;
+      const float front=std::max(0.f,std::cos(angle));
+      const float ridge=cuirass?.016f*std::pow(front,12.f):.11f*std::pow(front,10.f);
+      const float flute=cuirass?.003f*std::sin(angle*8)*std::sin(angle*8)*front:.018f*std::cos(angle*6)*front;
+      const float thickness=shell?(cuirass?.008f:.035f):0;
+      const bool edge=row==0 || row==1 || row>=rows-2 || (!cuirass && (col==0 || col==columns));
+      const float shade=.86f+.10f*front;
+      const XMFLOAT4 tint=shell?XMFLOAT4{.22f,.25f,.27f,1}:edge?XMFLOAT4{.72f,.54f,.29f,1}:XMFLOAT4{shade*.80f,shade*.88f,shade,1};
+      g.vertices.push_back({{std::sin(angle)*(r.y-thickness),r.x,std::cos(angle)*(r.z-thickness)+ridge+flute},{},tint});
+    }
+    for(unsigned row=0;row+1<rows;++row) for(unsigned col=0;col<columns;++col) {
+      const unsigned a=shell*rows*stride+row*stride+col,b=a+1,d=a+stride,c=d+1;
+      if(!shell) {Triangle(g,a,b,d);Triangle(g,b,c,d);}
+      else {Triangle(g,a,d,b);Triangle(g,b,d,c);}
+    }
+  }
+  // Separate edge vertices preserve sharp metal hems and avoid averaging an
+  // inner normal into the outer shell. Close the top/bottom and plate sides.
+  const auto bridge=[&](unsigned a,unsigned b,unsigned c,unsigned d) {
+    const auto start=unsigned(g.vertices.size());
+    for(auto index:{a,b,c,d}) {auto v=g.vertices[index];v.color={.72f,.54f,.29f,1};g.vertices.push_back(v);}
+    Triangle(g,start,start+1,start+2);Triangle(g,start,start+2,start+3);
+  };
+  const unsigned inner=rows*stride;
+  for(unsigned col=0;col<columns;++col) {
+    bridge(col,inner+col,inner+col+1,col+1);
+    const auto a=(rows-1)*stride+col;bridge(a,a+1,inner+a+1,inner+a);
+  }
+  if(!cuirass) for(unsigned row=0;row+1<rows;++row) {
+    const auto a=row*stride,b=a+stride;bridge(a,b,inner+b,inner+a);
+    bridge(a+columns,inner+a+columns,inner+b+columns,b+columns);
+  }
+  if(cuirass) {
+    const auto surface=[&](float x,float y) {
+      unsigned row=0;while(row+2<rows && y>profile[row+1].x) ++row;
+      const auto a=profile[row],b=profile[row+1];const float t=std::clamp((y-a.x)/(b.x-a.x),0.f,1.f);
+      const float rx=a.y+(b.y-a.y)*t,rz=a.z+(b.z-a.z)*t;
+      const float angle=std::asin(std::clamp(x/rx,-.99f,.99f)),front=std::cos(angle);
+      return front*rz+.016f*std::pow(front,12.f)+.003f*std::sin(angle*8)*std::sin(angle*8)*front;
+    };
+    // Raised chased ribs follow the fitted surface rather than floating flat
+    // in front of it. The branching arch is an original Dawnwatch motif.
+    for(float side:{-1.f,1.f}) for(unsigned branch=0;branch<2;++branch) {
+      const unsigned steps=low?8:16,base=unsigned(g.vertices.size());
+      for(unsigned step=0;step<=steps;++step) {
+        const float t=float(step)/steps;
+        const float x=side*(.034f+(.15f+branch*.025f)*std::pow(1-t,1.6f));
+        const float y=.145f-branch*.035f-t*(.25f-branch*.045f);
+        for(unsigned rim=0;rim<3;++rim) {
+          const float px=x+(int(rim)-1)*.0045f;
+          g.vertices.push_back({{px,y,surface(px,y)+.002f+(rim==1?.003f:0)},{},{.86f,.65f,.35f,1}});
+        }
+      }
+      for(unsigned step=0;step<steps;++step) for(unsigned rim=0;rim<2;++rim) {
+        const unsigned a=base+step*3+rim,b=a+1,c=b+3,d=a+3;
+        Triangle(g,a,d,b);Triangle(g,b,d,c);
+      }
+    }
+  }
+  Normals(g);return g;
+}
 Geometry Lathe(const std::vector<XMFLOAT3>& profile,unsigned segments,float irregular=0,float bend=0) {
   Geometry g;
   for (unsigned row=0;row<profile.size();++row) for (unsigned j=0;j<segments;++j) {
@@ -225,6 +302,8 @@ float Hash(int x,int y) {
 }
 
 Geometry BuildMesh(Mesh mesh) {
+  if(mesh==Mesh::GuardCuirass || mesh==Mesh::GuardCuirassLow) return GuardArmor(true,mesh==Mesh::GuardCuirassLow);
+  if(mesh==Mesh::GuardPlate || mesh==Mesh::GuardPlateLow) return GuardArmor(false,mesh==Mesh::GuardPlateLow);
   if(mesh>=Mesh::WeaponMace && mesh<=Mesh::WeaponCleaver) return Equipment(mesh);
   if (IsBodyMesh(mesh)) return CharacterBody(unsigned(mesh)-unsigned(Mesh::Body)).mesh;
   if (IsHandMesh(mesh)) return CharacterHand((unsigned(mesh)-unsigned(Mesh::Hand))/2,(unsigned(mesh)-unsigned(Mesh::Hand))%2!=0).mesh;
@@ -277,20 +356,32 @@ Geometry BuildMesh(Mesh mesh) {
     }
     Normals(g);return g;
   }
-  if (mesh==Mesh::Cloak) {
+  if (mesh==Mesh::Cloak || mesh==Mesh::GuardCloak) {
     Geometry g;
+    const bool guard=mesh==Mesh::GuardCloak;
     // One continuous flared sheet, shared smooth normals and a separate back
     // surface. Coordinates are metres from the pinned shoulder seam.
-    constexpr unsigned columns=16,rows=16,stride=columns+1,sideVertices=stride*(rows+1);
+    const unsigned columns=guard?32:16,rows=columns,stride=columns+1,sideVertices=stride*(rows+1);
     for (unsigned side=0;side<2;++side) {
       for (unsigned row=0;row<=rows;++row) for (unsigned column=0;column<=columns;++column) {
         const float t=float(row)/rows,u=2.f*column/columns-1;
         const float fold=std::cos(u*4*3.14159265f)*(.009f+t*.022f)*std::sin(t*1.5707963f);
         const float edge=std::abs(u);
-        const XMFLOAT3 p{u*(.22f+t*.14f),-.82f*t,-.025f-.115f*t-fold-.035f*u*u};
+        const float hem=guard?.035f*std::pow(t,10.f)*(1+std::cos(u*3*3.14159265f)):0;
+        const XMFLOAT3 p{u*(.22f+t*(guard?.11f:.14f)),-(guard?.88f:.82f)*t+hem,-.025f-.115f*t-fold-.035f*u*u};
         const bool trim=column==0 || column==columns || row==rows;
         const float shade=1-.18f*t-.12f*edge;
-        g.vertices.push_back({p,{},trim?XMFLOAT4{.66f,.48f,.22f,1}:XMFLOAT4{.13f*shade,.28f*shade,.39f*shade,1}});
+        auto color=trim?XMFLOAT4{.66f,.48f,.22f,1}:XMFLOAT4{.13f*shade,.28f*shade,.39f*shade,1};
+        if(guard) {
+          // Woven three-branch watch crest, integral to the deformed cloth.
+          const bool spine=edge<.055f && t>.22f && t<.66f;
+          const bool arch=t>.24f && t<.59f && std::abs(edge-(.08f+(.59f-t)*.88f))<.045f;
+          const bool crown=t>.20f && t<.25f && edge<.36f;
+          const bool seam=edge>.90f || t>.93f;
+          color=trim || seam || spine || arch || crown?XMFLOAT4{.68f*shade,.49f*shade,.25f*shade,1}:
+            XMFLOAT4{.31f*shade,.075f*shade,.045f*shade,1};
+        }
+        g.vertices.push_back({p,{},color});
       }
       for (unsigned row=0;row<rows;++row) for (unsigned column=0;column<columns;++column) {
         const unsigned a=side*sideVertices+row*stride+column,b=a+1,c=b+stride,d=a+stride;
@@ -431,7 +522,19 @@ Geometry BuildMesh(Mesh mesh) {
       const float angle=std::atan2(p.x,p.z),lower=std::clamp((.34f-p.y)/.17f,0.f,1.f);
       const float back=std::clamp((.18f-p.z)/.50f,0.f,1.f);
       // A swept, uneven hairline and longer nape replace the straight cap edge.
-      p.y-=lower*(.20f*back+.018f*std::sin(angle*3+.6f));
+      p.y-=lower*(.45f*back+.012f*std::sin(angle*3+.6f));
+      // Stretching only the old cap's height left it inside the wider skull,
+      // producing islands of exposed scalp. Refit every lowered ring to the
+      // head contour, with a small continuous shell allowance at both LODs.
+      if(p.x*p.x+p.z*p.z>.001f && p.y<.49f) {
+        const std::array<XMFLOAT3,9> skull{{{-.36f,.34f,.36f},{-.25f,.40f,.39f},
+          {-.10f,.46f,.42f},{.05f,.45f,.44f},{.15f,.44f,.44f},
+          {.26f,.44f,.43f},{.32f,.42f,.40f},{.38f,.38f,.37f},{.49f,.19f,.19f}}};
+        unsigned row=0;while(row+2<skull.size() && p.y>skull[row+1].x) ++row;
+        const auto a=skull[row],b=skull[row+1];const float t=std::clamp((p.y-a.x)/(b.x-a.x),0.f,1.f);
+        p.x=std::sin(angle)*(a.y+(b.y-a.y)*t+.024f);
+        p.z=std::cos(angle)*(a.z+(b.z-a.z)*t+.024f);
+      }
       const float lock=std::sin(angle*11+p.y*13);
       const float relief=.009f*lock*std::clamp((.51f-p.y)/.15f,0.f,1.f);
       p.x+=std::sin(angle)*relief;p.z+=std::cos(angle)*relief;

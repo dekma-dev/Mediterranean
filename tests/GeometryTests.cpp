@@ -53,14 +53,15 @@ int main() {
       Check(std::abs(v.position.x)<=.501f && std::abs(v.position.z)<=.501f &&
         v.position.y>=-.501f && v.position.y<=.531f,"Helmet must retain its fitted head envelope");
   }
-  std::size_t bytes=0,triangles=0,weaponBytes=0,weaponTriangles=0;
+  std::size_t bytes=0,triangles=0,weaponBytes=0,weaponTriangles=0,armorBytes=0,armorTriangles=0;
   for (unsigned mesh=0;mesh<static_cast<unsigned>(visual::Mesh::Count);++mesh) {
     const auto g=visual::BuildMesh(static_cast<visual::Mesh>(mesh));
     Check(!g.vertices.empty() && !g.indices.empty() && g.indices.size()%3==0,"Missing or incomplete mesh.");
     // The separately budgeted weighted body is covered by SkinningTests.
     if(!visual::IsBodyMesh(static_cast<visual::Mesh>(mesh)) && !visual::IsHandMesh(static_cast<visual::Mesh>(mesh))) {
       const auto cost=g.vertices.size()*sizeof(visual::Vertex)+g.indices.size()*sizeof(std::uint32_t);
-      if(mesh>=unsigned(visual::Mesh::WeaponMace)) {weaponBytes+=cost;weaponTriangles+=g.indices.size()/3;}
+      if(mesh>=unsigned(visual::Mesh::GuardCuirass) && mesh<=unsigned(visual::Mesh::GuardCloak)) {armorBytes+=cost;armorTriangles+=g.indices.size()/3;}
+      else if(mesh>=unsigned(visual::Mesh::WeaponMace)) {weaponBytes+=cost;weaponTriangles+=g.indices.size()/3;}
       else {bytes+=cost;triangles+=g.indices.size()/3;}
     }
     for (const auto& v : g.vertices) {
@@ -83,6 +84,14 @@ int main() {
     }
   }
   Check(bytes<=640*1024 && triangles<=16000,"Reusable mesh library exceeded its startup geometry budget.");
+  std::cout<<"Guard armor: "<<armorBytes<<" bytes / "<<armorTriangles<<" triangles\n";
+  Check(armorBytes<=320*1024 && armorTriangles<=8500,"Guard outfit exceeded its bounded shared geometry budget");
+  for(auto mesh:{visual::Mesh::GuardCuirass,visual::Mesh::GuardPlate}) {
+    const auto high=visual::BuildMesh(mesh),low=visual::BuildMesh(visual::AttachmentMesh(mesh,1));
+    Check(low.indices.size()<high.indices.size()/2,"Guard armor must reduce topology at distance");
+    for(const auto& v:high.vertices) Check(std::abs(v.position.x)<=.51f && std::abs(v.position.y)<=.51f && std::abs(v.position.z)<=.51f,
+      "Guard armor escaped its authored attachment envelope");
+  }
   std::cout<<"Equipment budget measured: "<<weaponBytes<<" bytes / "<<weaponTriangles<<" triangles\n";
   Check(weaponBytes<=416*1024 && weaponTriangles<=8500,"Class equipment exceeded its separate cached geometry budget.");
   std::cout<<"Class weapon bytes: "<<weaponBytes<<"; triangles: "<<weaponTriangles<<'\n';

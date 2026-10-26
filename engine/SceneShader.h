@@ -70,6 +70,9 @@ VOut VSWorld(InstanceIn i) {
  if (i.surface.w<0) receiver.xyz+=o.n*(i.surface.w<-1?.0007:.0025);
  o.tint=i.tint*i.paint; o.shadow=mul(receiver,shadowVP[0]);
  o.detailShadow=mul(receiver,shadowVP[1]); o.material=i.surface.x;
+ // Authored vertices carry a validated native material ID in alpha.
+ // The special instance material leaves ordinary tint/opacity unchanged.
+ if (i.surface.x==13) { o.material=i.tint.w; o.tint.a=i.paint.a; }
  // Metric object coordinates follow animated parts instead of sliding through
  // a world-space texture. Projection weights account for nonuniform scaling.
  float3 size=float3(length(i.w0.xyz),length(i.w1.xyz),length(i.w2.xyz));
