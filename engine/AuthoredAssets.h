@@ -1,5 +1,6 @@
 #pragma once
 #include "engine/Geometry.h"
+#include "engine/Skinning.h"
 #include <array>
 #include <string_view>
 namespace authored {
@@ -16,4 +17,12 @@ std::string_view EmbeddedBytes();
 const char* Name(Asset asset);
 constexpr unsigned Slot(Asset asset,unsigned lod=0) {return firstMesh+unsigned(asset)*lodCount+lod;}
 unsigned SelectLod(float projectedHeight);
+constexpr bool Animated(unsigned mesh) {return mesh>=firstMesh && mesh<Slot(Asset::Oak);}
+visual::SkinInfluence Influence(Asset asset,DirectX::XMFLOAT3 position);
+// Additive presentation channels, in radians/metres, independent of game rules.
+struct Gesture {
+ float pitch=0,yaw=0,roll=0,hip=0;
+ float leftLift=0,rightLift=0,leftOpen=0,rightOpen=0;
+};
+visual::BodyPalette Pose(Asset asset,float time,float gait=0,float attack=0,float travel=0,Gesture gesture={});
 }

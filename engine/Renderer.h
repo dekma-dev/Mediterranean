@@ -65,6 +65,9 @@ public:
   // detail=3 chooses a camera-dependent LOD; 0..2 force a review level.
   void DrawAuthoredAsset(authored::Asset asset,const DirectX::XMFLOAT3& position,
     const DirectX::XMFLOAT3& scale={1,1,1},float yaw=0,unsigned detail=3);
+  void DrawAnimatedAsset(authored::Asset asset,const DirectX::XMFLOAT3& position,float yaw,
+    float time,float gait=0,float attack=0,float travel=0,unsigned detail=3,
+    const DirectX::XMFLOAT4& tint={1,1,1,1},authored::Gesture gesture={});
   // Remapped/omitted queued world attachments, excluding portraits.
   const std::array<unsigned,2>& AttachmentLodCounts() const { return attachmentLodCounts_; }
   const std::array<unsigned,2>& LastAttachmentLodCounts() const { return lastAttachmentLodCounts_; }

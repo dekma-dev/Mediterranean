@@ -3,6 +3,7 @@
 
 #include "engine/Renderer.h"
 #include "game/WorldView.h"
+#include "game/AuthoredActorMotion.h"
 #include "game/CharacterView.h"
 #include "game/HandPose.h"
 #include "game/CharacterPose.h"
@@ -54,6 +55,7 @@ void Game::ChooseCharacter(const std::filesystem::path& save) {
 
 bool Game::RestoreSnapshot(const std::string& snapshot) {
   if (!simulation_.Load(snapshot)) return false;
+  worldView_.ResetWildlife();
   CancelUiGesture();
   interface_.SetOnly(ui::Panel::None);
   interface_.previewYaw=0;
@@ -286,8 +288,9 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
     }
   } else if (interface_.panel==ui::Panel::Quest) interface_.Close(ui::Panel::Quest);
   time_+=dt;
+  worldView_.UpdateWildlife(dt,simulation_.Map(),simulation_.Player(),simulation_.Health()>0);
   atmosphereTime_=std::fmod(atmosphereTime_+dt,1800.0);
-  if (command.restart || (wasDead && simulation_.Health()>0)) { ResetMotion(); return; }
+  if (command.restart || (wasDead && simulation_.Health()>0)) { worldView_.ResetWildlife(); ResetMotion(); return; }
   interface_.UpdateCombatFeedback(dt,simulation_);
   effects_.Advance(dt);
   for (std::size_t i=0;i<simulation_.VisualEventCount();++i) {
@@ -567,7 +570,12 @@ void Game::Render(Renderer& renderer,bool showInterface) {
     if(enemy.kind==rpg::EnemyKind::Wraith) {enemyOutfit.weapon=false;enemyOutfit.cloak=true;}
     if(enemy.Boss()) {enemyOutfit.shoulders=true;enemyOutfit.cloak=true;enemyOutfit.gloves=true;}
     const auto& pose=enemyPoses_[i];
-    DrawCharacter(renderer,enemy.position,0,pose.facing,
+    if(enemy.kind!=rpg::EnemyKind::Trainer) {
+      const auto asset=enemy.kind==rpg::EnemyKind::Wraith?authored::Asset::Revenant:
+        (captain||enemy.kind==rpg::EnemyKind::Reaver)?authored::Asset::Orc:authored::Asset::Skeleton;
+      renderer.DrawAnimatedAsset(asset,{enemy.position.x,0,enemy.position.z},pose.facing,time_,pose.gait,pose.attack,enemyAnimations_[i].pose.travel,3,
+        enemy.hitFlash>0?XMFLOAT4{1,.7f,.55f,1}:XMFLOAT4{1,1,1,1},AuthoredActorGesture(enemyAnimations_[i].pose));
+    } else DrawCharacter(renderer,enemy.position,0,pose.facing,
       enemy.hitFlash>0?XMFLOAT4{1,.7f,.55f,1}:enemy.kind==rpg::EnemyKind::Trainer?XMFLOAT4{.55f,.46f,.22f,1}:enemy.kind==rpg::EnemyKind::Wraith?XMFLOAT4{.35f,.30f,.61f,1}:enemy.kind==rpg::EnemyKind::Reaver?XMFLOAT4{.53f,.34f,.19f,1}:captain?XMFLOAT4{.36f,.19f,.48f,1}:XMFLOAT4{.65f,.2f,.25f,1},
       enemy.kind==rpg::EnemyKind::Wraith?0.f:pose.attack,pose.gait,enemyOutfit,enemyAnimations_[i].pose,std::uint64_t(enemy.id)+16);
     if (enemy.windup>0 && simulation_.Health()>0) {

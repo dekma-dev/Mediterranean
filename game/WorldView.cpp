@@ -66,7 +66,14 @@ void DrawScenery(Renderer& r,const rpg::WorldMap& map,bool sparring) {
       r.DrawAuthoredAsset(tree,{x,0,z},{scale,scale,scale});
       continue;
     }
-    if (o.kind==rpg::PropKind::Ruin) { DrawWatchRuin(r,o); continue; }
+    if (o.kind==rpg::PropKind::Ruin) {
+      if(z>20) {
+        const auto& b=authored::Collection()[unsigned(authored::Asset::Tower)*authored::lodCount].bounds;
+        const float scale=std::min({(o.CameraHeight()-.1f)/b.maximum.y,o.halfX/std::max(std::abs(b.minimum.x),std::abs(b.maximum.x)),o.halfZ/std::max(std::abs(b.minimum.z),std::abs(b.maximum.z))});
+        r.DrawAuthoredAsset(authored::Asset::Tower,{x,0,z},{scale,scale,scale});
+      } else DrawWatchRuin(r,o);
+      continue;
+    }
     DrawBuilding(r,o);
   }
   // Decorative planks stay inside the playable island.
@@ -106,6 +113,12 @@ void WorldView::Draw(Renderer& r,const rpg::WorldMap& map,float time,bool sparri
   // replaces one authored dummy with an animated opponent.
   if (sparring!=sparring_) { scenery_.Invalidate(); sparring_=sparring; }
   r.DrawStaticScene(scenery_,[&] { DrawScenery(r,map,sparring); });
+  // Ambient actors update outside rendering; repeated views cannot advance AI.
+  for(unsigned i=0;i<wildlife_.Animals().size();++i) {
+    const auto& a=wildlife_.Animals()[i];
+    r.DrawAnimatedAsset(i==0?authored::Asset::Wolf:authored::Asset::Boar,
+      {a.position.x,0,a.position.z},a.yaw,time+i*2,a.gait,0,a.travel);
+  }
   using M=visual::Mesh;
   using S=visual::Material;
   for (const auto& o : map.Obstacles()) if (o.kind==rpg::PropKind::Ruin)
@@ -123,7 +136,9 @@ void WorldView::Draw(Renderer& r,const rpg::WorldMap& map,float time,bool sparri
     outfit.weapon=i==0;outfit.armor=i==0;outfit.cloak=true;outfit.helm=i==0;
     outfit.classId=i==0?rpg::ClassId::Paladin:i==1?rpg::ClassId::Scout:rpg::ClassId::Mage;
     const DirectX::XMFLOAT4 colors[]={{.47f,.30f,.17f,1},{.26f,.46f,.34f,1},{.38f,.30f,.55f,1}};
-    DrawCharacter(r,npc.position,0,3.14159f,colors[i],0,0,outfit,animation::Idle(time,6.1f+i),4+i);
+    if(i==0 || i==2)
+      r.DrawAnimatedAsset(i==0?authored::Asset::Guardian:authored::Asset::Mage,{npc.position.x,0,npc.position.z},3.14159f,time+i);
+    else DrawCharacter(r,npc.position,0,3.14159f,colors[i],0,0,outfit,animation::Idle(time,6.1f+i),4+i);
     r.DrawMesh(M::Crystal,{npc.position.x,2.75f+std::sin(time*2+i)*.08f,npc.position.z},
       {.17f,.3f,.17f},{.85f,.67f,.27f,1},S::Glow,time,0,visual::ShadowMode::None);
   }

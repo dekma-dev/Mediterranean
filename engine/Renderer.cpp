@@ -150,6 +150,8 @@ bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
     const auto index=i-unsigned(visual::Mesh::Hand);
     const auto& weights=visual::CharacterHand(index/2,index%2!=0).influences;
     influences.insert(influences.end(),weights.begin(),weights.end());
+  } else if(authored::Animated(i)) {
+    for(const auto& vertex:mesh.vertices) influences.push_back(authored::Influence(authored::Asset((i-authored::firstMesh)/authored::lodCount),vertex.position));
   } else influences.resize(vertices.size());
  }
  // A LOD swap must retain a conservative bound for every reduction level.
@@ -373,9 +375,30 @@ void Renderer::Draw(const XMMATRIX& world,const XMMATRIX& vp,const XMFLOAT4& col
 }
 void Renderer::DrawAuthoredAsset(authored::Asset asset,const XMFLOAT3& position,const XMFLOAT3& scale,float yaw,unsigned detail) {
  if(unsigned(asset)>=authored::assetCount || scale.x<=0 || scale.y<=0 || scale.z<=0) return;
+ if(authored::Animated(authored::Slot(asset)) && bodyCount_>=visual::maxBodies) {error_=L"Authored actor palette budget exceeded.";frameFailed_=true;return;}
  const unsigned selected=authored::Slot(asset,detail>=3?0:std::min(detail,2u));
  DrawMesh(visual::Mesh(selected),position,scale,{1,1,1,1},visual::Material::Count,yaw);
  world_[selected].back().reserved=detail<3?1:0;world_[selected].back().body=255;
+ if(authored::Animated(selected)) {
+  auto& gpu=bodyPalettes_[bodyCount_];gpu={};bodyActors_[bodyCount_]=0;
+  for(unsigned bone=0;bone<visual::bodyBones;++bone) {
+   XMStoreFloat4x4(&gpu.joints[bone],XMMatrixIdentity());gpu.normals[bone]=gpu.joints[bone];
+  }
+  world_[selected].back().instance.surface.z=float(bodyCount_++);
+  world_[selected].back().radius+=1.f;
+ }
+}
+void Renderer::DrawAnimatedAsset(authored::Asset asset,const XMFLOAT3& position,float yaw,float time,float gait,float attack,float travel,unsigned detail,const XMFLOAT4& tint,authored::Gesture gesture) {
+ const auto before=bodyCount_;
+ DrawAuthoredAsset(asset,position,{1,1,1},yaw,detail);
+ if(bodyCount_==before) return;
+ world_[authored::Slot(asset,detail>=3?0:std::min(detail,2u))].back().instance.color=tint;
+ const auto palette=authored::Pose(asset,time,gait,attack,travel,gesture);
+ auto& gpu=bodyPalettes_[before];
+ for(unsigned bone=0;bone<visual::bodyBones;++bone) {
+  XMStoreFloat4x4(&gpu.joints[bone],XMMatrixTranspose(XMLoadFloat4x4(&palette.joints[bone])));
+  XMStoreFloat4x4(&gpu.normals[bone],XMMatrixTranspose(XMLoadFloat4x4(&palette.normals[bone])));
+ }
 }
 void Renderer::DrawMarkerBox(const XMFLOAT3& p,const XMFLOAT3& s,const XMFLOAT4& color,float yaw) {
  DrawMesh(visual::Mesh::Box,p,s,color,visual::Material::Plain,yaw,0,visual::ShadowMode::None);
@@ -644,7 +667,7 @@ bool Renderer::FlushWorld() {
   for (unsigned b=0;b<batchCounts[pass];++b) {
    const auto& batch=passes[pass][b];
    const auto& mesh=meshes_[batch.mesh];
-   const unsigned skin=visual::IsBodyMesh(static_cast<visual::Mesh>(batch.mesh))?1:visual::IsHandMesh(static_cast<visual::Mesh>(batch.mesh))?2:0;
+   const unsigned skin=(visual::IsBodyMesh(static_cast<visual::Mesh>(batch.mesh))||authored::Animated(batch.mesh))?1:visual::IsHandMesh(static_cast<visual::Mesh>(batch.mesh))?2:0;
    if(skin!=skinActive) {
     context_->IASetInputLayout(skin?bodyLayout_.Get():worldLayout_.Get());
     context_->VSSetShader(skin==2?(shadowPass?handShadowShader_.Get():handShader_.Get()):

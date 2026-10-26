@@ -19,3 +19,10 @@ About project:
 - our platform is PC;
 - to begin with we are creating single-play engine, but consider that in future it will be MMO game;
 - first one we will create one well-developed map where we will test any mechanics and more.
+
+## User-created Blender assets
+
+- Use all thirteen user-created Blender models as the foundation for future character, creature and environment art. Consult `docs/blender-assets.md` before making equivalent replacement assets.
+- Tracked editable source: `assets/authored/collection01.blend`. Local authoring copy: `.blender-local/collection-01/Mediterranean_Collection_01.blend`; `.blend1` is a backup, not another collection. Compare copies before editing and preserve newer user changes.
+- Runtime exports: `assets/authored/collection01.masset` and `collection01.json`. Preserve the native DirectX 11 pipeline. Do not regenerate the source from scripts without checking for user edits.
+- All thirteen have world roles already. Improve their materials, rigs and animation. Playable-character adoption must preserve class identity, customization and interchangeable equipment; the current procedural presentation rig is not authored Blender animation.

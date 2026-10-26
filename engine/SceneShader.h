@@ -95,8 +95,11 @@ void SkinBody(inout InstanceIn i,uint4 joints,float4 weights) {
   p+=mul(float4(i.p,1),bodies[actor].joints[joints[k]]).xyz*weights[k];
   n+=mul(float4(i.n,0),bodies[actor].normals[joints[k]]).xyz*weights[k];
  }
- float4 style=bodies[actor].colors[(uint)i.tint.w];
- i.p=p; i.n=normalize(n); i.tint=float4(style.rgb,1); i.surface.x=style.w;
+ i.p=p; i.n=normalize(n);
+ if(i.surface.x!=13) {
+  float4 style=bodies[actor].colors[(uint)i.tint.w];
+  i.tint=float4(style.rgb,1); i.surface.x=style.w;
+ }
 }
 VOut VSBody(SkinIn v) {
  float3 bindPosition=v.object.p,bindNormal=v.object.n;

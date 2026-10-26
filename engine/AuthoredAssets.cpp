@@ -4,6 +4,58 @@
 #include <cstring>
 #include <stdexcept>
 namespace authored {
+visual::SkinInfluence Influence(Asset asset,DirectX::XMFLOAT3 p) {
+ // Smooth spatial envelopes also work on the decimated meshes. The archive
+ // remains an editable static source; these are presentation rigs, not gameplay.
+ unsigned bone=0;float weight=0;
+ if(asset==Asset::Wolf || asset==Asset::Boar) {
+  if(p.y<.8f) {bone=2+(p.x>0?1u:0u)+(p.z<0?2u:0u);weight=std::clamp((.85f-p.y)/.3f,0.f,1.f);}
+  else if(p.z>.45f) {bone=1;weight=std::clamp((p.z-.45f)/.35f,0.f,1.f);}
+ } else {
+  const float width=asset==Asset::Orc?1.22f:1.f;
+  if(p.y<.95f && std::abs(p.x)<.4f*width) {
+   bone=p.x<0?2:4;weight=std::clamp((.99f-p.y)/.18f,0.f,1.f);
+  } else if(std::abs(p.x)>.32f*width) {
+   bone=p.x<0?6:8;weight=std::clamp((std::abs(p.x)/width-.32f)/.15f,0.f,1.f);
+  } else {bone=1;weight=std::clamp((p.y-.95f)/.4f,0.f,1.f);}
+ }
+ return {{bone,0,0,0},{weight,1-weight,0,0}};
+}
+visual::BodyPalette Pose(Asset asset,float time,float gait,float attack,float travel,Gesture gesture) {
+ using namespace DirectX;
+ visual::BodyPalette palette{};
+ const auto finite=[](float v) {return std::isfinite(v)?v:0.f;};
+ time=finite(time);gait=finite(gait);attack=std::clamp(finite(attack),-1.f,1.f);travel=std::clamp(finite(travel),0.f,1.f);
+ const float breath=std::sin(time*1.8f)*.012f,step=std::sin(gait)*.38f*travel;
+ const bool beast=asset==Asset::Wolf||asset==Asset::Boar;
+ const auto bounded=[&](float v,float limit) {return std::clamp(finite(v),-limit,limit);};
+ const auto torsoRotation=XMMatrixRotationRollPitchYaw(bounded(gesture.pitch,.3f),bounded(gesture.yaw,.4f),bounded(gesture.roll,.25f));
+ const auto torso=XMMatrixTranslation(0,-.96f,0)*torsoRotation*
+   XMMatrixTranslation(0,.96f+bounded(gesture.hip,.08f),0);
+ for(unsigned i=0;i<visual::bodyBones;++i) {
+  XMFLOAT3 pivot{};float angle=0;
+  if(beast) {
+   if(i==1) {pivot={0,1,.45f};angle=breath*2;}
+   if(i>=2&&i<=5) {pivot={(i%2? .26f:-.26f),.8f,i<4?.5f:-.5f};angle=step*((i==2||i==5)?1.f:-1.f);}
+  } else {
+   if(i==1) {pivot={0,.96f,0};angle=breath;}
+   if(i==2||i==4) {pivot={i==2?-.2f:.2f,.96f,0};angle=i==2?step:-step;}
+   if(i==6||i==8) {pivot={(i==6?-.4f:.4f)*(asset==Asset::Orc?1.22f:1.f),1.69f,0};angle=(i==6?-step:step)*.55f+breath+(i==8?-attack*.9f:0);}
+  }
+  float open=0;
+  if(!beast && (i==6 || i==8)) {
+   angle-=bounded(i==6?gesture.leftLift:gesture.rightLift,1.05f);
+   open=bounded(i==6?gesture.leftOpen:gesture.rightOpen,.5f)*(i==6?-1.f:1.f);
+  }
+  auto rotation=XMMatrixRotationX(angle)*XMMatrixRotationZ(open);
+  auto transform=XMMatrixTranslation(-pivot.x,-pivot.y,-pivot.z)*rotation*XMMatrixTranslation(pivot.x,pivot.y,pivot.z);
+  // Shoulder transforms inherit torso rotation, keeping arm roots attached.
+  if(!beast && (i==1 || i==6 || i==8)) {transform*=torso;rotation*=torsoRotation;}
+  XMStoreFloat4x4(&palette.joints[i],transform);
+  XMStoreFloat4x4(&palette.normals[i],rotation);
+ }
+ return palette;
+}
 static_assert(unsigned(visual::Material::Count)==13,"Update authored shader material sentinel with material layers");
 static_assert(sizeof(visual::Vertex)==40,"Authored archive stores ten float32 values per vertex");
 namespace {

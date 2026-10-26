@@ -1,6 +1,8 @@
 #include "engine/AuthoredAssets.h"
 #include "engine/Renderer.h"
 #include "platform/Win32Window.h"
+#include "game/AuthoredActorMotion.h"
+#include <filesystem>
 #include <iostream>
 #include <limits>
 #include <cstring>
@@ -29,7 +31,60 @@ int main() {
   Win32Window window;Renderer renderer;
   Check(window.Create(GetModuleHandleW(nullptr),960,720,L"Authored asset checks",false),"Hidden window");
   Check(renderer.Initialize(window.GetHandle(),960,720),"Embedded GPU buffers");
+  for(unsigned a=0;a<unsigned(authored::Asset::Oak);++a) {
+    const auto asset=authored::Asset(a);
+    const auto rest=authored::Pose(asset,0),moving=authored::Pose(asset,1,.8f,.6f,1);
+    float displacement=0;
+    for(unsigned lod=0;lod<authored::lodCount;++lod) {
+      for(const auto& vertex:library[a*authored::lodCount+lod].geometry.vertices) {
+        const auto weights=authored::Influence(asset,vertex.position);
+        Check(weights.bones[0]<visual::bodyBones && weights.weights.x>=0 && weights.weights.y>=0 && std::abs(weights.weights.x+weights.weights.y-1)<1e-6f,"Invalid animation influence");
+        const auto bind=visual::SkinVertex(vertex,weights,rest),posed=visual::SkinVertex(vertex,weights,moving);
+        Check(std::abs(bind.position.x-vertex.position.x)+std::abs(bind.position.y-vertex.position.y)+std::abs(bind.position.z-vertex.position.z)<1e-5f,"Bind pose changed mesh");
+        Check(std::isfinite(posed.position.x)&&std::isfinite(posed.position.y)&&std::isfinite(posed.position.z),"Nonfinite animated vertex");
+        displacement+=std::abs(posed.position.y-bind.position.y)+std::abs(posed.position.z-bind.position.z);
+      }
+      renderer.BeginFrame();renderer.SetCamera({3,2,-5},{0,1,0});
+      renderer.DrawAnimatedAsset(asset,{0,0,0},DirectX::XM_PI,1,.8f,.6f,1,lod);
+      Check(renderer.Capture(L"authored-motion-"+std::to_wstring(a)+L"-"+std::to_wstring(lod)+L".png")&&renderer.EndFrame(false)&&renderer.ValidateDebugMessages(),"Animated color/shadow/LOD render failed");
+    }
+    Check(displacement>1,"Actor remained static");
+  }
   visual::StaticScene cached;
+  const auto captures=std::filesystem::current_path()/"authored-combat-check";
+  std::filesystem::create_directories(captures);
+  for(const auto asset:{authored::Asset::Skeleton,authored::Asset::Orc,authored::Asset::Revenant}) {
+    const auto id=asset==authored::Asset::Revenant?rpg::ClassId::Mage:asset==authored::Asset::Orc?rpg::ClassId::Demonologist:rpg::ClassId::Warrior;
+    const auto clip=asset==authored::Asset::Skeleton?animation::ActionClip::Basic:animation::ActionClip::Heavy;
+    const auto rest=authored::Pose(asset,0);
+    for(unsigned stage=0;stage<5;++stage) {
+      animation::Sample sample;
+      if(stage>0 && stage<4)sample.action=animation::SampleAction(id,clip,animation::ActionDuration(clip)*(.15f+.25f*stage));
+      if(stage==4){sample.hit=.8f;sample.hitSide=.7f;}
+      const auto gesture=AuthoredActorGesture(sample);
+      const auto posed=authored::Pose(asset,0,0,0,0,gesture);
+      float moved=0;
+      for(unsigned lod=0;lod<authored::lodCount;++lod) {
+        for(const auto& v:library[unsigned(asset)*authored::lodCount+lod].geometry.vertices) {
+          const auto influence=authored::Influence(asset,v.position);
+          const auto p=visual::SkinVertex(v,influence,posed);
+          const float d=std::abs(p.position.x-v.position.x)+std::abs(p.position.y-v.position.y)+std::abs(p.position.z-v.position.z);
+          Check(std::isfinite(d)&&d<2,"Combat gesture exploded mesh");
+          if(v.position.y<.7f && std::abs(v.position.x)<.3f)Check(d<1e-5f,"Upper-body gesture displaced planted legs");
+          moved+=d;
+        }
+      }
+      Check(stage?moved>.01f:moved<.01f,"Gesture missing or neutral pose changed");
+      renderer.BeginFrame();renderer.SetCamera({3,2,-5},{0,1,0});
+      renderer.DrawMesh(visual::Mesh::Box,{0,-.06f,0},{8,.12f,8},{.22f,.25f,.23f,1},visual::Material::Stone);
+      renderer.DrawAnimatedAsset(asset,{0,0,0},DirectX::XM_PI,0,0,0,0,0,{1,1,1,1},gesture);
+      renderer.DrawText(.02f,.025f,std::string(authored::Name(asset))+" / "+(stage==0?"NEUTRAL":stage==4?"HIT RESPONSE":"ACTION "+std::to_string(stage)),{1,.86f,.6f,1},1.8f);
+      Check(renderer.Capture((captures/(std::to_string(unsigned(asset))+"-"+std::to_string(stage)+".png")).wstring())&&renderer.EndFrame(false)&&renderer.ValidateDebugMessages(),"Combat gesture render/shadows");
+    }
+    authored::Gesture invalid;invalid.pitch=std::numeric_limits<float>::quiet_NaN();invalid.leftLift=std::numeric_limits<float>::infinity();
+    const auto sanitized=authored::Pose(asset,0,0,0,0,invalid);
+    Check(std::memcmp(&sanitized,&rest,sizeof(rest))==0,"Invalid gesture was not sanitized to neutral");
+  }
   unsigned nearTriangles=0;
   for(unsigned frame=0;frame<3;++frame) {
     renderer.BeginFrame();renderer.SetCamera(frame==1?DirectX::XMFLOAT3{0,4,-100}:DirectX::XMFLOAT3{3,3,-6},{0,1.5f,0});
