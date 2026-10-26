@@ -387,6 +387,9 @@ float4 PSMain(VOut i) : SV_TARGET {
   heightDerivative+=float2(ddx(relief),ddy(relief));
   roughness=lerp(.96,lerp(.93,.68+.14*stoneVariation,mortar),routes.y);
   cavity=lerp(1,lerp(.65,1,mortar),routes.y);
+  // Exposed ridge faces use weathered rock, while gentle slopes retain heath.
+  float escarpment=1-smoothstep(.38,.78,geometric.y);
+  albedo=lerp(albedo,lerp(float3(.24,.25,.235),float3(.39,.365,.31),fine),escarpment);
   heightDerivative*=.58;
  }
  if (i.material==8) {
@@ -406,6 +409,7 @@ float4 PSMain(VOut i) : SV_TARGET {
   float streak=Noise(float2((i.wp.x+i.wp.z)*5.3,i.wp.y*.32));
   float stain=(1-smoothstep(.12,1.65,i.wp.y))*(.35+.65*streak);
   albedo*=lerp(.89,1.035,wash);
+  albedo=lerp(dot(albedo,float3(.2126,.7152,.0722)).xxx,albedo,.70)*.91;
   albedo=lerp(albedo,albedo*float3(.63,.66,.53),stain*.65);
   albedo*=1-.065*smoothstep(.55,.85,streak);
  }

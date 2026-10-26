@@ -165,7 +165,7 @@ void DrawSupplyStall(Renderer& r,const rpg::Obstacle& o) {
     r.DrawSegment({x+side*(o.halfX-.06f),2.08f,z},{x+side*.60f,2.57f,z},.08f,.08f,brass,S::Wood);
   }
   Box(r,{x,2.57f,z},{2.65f,.09f,.10f},wood,S::Wood);
-  r.DrawMesh(M::Canopy,{x,2.63f,z},{2.75f,1,1.35f},{.33f,.48f,.29f,1},S::Cloth);
+  r.DrawMesh(M::Canopy,{x,2.63f,z},{2.75f,1,1.35f},{.38f,.355f,.28f,1},S::Cloth);
   for (int i=0;i<3;++i) {
     r.DrawMesh(M::Barrel,{x-.7f+i*.27f,o.height+.18f,z},{.16f,.29f,.16f},{.52f,.18f,.14f,1},S::Cloth);
     Box(r,{x-.7f+i*.27f,o.height+.36f,z},{.06f,.09f,.06f},brass,S::Metal);

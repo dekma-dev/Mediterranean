@@ -1,3 +1,4 @@
+#include "engine/Utf8.h"
 #include "engine/Renderer.h"
 #include "game/WorldMap.h"
 #include "SceneBytecode.generated.h"
@@ -922,7 +923,8 @@ bool Renderer::ValidateDebugMessages() {
 
 float Renderer::TextWidth(const std::string& text,float size) const {
  float line=0,width=0;
- for (unsigned char ch : text) {
+ for (std::size_t offset=0;offset<text.size();) {
+  const auto ch=text::Next(text,offset);
   if (ch=='\n') { width=std::max(width,line); line=0; }
   else line+=font_.Character(ch).advance*size*.5f;
  }
@@ -979,11 +981,12 @@ void Renderer::DrawRoundMapArtwork(float x,float y,float width,float height) {
 }
 void Renderer::DrawText(float x,float y,const std::string& text,const XMFLOAT4& color,float size) {
  const float start=x,scale=size*.5f,dx=32*scale/width_,dy=32*scale/height_;
- for (unsigned char ch : text) {
+ for (std::size_t offset=0;offset<text.size();) {
+  const auto ch=text::Next(text,offset);
   if (ch=='\n') { y+=30*scale/height_; x=start; continue; }
   const auto& glyph=font_.Character(ch);
   if (ch!=' ') {
-   const float u=glyph.u,v=glyph.v,du=32.f/512,dv=32.f/256;
+   const float u=glyph.u,v=glyph.v,du=32.f/512,dv=32.f/512;
    const Vertex a{{x*2-1,1-y*2,.5f},{u,v,1},color};
    const Vertex b{{(x+dx)*2-1,1-y*2,.5f},{u+du,v,1},color};
    const Vertex c{{(x+dx)*2-1,1-(y+dy)*2,.5f},{u+du,v+dv,1},color};

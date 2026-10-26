@@ -112,7 +112,7 @@ public:
   bool SetMapArtwork(const std::vector<std::uint8_t>& pixels,unsigned size);
   void DrawMapArtwork(float x,float y,float width,float height);
   void DrawRoundMapArtwork(float x,float y,float width,float height);
-  std::size_t InterfaceBytes() const { return 512*256+mapBytes_+uiBytes_; }
+  std::size_t InterfaceBytes() const { return 512*512+mapBytes_+uiBytes_; }
   void DrawText(float x, float y, const std::string& text, const DirectX::XMFLOAT4& color, float size = 2);
   const std::wstring& Error() const { return error_; }
 private:

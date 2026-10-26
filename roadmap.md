@@ -1,5 +1,8 @@
 # Mediterranean Roadmap
 
+Landscape composition follow-up (2026-10-26): rounded wooded ridge silhouettes now replace distant square platforms; grass is clustered and plaster/canvas are more subdued. See docs/environment-art-direction.md and manual check 281. Next substantial step remains playable elevation integrated with collision, navigation, feet/camera and saved positions; current peripheral ridges are decorative. Authored pine branch silhouettes and building texture fidelity still need improvement.
+
+
 Target presentation and practice (2026-10-26): model-based HUD portraits, friendly resident/keeper/quartermaster selection and immortal 200 HP practice dummies with 200 HP/s regeneration are implemented. Left-click bodies or names; Tab retains hostile cycling. Complete manual check 280 for overlap/occlusion, all class spells and portrait readability. Future portrait fidelity should follow authored character/material improvements rather than unrelated placeholder icons.
 
 

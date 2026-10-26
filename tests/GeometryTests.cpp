@@ -1,4 +1,5 @@
 #include "engine/Geometry.h"
+#include "engine/Landscape.h"
 #include "engine/InstanceTransform.h"
 #include "game/WorldMap.h"
 #include "game/CharacterPose.h"
@@ -53,15 +54,16 @@ int main() {
       Check(std::abs(v.position.x)<=.501f && std::abs(v.position.z)<=.501f &&
         v.position.y>=-.501f && v.position.y<=.531f,"Helmet must retain its fitted head envelope");
   }
-  std::size_t bytes=0,triangles=0,weaponBytes=0,weaponTriangles=0,armorBytes=0,armorTriangles=0;
+  std::size_t bytes=0,triangles=0,weaponBytes=0,weaponTriangles=0,armorBytes=0,armorTriangles=0,ridgeBytes=0,ridgeTriangles=0;
   for (unsigned mesh=0;mesh<static_cast<unsigned>(visual::Mesh::Count);++mesh) {
     const auto g=visual::BuildMesh(static_cast<visual::Mesh>(mesh));
     Check(!g.vertices.empty() && !g.indices.empty() && g.indices.size()%3==0,"Missing or incomplete mesh.");
     // The separately budgeted weighted body is covered by SkinningTests.
     if(!visual::IsBodyMesh(static_cast<visual::Mesh>(mesh)) && !visual::IsHandMesh(static_cast<visual::Mesh>(mesh))) {
       const auto cost=g.vertices.size()*sizeof(visual::Vertex)+g.indices.size()*sizeof(std::uint32_t);
-      if(mesh>=unsigned(visual::Mesh::GuardCuirass) && mesh<=unsigned(visual::Mesh::GuardCloak)) {armorBytes+=cost;armorTriangles+=g.indices.size()/3;}
-      else if(mesh>=unsigned(visual::Mesh::WeaponMace)) {weaponBytes+=cost;weaponTriangles+=g.indices.size()/3;}
+      if(mesh==unsigned(visual::Mesh::Ridge)) {ridgeBytes+=cost;ridgeTriangles+=g.indices.size()/3;}
+      else if(mesh>=unsigned(visual::Mesh::GuardCuirass) && mesh<=unsigned(visual::Mesh::GuardCloak)) {armorBytes+=cost;armorTriangles+=g.indices.size()/3;}
+      else if(mesh>=unsigned(visual::Mesh::WeaponMace) && mesh<=unsigned(visual::Mesh::WeaponCleaver)) {weaponBytes+=cost;weaponTriangles+=g.indices.size()/3;}
       else {bytes+=cost;triangles+=g.indices.size()/3;}
     }
     for (const auto& v : g.vertices) {
@@ -84,6 +86,8 @@ int main() {
     }
   }
   Check(bytes<=640*1024 && triangles<=16000,"Reusable mesh library exceeded its startup geometry budget.");
+  Check(ridgeBytes<=20*1024 && ridgeTriangles<=512,"Shared landscape ridge exceeded its dedicated 20 KiB / 512 triangle budget");
+  std::cout<<"Landscape ridge: "<<ridgeBytes<<" bytes / "<<ridgeTriangles<<" triangles\n";
   std::cout<<"Guard armor: "<<armorBytes<<" bytes / "<<armorTriangles<<" triangles\n";
   Check(armorBytes<=320*1024 && armorTriangles<=8500,"Guard outfit exceeded its bounded shared geometry budget");
   for(auto mesh:{visual::Mesh::GuardCuirass,visual::Mesh::GuardPlate}) {
@@ -148,6 +152,12 @@ int main() {
     Check(Finite(pose.arms[1].end) && Finite(pose.legs[0].joint) && Finite(pose.weaponDirection),"Pose inputs must sanitize safely.");
   }
   const auto terrain=visual::BuildMesh(visual::Mesh::Terrain);
+  const auto ridge=visual::BuildMesh(visual::Mesh::Ridge);
+  for(const auto& vertex:ridge.vertices) {
+    const auto p=vertex.position;
+    Check(p.x*p.x+p.z*p.z<=1.001f && p.y>=-.701f && p.y<=1.001f,"Ridge must stay in its culling/placement envelope");
+    if(p.y>=0) Check(std::abs(p.y-visual::RidgeHeight(p.x,p.z))<.001f,"Ridge geometry and tree grounding must use the same profile");
+  }
   for (int x=-int(rpg::WorldMap::halfWidth);x<=int(rpg::WorldMap::halfWidth);++x)
     for (int z=-int(rpg::WorldMap::halfDepth);z<=int(rpg::WorldMap::halfDepth);++z)
     Check(Covers(terrain,{float(x),0,float(z)}),"Visible terrain leaves a hole inside the playable collision rectangle.");

@@ -1,4 +1,5 @@
 #include "engine/Geometry.h"
+#include "engine/Landscape.h"
 #include "game/WorldMap.h"
 #include "engine/Skinning.h"
 #include "engine/HandSkinning.h"
@@ -618,6 +619,23 @@ Geometry BuildMesh(Mesh mesh) {
     g.vertices.insert(g.vertices.end(),{{{-.5f,-.5f,-.5f},{}},{{0,.5f,-.5f},{}},{{.5f,-.5f,-.5f},{}},
       {{.5f,-.5f,.5f},{}},{{0,.5f,.5f},{}},{{-.5f,-.5f,.5f},{}}});
     Triangle(g,8,9,10); Triangle(g,11,12,13);
+  } else if (mesh==Mesh::Ridge) {
+    constexpr unsigned segments=32,rings=8;
+    g.vertices.push_back({{0,RidgeHeight(0,0),0},{}});
+    for(unsigned ring=1;ring<=rings;++ring) for(unsigned i=0;i<segments;++i) {
+      const float a=i*2*pi/segments,r=float(ring)/rings,x=std::sin(a)*r,z=std::cos(a)*r;
+      g.vertices.push_back({{x,RidgeHeight(x,z),z},{}});
+    }
+    for(unsigned i=0;i<segments;++i) Triangle(g,0,1+i,1+(i+1)%segments);
+    for(unsigned ring=1;ring<rings;++ring) for(unsigned i=0;i<segments;++i) {
+      const auto a=1+(ring-1)*segments+i,b=1+(ring-1)*segments+(i+1)%segments;
+      Triangle(g,a,a+segments,b);Triangle(g,b,a+segments,b+segments);
+    }
+    // A tapered underside replaces the former square cliff/platform silhouette.
+    const auto skirt=unsigned(g.vertices.size());
+    for(unsigned i=0;i<segments;++i) g.vertices.push_back(g.vertices[1+(rings-1)*segments+i]);
+    const auto bottom=unsigned(g.vertices.size());g.vertices.push_back({{0,-.7f,0},{}});
+    for(unsigned i=0;i<segments;++i) Triangle(g,bottom,skirt+(i+1)%segments,skirt+i);
   } else if (mesh==Mesh::Terrain || mesh==Mesh::Cliff) {
     const auto angles=BoundaryAngles(); const auto count=static_cast<unsigned>(angles.size());
     if (mesh==Mesh::Terrain) {
