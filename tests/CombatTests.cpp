@@ -24,6 +24,26 @@ bool HasFeedback(const rpg::Simulation& game,rpg::FeedbackKind kind) {
 }
 
 int main() {
+  {
+    rpg::Simulation radial;
+    auto& actors=const_cast<std::vector<rpg::Enemy>&>(radial.Enemies());
+    for(auto& actor:actors) actor.health=0;
+    auto& boss=actors[0];boss.kind=rpg::EnemyKind::Captain;boss.rank=1;boss.health=boss.MaxHealth();
+    const auto player=radial.Player();boss.position=boss.home={player.x+1.4f,player.z};
+    boss.state=rpg::EnemyState::Pursuing;boss.windup=.01f;boss.bossAttack=1;boss.facing=0;
+    radial.Update(.02f,{});bool hurt=false,release=false;
+    for(std::size_t i=0;i<radial.VisualEventCount();++i) {
+      const auto& event=radial.VisualEvents()[i];
+      if(event.kind==rpg::CombatVisualKind::EnemyTempest) {
+        release=true;Require(event.facing==0,"Hit feedback must not rotate the committed attack effect");
+      }
+      if(event.kind==rpg::CombatVisualKind::Hurt) {
+        hurt=true;Require(std::abs(motion::AngleDelta(event.facing,-motion::tau*.25f))<.0001f,
+          "Radial hit feedback must come from the caster position, not its forward cone");
+      }
+    }
+    Require(hurt && release,"Radial fixture must release a damaging committed attack");
+  }
   for(int control=0;control<3;++control) for(bool bothPinned:{false,true}) {
     rpg::Simulation overlap;Require(overlap.Load(duel),"Overlap recovery fixture");
     auto& actors=const_cast<std::vector<rpg::Enemy>&>(overlap.Enemies());

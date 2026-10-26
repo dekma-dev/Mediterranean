@@ -975,7 +975,10 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
       if (enemy.Hits(distance,dot) && height_<1.5f &&
         health_>0 && HasLineOfSight(enemy.position,player_)) {
         const bool frost=class_==ClassId::Mage && barrier_>0;
-        DamagePlayer(enemy.Damage(),enemy.facing,elapsed);
+        // Circular and annular attacks can land beside or behind the caster.
+        // Damage presentation follows the actual incoming direction, while
+        // the committed warning/attack orientation remains unchanged.
+        DamagePlayer(enemy.Damage(),distance>.001f?std::atan2(delta.x,delta.z):enemy.facing,elapsed);
         if(frost) enemy.snared=std::max(enemy.snared,2.f);
       }
       else Emit(FeedbackKind::Miss,enemy.position);

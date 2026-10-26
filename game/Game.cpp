@@ -288,6 +288,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   time_+=dt;
   atmosphereTime_=std::fmod(atmosphereTime_+dt,1800.0);
   if (command.restart || (wasDead && simulation_.Health()>0)) { ResetMotion(); return; }
+  interface_.UpdateCombatFeedback(dt,simulation_);
   effects_.Advance(dt);
   for (std::size_t i=0;i<simulation_.VisualEventCount();++i) {
     const auto& event=simulation_.VisualEvents()[i];
@@ -648,7 +649,7 @@ void Game::Render(Renderer& renderer,bool showInterface) {
     }
     renderer.DrawText(screen.x,screen.y,text,color,2);
   }
-  if (drawInterface) interface_.Render(renderer,simulation_,time_,debugOverlay_);
+  if (drawInterface) interface_.Render(renderer,simulation_,time_,debugOverlay_,cameraYaw_);
 }
 
 std::wstring Game::WindowTitle() const {

@@ -12,9 +12,38 @@
 #include <cmath>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <sstream>
 
 void Require(bool value,const char* message) { if (!value) { std::cerr<<message<<'\n'; std::exit(1); } }
+void DamageDirectionChecks() {
+  float reference=-1;
+  for(int hz:{30,60,144,1000}) {
+    ui::DamageDirection cues;cues.Hit(motion::tau*.5f);
+    Require(std::abs(ui::DamageDirection::ScreenAngle(cues.pulses[0],0))<.00001f,"Frontal attacker must appear above the player");
+    Require(std::abs(ui::DamageDirection::ScreenAngle(cues.pulses[0],motion::tau*.25f)+motion::tau*.25f)<.00001f,
+      "Orbiting the camera must rotate world-space damage feedback");
+    for(float t=0;t<.4f-1e-7f;) {const float dt=std::min(1.f/hz,.4f-t);cues.Advance(dt);t+=dt;}
+    const float alpha=ui::DamageDirection::Opacity(cues.pulses[0]);
+    if(reference>=0) Require(std::abs(alpha-reference)<.00001f,"Damage direction fade depends on frame rate");
+    reference=alpha;
+    cues.Hit(motion::tau*.5f,.1f);
+    Require(std::abs(cues.pulses[0].age-.1f)<.00001f,"Repeated direction must refresh its existing pulse");
+    cues.Hit(motion::tau*.5f,.2f);
+    Require(cues.pulses[0].age==.1f,"Older contact must not overwrite a younger hit");
+    for(int i=0;i<hz;++i)cues.Advance(1.f/hz);
+    for(auto pulse:cues.pulses)Require(ui::DamageDirection::Opacity(pulse)==0,"Old hit indicators must expire completely");
+  }
+  ui::DamageDirection cues;
+  for(int i=0;i<40;++i) cues.Hit(i*.7f,.01f);
+  Require(cues.pulses.size()==6,"Damage feedback history must stay bounded");
+  cues.Advance(.01f,false);
+  for(auto pulse:cues.pulses) Require(ui::DamageDirection::Opacity(pulse)==0,"Death must clear incoming feedback");
+  cues.Hit(0);cues.Advance(1);
+  for(auto pulse:cues.pulses) Require(ui::DamageDirection::Opacity(pulse)==0,"Suspension must discard stale incoming feedback");
+  cues.Hit(std::numeric_limits<float>::quiet_NaN());cues.Hit(0,-1);
+  for(auto pulse:cues.pulses) Require(ui::DamageDirection::Opacity(pulse)==0,"Invalid contacts must not create feedback");
+}
 void HealthTrailChecks() {
   float reference=-1;
   for(int hz:{30,60,144,1000}) {
@@ -160,6 +189,7 @@ void InterruptedInputRegressions(Win32Window& window,Renderer& renderer) {
 }
 
 int main() {
+  DamageDirectionChecks();
   HealthTrailChecks();
   RelativeMouseRegressions();
   {
@@ -1373,6 +1403,30 @@ int main() {
     Require(ui::ReadIncomingAttacks(state).count==0,"Dead, distant and expired casts must disappear");
     renderer.BeginFrame();hud.Render(renderer,state,0,false);Require(renderer.EndFrame(false),"Incoming expiry redraw");
     Require(!hud.PointerOverUi(),"Expired incoming rows must release pointer regions");
+  }
+  for(const auto size:{std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
+    Require(renderer.Resize(size.first,size.second),"Damage direction resize");
+    rpg::Simulation state;ui::Interface hud;
+    auto& actors=const_cast<std::vector<rpg::Enemy>&>(state.Enemies());
+    const auto player=state.Player();
+    for(unsigned i=0;i<actors.size();++i) {
+      const float angle=i*motion::tau/3;
+      auto& actor=actors[i];actor.kind=rpg::EnemyKind::Raider;
+      actor.position=actor.home={player.x+std::sin(angle)*1.4f,player.z+std::cos(angle)*1.4f};
+      actor.facing=angle+motion::tau*.5f;actor.state=rpg::EnemyState::Pursuing;actor.windup=.01f;
+    }
+    state.Update(.02f,{});Require(state.Health()>0 && state.Health()<state.MaxHealth(),"Damage direction fixture must take real damage");
+    hud.UpdateCombatFeedback(.02f,state);const auto save=state.Save();
+    for(int orbit=0;orbit<2;++orbit) {
+      renderer.BeginFrame();hud.Render(renderer,state,.02f,false,orbit*motion::tau*.25f);
+      Require(renderer.Capture(L"damage-direction-"+std::to_wstring(size.first)+L"-"+std::to_wstring(orbit)+L".png") && renderer.EndFrame(false),"Damage direction capture");
+    }
+    Require(state.Save()==save,"Rendering damage directions must not change gameplay");
+    const ui::Layout layout(float(size.first),float(size.second));
+    const auto click=hud.Pointer(layout.x+640*layout.scale,layout.y+228*layout.scale,float(size.first),float(size.second),true,false);
+    Require(click.action==ui::Action::None && !hud.PointerOverUi(),"Damage crescents must not intercept gameplay clicks");
+    hud.ResetCombatFeedback();renderer.BeginFrame();hud.Render(renderer,state,.02f,false);
+    Require(renderer.EndFrame(false),"Damage direction reset render");
   }
   const auto loadingRoot=std::filesystem::current_path()/"loading-check";
   {

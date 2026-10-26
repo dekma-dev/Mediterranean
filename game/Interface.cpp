@@ -577,7 +577,7 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  if(selection.PageAge()<.16f) c.RectFill({814,140,400,510},{.045f,.03f,.02f,.28f*(1-selection.PageAge()/.16f)});
 }
 
-void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bool debug) {
+void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bool debug,float cameraYaw) {
  Canvas c(renderer); regions_.clear();
  struct StatusTip { std::string name,description,value; };
  std::vector<StatusTip> statusTips;
@@ -652,6 +652,24 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  // Combat frames sit beside the action; side windows move them to the top.
  const bool combatLayout=!HasPanels();
  if(combatLayout) {
+  // Restrained crimson crescents leave the character and hotbars unobstructed.
+  // Bearings stay in world space so orbiting the camera rotates feedback too.
+  for(const auto& pulse:damageDirection_.pulses) {
+   const float alpha=DamageDirection::Opacity(pulse);
+   if(alpha<=.001f) continue;
+   const float angle=DamageDirection::ScreenAngle(pulse,cameraYaw);
+   for(int segment=0;segment<12;++segment) {
+    const float a=angle-.24f+segment*.04f,b=a+.04f;
+    const float edge=1-std::abs((segment+.5f)/6-1);
+    const float x=640+std::sin(a)*174,y=340-std::cos(a)*112;
+    const float nx=640+std::sin(b)*174,ny=340-std::cos(b)*112;
+    c.Line(x,y,nx,ny,5,{.48f,.035f,.025f,alpha*(.3f+.55f*edge)});
+    c.Line(x,y,nx,ny,1.5f,{1,.48f,.22f,alpha*edge});
+   }
+   const float x=640+std::sin(angle)*163,y=340-std::cos(angle)*101;
+   c.Line(x,y,640+std::sin(angle-.055f)*174,340-std::cos(angle-.055f)*112,2,{1,.65f,.35f,alpha});
+   c.Line(x,y,640+std::sin(angle+.055f)*174,340-std::cos(angle+.055f)*112,2,{1,.65f,.35f,alpha});
+  }
   const auto incoming=ReadIncomingAttacks(s);
   if(incoming.count) {
      const Rect board{438,s.Sparring() || s.SparringReportTime()>0?205.f:24.f,400,27+incoming.count*48.f};

@@ -1,6 +1,7 @@
 #pragma once
 #include "game/Simulation.h"
 #include "game/HealthTrail.h"
+#include "game/DamageDirection.h"
 #include <vector>
 #include <cstdint>
 class Renderer;
@@ -59,8 +60,17 @@ public:
   void CancelDrag() { dragSpell_=dragHotbar_=-1; dragBag_=dragGear_=-1; dragItem_=Item::None; dragging_=false; }
   void InvalidateHitRegions() { regions_.clear(); renderedState_=~std::uint64_t(0); }
   bool Dragging() const { return dragging_; }
-  void Render(Renderer& renderer,const rpg::Simulation& simulation,float time,bool debug);
-  void ResetCombatFeedback() { playerHealth_.Reset();targetHealth_.Reset(); }
+  void Render(Renderer& renderer,const rpg::Simulation& simulation,float time,bool debug,float cameraYaw=0);
+  void UpdateCombatFeedback(float dt,const rpg::Simulation& simulation) {
+    damageDirection_.Advance(dt,simulation.Health()>0);
+    if(simulation.Health()<=0 || !std::isfinite(dt) || dt<=0 || dt>.25f) return;
+    for(std::size_t i=0;i<simulation.VisualEventCount();++i) {
+      const auto& event=simulation.VisualEvents()[i];
+      if(event.kind==rpg::CombatVisualKind::Hurt && event.actor==0)
+        damageDirection_.Hit(event.facing,std::clamp(event.elapsed,0.f,dt));
+    }
+  }
+  void ResetCombatFeedback() { playerHealth_.Reset();targetHealth_.Reset();damageDirection_.Reset(); }
   bool CapturesMovement() const { return panel==Panel::Menu; }
   // Layouts are independent per class and saved with expedition settings.
   std::string SaveHotbars() const;
@@ -102,6 +112,7 @@ public:
   rpg::Vec2 waypoint{},pendingWaypoint{};
 private:
   HealthTrail playerHealth_,targetHealth_;
+  DamageDirection damageDirection_;
   std::array<std::array<int,hotbarSlots>,int(rpg::ClassId::Count)> hotbars_=[] {
     std::array<std::array<int,hotbarSlots>,int(rpg::ClassId::Count)> bars{};
     for(auto& bar:bars) bar={0,1,2,3,4,5,6,7,-1,-1,5,6,7,3,4,-1,-1,-1,-1,-1}; return bars;

@@ -1,5 +1,7 @@
 # Mediterranean Roadmap
 
+Directional combat HUD checkpoint (2026-10-26): accepted player damage now produces brief camera-relative crimson crescents, with six bounded world-space directions and simulation-owned expiry. Circular/annular enemy hits now report actual caster-to-player direction instead of the caster's forward angle. Continue live combat readability and motion acceptance (manual 272); this is an encounter-feedback addition, not a claim that the recorded reference uses this exact widget. Character assets, authored motion and broader interface artwork remain open.
+
 Crowd movement checkpoint (2026-10-26): enemy pursuit and ranged retreat now probe around living neighbours before moving, with swept 0.9 m spacing and static-world clearance. Overlap recovery no longer pushes rooted, stunned or casting actors; only movable neighbours resolve an overlap. Continue live crowded-corner and encounter acceptance (manual 271), authored locomotion and the larger character/art milestones. This is bounded local avoidance, not a formation planner or large-scale MMO crowd solver.
 
 Directional impact checkpoint (2026-10-26): player/enemy hit presentation now adds signed shoulder roll/twist from accepted contact direction. Repeated contacts carry the previous response through onset; existing recoil, limb IK and combat clocks remain intact. Continue authored whole-body hit/recovery clips and live motion acceptance; this is a bounded procedural layer, not a replacement animation library.
