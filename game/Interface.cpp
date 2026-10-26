@@ -248,11 +248,28 @@ struct Canvas {
   }
  }
  // Painted armor crest with a live level/threat medallion.
- void Portrait(float x,float y,bool enemy,int level) {
+ void Portrait(float x,float y,const rpg::Simulation& s,const rpg::Enemy* enemy=nullptr,int friendly=-1) {
   Skin({x-29,y-29,58,59},17);
-  Art({x-23,y-23,46,45},Renderer::UiArt::Icons,IconUv(16),enemy?Color{.88f,.59f,.48f,1}:Color{1,1,1,1});
+  Gradient({x-24,y-24,48,47},{.16f,.20f,.22f,1},{.025f,.035f,.045f,1});
+  const auto p=P(x-24,y-24);
+  if(r.BeginPortrait(p.x,p.y,48*layout.scale/r.Width(),47*layout.scale/r.Height(),1)) {
+   if(enemy && enemy->kind==rpg::EnemyKind::Dummy) {
+    r.DrawMesh(visual::Mesh::Sphere,{0,1.9f,0},{.4f,.45f,.35f},{.61f,.49f,.28f,1},visual::Material::Cloth);
+    r.DrawMesh(visual::Mesh::Torso,{0,1.3f,0},{.85f,.75f,.4f},{.6f,.49f,.29f,1},visual::Material::Cloth);
+   } else if((enemy && enemy->kind!=rpg::EnemyKind::Trainer) || friendly==0 || friendly==2) {
+    const auto asset=friendly==0?authored::Asset::Guardian:friendly==2?authored::Asset::Mage:
+     enemy->kind==rpg::EnemyKind::Wraith?authored::Asset::Revenant:
+     enemy->kind==rpg::EnemyKind::Captain || enemy->kind==rpg::EnemyKind::Reaver?authored::Asset::Orc:authored::Asset::Skeleton;
+    r.DrawAnimatedAsset(asset,{0,0,0},0,0,0,0,0,0);
+   } else {
+    auto outfit=CharacterOutfit::From(s.Items(),s.Class(),s.Look());
+    if(friendly>=0 || enemy) {outfit=CharacterOutfit{};outfit.weapon=false;outfit.helm=false;outfit.classId=friendly==1?rpg::ClassId::Scout:rpg::ClassId::Paladin;}
+    DrawCharacter(r,{0,0},0,0,{s.ClassInfo().color[0],s.ClassInfo().color[1],s.ClassInfo().color[2],1},0,0,outfit,animation::Idle(0));
+   }
+   r.EndPortrait();
+  }
   Oval(x,y+25,12,10,{.07f,.055f,.035f,1}); Ring(x,y+25,10,gold);
-  Center(x-11,y+17,22,enemy?"!":std::to_string(level),12);
+  Center(x-11,y+17,22,friendly>=0?"+":enemy?enemy->kind==rpg::EnemyKind::Dummy?"T":"!":std::to_string(s.Level()),12);
  }
  void CooldownSweep(Rect a,float fraction) {
   const float end=std::clamp(fraction,0.f,1.f)*6.2831853f;
@@ -651,6 +668,29 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  hoverX_=mouseX_;hoverY_=mouseY_;
  renderedState_=StateKey(); renderedWidth_=float(renderer.Width()); renderedHeight_=float(renderer.Height());
  if (!renderer.HasMapArtwork() && !renderer.SetMapArtwork(BuildMapArtwork(s.Map()),512)) return;
+ // World targets are registered first: later HUD/panel regions take precedence.
+ const auto worldTarget=[&](rpg::EntityId id,rpg::Vec2 position,const char* name,bool friendly,const rpg::Enemy* actor=nullptr) {
+  if(std::hypot(position.x-s.Player().x,position.z-s.Player().z)>22 || !s.Map().CanTravel(s.Player(),position,.05f)) return;
+  Point head,foot;
+  if(!renderer.Project({position.x,2.35f,position.z},head) || !renderer.Project({position.x,0,position.z},foot)) return;
+  const float x=c.layout.LocalX(head.x*renderer.Width()),y=c.layout.LocalY(head.y*renderer.Height());
+  const float bottom=c.layout.LocalY(foot.y*renderer.Height()),height=std::clamp(bottom-y,25.f,220.f);
+  if(x<0 || x>1280 || y<0 || y>720) return;
+  const bool selected=friendly?s.FriendlyTarget()==int(id-rpg::Simulation::friendlyBase):s.TargetActor() && s.TargetActor()->id==id;
+  const Rect hit{x-std::max(20.f,height*.24f),y,std::max(40.f,height*.48f),height};
+  regions_.push_back({hit,{Action::SelectActor,int(id)},true});
+  const Rect label{x-64,y-15,128,15};
+  regions_.push_back({label,{Action::SelectActor,int(id)},true});
+  if(friendly || selected || hit.Contains(mouseX_,mouseY_) || (actor && actor->kind==rpg::EnemyKind::Dummy)) {
+   c.Center(label.x,label.y,label.w,name,10,friendly?Color{.62f,.94f,.57f,1}:gold);
+   if(actor) {c.RectFill({x-34,y+1,68,4},{.06f,.035f,.02f,1});
+    c.RectFill({x-33,y+2,66*std::clamp(actor->health/actor->MaxHealth(),0.f,1.f),2},{.85f,.48f,.20f,1});}
+   if(selected) c.Line(x-24,y-2,x+24,y-2,1,friendly?Color{.5f,.95f,.5f,1}:gold);
+  }
+ };
+ for(const auto& enemy:s.Enemies()) if(enemy.health>0) worldTarget(enemy.id,enemy.position,enemy.Name(),false,&enemy);
+ for(const auto& dummy:s.Dummies()) if(!(s.Sparring() && dummy.id==210)) worldTarget(dummy.id,dummy.position,dummy.Name(),false,&dummy);
+ for(int i=0;i<rpg::Simulation::friendlyCount;++i) worldTarget(rpg::Simulation::friendlyBase+i,rpg::Simulation::FriendlyPosition(i),rpg::Simulation::FriendlyName(i),true);
  const auto button=[&](Rect rect,const std::string& label,Action action,int value=0,bool enabled=true) {
   const bool hover=rect.Contains(mouseX_,mouseY_);
   c.Button(rect,enabled,false);
@@ -749,7 +789,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  regions_.push_back({{ux-5,uy,285,78},{},false});
  c.Frame({ux+27,uy+8,229,66},{.035f,.075f,.065f,.94f},{.39f,.46f,.28f,1});
  c.Banner({ux+49,uy,208,26},s.Nickname(),15);
- c.Portrait(ux+29,uy+36,false,s.Level());
+ c.Portrait(ux+29,uy+36,s);
  c.Frame({ux+58,uy+30,189,20},{.035f,.075f,.035f,1});
  c.Gradient({ux+61,uy+33,183*playerHealth_.trail,14},{.82f,.59f,.24f,1},{.43f,.23f,.08f,1});
  c.Gradient({ux+61,uy+33,183*std::clamp(s.Health()/s.MaxHealth(),0.f,1.f),14},
@@ -794,7 +834,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   const float tx=combatLayout?750.f:475.f,ty=combatLayout?458.f:26.f;
   regions_.push_back({{tx,ty,286,78},{},false});
   c.Frame({tx,ty+8,244,66},{.085f,.045f,.035f,.94f},{.46f,.36f,.20f,1});
-  c.Banner({tx+2,ty,226,26},target.Name(),14); c.Portrait(tx+253,ty+36,true,target.kind==rpg::EnemyKind::Captain?3:1);
+  c.Banner({tx+2,ty,226,26},target.Name(),14); c.Portrait(tx+253,ty+36,s,&target);
   c.Frame({tx+9,ty+30,223,20},{.10f,.025f,.015f,1});
   c.Gradient({tx+12,ty+33,217*targetHealth_.trail,14},{.90f,.69f,.32f,1},{.49f,.29f,.10f,1});
   c.Gradient({tx+12,ty+33,217*std::clamp(target.health/target.MaxHealth(),0.f,1.f),14},
@@ -805,7 +845,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   const std::string condition=target.stunned>0?"Stunned  "+Seconds(target.stunned)+"s":
     target.rooted>0?"Rooted  "+Seconds(target.rooted)+"s":target.snared>0?"Snared  "+Seconds(target.snared)+"s":
     target.exposed>0?"Exposed +25%  "+Seconds(target.exposed)+"s":"";
-  c.Center(tx+5,ty+54,228,!condition.empty()?condition:distance+" m  /  Selected target",11,muted);
+  c.Center(tx+5,ty+54,228,!condition.empty()?condition:target.kind==rpg::EnemyKind::Dummy?"Immortal / Regenerates 200 HP/s":distance+" m  /  Selected target",11,muted);
   if (target.windup>0) {
    const Rect cast{tx+10,combatLayout?ty-59:ty+117,220,19};
    c.Frame(cast,{.12f,.035f,.02f,1},{.67f,.34f,.12f,1});
@@ -818,6 +858,15 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   int badge=0;
   for(const auto& effect:TargetStatusEffects(target)) statusBadge(tx+10+badge++*39,
     combatLayout?ty-35:ty+82,effect.icon,effect.name,effect.description,Seconds(effect.seconds)+"s",true);
+ }
+ if(s.FriendlyTarget()>=0) {
+  const int npc=s.FriendlyTarget();const float tx=combatLayout?750.f:475.f,ty=combatLayout?458.f:26.f;
+  regions_.push_back({{tx,ty,286,78},{},false});
+  c.Frame({tx,ty+8,244,66},{.035f,.085f,.055f,.94f},{.38f,.55f,.29f,1});
+  c.Banner({tx+2,ty,226,26},rpg::Simulation::FriendlyName(npc),14);
+  c.Portrait(tx+253,ty+36,s,nullptr,npc);
+  c.Center(tx+10,ty+34,220,"FRIENDLY / NON-COMBAT",12,{.60f,.90f,.53f,1});
+  c.Center(tx+10,ty+54,220,"Approach and press E to interact",11,muted);
  }
  c.Oval(1170,94,81,81,{.025f,.04f,.02f,1});
  Atlas(c,s,{1096,20,148,148},true,hasWaypoint,waypoint);

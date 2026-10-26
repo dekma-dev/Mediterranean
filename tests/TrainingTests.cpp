@@ -16,6 +16,40 @@ void FirstHit(rpg::Simulation& s) {
   Require(s.Health()<health,"Training opponent must turn, telegraph and hit within two seconds.");
 }
 int main() {
+  {
+    rpg::Simulation friendly; rpg::Command select; select.selectActor=303;
+    friendly.Update(.01f,select);
+    Require(friendly.FriendlyTarget()==3 && !friendly.TargetActor(),"Keeper must be a friendly, non-combat selection");
+    rpg::Command attack; attack.ability=0;friendly.Update(.01f,attack);
+    Require(!friendly.Attacking() && friendly.Cooldown(0)==0,"Friendly targeting must not spend an attack");
+    select.selectActor=999;friendly.Update(.01f,select);
+    Require(friendly.FriendlyTarget()==3,"Unknown identities must not retarget");
+  }
+  for(int hz:{30,60,144}) {
+    rpg::Simulation practice;Require(practice.Load(Veteran()),"Dummy fixture loads");
+    rpg::Command select;select.selectActor=210;practice.Update(1.f/hz,select);
+    Require(practice.TargetActor() && practice.TargetActor()->kind==rpg::EnemyKind::Dummy,"Scenery dummy must be selectable without starting sparring");
+    const auto hp=practice.Health();const auto gold=practice.Gold(),xp=practice.Experience();
+    rpg::Command hit;hit.ability=0;practice.Update(1.f/hz,hit);
+    bool damaged=false;
+    for(int n=0;n<hz*2;++n) {practice.Update(1.f/hz,{});if(practice.Dummies()[0].health<200) {damaged=true;break;}}
+    Require(damaged,"Practice attack must visibly reduce dummy HP");
+    const float before=practice.Dummies()[0].health;practice.Update(1.f/hz,{});
+    Require(std::abs(practice.Dummies()[0].health-std::min(200.f,before+200.f/hz))<.002f,"Dummy regeneration must be exactly 200 HP per simulated second");
+    for(int n=0;n<hz;++n) practice.Update(1.f/hz,{});
+    Require(practice.Dummies()[0].health==200 && practice.Health()==hp,"Dummy must fully recover without retaliating");
+    Require(practice.Gold()==gold && practice.Experience()==xp && !practice.Sparring(),"Dummy practice grants no progression and does not start sparring");
+    auto& dummy=const_cast<rpg::Enemy&>(practice.Dummies()[0]);dummy.health=1;
+    hit.ability=1;practice.Update(1.f/hz,hit);
+    bool lethalContact=false;
+    for(int n=0;n<hz*2;++n) {
+      dummy.health=1; practice.Update(1.f/hz,{});
+      if(dummy.damagedThisUpdate) {lethalContact=true;break;}
+    }
+    Require(lethalContact,"A normally lethal practice hit must actually land");
+    Require(dummy.health>0 && dummy.state==rpg::EnemyState::Idle && !dummy.looted,"Dummy stays alive and never becomes loot");
+    rpg::Simulation reload;Require(reload.Load(practice.Save()) && !reload.TargetActor() && reload.Dummies()[0].health==200,"Practice state is transient across load");
+  }
   using namespace rpg;
   {
     Simulation dash; Require(dash.Load(Veteran()),"Dash training fixture must load");

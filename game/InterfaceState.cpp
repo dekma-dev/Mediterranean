@@ -66,7 +66,7 @@ bool Interface::PointerOverWindow() const {
 }
 bool Interface::PointerOverUi() const {
   return PointerOverWindow() || std::any_of(regions_.begin(),regions_.end(),[&](const Region& region) {
-    return region.rect.Contains(mouseX_,mouseY_);
+    return region.event.action!=Action::SelectActor && region.rect.Contains(mouseX_,mouseY_);
   });
 }
 Layout::Layout(float width,float height) {

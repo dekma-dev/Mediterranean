@@ -158,6 +158,9 @@ bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapsh
       renderer_->BeginFrame(); game_->Render(*renderer_,showInterface);
       return renderer_->Capture(path.wstring()) && renderer_->EndFrame();
     };
+    rpg::Command friendly; friendly.selectActor=303; game_->ExecuteCommand(friendly);
+    if (!capture(L"-friendly-target")) { error_=renderer_->Error(); return false; }
+    if (!game_->RestoreSnapshot(original)) return false;
     for (int i=0;i<rpg::Inventory::gearCount;++i) {
       rpg::Command c; c.inventory={rpg::InventoryAction::Unequip,i,-1,game_->State().Items().Worn(rpg::GearSlot(i))}; game_->ExecuteCommand(c);
     }
@@ -232,6 +235,9 @@ bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapsh
     game_->SetCameraOrbit(game_->State().Facing()+3.14159265f,.2f,4);
     if (!capture(L"-watchman-character",false)) { error_=renderer_->Error(); return false; }
     if (!walkTo({12,-3.8f})) { error_=L"Equipped sparring scenario could not reach the guard."; return false; }
+    c={}; c.selectActor=210; game_->ExecuteCommand(c);
+    game_->SetCameraOrbit(0,.45f,7);
+    if (!capture(L"-dummy-target")) { error_=renderer_->Error(); return false; }
     c={}; c.interact=true; game_->ExecuteCommand(c);
     if (!game_->State().Sparring()) { error_=L"Equipped sparring render scenario could not start."; return false; }
     game_->SetCameraOrbit(0,.45f,7);

@@ -1424,7 +1424,7 @@ int main() {
     Require(state.Save()==save,"Rendering damage directions must not change gameplay");
     const ui::Layout layout(float(size.first),float(size.second));
     const auto click=hud.Pointer(layout.x+640*layout.scale,layout.y+228*layout.scale,float(size.first),float(size.second),true,false);
-    Require(click.action==ui::Action::None && !hud.PointerOverUi(),"Damage crescents must not intercept gameplay clicks");
+    Require((click.action==ui::Action::None || click.action==ui::Action::SelectActor) && !hud.PointerOverUi(),"Damage crescents must pass gameplay clicks through, including world target selection");
     hud.ResetCombatFeedback();renderer.BeginFrame();hud.Render(renderer,state,.02f,false);
     Require(renderer.EndFrame(false),"Damage direction reset render");
   }
@@ -1445,6 +1445,21 @@ int main() {
     Require(!hud.PointerOverUi(),"Relocated warnings must release their old hit region");
   }
   std::filesystem::create_directories(loadingRoot);
+  {
+    rpg::Simulation residents; ui::Interface hud;
+    Require(renderer.Resize(1280,720),"Friendly target resize");
+    renderer.BeginFrame();renderer.SetCamera({0,5,-18},{-3,1,-10});
+    hud.Render(renderer,residents,0,false);
+    DirectX::XMFLOAT2 point;
+    Require(renderer.Project({-3,1.3f,-10},point),"Keeper body must project");
+    const auto pick=hud.Pointer(point.x*1280,point.y*720,1280,720,true,false);
+    Require(pick.action==ui::Action::SelectActor && pick.value==303,"Clicking keeper body selects friendly identity");
+    Require(!hud.PointerOverUi(),"World target must not block RMB camera capture");
+    Require(renderer.EndFrame(false),"World target frame flush");
+    rpg::Command select;select.selectActor=pick.value;residents.Update(.01f,select);
+    renderer.BeginFrame();hud.Render(renderer,residents,.01f,false);
+    Require(renderer.Capture(L"friendly-target-layout.png") && renderer.EndFrame(false),"Friendly portrait capture");
+  }
   const auto textureBytes=renderer.InterfaceBytes();
   for(const auto size:{std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
     Require(renderer.Resize(size.first,size.second),"Loading layout resize");

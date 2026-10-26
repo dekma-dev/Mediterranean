@@ -171,7 +171,6 @@ void Simulation::UseAbility(int index,float visualElapsed) {
     message_=RetreatMobility()?"Retreat while facing the threat.":"Dash to target.";
   } else {
     if (!TargetActor() || TargetActor()->health<=0) { message_="Press Tab to select an enemy."; return; }
-    const bool trainingTarget=sparring_ && target_==int(enemies_.size());
     const auto& enemy=*TargetActor();
     if (enemy.state==EnemyState::Returning) { message_="That enemy is returning home."; return; }
     if (Length(Difference(enemy.position,player_))>Spell(index).range || height_>1.5f) {
@@ -732,7 +731,7 @@ void Simulation::Update(float seconds,const Command& command) {
   if(command.selectActor) {
     const auto selectable=[&](Vec2 p) {return Length(Difference(p,player_))<=22 && HasLineOfSight(player_,p);};
     for(int i=0;i<friendlyCount;++i) if(command.selectActor==friendlyBase+i && selectable(FriendlyPosition(i))) {
-      StopMovement(); target_=-1; friendlyTarget_=i; message_=std::string(FriendlyName(i))+" / Friendly";
+      CancelAttack(); queuedAttack_=-1; queueRemaining_=0; target_=-1; friendlyTarget_=i; message_=std::string(FriendlyName(i))+" / Friendly";
     }
     for(int i=0;i<int(enemies_.size());++i) if(enemies_[i].id==command.selectActor && enemies_[i].health>0 && selectable(enemies_[i].position)) {
       target_=i; friendlyTarget_=-1;

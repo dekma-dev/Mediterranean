@@ -113,6 +113,7 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   command.uiClick=event.action!=ui::Action::None || previousUi!=interface_.StateKey();
   switch (event.action) {
   case ui::Action::SelectThreat: if(event.value>0) command.selectThreat=rpg::EntityId(event.value); break;
+  case ui::Action::SelectActor: if(event.value>0) command.selectActor=rpg::EntityId(event.value); break;
   case ui::Action::MusicVolume: interface_.musicVolume=std::clamp(interface_.musicVolume+event.value,0,100); break;
   case ui::Action::EffectsVolume: interface_.effectsVolume=std::clamp(interface_.effectsVolume+event.value,0,100); break;
   case ui::Action::Close: interface_.Close(static_cast<ui::Panel>(event.value)); break;
@@ -544,6 +545,15 @@ void Game::Render(Renderer& renderer,bool showInterface) {
   worldView_.Draw(renderer,simulation_.Map(),time_,simulation_.Sparring(),merchantFace_.pose,keeperFace_.pose);
   using M=visual::Mesh;
   using S=visual::Material;
+  if(simulation_.FriendlyTarget()>=0) {
+    const auto p=rpg::Simulation::FriendlyPosition(simulation_.FriendlyTarget());
+    renderer.DrawEffectRing({p.x,.035f,p.z},.65f,{.35f,.85f,.4f,.65f});
+  }
+  for(const auto& dummy:simulation_.Dummies()) if(!(simulation_.Sparring() && dummy.id==210)) {
+    if(simulation_.TargetActor() && simulation_.TargetActor()->id==dummy.id)
+      renderer.DrawEffectRing({dummy.position.x,.035f,dummy.position.z},.65f,{.85f,.65f,.25f,.65f});
+    if(dummy.hitFlash>0) renderer.DrawEffectRing({dummy.position.x,1.3f,dummy.position.z},.35f,{1,.65f,.25f,dummy.hitFlash*3});
+  }
   DrawCharacter(renderer,player,y,playerPose_.facing,simulation_.HurtFlash()>0?XMFLOAT4{1,.48f,.35f,1}:
     XMFLOAT4{simulation_.ClassInfo().color[0],simulation_.ClassInfo().color[1],simulation_.ClassInfo().color[2],1},simulation_.ClassInfo().range>3?0:playerPose_.attack,playerPose_.gait,CharacterOutfit::From(simulation_.Items(),simulation_.Class(),simulation_.Look()),playerAnimation_.pose,1);
   const auto anchor=rpg::WorldMap::astralAnchor;
@@ -642,12 +652,6 @@ void Game::Render(Renderer& renderer,bool showInterface) {
   classfx::States(renderer,simulation_,time_);
   effects_.Render(renderer);
   const bool drawInterface=showInterface && (hudVisible_ || interface_.HasPanels() || simulation_.Health()<=0);
-  if(drawInterface) for(const auto& npc:rpg::WorldMap::residents) {
-    DirectX::XMFLOAT2 screen;
-    if(std::hypot(npc.position.x-player.x,npc.position.z-player.z)<9 &&
-      renderer.Project({npc.position.x,2.5f,npc.position.z},screen) && screen.x>.1f && screen.x<.78f && screen.y>.12f && screen.y<.8f)
-      renderer.DrawText(screen.x-.055f,screen.y,npc.name,{.95f,.81f,.43f,1},1.1f);
-  }
   for (std::size_t i=0;drawInterface && i<simulation_.Feedback().size();++i) {
     const auto& feedback=simulation_.Feedback()[i];
     DirectX::XMFLOAT2 screen;

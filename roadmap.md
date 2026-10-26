@@ -1,5 +1,8 @@
 # Mediterranean Roadmap
 
+Target presentation and practice (2026-10-26): model-based HUD portraits, friendly resident/keeper/quartermaster selection and immortal 200 HP practice dummies with 200 HP/s regeneration are implemented. Left-click bodies or names; Tab retains hostile cycling. Complete manual check 280 for overlap/occlusion, all class spells and portrait readability. Future portrait fidelity should follow authored character/material improvements rather than unrelated placeholder icons.
+
+
 Dawnwatch environment direction (2026-10-26): implemented broken heath/earth ground, subdued foliage and roof weathering, clearer near-ground air and nine wooded rocky peripheral outcrops using existing authored trees. See docs/environment-art-direction.md and manual check 279. This is a material/composition pass, not finished realistic terrain: prioritize coordinated heightfield/collision/navigation, authored foliage silhouettes and architecture materials next.
 
 
