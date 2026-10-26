@@ -154,6 +154,7 @@ private:
   std::uint8_t attachmentBody_=255;
   std::array<unsigned,2> attachmentLodCounts_{},lastAttachmentLodCounts_{};
   Microsoft::WRL::ComPtr<ID3D11Buffer> skinWeights_,skinConstants_;
+  Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> skinPaletteView_;
   Microsoft::WRL::ComPtr<ID3D11VertexShader> bodyShader_,bodyShadowShader_;
   Microsoft::WRL::ComPtr<ID3D11InputLayout> bodyLayout_;
   std::vector<visual::Vertex> hud_;

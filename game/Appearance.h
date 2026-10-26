@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <string>
+#include "engine/Utf8.h"
 
 namespace rpg {
 // Small, versioned cosmetic choices; independent of combat stats and equipment.
@@ -22,11 +23,20 @@ inline constexpr std::array<Swatch,5> tunicDyes{{
   {"Class colors",0,0,0},{"Oxblood",.34f,.095f,.08f},{"Forest",.12f,.24f,.15f},
   {"Midnight",.12f,.19f,.31f},{"Linen",.62f,.54f,.39f}
 }};
+inline bool NameLetter(unsigned c) {
+  return (c>='A' && c<='Z') || (c>='a' && c<='z') || (c>=0x410 && c<=0x44f) || c==0x401 || c==0x451;
+}
+inline std::size_t NameLength(std::string_view name) {
+  std::size_t length=0;
+  for(std::size_t offset=0;offset<name.size();++length) text::Next(name,offset);
+  return length;
+}
 inline bool ValidCharacterName(const std::string& name) {
-  if(name.empty() || name.size()>20 || name.front()==' ' || name.back()==' ') return false;
+  if(name.empty() || name.size()>40 || NameLength(name)>20 || name.front()==' ' || name.back()==' ') return false;
   bool letter=false;
-  for(unsigned char c:name) {
-    if((c>='A' && c<='Z') || (c>='a' && c<='z')) letter=true;
+  for(std::size_t offset=0;offset<name.size();) {
+    const auto c=text::Next(name,offset);
+    if(NameLetter(c)) letter=true;
     else if(c!=' ' && c!='-' && c!='\'') return false;
   }
   return letter;

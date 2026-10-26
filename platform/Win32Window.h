@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 #include "platform/MouseMotion.h"
+#include <string>
 
 class Win32Window {
 public:
@@ -22,6 +23,7 @@ public:
   bool Fullscreen() const { return fullscreen_; }
   void SetLoading(bool enabled) { loading_=enabled;if(enabled && hwnd_) {InvalidateRect(hwnd_,nullptr,FALSE);UpdateWindow(hwnd_);} }
   float ConsumeWheel() { const float result = wheel_; wheel_ = 0; return result; }
+  std::string ConsumeText() { auto result=std::move(text_);text_.clear();return result; }
   bool SetMouseLook(bool enabled);
   bool MouseLook() const { return mouseLook_; }
   MouseMotion::Delta ConsumeMouseMotion() { return mouseMotion_.Consume(); }
@@ -35,6 +37,7 @@ private:
   HWND hwnd_ = nullptr;
   HCURSOR cursor_ = nullptr;
   float wheel_ = 0;
+  std::string text_;
   bool fullscreen_ = false;
   bool visible_ = false;
   bool loading_=false;

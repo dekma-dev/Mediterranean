@@ -13,8 +13,8 @@ bool FontAtlas::Initialize(ID3D11Device* device) {
   if (!bitmap || !font) { if (bitmap) DeleteObject(bitmap); if (font) DeleteObject(font); DeleteDC(dc); return false; }
   auto oldBitmap=SelectObject(dc,bitmap); auto oldFont=SelectObject(dc,font);
   PatBlt(dc,0,0,512,512,BLACKNESS); SetBkMode(dc,TRANSPARENT); SetTextColor(dc,RGB(255,255,255));
-  for (int i=0;i<191;++i) {
-    const wchar_t ch=static_cast<wchar_t>(i<95?i+32:0x400+i-95); SIZE size{};
+  for (int i=0;i<194;++i) {
+    const wchar_t ch=static_cast<wchar_t>(i<95?i+32:i<191?0x400+i-95:i==191?0xab:i==192?0xbb:0x2212); SIZE size{};
     GetTextExtentPoint32W(dc,&ch,1,&size);
     const int x=(i%16)*32,y=(i/16)*40;
     TextOutW(dc,x+1,y+1,&ch,1); glyphs_[i]={float(x)/512,float(y)/512,float(size.cx)};

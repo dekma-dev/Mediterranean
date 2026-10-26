@@ -476,7 +476,7 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  const auto page=selection.Screen();const bool roster=page==Page::Roster,customize=page==Page::Customize;
  const bool valid=!roster || selection.State()!=Status::Unreadable,saved=selection.State()==Status::Saved;
  const auto& hero=selection.Hero();const auto& info=hero.ClassInfo();
- localization::playerName=hero.Nickname();
+ localization::playerName=std::string(hero.Nickname())==hero.ClassInfo().title?"":hero.Nickname();
  renderer.DrawHudRect(0,0,1,1,{.017f,.016f,.014f,1});
  c.Art({0,0,1280,720},Renderer::UiArt::Hall);
  c.Gradient({0,0,1280,132},{.015f,.012f,.01f,.9f},{.015f,.012f,.01f,0});
@@ -674,7 +674,7 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
 }
 
 void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bool debug,float cameraYaw) {
- localization::playerName=s.Nickname();
+ localization::playerName=std::string(s.Nickname())==s.ClassInfo().title?"":s.Nickname();
  Canvas c(renderer); regions_.clear();
  struct StatusTip { std::string name,description,value; };
  std::vector<StatusTip> statusTips;

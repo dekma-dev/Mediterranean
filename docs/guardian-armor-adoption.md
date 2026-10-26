@@ -1,5 +1,11 @@
 # Guardian armor adoption
 
+## Arm-aware shoulder follow-up
+
+The shoulder assemblies now use a bounded hinge driven by the final IK upper arm in torso-local coordinates. Smooth elevation weighting prevents sudden engagement; forward reach contributes limited pitch. The authored export offset is preserved around the anatomical shoulder socket. There is no additional time integrator, allocation or asset regeneration. Color and shadow use the shared transformed draw path and existing LOD mapping. Chest and fauld still follow the torso. Earlier descriptions of all plates being torso-bound refer to the previous checkpoint.
+
+Regression coverage sweeps both arms through 180 degrees, checks mirrored sockets and continuity, and verifies covariance under torso pitch/yaw/roll and lift. Release/Debug builds pass; equipment, action and attachment LOD tests pass. The native heavy-attack study was inspected. Full Blender skin/animation adoption remains open.
+
 ## Shoulder and waist follow-up
 
 Both authored shoulder assemblies and the four overlapping waist plates are now exported independently. Each shoulder has 900/220 triangles and the fauld has 899/220; compiled geometry totals 146,588 bytes for all six new meshes. These have a separate 160 KiB/3400-triangle allowance; existing mesh budgets remain unchanged. The source is still read-only.

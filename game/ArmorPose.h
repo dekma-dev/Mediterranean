@@ -16,7 +16,7 @@ inline DirectX::XMMATRIX GuardianShoulderTransform(const CharacterPose& pose,uns
   const float length=XMVectorGetX(XMVector3Length(direction));
   direction=length>.0001f?direction/length:XMVectorSet(0,-1,0,0);
   const float outward=std::max(0.f,side*XMVectorGetX(direction));
-  const float elevation=std::atan2(outward,std::max(.001f,-XMVectorGetY(direction)));
+  const float elevation=std::atan2(outward,-XMVectorGetY(direction));
   const float amount=std::clamp((elevation-.18f)/1.39f,0.f,1.f);
   const float roll=side*.72f*amount*amount*(3-2*amount);
   const float pitch=-std::clamp(XMVectorGetZ(direction)*.38f,-.30f,.30f);

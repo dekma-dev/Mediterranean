@@ -1,5 +1,7 @@
 # Mediterranean Roadmap
 
+Guardian shoulder motion checkpoint (2026-10-26): arm-aware bounded hinges now replace rigid torso following for the authored shoulders. Continue full authored body/26-joint palette and clip integration; chest/fauld remain torso-bound and individual lames are not simulated. Validate overhead/reach/shield silhouettes in live play (manual 288).
+
 Guardian set checkpoint (2026-10-26): authored chest, independent shoulders and waist plates now replace corresponding procedural pieces. Keep gear-slot ownership during further body adoption; reward chest fallback no longer restores removed Warrior shoulders. Next: body/rig integration and arm-aware articulation for the imported plates, with full-class customization preserved. Current equipment is rigidly attached to the existing torso pose.
 
 Authored player adoption (2026-10-26): Warrior chest geometry now comes from collection03 Dawnwarden, retaining chest removal, class identity and torso motion. Continue bounded exports of the newer authored body and gear, then extend the native skin palette/mesh path for its 26-joint rig. Existing motion GLBs contain animation only; they are not ready-to-render characters. Preserve source hashes and keep class customization/removable equipment throughout adoption.

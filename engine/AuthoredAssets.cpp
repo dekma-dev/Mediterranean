@@ -1,10 +1,12 @@
 #include "engine/AuthoredAssets.h"
+#include "engine/WolfAnimation.h"
 #include <Windows.h>
 #include <cmath>
 #include <cstring>
 #include <stdexcept>
 namespace authored {
 visual::SkinInfluence Influence(Asset asset,DirectX::XMFLOAT3 p) {
+ if(asset==Asset::Wolf)return wolf::Influence(p);
  // Smooth spatial envelopes also work on the decimated meshes. The archive
  // remains an editable static source; these are presentation rigs, not gameplay.
  unsigned bone=0;float weight=0;
@@ -22,6 +24,7 @@ visual::SkinInfluence Influence(Asset asset,DirectX::XMFLOAT3 p) {
  return {{bone,0,0,0},{weight,1-weight,0,0}};
 }
 visual::BodyPalette Pose(Asset asset,float time,float gait,float attack,float travel,Gesture gesture) {
+ if(asset==Asset::Wolf)return wolf::Pose(time,gait,travel);
  using namespace DirectX;
  visual::BodyPalette palette{};
  const auto finite=[](float v) {return std::isfinite(v)?v:0.f;};

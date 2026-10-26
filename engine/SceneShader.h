@@ -85,19 +85,23 @@ VOut VSWorld(InstanceIn i) {
 }
 )" R"(
 // A shared palette is reused by color, both shadow cascades and portraits.
-struct BodyPalette { matrix joints[10]; matrix normals[10]; float4 colors[6]; };
-cbuffer Bodies : register(b1) { BodyPalette bodies[32]; };
+// Float4 elements avoid the SM5 2048-byte structured-element limit.
+StructuredBuffer<float4> bodyRows : register(t9);
+matrix BodyMatrix(uint actor,uint joint,bool normal) {
+ uint base=actor*262+(normal?128:0)+joint*4;
+ return transpose(matrix(bodyRows[base],bodyRows[base+1],bodyRows[base+2],bodyRows[base+3]));
+}
 struct SkinIn { InstanceIn object; uint4 bones : BLENDINDICES; float4 weights : BLENDWEIGHT; };
 void SkinBody(inout InstanceIn i,uint4 joints,float4 weights) {
  uint actor=(uint)i.surface.z;
  float3 p=0,n=0;
  [unroll] for(uint k=0;k<4;++k) {
-  p+=mul(float4(i.p,1),bodies[actor].joints[joints[k]]).xyz*weights[k];
-  n+=mul(float4(i.n,0),bodies[actor].normals[joints[k]]).xyz*weights[k];
+  p+=mul(float4(i.p,1),BodyMatrix(actor,joints[k],false)).xyz*weights[k];
+  n+=mul(float4(i.n,0),BodyMatrix(actor,joints[k],true)).xyz*weights[k];
  }
  i.p=p; i.n=normalize(n);
  if(i.surface.x!=13) {
-  float4 style=bodies[actor].colors[(uint)i.tint.w];
+  float4 style=bodyRows[actor*262+256+(uint)i.tint.w];
   i.tint=float4(style.rgb,1); i.surface.x=style.w;
  }
 }

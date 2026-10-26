@@ -1,3 +1,4 @@
+#include "platform/LocalizedText.h"
 #include "game/Localization.h"
 #include <Windows.h>
 #include <shellapi.h>
@@ -30,12 +31,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
   launch::Options options;std::wstring optionError;
   const bool diagnostic=smoke || benchmark || suite;
   if(!diagnostic && !launch::Parse(playArguments,options,optionError)) {
-    MessageBoxW(nullptr,optionError.c_str(),L"Mediterranean launch options",MB_OK|MB_ICONERROR);return 2;
+    localization::Message(nullptr,optionError.c_str(),L"Mediterranean launch options",MB_OK|MB_ICONERROR);return 2;
   }
   std::unique_ptr<launch::Instance> instanceLock;
   if(!diagnostic) {
     instanceLock=std::make_unique<launch::Instance>(launch::InstanceName(launch::Directory(),L"game"));
-    if(!instanceLock->Acquired()) {MessageBoxW(nullptr,L"The game is already running from this folder.",L"Mediterranean",MB_OK|MB_ICONINFORMATION);return 3;}
+    if(!instanceLock->Acquired()) {localization::Message(nullptr,L"The game is already running from this folder.",L"Mediterranean",MB_OK|MB_ICONINFORMATION);return 3;}
   }
   std::string snapshot;
   if (!snapshotPath.empty()) {
@@ -53,7 +54,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
   if (!engine.Initialize(instance, resolution.width, resolution.height, !diagnostic,!diagnostic && options.fullscreen)) {
     if (smoke) { std::wofstream log(std::filesystem::path(capture+L".log")); log << engine.Error(); }
     else if (benchmark || suite) { std::wofstream log(std::filesystem::path(report+L".log")); log << engine.Error(); }
-    else if (!benchmark) MessageBox(nullptr, engine.Error().c_str(), L"RPG Native", MB_OK | MB_ICONERROR);
+    else if (!benchmark) localization::Message(nullptr, engine.Error().c_str(), L"RPG Native", MB_OK | MB_ICONERROR);
     return -1;
   }
   if (benchmark || suite) {

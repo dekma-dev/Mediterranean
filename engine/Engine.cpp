@@ -1,3 +1,4 @@
+#include "platform/LocalizedText.h"
 #include "engine/Engine.h"
 #include "engine/BenchmarkStats.h"
 
@@ -22,7 +23,7 @@ Engine::~Engine() = default;
 
 bool Engine::Initialize(HINSTANCE instance, int width, int height, bool visible, bool fullscreen,const std::string& snapshot) {
   window_ = std::make_unique<Win32Window>();
-  if (!window_->Create(instance, width, height, L"Mediterranean", visible,fullscreen)) {
+  if (!window_->Create(instance, width, height, localization::Wide(L"Mediterranean").c_str(), visible,fullscreen)) {
     error_ = L"Could not create the application window.";
     return false;
   }
@@ -59,7 +60,7 @@ bool Engine::Initialize(HINSTANCE instance, int width, int height, bool visible,
   }
   game_->SetAudioAvailable(bool(audio_));
   game_->SetFullscreenState(window_->Fullscreen());
-  SetWindowTextW(window_->GetHandle(), game_->WindowTitle().c_str());
+  SetWindowTextW(window_->GetHandle(), localization::Wide(game_->WindowTitle()).c_str());
 
   running_ = true;
   return true;
@@ -488,7 +489,7 @@ int Engine::Run() {
       input_.CancelGestures();
     }
     const auto mouse=window_->ConsumeMouseMotion();
-    input_.Update(window_->GetHandle(),window_->MouseLook(),mouse.x,mouse.y);
+    input_.Update(window_->GetHandle(),window_->MouseLook(),mouse.x,mouse.y,window_->ConsumeText());
     if (IsIconic(window_->GetHandle()) || GetForegroundWindow() != window_->GetHandle()) {
       if(audio_) audio_->Suspend(true);
       game_->SuspendInput();
@@ -520,7 +521,7 @@ void Engine::Tick(double deltaSeconds) {
   if (renderer_->Width()!=client.right || renderer_->Height()!=client.bottom) game_->CancelUiGesture();
   if (!renderer_->Resize(client.right, client.bottom)) {
     window_->SetMouseLook(false);
-    MessageBoxW(window_->GetHandle(), renderer_->Error().c_str(), L"Renderer error", MB_OK | MB_ICONERROR);
+    localization::Message(window_->GetHandle(), renderer_->Error().c_str(), L"Renderer error", MB_OK | MB_ICONERROR);
     exitCode_ = 1;
     running_ = false;
     return;
@@ -554,7 +555,7 @@ void Engine::Tick(double deltaSeconds) {
   game_->Render(*renderer_);
   if (!renderer_->EndFrame()) {
     window_->SetMouseLook(false);
-    MessageBoxW(window_->GetHandle(), renderer_->Error().c_str(), L"Renderer error", MB_OK | MB_ICONERROR);
+    localization::Message(window_->GetHandle(), renderer_->Error().c_str(), L"Renderer error", MB_OK | MB_ICONERROR);
     exitCode_ = 1;
     running_ = false;
   }

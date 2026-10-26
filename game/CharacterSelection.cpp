@@ -211,10 +211,24 @@ CharacterSelection::Action CharacterSelection::Update(float seconds,const Input&
     const bool control=input.Held(VK_CONTROL),alt=input.Held(VK_MENU);
     if(control && !alt && input.Pressed('A')) draftName_.clear();
     if(!control && !alt) {
-      for(int key='A';key<='Z';++key) if(input.Pressed(key) && draftName_.size()<20) draftName_+=char((input.Held(VK_SHIFT)!=input.CapsLock())?key:key+32);
-      if(input.Pressed(VK_BACK) && !draftName_.empty()) draftName_.pop_back();
-      if(input.Pressed(VK_SPACE) && !draftName_.empty() && draftName_.back()!=' ' && draftName_.size()<19) draftName_+=' ';
-      for(auto key:{VK_OEM_MINUS,VK_OEM_7}) if(input.Pressed(key) && draftName_.size()<20) draftName_+=key==VK_OEM_MINUS?'-':'\'';
+      if(input.NativeText()) {
+        for(std::size_t offset=0;offset<input.Characters().size() && rpg::NameLength(draftName_)<20;) {
+          const auto begin=offset;const auto ch=text::Next(input.Characters(),offset);
+          if(rpg::NameLetter(ch) || ch=='-' || ch=='\'' ||
+             (ch==' ' && !draftName_.empty() && draftName_.back()!=' ' && rpg::NameLength(draftName_)<19))
+            draftName_+=input.Characters().substr(begin,offset-begin);
+        }
+      } else {
+        // Deterministic synthetic input used by tools/tests without a message loop.
+        for(int key='A';key<='Z';++key) if(input.Pressed(key) && rpg::NameLength(draftName_)<20) draftName_+=char((input.Held(VK_SHIFT)!=input.CapsLock())?key:key+32);
+        if(input.Pressed(VK_SPACE) && !draftName_.empty() && draftName_.back()!=' ' && rpg::NameLength(draftName_)<19) draftName_+=' ';
+        for(auto key:{VK_OEM_MINUS,VK_OEM_7}) if(input.Pressed(key) && rpg::NameLength(draftName_)<20) draftName_+=key==VK_OEM_MINUS?'-':'\'';
+      }
+      if(input.Pressed(VK_BACK) && !draftName_.empty()) {
+        auto begin=draftName_.size()-1;
+        while(begin && (static_cast<unsigned char>(draftName_[begin])&0xc0)==0x80) --begin;
+        draftName_.erase(begin);
+      }
     }
     if(previousName!=draftName_) PreviewDraft();
     if(input.Pressed(VK_RETURN)) {

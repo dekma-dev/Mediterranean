@@ -6,6 +6,7 @@
 #include <string_view>
 #include <vector>
 #include <unordered_map>
+#include <array>
 
 namespace localization {
 enum class Language { Russian, English };
@@ -38,11 +39,25 @@ inline std::string Translate(std::string_view input) {
   // Bound dynamic HUD text cache.
   static std::unordered_map<std::string,std::string> cache;
   if(auto entry=cache.find(std::string(input));entry!=cache.end()) return entry->second;
+  // Most descriptions are complete messages. Avoid scanning the whole catalog
+  // for each byte; composed HUD strings use first-byte candidate buckets.
+  static const auto exact=[] {
+    std::unordered_map<std::string_view,std::string_view> values;
+    for(const auto& entry:Dictionary()) values.emplace(entry.english,entry.russian);
+    return values;
+  }();
+  if(auto entry=exact.find(input);entry!=exact.end()) return std::string(entry->second);
+  static const auto buckets=[] {
+    std::array<std::vector<const Entry*>,256> values;
+    for(const auto& entry:Dictionary()) if(!entry.english.empty()) values[static_cast<unsigned char>(entry.english.front())].push_back(&entry);
+    return values;
+  }();
   const auto letter=[](char c){return (c>='A' && c<='Z') || (c>='a' && c<='z');};
   std::string result;result.reserve(input.size()*2);
   for(std::size_t i=0;i<input.size();) {
     bool found=false;
-    for(const auto& entry:Dictionary()) {
+    for(const auto* candidate:buckets[static_cast<unsigned char>(input[i])]) {
+      const auto& entry=*candidate;
       const auto size=entry.english.size();
       if(i+size>input.size() || input.substr(i,size)!=entry.english) continue;
       if((i && letter(input[i-1]) && letter(entry.english.front())) ||

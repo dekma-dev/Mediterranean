@@ -127,8 +127,7 @@ bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
  elements.push_back({"BLENDWEIGHT",0,DXGI_FORMAT_R32G32B32A32_FLOAT,2,16,D3D11_INPUT_PER_VERTEX_DATA,0});
  if (!Check(device_->CreateInputLayout(elements.data(),static_cast<UINT>(elements.size()),body->GetBufferPointer(),body->GetBufferSize(),bodyLayout_.GetAddressOf()),L"Create skinned layout")) return false;
  static_assert(sizeof(Instance)==160,"Instance layout must match the shader.");
- static_assert(sizeof(visual::SkinInfluence)==32 && sizeof(visual::BodyPalette)==1376,"Keep skinning layouts synchronized with HLSL.");
- static_assert(sizeof(bodyPalettes_)<=65536,"Skin palettes must fit a D3D11 constant buffer.");
+ static_assert(sizeof(visual::SkinInfluence)==32 && sizeof(visual::BodyPalette)==4192,"Keep skinning layouts synchronized with HLSL.");
  static_assert(sizeof(visual::HandPalette)==1024 && sizeof(handPalettes_)==65536,"Hand palettes must match HLSL and the D3D11 constant limit.");
  std::vector<Vertex> vertices; std::vector<std::uint32_t> indices;
  std::vector<visual::SkinInfluence> influences;
@@ -176,9 +175,12 @@ bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
  const XMFLOAT4 emptyField{};
  D3D11_SUBRESOURCE_DATA fieldData{}; fieldData.pSysMem=&emptyField;
  if (!Check(device_->CreateBuffer(&b,&fieldData,cloudLightConstants_.GetAddressOf()),L"Create cloud field constants")) return false;
- b.ByteWidth=sizeof(bodyPalettes_); b.Usage=D3D11_USAGE_DYNAMIC; b.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
+ b={};b.ByteWidth=sizeof(bodyPalettes_);b.Usage=D3D11_USAGE_DEFAULT;b.BindFlags=D3D11_BIND_SHADER_RESOURCE;
+ b.MiscFlags=D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;b.StructureByteStride=sizeof(XMFLOAT4);
  if (!Check(device_->CreateBuffer(&b,nullptr,skinConstants_.GetAddressOf()),L"Create skin palettes")) return false;
- b.ByteWidth=sizeof(handPalettes_);
+ D3D11_SHADER_RESOURCE_VIEW_DESC skinView{};skinView.Format=DXGI_FORMAT_UNKNOWN;skinView.ViewDimension=D3D11_SRV_DIMENSION_BUFFER;skinView.Buffer.NumElements=sizeof(bodyPalettes_)/sizeof(XMFLOAT4);
+ if(!Check(device_->CreateShaderResourceView(skinConstants_.Get(),&skinView,skinPaletteView_.GetAddressOf()),L"Create skin palette view"))return false;
+ b={};b.ByteWidth=sizeof(handPalettes_);b.Usage=D3D11_USAGE_DYNAMIC;b.BindFlags=D3D11_BIND_CONSTANT_BUFFER;b.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
  if (!Check(device_->CreateBuffer(&b,nullptr,handConstants_.GetAddressOf()),L"Create hand palettes")) return false;
  b.ByteWidth=16380*sizeof(Vertex); b.Usage=D3D11_USAGE_DYNAMIC; b.BindFlags=D3D11_BIND_VERTEX_BUFFER; b.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
  if (!Check(device_->CreateBuffer(&b,nullptr,hudVertices_.GetAddressOf()),L"Create HUD buffer")) return false;
@@ -383,7 +385,7 @@ void Renderer::DrawAuthoredAsset(authored::Asset asset,const XMFLOAT3& position,
  world_[selected].back().reserved=detail<3?1:0;world_[selected].back().body=255;
  if(authored::Animated(selected)) {
   auto& gpu=bodyPalettes_[bodyCount_];gpu={};bodyActors_[bodyCount_]=0;
-  for(unsigned bone=0;bone<visual::bodyBones;++bone) {
+  for(unsigned bone=0;bone<visual::paletteBones;++bone) {
    XMStoreFloat4x4(&gpu.joints[bone],XMMatrixIdentity());gpu.normals[bone]=gpu.joints[bone];
   }
   world_[selected].back().instance.surface.z=float(bodyCount_++);
@@ -397,7 +399,7 @@ void Renderer::DrawAnimatedAsset(authored::Asset asset,const XMFLOAT3& position,
  world_[authored::Slot(asset,detail>=3?0:std::min(detail,2u))].back().instance.color=tint;
  const auto palette=authored::Pose(asset,time,gait,attack,travel,gesture);
  auto& gpu=bodyPalettes_[before];
- for(unsigned bone=0;bone<visual::bodyBones;++bone) {
+ for(unsigned bone=0;bone<visual::paletteBones;++bone) {
   XMStoreFloat4x4(&gpu.joints[bone],XMMatrixTranspose(XMLoadFloat4x4(&palette.joints[bone])));
   XMStoreFloat4x4(&gpu.normals[bone],XMMatrixTranspose(XMLoadFloat4x4(&palette.normals[bone])));
  }
@@ -615,14 +617,10 @@ bool Renderer::FlushWorld() {
   context_->Unmap(instances_.Get(),0);
  }
  if(bodyCount_) {
-  // A portrait can follow world draws immediately. DISCARD lets the driver
-  // rename the palette instead of waiting for the world's bones to finish.
-  D3D11_MAPPED_SUBRESOURCE mapped{};
-  if(!Check(context_->Map(skinConstants_.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&mapped),L"Upload skin palettes")) return false;
-  std::memcpy(mapped.pData,bodyPalettes_.data(),bodyCount_*sizeof(visual::BodyPalette));
-  context_->Unmap(skinConstants_.Get(),0);
+  // Structured storage keeps 32 actors with 32 joints beyond the 64 KiB cbuffer limit.
+  context_->UpdateSubresource(skinConstants_.Get(),0,nullptr,bodyPalettes_.data(),0,0);
  }
- context_->VSSetConstantBuffers(1,1,skinConstants_.GetAddressOf());
+ context_->VSSetShaderResources(9,1,skinPaletteView_.GetAddressOf());
  if(handCount_) {
   D3D11_MAPPED_SUBRESOURCE mapped{};
   if(!Check(context_->Map(handConstants_.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&mapped),L"Upload hand palettes")) return false;

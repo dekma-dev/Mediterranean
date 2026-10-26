@@ -1,3 +1,4 @@
+#include "platform/LocalizedText.h"
 #include "platform/Win32Window.h"
 #include "platform/GameCursor.h"
 #include <windowsx.h>
@@ -69,13 +70,20 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
         DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,FF_ROMAN,L"Georgia");
       const auto previous=SelectObject(dc,font);
       RECT title{margin,bounds.bottom/2-60,bounds.right-margin,bounds.bottom/2};
-      DrawTextW(dc,L"MEDITERRANEAN",-1,&title,DT_CENTER|DT_SINGLELINE|DT_VCENTER);
+      DrawTextW(dc,localization::Wide(L"MEDITERRANEAN").c_str(),-1,&title,DT_CENTER|DT_SINGLELINE|DT_VCENTER);
       SelectObject(dc,previous);DeleteObject(font);
       title.top=bounds.bottom/2+12;title.bottom=title.top+36;
-      DrawTextW(dc,L"Opening the gates of Dawnwatch...",-1,&title,DT_CENTER|DT_SINGLELINE|DT_VCENTER);
+      DrawTextW(dc,localization::Wide(L"Opening the gates of Dawnwatch...").c_str(),-1,&title,DT_CENTER|DT_SINGLELINE|DT_VCENTER);
       EndPaint(hwnd,&paint);return 0;
     }
     break;
+  case WM_CHAR:
+    if(window && GetForegroundWindow()==hwnd && wparam>=32 && wparam<0xd800 && window->text_.size()<256) {
+      const wchar_t character=static_cast<wchar_t>(wparam);char bytes[4];
+      const int count=WideCharToMultiByte(CP_UTF8,0,&character,1,bytes,4,nullptr,nullptr);
+      if(count>0) window->text_.append(bytes,count);
+    }
+    return 0;
   case WM_RBUTTONDOWN:
     if (window) {
       window->rightAnchor_={GET_X_LPARAM(lparam),GET_Y_LPARAM(lparam)};
@@ -107,6 +115,7 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
     if (window && window->mouseLook_ && reinterpret_cast<HWND>(lparam)!=hwnd) window->EndMouseLook(true);
     break;
   case WM_KILLFOCUS:
+    if(window) window->text_.clear();
   case WM_CANCELMODE:
   case WM_ENTERSIZEMOVE:
   case WM_ENTERMENULOOP:

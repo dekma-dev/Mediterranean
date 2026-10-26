@@ -388,10 +388,25 @@ void AppearancePersistence() {
     if(index) Check(palette.colors[0].x==rpg::tunicDyes[index].r,"Tunic dye did not reach the continuous mesh");
   }
 }
+void RussianNames(const std::filesystem::path& root) {
+  Game game;game.Initialize();game.ChooseCharacter(root/("russian-"+std::to_string(GetTickCount64()))/"patrol.save");
+  Driver d;d.Step(game);d.Click(game,Control::Create);d.Click(game,Control::Next);
+  d.frame.nativeText=true;d.frame.text="Алёна";d.Step(game);d.frame.text.clear();
+  Check(game.Selection().DraftName()=="Алёна","Native Russian keyboard text lost");
+  d.Key(game,VK_BACK);Check(game.Selection().DraftName()=="Алён","Backspace split a Cyrillic codepoint");
+  d.frame.text="а-Ёж";d.Step(game);d.frame.text.clear();
+  Check(game.Selection().DraftName()=="Алёна-Ёж","Cyrillic punctuation/yo lost");
+  d.Key(game,VK_RETURN);d.Click(game,Control::Confirm);
+  Check(std::string(game.Selection().Hero().Nickname())=="Алёна-Ёж" && game.Selection().State()==Selection::Status::Saved,"Russian character creation/save failed");
+  rpg::Simulation s,copy;std::string twenty;
+  for(int n=0;n<20;++n) twenty+="я";
+  Check(s.CreateCharacter(rpg::ClassId::Mage,twenty) && copy.Load(s.Save()) && copy.Save()==s.Save(),"20 Cyrillic letters do not round-trip");
+  Check(!rpg::ValidCharacterName(twenty+"я") && !rpg::ValidCharacterName("Я\xff") && !rpg::ValidCharacterName("Я1"),"Malformed/long names accepted");
+}
 }
 int main() {
   const auto root=std::filesystem::current_path()/"character-selection-check";std::filesystem::create_directories(root);
   const auto veteran=Read(std::filesystem::path(RPG_TEST_FIXTURES)/"veteran-preview.save");
-  ReportedRegressions(root);StorageTransactions(root);Flow(root,veteran);ClassSlots(root);CreationSafety(root);AppearancePersistence();Render(root,veteran);
+  ReportedRegressions(root);StorageTransactions(root);Flow(root,veteran);ClassSlots(root);CreationSafety(root);AppearancePersistence();RussianNames(root);Render(root,veteran);
   std::cout<<"PASS: character metadata, frozen world, input isolation, saved/new/error/repaired states, changed saves, resize/focus, hidden DX11 captures\n";
 }

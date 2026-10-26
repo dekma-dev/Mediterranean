@@ -78,7 +78,11 @@ private:
     a.speed+=(desiredSpeed-a.speed)*(1-std::exp(-5.f*dt));
     const auto next=map.MoveAndSlide(a.position,{std::sin(a.yaw)*a.speed*dt,std::cos(a.yaw)*a.speed*dt},.65f);
     const float moved=Distance(next,a.position);a.position=next;
-    a.gait=std::fmod(a.gait+moved*(species==0?5.f:6.f),6.2831853f);
+    // Authored wolf clips cover different distances per cycle; accumulate phase
+    // from actual travel so a blocked animal cannot keep stepping in place.
+    const float g=std::clamp((a.travel-.35f)/.65f*2,0.f,2.f);
+    const float wolfStride=g<1 ? (.23f/.68f)*(1-g)+(.34f/.54f)*g : (.34f/.54f)*(2-g)+(.50f/.34f)*(g-1);
+    a.gait=std::fmod(a.gait+moved*(species==0?6.2831853f/wolfStride:6.f),6.2831853f);
     const float stride=std::clamp(moved/dt/1.6f,0.f,1.f);
     a.travel+=(stride-a.travel)*(1-std::exp(-12.f*dt));
   }

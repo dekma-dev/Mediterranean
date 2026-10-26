@@ -101,6 +101,7 @@ add_library(MediterraneanClient STATIC
   engine/Audio.cpp
   engine/Renderer.cpp
   engine/AuthoredAssets.cpp
+  engine/WolfAnimation.cpp
   engine/GpuTimer.cpp
   engine/Geometry.cpp
   engine/Skinning.cpp
@@ -128,7 +129,7 @@ add_dependencies(MediterraneanClient EmbeddedMeshes)
 # Resource include paths make RC independent of the build working directory.
 target_sources(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/UiArtwork.rc")
 target_sources(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/Collection.rc")
-set_source_files_properties(assets/authored/Collection.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/collection01.masset")
+set_source_files_properties(assets/authored/Collection.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/collection01.masset;${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/frostfang.motion")
 target_include_directories(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored")
 target_include_directories(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui")
 add_library(LaunchSupport STATIC launcher/LaunchSupport.cpp)
@@ -167,7 +168,13 @@ include(CTest)
 if (BUILD_TESTING)
   add_executable(LocalizationTests tests/LocalizationTests.cpp)
   target_include_directories(LocalizationTests PRIVATE .)
+  target_link_libraries(LocalizationTests PRIVATE MediterraneanSimulation)
   add_test(NAME LocalizationTests COMMAND LocalizationTests)
+  find_package(Python3 COMPONENTS Interpreter QUIET)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME LocalizationCoverage COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check-localization.py")
+    set_tests_properties(LocalizationCoverage PROPERTIES ENVIRONMENT "PYTHONIOENCODING=utf-8")
+  endif()
 
   add_executable(AuthoredAssetTests tests/AuthoredAssetTests.cpp)
   target_link_libraries(AuthoredAssetTests PRIVATE MediterraneanClient)

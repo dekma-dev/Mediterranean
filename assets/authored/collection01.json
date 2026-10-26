@@ -2,8 +2,8 @@
   "version": 1,
   "coordinate_system": "Y up, +Z forward, metres",
   "source": "collection01.blend",
-  "sha256": "aec6bba86ffa515d3c8cef41f410f6c53406f3602a8c55206fbe1c8a94df5a38",
-  "bytes": 13001708,
+  "sha256": "3c7b30bbf1d2de8e85e98ce1fe037847baa4654ec1bf5eee5ecd907c28c53de3",
+  "bytes": 13327876,
   "meshes": [
     {
       "asset": "01 \u2022 Dawnwarden",
@@ -278,54 +278,54 @@
     {
       "asset": "06 \u2022 Frostfang",
       "lod": 0,
-      "vertices": 3792,
-      "triangles": 7402,
+      "vertices": 7057,
+      "triangles": 13918,
       "bounds": [
         [
-          -0.4097418785095215,
-          0.010092727839946747,
-          -1.2589359283447266
+          -0.2454184591770172,
+          0.00518070487305522,
+          -1.0379079580307007
         ],
         [
-          0.4097350537776947,
-          1.7275108098983765,
-          1.3394743204116821
+          0.24546067416667938,
+          1.2350518703460693,
+          1.1778212785720825
         ]
       ]
     },
     {
       "asset": "06 \u2022 Frostfang",
       "lod": 1,
-      "vertices": 1546,
-      "triangles": 2900,
+      "vertices": 2897,
+      "triangles": 5534,
       "bounds": [
         [
-          -0.40976694226264954,
-          0.008795665577054024,
-          -1.2599308490753174
+          -0.24545827507972717,
+          0.004831613972783089,
+          -1.0399221181869507
         ],
         [
-          0.40974199771881104,
-          1.7253817319869995,
-          1.3424973487854004
+          0.24540115892887115,
+          1.2355715036392212,
+          1.1778212785720825
         ]
       ]
     },
     {
       "asset": "06 \u2022 Frostfang",
       "lod": 2,
-      "vertices": 564,
-      "triangles": 952,
+      "vertices": 1071,
+      "triangles": 1906,
       "bounds": [
         [
-          -0.41263875365257263,
-          0.0023479775991290808,
-          -1.2583606243133545
+          -0.2467747926712036,
+          0.007050429005175829,
+          -1.0315961837768555
         ],
         [
-          0.41332483291625977,
-          1.721351146697998,
-          1.3352487087249756
+          0.24487487971782684,
+          1.2335931062698364,
+          1.1794058084487915
         ]
       ]
     },
@@ -708,5 +708,7 @@
       ]
     }
   ],
-  "limitations": "Static exports. Procedural Blender materials mapped to native material layers and vertex colors. No Blender light baking or texture dependencies."
+  "limitations": "Static exports. Procedural Blender materials mapped to native material layers and vertex colors. No Blender light baking or texture dependencies.",
+  "wolf_source": "frostfang.blend",
+  "wolf_motion": "frostfang.motion"
 }

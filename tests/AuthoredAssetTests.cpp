@@ -1,4 +1,5 @@
 #include "engine/AuthoredAssets.h"
+#include "engine/WolfAnimation.h"
 #include "engine/Renderer.h"
 #include "platform/Win32Window.h"
 #include "game/AuthoredActorMotion.h"
@@ -19,6 +20,14 @@ int main() {
   CoInitializeEx(nullptr,COINIT_MULTITHREADED);
   const auto source=std::string(authored::EmbeddedBytes());
   const auto& library=authored::Collection();std::size_t triangles=0,bytes=0;
+  const auto wolfBytes=std::string(authored::wolf::EmbeddedBytes());
+  const auto& wolf=authored::wolf::Collection();Check(wolf.bones==30,"Wolf anatomical skeleton lost joints");
+  const auto rejectWolf=[](const std::string& b){bool rejected=false;try{authored::wolf::Decode(b);}catch(const std::runtime_error&){rejected=true;}Check(rejected,"Malformed wolf animation accepted");};
+  rejectWolf(wolfBytes.substr(0,wolfBytes.size()-1));
+  auto brokenWolf=wolfBytes;Put(brokenWolf,8,33u);rejectWolf(brokenWolf);
+  brokenWolf=wolfBytes;Put(brokenWolf,20,30u);rejectWolf(brokenWolf);
+  brokenWolf=wolfBytes;Put(brokenWolf,36,std::numeric_limits<float>::quiet_NaN());rejectWolf(brokenWolf);
+  brokenWolf=wolfBytes;brokenWolf.push_back('x');rejectWolf(brokenWolf);
   for(const auto& m:library) {triangles+=m.geometry.indices.size()/3;bytes+=m.geometry.vertices.size()*40+m.geometry.indices.size()*4;}
   Check(bytes<authored::archiveBudget,"Authored geometry budget");
   const auto pine=unsigned(authored::Asset::Pine)*authored::lodCount;
@@ -45,7 +54,9 @@ int main() {
     for(unsigned lod=0;lod<authored::lodCount;++lod) {
       for(const auto& vertex:library[a*authored::lodCount+lod].geometry.vertices) {
         const auto weights=authored::Influence(asset,vertex.position);
-        Check(weights.bones[0]<visual::bodyBones && weights.weights.x>=0 && weights.weights.y>=0 && std::abs(weights.weights.x+weights.weights.y-1)<1e-6f,"Invalid animation influence");
+        const float ws[]={weights.weights.x,weights.weights.y,weights.weights.z,weights.weights.w};float sum=0;
+        for(unsigned k=0;k<4;++k){Check(weights.bones[k]<(asset==authored::Asset::Wolf?30u:visual::bodyBones)&&std::isfinite(ws[k])&&ws[k]>=0,"Invalid animation influence");sum+=ws[k];}
+        Check(std::abs(sum-1)<1e-5f,"Unnormalized animation influence");
         const auto bind=visual::SkinVertex(vertex,weights,rest),posed=visual::SkinVertex(vertex,weights,moving);
         Check(std::abs(bind.position.x-vertex.position.x)+std::abs(bind.position.y-vertex.position.y)+std::abs(bind.position.z-vertex.position.z)<1e-5f,"Bind pose changed mesh");
         Check(std::isfinite(posed.position.x)&&std::isfinite(posed.position.y)&&std::isfinite(posed.position.z),"Nonfinite animated vertex");
@@ -58,6 +69,14 @@ int main() {
     Check(displacement>1,"Actor remained static");
   }
   visual::StaticScene cached;
+  for(unsigned clip=0;clip<4;++clip) {
+    const float travel=clip==0?0.f:clip==1?.3f:clip==2?.675f:1.f;
+    for(unsigned frame=0;frame<8;++frame) {
+      renderer.BeginFrame();renderer.SetCamera({2.8f,1.25f,-2.3f},{0,.55f,0});
+      renderer.DrawAnimatedAsset(authored::Asset::Wolf,{0,0,0},DirectX::XM_PI,frame*.13f,frame*DirectX::XM_2PI/8,0,travel,frame%3);
+      Check(renderer.Capture(L"wolf-clip-"+std::to_wstring(clip)+L"-"+std::to_wstring(frame)+L".png")&&renderer.EndFrame(false)&&renderer.ValidateDebugMessages(),"Wolf clip and shadow rendering");
+    }
+  }
   for(int hz:{30,60,144,240}) {
     EnemyDefeat death;death.Reset(true);animation::Sample pose;pose.travel=.7f;pose.action.pitch=.12f;
     death.Update(0,false,.4f,1,pose);

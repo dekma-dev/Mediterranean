@@ -1,3 +1,4 @@
+#include "platform/LocalizedText.h"
 #include "game/Localization.h"
 #include "launcher/LaunchSupport.h"
 #include "game/UiSkin.h"
@@ -18,13 +19,7 @@ constexpr int Play=1001,Display=1002,Size=1003,Guide=1005,Saves=1006;
 constexpr float canvasWidth=940,canvasHeight=590;
 const Color background(255,24,24,18),panel(255,29,25,22),gold(255,211,179,111),ink(255,242,228,201),muted(255,191,177,153);
 std::wstring Localized(const wchar_t* input) {
-  const int length=int(wcslen(input));
-  std::string utf8(WideCharToMultiByte(CP_UTF8,0,input,length,nullptr,0,nullptr,nullptr), '\0');
-  WideCharToMultiByte(CP_UTF8,0,input,length,utf8.data(),int(utf8.size()),nullptr,nullptr);
-  const auto translated=localization::Translate(utf8);
-  std::wstring wide(MultiByteToWideChar(CP_UTF8,0,translated.data(),int(translated.size()),nullptr,0), L'\0');
-  MultiByteToWideChar(CP_UTF8,0,translated.data(),int(translated.size()),wide.data(),int(wide.size()));
-  return wide;
+  return localization::Wide(input);
 }
 void Text(Graphics& g,const wchar_t* text,float x,float y,float width,float height,float size,Color color,const wchar_t* family=L"Segoe UI",INT style=FontStyleRegular) {
   Font font(family,size,style,UnitPixel);SolidBrush brush(color);StringFormat format;
@@ -44,11 +39,11 @@ public:
     WNDCLASSEXW wc{sizeof(wc)};wc.lpfnWndProc=Procedure;wc.hInstance=instance;wc.lpszClassName=L"MediterraneanLauncherWindow";
     wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);wc.hIcon=LoadIconW(nullptr,IDI_APPLICATION);
     if(!RegisterClassExW(&wc) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) return false;
-    window_=CreateWindowExW(WS_EX_CONTROLPARENT,wc.lpszClassName,L"Mediterranean Launcher",WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX|WS_CLIPCHILDREN,
+    window_=CreateWindowExW(WS_EX_CONTROLPARENT,wc.lpszClassName,Localized(L"Mediterranean Launcher").c_str(),WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX|WS_CLIPCHILDREN,
       CW_USEDEFAULT,CW_USEDEFAULT,940,590,nullptr,nullptr,instance,this);
     if(!window_) return false;
     const auto make=[&](const wchar_t* kind,const wchar_t* label,int id,DWORD style) {
-      const auto control=CreateWindowExW(0,kind,label,WS_CHILD|WS_VISIBLE|WS_TABSTOP|style,0,0,1,1,window_,reinterpret_cast<HMENU>(INT_PTR(id)),instance,nullptr);
+      const auto control=CreateWindowExW(0,kind,Localized(label).c_str(),WS_CHILD|WS_VISIBLE|WS_TABSTOP|style,0,0,1,1,window_,reinterpret_cast<HMENU>(INT_PTR(id)),instance,nullptr);
       return control;
     };
     display_=make(L"COMBOBOX",L"Display mode",Display,CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS|WS_VSCROLL);
@@ -365,6 +360,7 @@ private:
 };
 }
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int) {
+  localization::Initialize(launch::Directory());
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
   int count=0;auto** arguments=CommandLineToArgvW(GetCommandLineW(),&count);
   const bool test=arguments && count==3 && std::wstring(arguments[1])==L"--self-test";
@@ -372,11 +368,11 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int) {
   if(arguments) LocalFree(arguments);
   if(count!=1 && !test) return 2;
   launch::Instance owner(launch::InstanceName(launch::Directory(),L"launcher"));
-  if(!owner.Acquired()) {if(!test) MessageBoxW(nullptr,L"The launcher is already open for this game folder.",L"Mediterranean",MB_OK|MB_ICONINFORMATION);return 3;}
+  if(!owner.Acquired()) {if(!test) localization::Message(nullptr,L"The launcher is already open for this game folder.",L"Mediterranean",MB_OK|MB_ICONINFORMATION);return 3;}
   GdiplusStartupInput startup;ULONG_PTR token=0;
   if(GdiplusStartup(&token,&startup,nullptr)!=Ok) return 1;
   int result=1;
   try {Launcher launcher;if(launcher.Create(instance,!test)) result=test?(launcher.SelfTest(output)?0:1):launcher.Run();}
-  catch(const std::exception&) {if(!test) MessageBoxW(nullptr,L"The launcher could not start. Check access to the game folder.",L"Mediterranean",MB_OK|MB_ICONERROR);}
+  catch(const std::exception&) {if(!test) localization::Message(nullptr,L"The launcher could not start. Check access to the game folder.",L"Mediterranean",MB_OK|MB_ICONERROR);}
   GdiplusShutdown(token);return result;
 }
