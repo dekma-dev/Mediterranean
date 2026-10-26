@@ -2,6 +2,9 @@
 #include "engine/Renderer.h"
 #include "platform/Win32Window.h"
 #include "game/AuthoredActorMotion.h"
+#include "game/EnemyDefeat.h"
+#include "game/Game.h"
+#include "tests/DashFixture.h"
 #include <filesystem>
 #include <iostream>
 #include <limits>
@@ -51,6 +54,19 @@ int main() {
     Check(displacement>1,"Actor remained static");
   }
   visual::StaticScene cached;
+  for(int hz:{30,60,144,240}) {
+    EnemyDefeat death;death.Reset(true);animation::Sample pose;pose.travel=.7f;pose.action.pitch=.12f;
+    death.Update(0,false,.4f,1,pose);
+    Check(death.Gesture().collapse==0&&death.attack==.4f,"Death onset lost pose");
+    float last=0;
+    for(int i=0;i<hz*2;++i) {
+      death.Update(1.f/hz,false,0,0,{});const float collapse=death.Gesture().collapse;
+      Check(collapse>=last&&collapse<=1,"Collapse is non-monotonic");last=collapse;
+    }
+    Check(death.Gesture().collapse==1&&death.Remaining()==0,"Death does not settle");
+    death.Reset(false);Check(death.Gesture().collapse==1,"Loaded corpse replays death");
+    death.Update(.01f,true,0,0,{});Check(death.age<0&&death.Gesture().collapse==0,"Revival retained collapse");
+  }
   const auto captures=std::filesystem::current_path()/"authored-combat-check";
   std::filesystem::create_directories(captures);
   for(const auto asset:{authored::Asset::Skeleton,authored::Asset::Orc,authored::Asset::Revenant}) {
@@ -84,8 +100,39 @@ int main() {
     authored::Gesture invalid;invalid.pitch=std::numeric_limits<float>::quiet_NaN();invalid.leftLift=std::numeric_limits<float>::infinity();
     const auto sanitized=authored::Pose(asset,0,0,0,0,invalid);
     Check(std::memcmp(&sanitized,&rest,sizeof(rest))==0,"Invalid gesture was not sanitized to neutral");
+    for(unsigned stage=0;stage<5;++stage) {
+      EnemyDefeat defeat;defeat.Reset(true);defeat.Update(EnemyDefeat::duration*stage/4,false,0,0,{});
+      const auto gesture=defeat.Gesture();const auto palette=authored::Pose(asset,0,0,0,0,gesture);
+      for(unsigned lod=0;lod<authored::lodCount;++lod)for(const auto& v:library[unsigned(asset)*authored::lodCount+lod].geometry.vertices) {
+        const auto p=visual::SkinVertex(v,authored::Influence(asset,v.position),palette);
+        Check(std::isfinite(p.position.y),"Death pose nonfinite");
+        if(stage==4)Check(p.position.y>=-.12f&&p.position.y<1.3f,"Corpse is underground or standing");
+      }
+      renderer.BeginFrame();renderer.SetCamera({3,2,-5},{0,.65f,.6f});
+      renderer.DrawMesh(visual::Mesh::Box,{0,-.06f,0},{8,.12f,8},{.22f,.25f,.23f,1},visual::Material::Stone);
+      renderer.DrawAnimatedAsset(asset,{0,0,0},DirectX::XM_PI,0,0,0,0,0,{1,1,1,1},gesture);
+      Check(renderer.Capture((captures/("death-"+std::to_string(unsigned(asset))+"-"+std::to_string(stage)+".png")).wstring())&&renderer.EndFrame(false)&&renderer.ValidateDebugMessages(),"Death color/shadow capture");
+    }
   }
   unsigned nearTriangles=0;
+  {
+    std::string fixture=test::dashFixture;
+    fixture.replace(fixture.find("-4 2 100"),std::strlen("-4 2 100"),"-4 5.5 100");
+    fixture.replace(fixture.find("100 -4 7 80"),11,"100 -4 7 1");
+    Game game;game.Initialize();Check(game.RestoreSnapshot(fixture),"Death integration fixture");
+    rpg::Command target;target.nextTarget=true;game.ExecuteCommand(target,1.f/120);
+    rpg::Command strike;strike.ability=0;game.ExecuteCommand(strike,1.f/120);
+    for(unsigned i=0;i<240;++i)game.ExecuteCommand({},1.f/120);
+    Check(game.State().Enemies()[0].health<=0&&!game.State().Enemies()[0].looted,"Death test failed to defeat enemy");
+    const auto saved=game.State().Save();
+    game.SetCameraOrbit(.4f,.6f,5);
+    renderer.BeginFrame();game.Render(renderer,false);
+    Check(renderer.Capture((captures/"corpse-world.png").wstring())&&renderer.EndFrame(false),"World corpse render");
+    Check(game.RestoreSnapshot(saved)&&game.State().Save()==saved,"Corpse load changed save");
+    renderer.BeginFrame();game.Render(renderer,false);Check(renderer.EndFrame(false),"Loaded corpse render");
+    rpg::Command loot;loot.interact=true;game.ExecuteCommand(loot,1.f/120);
+    Check(game.State().Enemies()[0].looted,"Corpse blocked existing loot interaction");
+  }
   for(unsigned frame=0;frame<3;++frame) {
     renderer.BeginFrame();renderer.SetCamera(frame==1?DirectX::XMFLOAT3{0,4,-100}:DirectX::XMFLOAT3{3,3,-6},{0,1.5f,0});
     renderer.DrawStaticScene(cached,[&] {renderer.DrawAuthoredAsset(authored::Asset::Cottage,{0,0,0},{1,1,1},DirectX::XM_PI);});

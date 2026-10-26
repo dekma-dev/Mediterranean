@@ -9,6 +9,7 @@
 #include "game/FootPlacement.h"
 #include "game/WorldView.h"
 #include "game/CharacterSelection.h"
+#include "game/EnemyDefeat.h"
 class Renderer;
 
 class Game {
@@ -68,6 +69,7 @@ private:
   std::vector<motion::MovementSample> enemyMovement_;
   animation::State playerAnimation_;
   std::vector<animation::State> enemyAnimations_;
+  std::vector<EnemyDefeat> enemyDefeats_;
   facial::State playerFace_,keeperFace_,merchantFace_;
   std::vector<facial::State> enemyFaces_;
   animation::FootPlacement playerFeet_;

@@ -385,6 +385,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
       enemyMovement_[i].Reset(enemy.position.x,enemy.position.z);
     }
     const bool active=simulation_.Health()>0 && enemy.health>0 && (i<enemies.size() || simulation_.Sparring());
+    enemyDefeats_[i].Update(dt,enemy.health>0,enemyPoses_[i].attack,enemyPoses_[i].gait,enemyAnimations_[i].pose);
     auto& releaseAge=enemyAnimations_[i].enemyReleaseAge;
     releaseAge=std::min(1.f,releaseAge+dt);
     for(std::size_t eventIndex=0;eventIndex<simulation_.VisualEventCount();++eventIndex) {
@@ -497,12 +498,14 @@ void Game::ResetMotion() {
   playerFeet_.Reset(simulation_.Player(),simulation_.Facing());
   enemyPoses_.resize(simulation_.Enemies().size()+1);
   enemyAnimations_.resize(enemyPoses_.size());
+  enemyDefeats_.resize(enemyPoses_.size());
   enemyFaces_.resize(enemyPoses_.size());
   enemyFeet_.resize(enemyPoses_.size());
   enemyMovement_.resize(enemyPoses_.size());
   for (std::size_t i=0;i<enemyPoses_.size();++i) {
     const auto& enemy=i<simulation_.Enemies().size()?simulation_.Enemies()[i]:simulation_.SparringOpponent();
     enemyPoses_[i].Reset(enemy.facing);
+    enemyDefeats_[i].Reset(enemy.health>0);
     enemyAnimations_[i].Reset(float(enemy.id)*.37f);
     enemyFaces_[i].Reset(enemy.id+16);
     enemyFeet_[i].Reset(enemy.position,enemy.facing);
@@ -560,7 +563,13 @@ void Game::Render(Renderer& renderer,bool showInterface) {
     const auto& enemy=i<int(enemies.size())?enemies[i]:simulation_.SparringOpponent();
     if (enemy.health<=0) {
       if (!enemy.looted) {
-        renderer.DrawMesh(M::Rock,{enemy.position.x,.22f,enemy.position.z},{.55f,.44f,.45f},{.51f,.34f,.15f,1},S::Cloth);
+        if(enemy.kind!=rpg::EnemyKind::Trainer) {
+          const auto asset=enemy.kind==rpg::EnemyKind::Wraith?authored::Asset::Revenant:
+            (enemy.kind==rpg::EnemyKind::Captain||enemy.kind==rpg::EnemyKind::Reaver)?authored::Asset::Orc:authored::Asset::Skeleton;
+          const auto& defeat=enemyDefeats_[i];const float keep=defeat.Remaining();
+          renderer.DrawAnimatedAsset(asset,{enemy.position.x,0,enemy.position.z},enemy.facing,0,
+            defeat.gait,defeat.attack*keep,defeat.travel*keep,3,{.8f,.8f,.8f,1},defeat.Gesture());
+        } else renderer.DrawMesh(M::Rock,{enemy.position.x,.22f,enemy.position.z},{.55f,.44f,.45f},{.51f,.34f,.15f,1},S::Cloth);
         renderer.DrawMesh(M::Crystal,{enemy.position.x,1.f+std::sin(time_*3)*.1f,enemy.position.z},{.18f,.3f,.18f},{1,.82f,.3f,1},S::Glow,0,0,visual::ShadowMode::None);
       }
       continue;

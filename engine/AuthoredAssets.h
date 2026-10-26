@@ -23,6 +23,7 @@ visual::SkinInfluence Influence(Asset asset,DirectX::XMFLOAT3 position);
 struct Gesture {
  float pitch=0,yaw=0,roll=0,hip=0;
  float leftLift=0,rightLift=0,leftOpen=0,rightOpen=0;
+ float collapse=0;
 };
 visual::BodyPalette Pose(Asset asset,float time,float gait=0,float attack=0,float travel=0,Gesture gesture={});
 }

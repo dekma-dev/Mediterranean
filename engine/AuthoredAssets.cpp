@@ -28,6 +28,11 @@ visual::BodyPalette Pose(Asset asset,float time,float gait,float attack,float tr
  time=finite(time);gait=finite(gait);attack=std::clamp(finite(attack),-1.f,1.f);travel=std::clamp(finite(travel),0.f,1.f);
  const float breath=std::sin(time*1.8f)*.012f,step=std::sin(gait)*.38f*travel;
  const bool beast=asset==Asset::Wolf||asset==Asset::Boar;
+ const float collapse=beast?0.f:std::clamp(finite(gesture.collapse),0.f,1.f);
+ const auto fallRotation=XMMatrixRotationX(collapse*DirectX::XM_PIDIV2);
+ // At rest the model's forward-most point becomes its lowest point.
+ const float floorHeight=collapse>0?Collection()[unsigned(asset)*lodCount].bounds.maximum.z:0.f;
+ const auto fall=fallRotation*XMMatrixTranslation(0,std::max(0.f,floorHeight)*collapse*collapse+.025f*collapse,0);
  const auto bounded=[&](float v,float limit) {return std::clamp(finite(v),-limit,limit);};
  const auto torsoRotation=XMMatrixRotationRollPitchYaw(bounded(gesture.pitch,.3f),bounded(gesture.yaw,.4f),bounded(gesture.roll,.25f));
  const auto torso=XMMatrixTranslation(0,-.96f,0)*torsoRotation*
@@ -51,6 +56,7 @@ visual::BodyPalette Pose(Asset asset,float time,float gait,float attack,float tr
   auto transform=XMMatrixTranslation(-pivot.x,-pivot.y,-pivot.z)*rotation*XMMatrixTranslation(pivot.x,pivot.y,pivot.z);
   // Shoulder transforms inherit torso rotation, keeping arm roots attached.
   if(!beast && (i==1 || i==6 || i==8)) {transform*=torso;rotation*=torsoRotation;}
+  if(collapse>0) {transform*=fall;rotation*=fallRotation;}
   XMStoreFloat4x4(&palette.joints[i],transform);
   XMStoreFloat4x4(&palette.normals[i],rotation);
  }

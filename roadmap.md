@@ -1,5 +1,9 @@
 # Mediterranean Roadmap
 
+Authored defeat presentation (2026-10-26): skeleton/orc/revenant enemies now collapse and retain their actual model until looted, replacing instant loot-bag substitution. Outgoing poses blend away; loaded dead enemies start settled. Native color/shadow and gameplay loot/load tests pass in Release. Continue manual check 278 for ground/wall clearance; authored death clips and obstacle-aware corpse placement remain future refinements.
+
+Authored enemy action bridge (2026-10-26): the Blender enemy renderer now receives existing smoothed torso/arm action channels and directional hit responses, with inherited shoulder transforms and shared shadow deformation. This restores casting/boss gesture information lost by the earlier basic-swing integration. Continue manual check 277, authored skeletons/weights and actual Blender clip export; the runtime adapter does not complete those animation milestones.
+
 Living Blender wildlife (2026-10-26): Frostfang and Thornback now rest, roam, watch approaching players, flee and return to their habitats. Map clearance, gradual acceleration/turning and distance-driven gait replace fixed decorative placement. Continue manual check 276, authored quadruped clips/foot planting and richer species interactions; they remain ambient non-combat creatures. Playable-character rigs and equipment integration remain the larger art priority.
 
 User asset direction (2026-10-26): use all thirteen user-created Blender models from `assets/authored/collection01.blend` as the foundation for future art work. The current source assigns every model a world role; see `docs/blender-assets.md` for the inventory. Prioritize authored character rigging/action export, material fidelity and equipment-compatible playable-character adoption. Preserve the editable collection and compare its local authoring copy before regeneration; new primitive substitutes must not displace these assets.
