@@ -15,7 +15,7 @@
 
 namespace rpg {
 enum class EnemyState { Idle, Pursuing, Returning, Dead };
-enum class EnemyKind { Raider, Captain,Trainer,Reaver,Wraith };
+enum class EnemyKind { Raider, Captain,Trainer,Reaver,Wraith,Dummy };
 struct Enemy {
   Vec2 position, home;
   int rank=0;
@@ -36,7 +36,7 @@ struct Enemy {
   float snared=0,rooted=0,stunned=0,exposed=0; // transient combat effects
   bool Boss() const { return kind==EnemyKind::Captain && rank>0; }
   bool Enraged() const { return Boss() && health>0 && health<=MaxHealth()*.4f; }
-  float MaxHealth() const { return Boss()?240.f+rank*32.f:(kind==EnemyKind::Trainer?180.f:kind==EnemyKind::Captain?120.f:kind==EnemyKind::Reaver?105.f:80.f)+rank*18.f; }
+  float MaxHealth() const { return kind==EnemyKind::Dummy?200.f:Boss()?240.f+rank*32.f:(kind==EnemyKind::Trainer?180.f:kind==EnemyKind::Captain?120.f:kind==EnemyKind::Reaver?105.f:80.f)+rank*18.f; }
   float WindupDuration() const { return Boss()?1.5f:kind==EnemyKind::Trainer?.9f:kind==EnemyKind::Captain?1.f:kind==EnemyKind::Reaver?1.15f:kind==EnemyKind::Wraith?1.1f:.7f; }
   float AttackInterval() const { return kind==EnemyKind::Captain?2.4f:kind==EnemyKind::Reaver?2.7f:kind==EnemyKind::Wraith?1.2f:1.4f; }
   float Damage() const { return (Boss()?28.f:kind==EnemyKind::Captain?16.f:kind==EnemyKind::Reaver?20.f:kind==EnemyKind::Wraith?15.f:8.f)+rank*2.f+(Enraged()?10.f:0.f); }
@@ -51,13 +51,14 @@ struct Enemy {
   }
   const char* AttackName() const { return Boss()?(bossAttack==1?"Iron tempest":bossAttack==2?"Execution line":"Doomquake"):kind==EnemyKind::Wraith?"Veil lance":kind==EnemyKind::Reaver?"Reaping cleave":"Incoming strike"; }
   const char* Counterplay() const { return Boss()?(bossAttack==1?"UNINTERRUPTIBLE - MOVE OUT":bossAttack==2?"SIDESTEP / INTERRUPT":"INNER FLANK / OR OUTSIDE RING"):kind==EnemyKind::Wraith?"SIDESTEP / INTERRUPT":kind==EnemyKind::Reaver?"GET BEHIND / INTERRUPT":"DODGE / INTERRUPT"; }
-  const char* Name() const { if(Boss()) return rank>=8?"BOSS: ASHEN OVERLORD":"BOSS: OATHBREAKER";if(kind==EnemyKind::Reaver) return "ASH REAVER";if(kind==EnemyKind::Wraith) return "VEIL HUNTER";return kind==EnemyKind::Trainer?"SPARRING GUARD":kind==EnemyKind::Captain?"RAIDER CAPTAIN":"RAIDER"; }
+  const char* Name() const { if(kind==EnemyKind::Dummy) return "TRAINING DUMMY"; if(Boss()) return rank>=8?"BOSS: ASHEN OVERLORD":"BOSS: OATHBREAKER";if(kind==EnemyKind::Reaver) return "ASH REAVER";if(kind==EnemyKind::Wraith) return "VEIL HUNTER";return kind==EnemyKind::Trainer?"SPARRING GUARD":kind==EnemyKind::Captain?"RAIDER CAPTAIN":"RAIDER"; }
   static constexpr float attackReach = 2.4f, attackHalfAngle = 1.f;
 };
 struct Command {
   Vec2 movement;
   bool sprint = false, jump = false, nextTarget = false, interact = false, restart = false;
   EntityId selectThreat=0; // Explicit caster identity from the incoming-attack HUD.
+  EntityId selectActor=0; // World click: hostile, practice target or friendly resident.
   int ability = -1;
   bool queueAttack = false; // Physical/UI input may buffer one near-ready attack.
   int learnTalent = -1;
@@ -208,6 +209,12 @@ public:
   std::size_t VisualEventCount() const { return visualEventCount_; }
   int Target() const { return target_; }
   const Enemy* TargetActor() const;
+  const std::array<Enemy,3>& Dummies() const { return dummies_; }
+  static constexpr EntityId friendlyBase=300;
+  static constexpr int friendlyCount=5;
+  static Vec2 FriendlyPosition(int index) { return index<3?WorldMap::residents[index].position:index==3?WorldMap::questGiver:WorldMap::quartermaster; }
+  static const char* FriendlyName(int index) { return index<3?WorldMap::residents[index].name:index==3?"Beacon keeper":"Quartermaster"; }
+  int FriendlyTarget() const { return friendlyTarget_; }
   bool VisibleEnemyCast(const Enemy& enemy) const {
     return enemy.health>0 && enemy.windup>0 && enemy.state==EnemyState::Pursuing &&
       std::hypot(player_.x-enemy.position.x,player_.z-enemy.position.z)<=12.f &&
@@ -324,6 +331,8 @@ private:
   bool jumpedThisUpdate_ = false, dashedThisUpdate_ = false;
   std::array<float,8> cooldowns_{};
   int target_ = -1, gold_ = 0;
+  int friendlyTarget_=-1;
+  std::array<Enemy,3> dummies_{};
   int queuedAttack_=-1;
   EntityId queuedTarget_=0;
   float queueRemaining_=0;

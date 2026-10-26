@@ -30,11 +30,11 @@ void DrawScenery(Renderer& r,const rpg::WorldMap& map,bool sparring) {
     const float scale=cover.scale;
     if (cover.shrub) {
       r.DrawMesh(M::Foliage,{cover.position.x,.30f*scale,cover.position.z},{1.1f*scale,.65f*scale,1.05f*scale},
-        {.30f,.40f,.16f,1},S::Leaves,cover.yaw);
+        {.27f,.32f,.23f,1},S::Leaves,cover.yaw);
     } else {
       const bool meadow=cover.position.z<-19;
       r.DrawMesh(M::Grass,{cover.position.x,0,cover.position.z},{scale,(meadow?.9f:.65f)*scale,scale},
-        meadow?XMFLOAT4{.48f,.46f,.24f,1}:XMFLOAT4{.35f,.43f,.19f,1},S::Leaves,cover.yaw,0,visual::ShadowMode::None);
+        meadow?XMFLOAT4{.40f,.37f,.25f,1}:XMFLOAT4{.29f,.34f,.23f,1},S::Leaves,cover.yaw,0,visual::ShadowMode::None);
       if(meadow) {
         r.DrawMesh(M::Grass,{cover.position.x+.22f,0,cover.position.z-.18f},{scale*.6f,scale*.52f,scale*.6f},
           {.33f,.40f,.20f,1},S::Leaves,cover.yaw+1.7f,0,visual::ShadowMode::None);
@@ -100,11 +100,21 @@ void DrawScenery(Renderer& r,const rpg::WorldMap& map,bool sparring) {
     r.DrawMesh(M::Crystal,{site.x,1.05f,site.z},{.12f,.22f,.12f},{.42f,.69f,.76f,1},S::Glow,0,0,visual::ShadowMode::None);
     box({site.x,.75f,site.z-.25f},{.35f,.20f,.04f},brass,S::Metal);
   }
-  for (int i=0;i<7;++i) {
-    const float angle=i*.9f,x=std::cos(angle)*48,z=std::sin(angle)*48,y=-4+float(i%3)*3;
-    r.DrawMesh(M::Cliff,{x,y,z},{.24f,.8f,.26f},rock,S::Stone,angle);
-    r.DrawMesh(M::Terrain,{x,y,z},{.24f,1,.26f},{1,1,1,1},S::Ground,angle);
-    r.DrawMesh(M::Rock,{x,y+1,z},{3,3,3},rock,S::Stone,angle);
+  // Wooded outcrops frame the horizon, outside the navigable/camera rectangle.
+  // Shared authored trees use the existing view-dependent LOD and static cache.
+  for (int i=0;i<9;++i) {
+    const float angle=i*.70f+.15f,x=std::cos(angle)*58,z=std::sin(angle)*61;
+    const float y=-3.f+float(i%3)*1.2f;
+    r.DrawMesh(M::Cliff,{x,y,z},{.36f,.95f,.32f},rock,S::Stone,angle);
+    r.DrawMesh(M::Terrain,{x,y,z},{.36f,1,.32f},{1,1,1,1},S::Ground,angle);
+    for(int ridge=0;ridge<3;++ridge)
+      r.DrawMesh(M::Rock,{x+(ridge-1)*4.f,y+.8f,z+2},{5.5f,3.f+float((i+ridge)%3),4.7f},
+        {.31f,.33f,.31f,1},S::Stone,angle+ridge*.6f);
+    for(int tree=0;tree<5;++tree) {
+      const float a=tree*2.39996f+i,spread=3.2f+tree*.6f,scale=.70f+float((i+tree)%4)*.12f;
+      r.DrawAuthoredAsset(tree==2?authored::Asset::DeadTree:authored::Asset::Pine,
+        {x+std::sin(a)*spread,y,z+std::cos(a)*spread},{scale,scale,scale},a);
+    }
   }
 }
 }

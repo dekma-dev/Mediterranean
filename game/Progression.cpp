@@ -120,6 +120,7 @@ void Simulation::EmitVisual(CombatVisualKind kind,Vec2 position,float height,flo
     if(kind==CombatVisualKind::SpellCast) {
       for(const auto& enemy:enemies_) if(enemy.id==attackTarget_) event.destination=enemy.position;
       if(sparring_ && trainer_.id==attackTarget_) event.destination=trainer_.position;
+      for(const auto& dummy:dummies_) if(dummy.id==attackTarget_) event.destination=dummy.position;
       event.flight=(combat::Contact(HeavyAttack())-combat::StrokeStart(HeavyAttack()))/AttackRate();
     }
   }
@@ -163,6 +164,7 @@ void Simulation::DamagePlayer(float damage,float incomingFacing,float visualElap
   if (sparring_ && health_<=1) EndSparring("Yielded");
 }
 void Simulation::StartSparring() {
+  friendlyTarget_=-1; CancelAttack();
   trainer_=Enemy{}; trainer_.kind=EnemyKind::Trainer; trainer_.id=200;
   trainer_.position=trainer_.home=WorldMap::trainingPost; trainer_.health=trainer_.MaxHealth();
   trainer_.state=EnemyState::Pursuing; sparring_=true; sparringRemaining_=30; sparringReportTime_=0;

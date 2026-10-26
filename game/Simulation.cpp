@@ -13,6 +13,8 @@ Vec2 Difference(Vec2 a, Vec2 b) { return {a.x-b.x,a.z-b.z}; }
 }
 
 Simulation::Simulation() {
+  for(int i=0;i<3;++i) { auto& d=dummies_[i]; d.id=210+i; d.kind=EnemyKind::Dummy;
+    d.position=d.home={12,-2.f+i*3}; d.health=200; }
   trainer_.position=trainer_.home=WorldMap::trainingPost; trainer_.id=200; trainer_.kind=EnemyKind::Trainer; trainer_.health=trainer_.MaxHealth();
   EntityId id=100;
   for (Vec2 home : {Vec2{-4,7},Vec2{4,9},Vec2{0,12}}) {
@@ -78,6 +80,7 @@ float Simulation::CameraDistance(Vec2 origin,float originY,Vec2 direction,float 
 }
 
 void Simulation::SelectTarget() {
+  friendlyTarget_=-1;
   if (sparring_) { target_=int(enemies_.size()); return; }
   const int count=static_cast<int>(enemies_.size());
   for (int step=1;step<=count;++step) {
@@ -90,6 +93,9 @@ void Simulation::SelectTarget() {
   target_=-1; message_="No living target nearby.";
 }
 const Enemy* Simulation::TargetActor() const {
+  if(friendlyTarget_>=0) return nullptr;
+  const int dummy=target_-int(enemies_.size())-1;
+  if(dummy>=0 && dummy<3 && !(dummy==0 && sparring_)) return &dummies_[dummy];
   if (target_==int(enemies_.size()) && sparring_) return &trainer_;
   return target_>=0 && target_<int(enemies_.size())?&enemies_[target_]:nullptr;
 }
@@ -109,6 +115,7 @@ Simulation::DashCheck Simulation::CheckDashTarget() const {
 }
 
 const Enemy* Simulation::DashTargetActor() const {
+  for(const auto& dummy:dummies_) if(dummy.id==dashTarget_ && !(sparring_ && dummy.id==210)) return &dummy;
   if (sparring_ && trainer_.id==dashTarget_) return &trainer_;
   for (const auto& enemy : enemies_) if (enemy.id==dashTarget_) return &enemy;
   return nullptr;
@@ -165,7 +172,7 @@ void Simulation::UseAbility(int index,float visualElapsed) {
   } else {
     if (!TargetActor() || TargetActor()->health<=0) { message_="Press Tab to select an enemy."; return; }
     const bool trainingTarget=sparring_ && target_==int(enemies_.size());
-    auto& enemy=trainingTarget?trainer_:enemies_[target_];
+    const auto& enemy=*TargetActor();
     if (enemy.state==EnemyState::Returning) { message_="That enemy is returning home."; return; }
     if (Length(Difference(enemy.position,player_))>Spell(index).range || height_>1.5f) {
       message_="Target is out of ability range."; return;
@@ -213,6 +220,7 @@ void Simulation::CompleteRecovery() {
 
 void Simulation::ResolveAttack(float elapsed) {
   Enemy* victim=nullptr;
+  for(auto& dummy:dummies_) if(dummy.id==attackTarget_ && !(sparring_ && dummy.id==210)) victim=&dummy;
   for (auto& enemy : enemies_) if (enemy.id==attackTarget_) victim=&enemy;
   const bool trainingTarget=sparring_ && trainer_.id==attackTarget_;
   if (trainingTarget) victim=&trainer_;
@@ -318,12 +326,14 @@ void Simulation::ResolveAttack(float elapsed) {
   heal=std::min(heal,MaxHealth()-health_);health_+=heal;
   if(heal>0) Emit(FeedbackKind::Heal,player_,int(heal));
   enemy.health-=damage;
+  // A practice target accepts real damage and effects but can never die or award loot.
+  if(enemy.kind==EnemyKind::Dummy) enemy.health=std::max(1.f,enemy.health);
   if (trainingTarget) sparringDealt_+=int(damage);
   Emit(FeedbackKind::Damage,enemy.position,static_cast<int>(damage));
   EmitVisual((index==0 || index==7)?CombatVisualKind::Hit:CombatVisualKind::HeavyHit,enemy.position,1.25f,facing_,enemy.id,elapsed);
   enemy.hitFlash=std::max(0.f,.2f-elapsed); enemy.damagedThisUpdate=true; attackFlash_=.2f;
   message_=attackEmpowered_?CombatStyleInfo().payoff:"Hit.";
-  enemy.state=EnemyState::Pursuing;
+  enemy.state=enemy.kind==EnemyKind::Dummy?EnemyState::Idle:EnemyState::Pursuing;
   if ((index==1 || ((index==6 || index==7) && class_==ClassId::Psionic) || (index==5 && (class_==ClassId::Psionic || class_==ClassId::Bard))) && enemy.windup>0 && enemy.Interruptible()) {
     enemy.windup=0; enemy.attackCooldown=class_==ClassId::Psionic?1.5f:.8f;
     Emit(FeedbackKind::Interrupt,enemy.position);
@@ -360,6 +370,11 @@ void Simulation::UpdateCombat(float dt,bool advanceAttack) {
       const float tail=std::max(0.f,remaining-step);
       for (auto& enemy : enemies_) UpdateEnemy(enemy,step,frameTail+tail);
       if (sparring_) UpdateEnemy(trainer_,step,frameTail+tail);
+      for(auto& dummy:dummies_) {
+        dummy.health=std::min(200.f,dummy.health+200.f*step);
+        dummy.snared=std::max(0.f,dummy.snared-step); dummy.rooted=std::max(0.f,dummy.rooted-step);
+        dummy.stunned=std::max(0.f,dummy.stunned-step); dummy.exposed=std::max(0.f,dummy.exposed-step);
+      }
       remaining=tail;
     }
   };
@@ -596,6 +611,7 @@ void Simulation::Update(float seconds,const Command& command) {
   jumpedThisUpdate_=dashedThisUpdate_=false;
   for (auto& enemy : enemies_) { enemy.movementDistance=0; enemy.damagedThisUpdate=false; }
   trainer_.movementDistance=0; trainer_.damagedThisUpdate=false;
+  for(auto& dummy:dummies_) dummy.damagedThisUpdate=false;
   if (!std::isfinite(seconds) || seconds<=0) return;
   const float dt=std::min(seconds,.05f);
   if(command.uiClick) EmitVisual(CombatVisualKind::UiClick,player_,height_,facing_);
@@ -607,6 +623,7 @@ void Simulation::Update(float seconds,const Command& command) {
   // Cosmetic flashes must finish even while combat is suspended after defeat.
   for (auto& enemy : enemies_) enemy.hitFlash=std::max(0.f,enemy.hitFlash-dt);
   trainer_.hitFlash=std::max(0.f,trainer_.hitFlash-dt);
+  for(auto& dummy:dummies_) dummy.hitFlash=std::max(0.f,dummy.hitFlash-dt);
   sparringReportTime_=std::max(0.f,sparringReportTime_-dt);
   if (health_<=0) {
     CloseQuestDialogue(); jumpBuffer_=0;
@@ -712,7 +729,20 @@ void Simulation::Update(float seconds,const Command& command) {
   };
   // Selection is resolved before availability and activation, including Tab+3.
   if (command.nextTarget) SelectTarget();
+  if(command.selectActor) {
+    const auto selectable=[&](Vec2 p) {return Length(Difference(p,player_))<=22 && HasLineOfSight(player_,p);};
+    for(int i=0;i<friendlyCount;++i) if(command.selectActor==friendlyBase+i && selectable(FriendlyPosition(i))) {
+      StopMovement(); target_=-1; friendlyTarget_=i; message_=std::string(FriendlyName(i))+" / Friendly";
+    }
+    for(int i=0;i<int(enemies_.size());++i) if(enemies_[i].id==command.selectActor && enemies_[i].health>0 && selectable(enemies_[i].position)) {
+      target_=i; friendlyTarget_=-1;
+    }
+    for(int i=0;i<3;++i) if(dummies_[i].id==command.selectActor && !(i==0 && sparring_) && selectable(dummies_[i].position)) {
+      target_=int(enemies_.size())+1+i; friendlyTarget_=-1;
+    }
+  }
   if(command.selectThreat) {
+    friendlyTarget_=-1;
     // A UI row can expire between rendering and input. Revalidate identity and
     // visibility; never reinterpret its former row number as another enemy.
     for(std::size_t i=0;i<enemies_.size();++i)

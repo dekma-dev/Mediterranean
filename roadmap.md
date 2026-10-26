@@ -1,5 +1,8 @@
 # Mediterranean Roadmap
 
+Dawnwatch environment direction (2026-10-26): implemented broken heath/earth ground, subdued foliage and roof weathering, clearer near-ground air and nine wooded rocky peripheral outcrops using existing authored trees. See docs/environment-art-direction.md and manual check 279. This is a material/composition pass, not finished realistic terrain: prioritize coordinated heightfield/collision/navigation, authored foliage silhouettes and architecture materials next.
+
+
 Authored defeat presentation (2026-10-26): skeleton/orc/revenant enemies now collapse and retain their actual model until looted, replacing instant loot-bag substitution. Outgoing poses blend away; loaded dead enemies start settled. Native color/shadow and gameplay loot/load tests pass in Release. Continue manual check 278 for ground/wall clearance; authored death clips and obstacle-aware corpse placement remain future refinements.
 
 Authored enemy action bridge (2026-10-26): the Blender enemy renderer now receives existing smoothed torso/arm action channels and directional hit responses, with inherited shoulder transforms and shared shadow deformation. This restores casting/boss gesture information lost by the earlier basic-swing integration. Continue manual check 277, authored skeletons/weights and actual Blender clip export; the runtime adapter does not complete those animation milestones.

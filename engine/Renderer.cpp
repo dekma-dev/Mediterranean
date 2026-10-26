@@ -34,7 +34,7 @@ using Vertex = visual::Vertex;
 struct Constants {
  XMFLOAT4X4 world,wvp,normalWorld,shadowVP[visual::shadowLayers]; XMFLOAT4 color,eyeAndHud;
  XMFLOAT4 sun=visual::daylightSun;
- XMFLOAT4 atmosphere{0,.85f,.006f,.57f}; // cloud phase, exposure, haze density, cloud threshold
+ XMFLOAT4 atmosphere{0,.85f,.004f,.57f}; // cloud phase, exposure, haze density, cloud threshold
 };
 static_assert(sizeof(Constants)==384,"Keep the HLSL Scene layout and offscreen shader diagnostics in sync.");
 static_assert(visual::shadowLayers==2,"The scene shader uses a whole-island and a detail shadow layer.");

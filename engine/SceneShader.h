@@ -164,7 +164,7 @@ float3 SkyRadiance(float3 ray) {
  radiance+=float3(.018,.035,.065)*(1-exp(-path.x/18000));
  // Keep the floating island's lower hemisphere cool and deep rather than a white void.
  radiance*=lerp(.72,1,smoothstep(0,.22,ray.y));
- return lerp(float3(.16,.23,.34),radiance,smoothstep(-.45,.02,ray.y));
+ return lerp(float3(.065,.105,.16),radiance,smoothstep(-.45,.02,ray.y));
 }
 float3 DisplayDaylight(float3 radiance) {
  float3 x=max(radiance,0)*atmosphere.y;
@@ -352,13 +352,19 @@ float4 PSMain(VOut i) : SV_TARGET {
  float cavity=1;
  if (i.material==1) {
   float broad=Noise(i.wp.xz*.16),fine=Noise(i.wp.xz*1.7);
-  albedo=lerp(float3(.22,.29,.13),float3(.36,.39,.20),broad)*detail;
+  // Broad heath/earth patches break the uniform lawn without new textures.
+  float heath=Noise(i.wp.xz*.075+float2(17,3));
+  float exposed=smoothstep(.42,.68,heath*.7+broad*.3);
+  float groundDetail=lerp(1,detail,.55);
+  float3 grass=lerp(float3(.19,.235,.155),float3(.30,.31,.205),broad);
+  float3 earth=lerp(float3(.255,.235,.20),float3(.36,.315,.245),fine);
+  albedo=lerp(grass,earth,exposed*.82)*groundDetail;
   // The 256-square weight map shares authored routes with the atlas and cover.
   // WorldMap survey bounds: 58 x 62 m playable land, plus a 4 m paper gutter.
   float2 groundUV=float2((i.wp.x+33)/66,(35-i.wp.z)/70);
   float2 routes=terrainSurface.Sample(fontSampler,groundUV).rg;
   routes*=all(groundUV>=0) && all(groundUV<=1);
-  float3 soil=float3(.43,.34,.23)*(.83+fine*.2)*detail;
+  float3 soil=float3(.34,.285,.225)*(.87+fine*.18)*groundDetail;
   float2 tile=i.wp.xz*float2(2.2,3.3);
   tile+=.10*sin(tile.yx*float2(2.9,3.7));
   tile.x+=floor(tile.y)*.5;
@@ -371,7 +377,7 @@ float4 PSMain(VOut i) : SV_TARGET {
   float smoothing=max(max(fwidth(tile.x),fwidth(tile.y)),.012);
   float mortar=smoothstep(.035-smoothing,.075+smoothing,joint);
   float stoneVariation=Hash(cell);
-  float3 stoneColor=lerp(float3(.37,.40,.42),float3(.59,.53,.43),stoneVariation);
+  float3 stoneColor=lerp(float3(.30,.325,.33),float3(.46,.435,.375),stoneVariation);
   float moss=(1-mortar)*smoothstep(.35,.7,fine);
   float3 jointColor=lerp(float3(.19,.18,.15),float3(.19,.25,.12),moss);
   float3 paving=lerp(jointColor,stoneColor*(.92+.12*chips),mortar)*detail;
@@ -381,6 +387,17 @@ float4 PSMain(VOut i) : SV_TARGET {
   heightDerivative+=float2(ddx(relief),ddy(relief));
   roughness=lerp(.96,lerp(.93,.68+.14*stoneVariation,mortar),routes.y);
   cavity=lerp(1,lerp(.65,1,mortar),routes.y);
+  heightDerivative*=.58;
+ }
+ if (i.material==8) {
+  float age=Noise(i.wp.xz*.32);
+  float luminance=dot(albedo,float3(.2126,.7152,.0722));
+  albedo=lerp(luminance.xxx,albedo,.64)*lerp(float3(.70,.77,.72),float3(.89,.86,.72),age);
+  roughness=max(roughness,.86);
+ }
+ if (i.material==5) {
+  float weather=Noise(i.wp.xz*.63+i.wp.y*.15);
+  albedo=lerp(dot(albedo,float3(.2126,.7152,.0722)).xxx,albedo,.57)*(.73+.12*weather);
  }
  if (i.material==4) {
   // Broad limewash variation and rain streaks on static plaster walls. Use

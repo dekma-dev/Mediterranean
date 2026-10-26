@@ -1,5 +1,8 @@
 # Mediterranean Progress
 
+Environment art pass (2026-10-26): reviewed local location/model/map stills and an existing opening video contact sheet. Added world-space exposed-earth patches, quieter terrain relief, restrained foliage/roof materials and wooded peripheral outcrops with existing authored assets and LOD/cache support. Preserved Blender sources, traversal and save formats. Rejected an excessive haze/cloud experiment after visual inspection and failed shadow contrast checks; restored established sunlight/cloud values. Final Debug game/launcher builds and ShadowTests/GeometryTests pass; Release full smoke exits 0. Before/after native captures are in build-ninja-release/environment-before and environment-after. Remaining flat terrain and stylized silhouettes are documented rather than claimed complete.
+
+
 Final defeat validation: Visual Studio Debug AuthoredAssetTests passes (5.48 s), including the normal-kill/save/load/loot scenario. Debug and Release game/launcher rebuilt; git diff --check passes.
 
 Authored enemy defeat (2026-10-26): added transient per-enemy defeat presentation. A 1.05-second collapse preserves the outgoing attack/gait/gesture initially, settles all palette joints together and retains the actual authored corpse until looted. Existing loot markers remain, trainers keep their prior representation and save data is unchanged. Reset/load initializes dead enemies directly in the settled pose. Asset bounds determine settled ground clearance. This is a controlled fall, not physics ragdoll simulation; live wall/actor overlap remains manual acceptance.
