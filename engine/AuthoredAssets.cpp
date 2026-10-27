@@ -21,6 +21,11 @@ visual::SkinInfluence Influence(Asset asset,DirectX::XMFLOAT3 p) {
    bone=p.x<0?6:8;weight=std::clamp((std::abs(p.x)/width-.32f)/.15f,0.f,1.f);
   } else {bone=1;weight=std::clamp((p.y-.95f)/.4f,0.f,1.f);}
  }
+ if(asset!=Asset::Boar && (bone==2||bone==4||bone==6||bone==8)) {
+  const bool leg=bone<6;
+  const float child=leg?std::clamp((.69f-p.y)/.19f,0.f,1.f):std::clamp((1.49f-p.y)/.23f,0.f,1.f);
+  return {{bone,bone+1,0,0},{weight*(1-child),weight*child,1-weight,0}};
+ }
  return {{bone,0,0,0},{weight,1-weight,0,0}};
 }
 visual::BodyPalette Pose(Asset asset,float time,float gait,float attack,float travel,Gesture gesture) {
@@ -62,6 +67,21 @@ visual::BodyPalette Pose(Asset asset,float time,float gait,float attack,float tr
   if(collapse>0) {transform*=fall;rotation*=fallRotation;}
   XMStoreFloat4x4(&palette.joints[i],transform);
   XMStoreFloat4x4(&palette.normals[i],rotation);
+ }
+ if(!beast) {
+  // Distal joints inherit their parent, then articulate about the bind elbow
+  // or knee. Previously their vertices followed only the straight upper limb.
+  for(unsigned child:{3u,5u,7u,9u}) {
+   const unsigned parent=child-1;const bool leg=child<6;
+   const float side=(child==3||child==7)?-1.f:1.f;
+   const XMFLOAT3 pivot=leg?XMFLOAT3{side*.20f,.57f,0}:XMFLOAT3{side*.47f*(asset==Asset::Orc?1.22f:1.f),1.43f,0};
+   const float phase=std::sin(gait)*(side<0?1.f:-1.f);
+   const float bend=leg?-.85f*std::max(0.f,phase)*travel:
+     -.22f*travel*std::abs(phase)-(child==9?.65f*std::abs(attack):.12f*std::abs(attack));
+   const auto local=XMMatrixTranslation(-pivot.x,-pivot.y,-pivot.z)*XMMatrixRotationX(bend)*XMMatrixTranslation(pivot.x,pivot.y,pivot.z);
+   XMStoreFloat4x4(&palette.joints[child],local*XMLoadFloat4x4(&palette.joints[parent]));
+   XMStoreFloat4x4(&palette.normals[child],XMMatrixRotationX(bend)*XMLoadFloat4x4(&palette.normals[parent]));
+  }
  }
  return palette;
 }

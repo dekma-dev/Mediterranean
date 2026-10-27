@@ -25,6 +25,7 @@ struct Sample {
   float carriedAttackSeconds=-1,carriedAttackWeight=0;
   bool carriedHeavyAttack=false;
   float takeoff=0,bank=0;
+  float landingSeconds=-1; // Accepted landing clock for authored clip sampling.
   float support=0,clothSide=0,clothBack=0;
   std::array<Foot,2> departureFeet{};
   float departure=0,departureSupport=0;
@@ -86,7 +87,7 @@ struct State {
   float castAge=2,leanVelocity=0,riseVelocity=0,travelVelocity=0;
   float bankVelocity=0;
   float clothSideVelocity=0,clothBackVelocity=0;
-  float flightAge=1,departureLanding=0;
+  float flightAge=1,departureLanding=0,departureLandingSeconds=-1;
   bool wasAirborne=false,hasDeparture=false;
   float dashImpactAge=2,dashCarry=0,brakeCarry=0;
   bool dashCollision=false;
@@ -148,6 +149,7 @@ struct State {
     if (!onGround && !wasAirborne) {
       flightAge=0; hasDeparture=pose.feetActive;
       departureLanding=pose.landing;
+      departureLandingSeconds=pose.landingSeconds;
       pose.departureFeet=pose.feet; pose.departureSupport=pose.support;
     }
     flightAge=std::min(1.f,flightAge+dt);
@@ -174,6 +176,7 @@ struct State {
       departureLanding*(1-SmoothStep(flightAge/.12f));
     // Extend the legs before touching down, regardless of filtered air state.
     pose.air=airBlend*SmoothStep(height/.25f); pose.rise=riseBlend; pose.travel=travelBlend;
+    pose.landingSeconds=onGround?landingAge:departureLandingSeconds;
     // Keep the push leg extended during the first part of ascent, then tuck.
     // This follows actual flight velocity; it cannot retrigger while falling.
     pose.takeoff=onGround?0:SmoothStep((velocity/motion::jumpSpeed-.55f)/.45f);

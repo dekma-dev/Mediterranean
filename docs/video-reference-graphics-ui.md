@@ -1,5 +1,40 @@
 # Recorded reference: materials and combat interface
 
+## Reference correction and Russian interface review — 2026-10-27
+
+Revisited the user's requirements and full-size training frames at 00:20 (combat
+HUD), 00:41 (inventory), 00:44 (atlas) and 02:54 (career window), plus the existing
+02:14–02:33 and 02:54–03:13 sheets and `loc1.jpg`. This is a sampled re-review of
+local material, not a claim to have replayed or measured every frame or the audio.
+
+The 02:54 career window clearly separates a left-hand ability area and three
+simultaneously visible talent fields. Replaced our two-page nine-card layout with
+a vertical seven-ability rail and three visible disciplines containing all
+eighteen implemented talents. Real prerequisites, level locks, learning, drafts,
+saved builds and dragging to either action row are preserved. Full translated
+descriptions remain in the right-hand inspector. No nonfunctional ranks or spells
+were added merely to fill the much denser reference grid.
+
+The reference has many more distinct painted icons, denser talent grids, richer
+ornamental art and different proportions. This change follows its information
+structure; it is **not** a one-to-one recreation. The current player anatomy,
+clothing, terrain relief and movement library remain substantial visual gaps.
+
+Next reference acceptance must prioritize these visible deliverables:
+
+1. Equipment-compatible authored player body, skinning and actual action clips,
+   using the user's Blender collections and preserving newer authoring edits.
+2. Playable elevation, believable site composition and coherent architecture/
+   foliage materials, checked against location images and traversal footage.
+3. Distinct original spell/item/portrait artwork and reference-sized inventory,
+   career and map compositions, with full Russian text readable at supported sizes.
+4. Measured starts, stops, turns, jump phases and class attack recoveries from
+   consecutive video frames, followed by matching live-game capture comparisons.
+
+Use matching camera, screen size and UI state for comparisons. An automated test
+pass or a procedural polish change is not evidence of reference-level art. Keep
+unmatched items open rather than recording the whole request as completed.
+
 ## Review scope — 2026-10-25
 
 Reviewed existing frame sheets from `allods_fight_interface.mp4` at approximately 00:00–00:19 and 01:34–01:53. Extracted and inspected frames from `allods_dange_fight.mp4` at 10, 60, 120, 180 and 240 seconds, plus six samples across 180.0–180.6 seconds. Sources remain in the user's NVIDIA recordings directory. This is a sampled visual review, not a complete frame-by-frame review or audio analysis. Local review images are in the ignored `build-video-review` directory.

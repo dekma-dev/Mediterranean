@@ -69,6 +69,17 @@ int main() {
     Check(displacement>1,"Actor remained static");
   }
   visual::StaticScene cached;
+  for(auto asset:{authored::Asset::Orc,authored::Asset::Skeleton,authored::Asset::Revenant}) {
+    const auto pose=authored::Pose(asset,1,DirectX::XM_PIDIV2,.7f,1);
+    Check(std::abs(pose.joints[3]._23-pose.joints[2]._23)+std::abs(pose.joints[3]._22-pose.joints[2]._22)>.1f,"Swing knee remains locked to thigh");
+    Check(std::abs(pose.joints[9]._22-pose.joints[8]._22)>.01f,"Striking elbow remains locked to upper arm");
+    bool shin=false,forearm=false;
+    for(const auto& v:library[unsigned(asset)*3].geometry.vertices) {
+      const auto w=authored::Influence(asset,v.position);const float weights[]={w.weights.x,w.weights.y,w.weights.z,w.weights.w};
+      for(unsigned k=0;k<4;++k) {shin|=(w.bones[k]==3||w.bones[k]==5)&&weights[k]>.5f;forearm|=(w.bones[k]==7||w.bones[k]==9)&&weights[k]>.5f;}
+    }
+    Check(shin&&forearm,"Authored distal limbs have no deforming weights");
+  }
   for(unsigned clip=0;clip<4;++clip) {
     const float travel=clip==0?0.f:clip==1?.3f:clip==2?.675f:1.f;
     for(unsigned frame=0;frame<8;++frame) {

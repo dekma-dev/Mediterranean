@@ -25,5 +25,6 @@ struct Gesture {
  float leftLift=0,rightLift=0,leftOpen=0,rightOpen=0;
  float collapse=0;
 };
+// gait is a cycle phase in radians, not a precomputed sine displacement.
 visual::BodyPalette Pose(Asset asset,float time,float gait=0,float attack=0,float travel=0,Gesture gesture={});
 }

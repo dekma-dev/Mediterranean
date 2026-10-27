@@ -1,0 +1,31 @@
+{
+  "source": "Collection 04 Blender actions / Dawnwarden",
+  "clips": [
+    {
+      "clip": "Attack_Slash",
+      "frames": 39,
+      "duration": 1.2666666666666666,
+      "source_sha256": "ec554c606ea833633fcfee45f64d50c73a909829f8e66932196eb57c9eeae74a"
+    },
+    {
+      "clip": "Attack_Overhead",
+      "frames": 49,
+      "duration": 1.6,
+      "source_sha256": "4c7cf38585d97fbc323af2cf53ca470c9f33e0793642baef7011e6bffcb8c734"
+    },
+    {
+      "clip": "Jump_Full",
+      "frames": 51,
+      "duration": 1.6666666666666667,
+      "source_sha256": "21fe754df949a5d2425a9baa1e2c3507ad25d432deb4eb7c3bc1297b431901da"
+    },
+    {
+      "clip": "Land_Heavy",
+      "frames": 31,
+      "duration": 1.0,
+      "source_sha256": "f7f2b2ba2e086f9506dceca740edad15d9f61bfedd9f50689776c39f6b512af7"
+    }
+  ],
+  "sha256": "f367714e6c5784bc370c6a080749aaa855980c187c575e0560f6a24402f24941",
+  "retarget": "Rest-relative hand and ankle targets, pelvis offset, weapon direction. Blender Z-up converted to game Y-up. Jump world displacement removed; gameplay owns vertical movement."
+}

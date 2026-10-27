@@ -1,5 +1,7 @@
 # Mediterranean Roadmap
 
+Reference/UI correction (2026-10-27): the N window now follows the recorded career screen's left ability rail and three simultaneous discipline fields, with all eighteen implemented talents visible and complete translated inspection text. This establishes the information structure, not the reference's dense grids or artwork. Prioritize authored body/action integration, playable terrain relief and distinct icon/material art next; do not substitute repeated frame recoloring for these visible gaps. Evidence and outstanding acceptance are in `docs/video-reference-graphics-ui.md`.
+
 Guardian shoulder motion checkpoint (2026-10-26): arm-aware bounded hinges now replace rigid torso following for the authored shoulders. Continue full authored body/26-joint palette and clip integration; chest/fauld remain torso-bound and individual lames are not simulated. Validate overhead/reach/shield silhouettes in live play (manual 288).
 
 Guardian set checkpoint (2026-10-26): authored chest, independent shoulders and waist plates now replace corresponding procedural pieces. Keep gear-slot ownership during further body adoption; reward chest fallback no longer restores removed Warrior shoulders. Next: body/rig integration and arm-aware articulation for the imported plates, with full-class customization preserved. Current equipment is rigidly attached to the existing torso pose.
@@ -10,7 +12,7 @@ Entrance UI hierarchy follow-up (2026-10-26): quiet inset rows and consolidated 
 
 Environment/entrance checkpoint (2026-10-26): authored pine shoots, building palette isolation and peeling foundation plaster are integrated; accepted Blender source matches runtime exports. Launcher and creation screens gain quieter bronze emphasis and ambient light without additional art textures. Next large environment step is still navigable terrain height and site composition; UI refinement does not replace the procedural player mesh with production character art. See docs/blender-assets.md and manual checks 283–284.
 
-Localization (2026-10-26): Russian-default/English selection is available in Esc settings and persists across launches. Finish authored translations for quest prose, class descriptions and remaining dynamic messages; audit each panel in both languages and replace compositional phrase fallback with explicit full-message keys where Russian grammar requires it.
+Localization (2026-10-27): full quest prose, eleven class kits, UI and native launcher/loading/error captions are translated; Russian names support actual keyboard text input and UTF-8 saves. Keep the source-coverage audit and complete-message catalog current, then inspect grammar and layout in native captures after text changes. See `docs/localization.md`. Technical diagnostics and user nicknames remain distinct from translated player prose.
 
 Landscape composition follow-up (2026-10-26): rounded wooded ridge silhouettes now replace distant square platforms; grass is clustered and plaster/canvas are more subdued. See docs/environment-art-direction.md and manual check 281. Next substantial step remains playable elevation integrated with collision, navigation, feet/camera and saved positions; current peripheral ridges are decorative. Authored pine branch silhouettes and building texture fidelity still need improvement.
 

@@ -1,5 +1,6 @@
 #include "game/Game.h"
 #include "game/CharacterPose.h"
+#include "engine/PlayerClips.h"
 #include <cstdlib>
 #include <iostream>
 #include <limits>
@@ -305,6 +306,24 @@ void TransitionRegressions() {
 }
 }
 int main() {
+  {
+    const auto bytes=playerclips::EmbeddedBytes();
+    Require(playerclips::Decode(bytes).size()==4,"All four Blender player clips must be embedded");
+    for(auto length : {std::size_t(0),std::size_t(12),bytes.size()-1}) {
+      bool rejected=false;
+      try { playerclips::Decode(bytes.substr(0,length)); } catch(const std::exception&) { rejected=true; }
+      Require(rejected,"Truncated player motion must be rejected");
+    }
+    for(bool heavy : {false,true}) {
+      Require(std::abs(playerclips::AttackPhase(combat::Contact(heavy),combat::StrokeStart(heavy),combat::Contact(heavy),combat::Duration(heavy))-.55f)<1e-6f,
+        "Blender contact must follow the authoritative combat clock");
+      const auto clip=heavy?playerclips::Clip::Overhead:playerclips::Clip::Slash;
+      Require(Distance(playerclips::Sample(clip,.34f).hands[1],playerclips::Sample(clip,.55f).hands[1])>.10f,
+        "Imported weapon hand must travel through the strike");
+    }
+    Require(Distance(playerclips::Sample(playerclips::Clip::Jump,.3f).feet[0],playerclips::Sample(playerclips::Clip::Jump,.6f).feet[0])>.01f,
+      "Imported jump must contain articulated foot motion");
+  }
   for(float side:{-1.f,1.f}) {
     float reference=0;
     for(int hz:{30,60,144,1000}) {

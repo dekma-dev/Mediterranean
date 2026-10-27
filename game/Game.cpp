@@ -391,7 +391,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
       enemyMovement_[i].Reset(enemy.position.x,enemy.position.z);
     }
     const bool active=simulation_.Health()>0 && enemy.health>0 && (i<enemies.size() || simulation_.Sparring());
-    enemyDefeats_[i].Update(dt,enemy.health>0,enemyPoses_[i].attack,enemyPoses_[i].gait,enemyAnimations_[i].pose);
+    enemyDefeats_[i].Update(dt,enemy.health>0,enemyPoses_[i].attack,enemyPoses_[i].phase,enemyAnimations_[i].pose);
     auto& releaseAge=enemyAnimations_[i].enemyReleaseAge;
     releaseAge=std::min(1.f,releaseAge+dt);
     for(std::size_t eventIndex=0;eventIndex<simulation_.VisualEventCount();++eventIndex) {
@@ -597,7 +597,7 @@ void Game::Render(Renderer& renderer,bool showInterface) {
     if(enemy.kind!=rpg::EnemyKind::Trainer) {
       const auto asset=enemy.kind==rpg::EnemyKind::Wraith?authored::Asset::Revenant:
         (captain||enemy.kind==rpg::EnemyKind::Reaver)?authored::Asset::Orc:authored::Asset::Skeleton;
-      renderer.DrawAnimatedAsset(asset,{enemy.position.x,0,enemy.position.z},pose.facing,time_,pose.gait,pose.attack,enemyAnimations_[i].pose.travel,3,
+      renderer.DrawAnimatedAsset(asset,{enemy.position.x,0,enemy.position.z},pose.facing,time_,pose.phase,pose.attack,enemyAnimations_[i].pose.travel,3,
         enemy.hitFlash>0?XMFLOAT4{1,.7f,.55f,1}:XMFLOAT4{1,1,1,1},AuthoredActorGesture(enemyAnimations_[i].pose));
     } else DrawCharacter(renderer,enemy.position,0,pose.facing,
       enemy.hitFlash>0?XMFLOAT4{1,.7f,.55f,1}:enemy.kind==rpg::EnemyKind::Trainer?XMFLOAT4{.55f,.46f,.22f,1}:enemy.kind==rpg::EnemyKind::Wraith?XMFLOAT4{.35f,.30f,.61f,1}:enemy.kind==rpg::EnemyKind::Reaver?XMFLOAT4{.53f,.34f,.19f,1}:captain?XMFLOAT4{.36f,.19f,.48f,1}:XMFLOAT4{.65f,.2f,.25f,1},

@@ -1,6 +1,7 @@
 #include "game/Localization.h"
 #include "engine/Utf8.h"
 #include "game/Interface.h"
+#include "game/BuildLayout.h"
 #include "game/CharacterView.h"
 #include "game/CharacterSelection.h"
 #include "game/MapArtwork.h"
@@ -176,6 +177,20 @@ struct Canvas {
    result.push_back(line);
   }
   return result;
+ }
+ void Paragraph(Rect area,const std::string& text,float size=14,Color color=muted,float leading=3) {
+  // Avoid a lone final Cyrillic letter on the next line of a narrow node.
+  std::istringstream words(localization::Translate(text));std::string word;
+  float widest=0;
+  while(words>>word) widest=std::max(widest,Width(word,size));
+  if(widest>area.w) size=std::max(8.f,size*area.w/widest);
+  auto lines=Lines(area.w,text,size);
+  const auto height=[&] { return lines.empty()?0.f:float(lines.size())*(size+leading)-leading; };
+  // Measure the complete translation before drawing; never discard the final
+  // sentence merely because its English version used fewer lines.
+  while(size>8 && height()>area.h) {size-=.5f;lines=Lines(area.w,text,size);}
+  for(std::size_t row=0;row<lines.size();++row)
+   Text(area.x,area.y+float(row)*(size+leading),lines[row],size,color);
  }
  void Triangle(Point a,Point b,Point c,Color tint) { r.DrawHudTriangle(P(a.x,a.y),P(b.x,b.y),P(c.x,c.y),tint); }
  void Line(float x,float y,float tx,float ty,float width,Color tint) {
@@ -533,7 +548,7 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
   const float highlight=selection.Highlight(control);
   if(enabled) c.Gradient({a.x+5,a.y+4,a.w-10,a.h-8},{.96f,.72f,.36f,.14f*highlight},{.6f,.36f,.12f,.03f*highlight});
   const float depression=selection.Pressed(control)?1.5f:0;
-  c.Center(a.x,a.y+(a.h-18)*.5f-1+depression,a.w,label,primary?19.f:15.f,enabled?ink:muted);
+  c.Center(a.x+7,a.y+(a.h-18)*.5f-1+depression,a.w-14,label,primary?19.f:15.f,enabled?ink:muted);
   if(focused && enabled) c.Line(a.x+8,a.y+a.h-7,a.x+a.w-8,a.y+a.h-7,1,gold);
  };
  button(C::Left,"<");button(C::Right,">");
@@ -1280,7 +1295,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    selectedTalent=std::clamp(selectedTalent,0,int(rpg::Talent::Count)-1);
    blockWindow({96,52,1088,595}); c.Banner({123,43,1003,39},"Champion build",23);
    close({1146,61,27,27},Panel::Build);
-   c.Text(124,104,"Level "+std::to_string(s.Level())+"  /  "+s.ClassName(),18,ink);
+   c.FitText(124,108,292,"Level "+std::to_string(s.Level())+"  /  "+s.ClassName(),16,ink);
    c.Frame({850,102,306,32},{.07f,.16f,.13f,1},s.TalentPoints()>0?gold:border);
    c.Center(850,109,306,std::to_string(s.TalentPoints())+" talent point"+(s.TalentPoints()==1?"":"s")+" available",15,gold);
    button({594,102,218,32},loadoutsPage?"Talents & spellbook":planningBuild?"Review draft":"Saved builds",Action::BuildPage);
@@ -1367,67 +1382,74 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.Wrap(488,612,668,s.Message(),11,muted,2);
     return;
    }
-   c.Text(148,136,"SPELLBOOK / inspect or drag an ability to the action bar",11,muted);
+   c.Frame(buildlayout::Spells,{.15f,.075f,.045f,1});
+   c.Center(132,160,176,"SPELLS",14,gold);
    for(int card=0;card<7;++card) {
     const int i=card>=4?card+1:card;
-    const Rect spellSlot{148+(card%4)*173.f,151+(card/4)*34.f,167,32};
-    c.Frame(spellSlot,selectedSpell==i?Color{.12f,.23f,.20f,1}:dark,selectedSpell==i?gold:border);
-    AbilityArtwork(c,{spellSlot.x+3,spellSlot.y+3,26,26},i,s.Class());
+    const Rect spellSlot=buildlayout::Spell(card);
+    const bool hovered=spellSlot.Contains(mouseX_,mouseY_);
+    c.Inset(spellSlot,hovered?1.f:0.f,selectedSpell==i);
+    const Rect art{spellSlot.x+4,spellSlot.y+5,34,34};
+    c.Frame({art.x-2,art.y-2,art.w+4,art.h+4});
+    AbilityArtwork(c,art,i,s.Class());
     const float remaining=s.Cooldown(i);
-    if(remaining>0) c.CooldownSweep({spellSlot.x+3,spellSlot.y+3,26,26},
-      std::clamp(remaining/s.AbilityCooldown(i),0.f,1.f));
-    c.FitText(spellSlot.x+33,spellSlot.y+3,128,s.Spell(i).name,13,ink);
+    if(remaining>0) c.CooldownSweep(art,std::clamp(remaining/s.AbilityCooldown(i),0.f,1.f));
+    c.Paragraph({spellSlot.x+44,spellSlot.y+3,128,27},s.Spell(i).name,13,ink,1);
     std::string bindings;
     for(int binding=0;binding<hotbarSlots;++binding) if(HotbarSpell(binding,s.Class())==i) {if(!bindings.empty()) bindings+="/";bindings+=BindingLabel(binding);}
-    c.FitText(spellSlot.x+33,spellSlot.y+18,128,(bindings.empty()?"Unbound":"Key "+bindings)+" / "+
-      (remaining>0?Seconds(remaining)+"s remaining":Number(s.AbilityCooldown(i))+"s cooldown"),10,remaining>0?gold:muted);
-    if(spellSlot.Contains(mouseX_,mouseY_))
+    c.FitText(spellSlot.x+44,spellSlot.y+31,128,(bindings.empty()?"Unbound":"Key "+bindings)+
+      (remaining>0?" / "+Seconds(remaining)+"s remaining":""),10,remaining>0?gold:muted);
+    if(hovered)
       c.Line(spellSlot.x+4,spellSlot.y+spellSlot.h-2,spellSlot.x+spellSlot.w-4,spellSlot.y+spellSlot.h-2,1,gold);
     regions_.push_back({spellSlot,{Action::SelectSpell,i},true});
    }
+   c.Paragraph({132,551,176,17},"Drag to an action row",11,muted,1);
    const auto& branches=s.ClassInfo().branches;
    const Color branchColors[]={{.83f,.54f,.31f,1},{.40f,.64f,.83f,1},{.45f,.77f,.57f,1}};
+   const unsigned shownBuild=planningBuild && previewBuild>=0?unsigned(previewBuild):s.BuildMask();
    for (int branch=0;branch<3;++branch) {
-    const float x=248+branch*232.f;
-    c.RectFill({x-76,222,152,25},dark); c.Center(x-76,226,152,branches[branch],16,branchColors[branch]);
-    const unsigned shownBuild=planningBuild && previewBuild>=0?unsigned(previewBuild):s.BuildMask();
-    const bool connected=rpg::HasTalent(shownBuild,rpg::Talent(talentPage?9+branch:branch));
-    const Color wire=connected?branchColors[branch]:border;
-    // Both level-three choices connect to the foundation, not to each other.
-    if(talentPage) {
-      c.Line(x,346,x,360,2,wire);c.Line(x,452,x,466,2,wire);
-    } else {
-      c.Line(x,346,x,353,2,wire); c.Line(x,353,x-111,353,2,wire);
-      c.Line(x-111,353,x-111,512,2,wire);
-      c.Line(x-111,406,x-105,406,2,wire); c.Line(x-111,512,x-105,512,2,wire);
-      c.Center(x-45,452,90,"DISCIPLINES",10,muted);
+    const auto field=buildlayout::Field(branch);
+    c.Frame(field,{.17f,.085f,.055f,1});
+    c.Center(field.x+10,160,field.w-20,branches[branch],15,branchColors[branch]);
+    // Route actual prerequisites through the narrow gutter, behind the nodes.
+    // Specializations and mastery both descend from the foundation.
+    for(int i=branch;i<int(rpg::Talent::Count);i+=3) {
+     const auto parent=s.TalentDefinition(i).prerequisite;
+     if(!rpg::ValidTalent(parent)) continue;
+     const auto from=buildlayout::Talent(int(parent)),to=buildlayout::Talent(i);
+     const Color wire=rpg::HasTalent(shownBuild,parent)?branchColors[branch]:border;
+     c.Line(from.x,from.y+27,field.x+8,from.y+27,1,wire);
+     c.Line(field.x+8,from.y+27,field.x+8,to.y+27,1,wire);
+     c.Line(field.x+8,to.y+27,to.x,to.y+27,1,wire);
     }
    }
-   for (int i=talentPage*9;i<std::min(int(rpg::Talent::Count),talentPage*9+9);++i) {
+   for (int i=0;i<int(rpg::Talent::Count);++i) {
     const auto talent=rpg::Talent(i); const auto& info=s.TalentDefinition(i);
     const bool learned=planningBuild?rpg::HasTalent(unsigned(std::max(0,previewBuild)),talent):s.HasTalent(talent);
     unsigned trial=unsigned(std::max(0,previewBuild));
     const bool available=planningBuild?rpg::TogglePlannedTalent(trial,talent):std::string(s.TalentStatus(talent))=="Ready to learn";
-    const Rect rect{143+(i%3)*232.f,254+((i%9)/3)*106.f,210,92};
+    const Rect rect=buildlayout::Talent(i);
     const bool hovered=rect.Contains(mouseX_,mouseY_),selectedNode=selectedSpell<0 && !confirmTalentReset && i==selectedTalent;
     const Color accent=learned?Color{.57f,.83f,.45f,1}:available?gold:border;
-    c.Frame(rect,selectedNode?Color{.12f,.23f,.20f,1}:Color{.035f,.085f,.075f,1},selectedNode || hovered?gold:accent);
-    c.RectFill({rect.x+4,rect.y+4,3,rect.h-8},accent);
-    TalentIcon(c,{rect.x+11,rect.y+8,30,33},i,learned || available?1.f:.45f,s.Class());
-    c.Wrap(rect.x+50,rect.y+10,150,info.name,15,learned || available?ink:muted,2);
-    c.Wrap(rect.x+12,rect.y+46,186,TalentEffect(s,i),12,muted,2);
+    c.Inset(rect,hovered?1.f:0.f,selectedNode);
+    c.Frame({rect.x+4,rect.y+4,33,35},dark,accent);
+    TalentIcon(c,{rect.x+7,rect.y+7,27,29},i,learned || available?1.f:.45f,s.Class());
+    c.RectFill({rect.x+23,rect.y+25,13,14},{.015f,.018f,.02f,.95f});
+    c.Center(rect.x+23,rect.y+25,13,std::to_string(info.level),10,ink);
+    c.Paragraph({rect.x+42,rect.y+6,96,29},info.name,13,learned || available?ink:muted,1);
     const char* state=learned?(planningBuild?"IN DRAFT":"LEARNED"):available?"AVAILABLE / 1 POINT":
       !planningBuild && s.Level()<info.level?"LEVEL LOCKED":info.prerequisite!=rpg::Talent::Count &&
-      !(planningBuild?rpg::HasTalent(unsigned(std::max(0,previewBuild)),info.prerequisite):s.HasTalent(info.prerequisite))?"NEEDS PARENT":
+      !(planningBuild?rpg::HasTalent(unsigned(std::max(0,previewBuild)),info.prerequisite):s.HasTalent(info.prerequisite))?"Requires parent":
       planningBuild?"DRAFT LIMIT":"UNAVAILABLE";
-    c.FitText(rect.x+12,rect.y+73,186,"LEVEL "+std::to_string(info.level)+" / "+state,10,learned || available?accent:muted);
+    c.FitText(rect.x+5,rect.y+40,132,state,10,learned || available?accent:muted);
+    if(hovered) c.Line(rect.x+4,rect.y+rect.h-1,rect.x+rect.w-4,rect.y+rect.h-1,1,gold);
     regions_.push_back({rect,{Action::SelectTalent,i},true});
    }
    c.Frame({850,150,306,454},{.035f,.08f,.075f,1});
    if (confirmTalentReset) {
     c.Wrap(874,173,258,"Reset your talents?",22,gold,2);
-    c.Wrap(874,245,258,"Refund all spent points for free. Your spells return to their foundation power.",15,ink,4);
-    c.Wrap(874,344,258,"Health will not be restored. Losing Vitality lowers your maximum and clamps excess health. Active cooldowns keep counting down.",14,muted,6);
+    c.Paragraph({874,240,258,92},"Refund all spent points for free. Your spells return to their foundation power.",15,ink);
+    c.Paragraph({874,338,258,125},"Health will not be restored. Losing Vitality lowers your maximum and clamps excess health. Active cooldowns keep counting down.",14,muted);
     const std::string status=s.TalentResetStatus();
     c.Wrap(874,478,258,status,13,gold,2);
     button({874,524,258,32},"Confirm reset",Action::ResetTalents,0,status=="Ready to reset");
@@ -1435,18 +1457,18 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    } else if (rpg::ValidSpell(selectedSpell)) {
     const auto& spell=s.Spell(selectedSpell);
     AbilityArtwork(c,{874,166,48,48},selectedSpell,s.Class());
-    c.Text(937,175,selectedSpell==7?"SETUP SPELL":selectedSpell==6?"SIGNATURE SPELL":selectedSpell==5?"CLASS TECHNIQUE":"FOUNDATION SPELL",13,gold);
-    c.Text(937,198,"Drag the card to bind / level 1",11,muted);
+    c.FitText(937,175,195,selectedSpell==7?"SETUP SPELL":selectedSpell==6?"SIGNATURE SPELL":selectedSpell==5?"CLASS TECHNIQUE":"FOUNDATION SPELL",13,gold);
+    c.Paragraph({937,195,195,27},"Drag the card to bind / level 1",11,muted,2);
     c.FitText(874,231,258,spell.name,22,ink);
-    c.Wrap(874,264,258,SpellEffect(s,selectedSpell),14,gold,2);
-    c.Wrap(874,311,258,selectedSpell==1?std::string(style.resource)+": "+std::to_string(style.capacity)+
-      " basic hits fill the reserve. "+style.payoff:spell.description,13,muted,5);
-    c.Text(874,413,"Cooldown "+Number(s.AbilityCooldown(selectedSpell))+"s / "+
+    c.Paragraph({874,264,258,35},SpellEffect(s,selectedSpell),14,gold,2);
+    c.Paragraph({874,305,258,98},selectedSpell==1?std::string(style.resource)+": "+std::to_string(style.capacity)+
+      " basic hits fill the reserve. "+style.payoff:spell.description,13,muted,2);
+    c.FitText(874,413,258,"Cooldown "+Number(s.AbilityCooldown(selectedSpell))+"s / "+
       (spell.range>0?Number(spell.range)+" m":"self"),13,ink);
-    c.Text(874,435,(selectedSpell<2 || selectedSpell>=5)?"Contact "+Number(spell.contact)+"s / recovery "+Number(spell.recovery)+"s":
+    c.FitText(874,435,258,(selectedSpell<2 || selectedSpell>=5)?"Contact "+Number(spell.contact)+"s / recovery "+Number(spell.recovery)+"s":
       selectedSpell==2?Number(s.RetreatMobility()?style.retreatDistance:3.5f)+" m travel / "+Number(s.MobilityDuration())+"s burst":
       (spell.contact>0?Number(spell.contact)+"s stationary preparation":"Instant defense"),12,muted);
-    c.Text(874,457,selectedSpell==1 && style.steadyHeavy?"Stand still until release":spell.targeting,12,muted);
+    c.Paragraph({874,455,258,25},selectedSpell==1 && style.steadyHeavy?"Stand still until release":spell.targeting,12,muted,1);
     c.Text(874,483,"RELATED TALENTS",11,gold);
     for(int i=0;i<3;++i) if (rpg::ValidTalent(spell.upgrades[i])) {
      const auto talent=spell.upgrades[i];
@@ -1460,14 +1482,14 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    const bool editable=planningBuild && rpg::TogglePlannedTalent(trial,talent);
    const std::string status=planningBuild?(editable?(learned?"Remove this path and dependent nodes":"Add to draft / no live changes"):"Needs prerequisite or a free draft point"):s.TalentStatus(talent);
    TalentIcon(c,{874,166,48,52},selectedTalent,1,s.Class());
-   c.Text(937,175,branches[selectedTalent%3],14,branchColors[selectedTalent%3]);
-   c.Text(937,199,selectedTalent>=9?"Advanced discipline":selectedTalent<3?"Foundation talent":selectedTalent<6?"Specialization / option A":"Specialization / option B",11,muted);
-   c.Wrap(874,232,258,info.name,20,gold,2);
-   c.Wrap(874,288,258,TalentEffect(s,selectedTalent),15,ink,2);
-   c.Wrap(874,341,258,info.description,14,muted,4);
+   c.FitText(937,175,195,branches[selectedTalent%3],14,branchColors[selectedTalent%3]);
+   c.FitText(937,199,195,selectedTalent>=9?"Advanced discipline":selectedTalent<3?"Foundation talent":selectedTalent<6?"Specialization / option A":"Specialization / option B",11,muted);
+   c.Paragraph({874,232,258,44},info.name,20,gold,2);
+   c.Paragraph({874,283,258,34},TalentEffect(s,selectedTalent),15,ink,2);
+   c.Paragraph({874,326,258,91},info.description,14,muted,3);
    c.Line(874,423,1132,423,1,border);
    c.Text(874,436,"Requires level "+std::to_string(info.level),13,ink);
-   if(info.prerequisite==rpg::Talent::Count) c.Text(874,460,"No prerequisite / foundation talent",12,muted);
+   if(info.prerequisite==rpg::Talent::Count) c.FitText(874,460,258,"No prerequisite / foundation talent",12,muted);
    else {
     const Rect prerequisite{874,456,258,30};
     const bool owned=planningBuild?rpg::HasTalent(unsigned(std::max(0,previewBuild)),info.prerequisite):s.HasTalent(info.prerequisite);
@@ -1476,20 +1498,17 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.Text(1115,461,">",14,gold);
     regions_.push_back({prerequisite,{Action::SelectTalent,int(info.prerequisite)},true});
    }
-   c.Wrap(874,493,258,status,13,learned?Color{.57f,.83f,.45f,1}:gold,2);
+   c.Paragraph({874,493,258,43},status,13,learned?Color{.57f,.83f,.45f,1}:gold,2);
    button({874,546,258,37},planningBuild?(learned?"Remove from draft":"Add to draft"):learned?"Learned":"Learn / 1 point",
      planningBuild?Action::DraftTalent:Action::LearnTalent,selectedTalent,planningBuild?editable:status=="Ready to learn");
    }
-   button({148,565,225,22},"I  Foundations / levels 2-3",Action::SelectTalent,0);
-   button({387,565,241,22},"II  Mastery / levels 5-9",Action::SelectTalent,9);
-   const float pageX=talentPage?387.f:148.f,pageWidth=talentPage?241.f:225.f;
-   c.Line(pageX+8,584,pageX+pageWidth-8,584,2,gold);
+   c.FitText(148,574,664,"Select a node to inspect its effect and prerequisites.",11,muted);
    c.Frame({148,589,480,8}); c.RectFill({151,592,474*xp,2},gold);
    button({666,590,146,28},planningBuild?"Clear draft":"Reset talents",planningBuild?Action::DraftTalent:Action::ConfirmTalentReset,planningBuild?-1:0,
      planningBuild?previewBuild>0:std::string(s.TalentResetStatus())=="Ready to reset" && !confirmTalentReset);
    c.Text(148,607,s.Level()==rpg::levelCap?"Level cap reached  /  "+std::to_string(s.EarnedPoints())+" points earned":
      std::to_string(s.Experience())+" XP  /  "+std::to_string(s.NextLevelExperience())+" for next level",12,muted);
-   c.Text(124,628,planningBuild?"DRAFT: "+std::to_string(rpg::TalentCount(unsigned(std::max(0,previewBuild))))+" / 5 points. Review draft to apply or save. Live talents are unchanged.":
+   c.FitText(148,623,984,planningBuild?"DRAFT: "+std::to_string(rpg::TalentCount(unsigned(std::max(0,previewBuild))))+" / 5 points. Review draft to apply or save. Live talents are unchanged.":
      "N or X closes. Choices are saved with F5. The world remains active.",12,muted);
    if(dragging_ && dragSpell_>=0) {
     drawHotbars();

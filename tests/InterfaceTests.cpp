@@ -3,6 +3,7 @@
 #include "tests/DashFixture.h"
 #include "tests/QuestFixture.h"
 #include "game/Interface.h"
+#include "game/BuildLayout.h"
 #include "game/EncounterView.h"
 #include "game/CharacterView.h"
 #include "game/TerrainSurface.h"
@@ -678,10 +679,10 @@ int main() {
     clickAt(1000,563);
     Require(game.State().HasTalent(rpg::Talent::WeaponTraining) && game.State().TalentPoints()==1,
       "Build Learn button must reach the simulation command");
-    clickAt(248,406); clickAt(1000,563);
+    clickAt(415,273); clickAt(1000,563);
     Require(game.State().HasTalent(rpg::Talent::WeaponMastery) && game.State().TalentPoints()==0,
       "Selecting a connected rank must learn that rank rather than the previous selection");
-    clickAt(735,183);
+    clickAt(220,519);
     Require(game.State().HasTalent(rpg::Talent::WeaponMastery),"Inspecting a spell must preserve the build");
     clickAt(730,604);
     Require(game.State().TalentPoints()==0,"Requesting a reset must not reset before confirmation");
@@ -690,9 +691,9 @@ int main() {
     clickAt(730,604); clickAt(1000,540);
     Require(game.State().TalentPoints()==2 && !game.State().HasTalent(rpg::Talent::WeaponMastery),
       "Confirmed reset must reach the simulation and refund the spent points");
-    clickAt(248,512); clickAt(1000,563);
+    clickAt(415,335); clickAt(1000,563);
     Require(!game.State().HasTalent(rpg::Talent::Executioner),"Alternate specializations still require their foundation");
-    clickAt(248,320); clickAt(1000,563); clickAt(248,512); clickAt(1000,563);
+    clickAt(415,211); clickAt(1000,563); clickAt(415,335); clickAt(1000,563);
     Require(game.State().HasTalent(rpg::Talent::Executioner) && game.State().TalentPoints()==0,
       "Alternative spell upgrades must be learnable through real input");
     clickAt(730,604); frame.focused=false; step(); frame.focused=true; step(); clickAt(1000,540);
@@ -729,9 +730,9 @@ int main() {
     clickAt(700,118); clickAt(660,568);
     Require(game.State().BuildMask()==65,"Switching pages must discard pending confirmation and stale click regions");
     clickAt(500,118); // Plan a custom build without changing the hero.
-    clickAt(248,320);clickAt(1000,563); // Remove Arms and its descendant.
+    clickAt(415,211);clickAt(1000,563); // Remove Arms and its descendant.
     Require(game.State().BuildMask()==65,"Planning removed live talents before confirmation");
-    clickAt(480,320);clickAt(1000,563); // Add Vitality to draft.
+    clickAt(585,211);clickAt(1000,563); // Add Vitality to draft.
     Require(game.State().BuildMask()==65,"Planning added a live talent before confirmation");
     clickAt(700,118);clickAt(660,568); // Review, request apply.
     Require(game.State().BuildMask()==65,"Draft application bypassed confirmation");
@@ -802,7 +803,7 @@ int main() {
     screen.MoveHotbar(19,0,simulation.Class());
     screen.SetOnly(ui::Panel::Build);
     renderer.BeginFrame();screen.Render(renderer,simulation,0,false);Require(renderer.EndFrame(false),"Spellbook drop source");
-    rowPointer(165,165,true,true,false);rowPointer(898,620,false,true,false);
+    rowPointer(165,205,true,true,false);rowPointer(898,620,false,true,false);
     renderer.BeginFrame();screen.Render(renderer,simulation,0,false);
     Require(renderer.Capture(L"spellbook-drop-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),"Raised spellbook drop targets");
     Require(rowPointer(898,620,false,false,true).action==ui::Action::None && screen.HotbarSpell(19,simulation.Class())==0,
@@ -897,9 +898,9 @@ int main() {
       Require(!screen.CapturesMovement(),
         "Build menu must leave movement live");
       for (int i=0;i<int(rpg::Talent::Count);++i) {
-        screen.talentPage=i/9;drawBuild();
-        const auto node=click(248+(i%3)*232.f,320+((i%9)/3)*106.f);
-        Require(node.action==ui::Action::SelectTalent && node.value==i,"Every connected talent node must accept scaled inspection");
+        const auto rect=ui::buildlayout::Talent(i);
+        const auto node=click(rect.x+rect.w*.5f,rect.y+rect.h*.5f);
+        Require(node.action==ui::Action::SelectTalent && node.value==i,"All eighteen talent nodes must be inspectable together without paging");
       }
       screen.talentPage=0;screen.selectedTalent=4; drawBuild();
       const auto parent=click(1000,470);
@@ -930,7 +931,8 @@ int main() {
         "Build close button must identify its modal panel");
       for(int card=0;card<7;++card) {
         const int spell=card>=4?card+1:card;
-        const auto inspect=click(210+(card%4)*173.f,167+(card/4)*34.f);
+        const auto rect=ui::buildlayout::Spell(card);
+        const auto inspect=click(rect.x+rect.w*.5f,rect.y+rect.h*.5f);
         Require(inspect.action==ui::Action::SelectSpell && inspect.value==spell,
           "Each foundation spell must open inspection, not cast through the modal");
         screen.selectedSpell=spell;
@@ -999,7 +1001,7 @@ int main() {
       screen.SetOnly(ui::Panel::Build);
       screen.selectedSpell=-1;
       buildState=rpg::Simulation{}; screen.selectedTalent=0; drawBuild();
-      Require(click(1000,563).action==ui::Action::None && click(248,320).action==ui::Action::SelectTalent,
+      Require(click(1000,563).action==ui::Action::None && click(415,211).action==ui::Action::SelectTalent,
         "Level one can inspect future talents but cannot learn them");
       screen.Close(ui::Panel::Build);
       Require(click(1000,563).action==ui::Action::None,"Closing N must discard stale learning regions");
@@ -1152,7 +1154,7 @@ int main() {
     clickAt(1000,563);
     Require(game.State().HasTalent(rpg::Talent::WeaponTraining) && game.State().TalentPoints()==1,
       "Build Learn button must reach the simulation command");
-    clickAt(248,406); clickAt(1000,563);
+    clickAt(415,273); clickAt(1000,563);
     Require(game.State().HasTalent(rpg::Talent::WeaponMastery) && game.State().TalentPoints()==0,
       "Selecting a connected rank must learn that rank rather than the previous selection");
     frame.down['N']=frame.down['W']=true; step();
@@ -1221,7 +1223,7 @@ int main() {
     clickAt(1000,563);
     Require(game.State().HasTalent(rpg::Talent::WeaponTraining) && game.State().TalentPoints()==1,
       "Build Learn button must reach the simulation command");
-    clickAt(248,406); clickAt(1000,563);
+    clickAt(415,273); clickAt(1000,563);
     Require(game.State().HasTalent(rpg::Talent::WeaponMastery) && game.State().TalentPoints()==0,
       "Selecting a connected rank must learn that rank rather than the previous selection");
     frame.down['N']=frame.down['W']=true; step();

@@ -102,6 +102,7 @@ add_library(MediterraneanClient STATIC
   engine/Renderer.cpp
   engine/AuthoredAssets.cpp
   engine/WolfAnimation.cpp
+  engine/PlayerClips.cpp
   engine/GpuTimer.cpp
   engine/Geometry.cpp
   engine/Skinning.cpp
@@ -129,7 +130,7 @@ add_dependencies(MediterraneanClient EmbeddedMeshes)
 # Resource include paths make RC independent of the build working directory.
 target_sources(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/UiArtwork.rc")
 target_sources(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/Collection.rc")
-set_source_files_properties(assets/authored/Collection.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/collection01.masset;${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/frostfang.motion")
+set_source_files_properties(assets/authored/Collection.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/collection01.masset;${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/frostfang.motion;${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/player.clips")
 target_include_directories(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored")
 target_include_directories(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui")
 add_library(LaunchSupport STATIC launcher/LaunchSupport.cpp)
@@ -284,7 +285,7 @@ if (BUILD_TESTING)
   target_link_libraries(InterfaceTests PRIVATE MediterraneanClient)
   target_compile_definitions(InterfaceTests PRIVATE RPG_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
   add_test(NAME InterfaceTests COMMAND InterfaceTests)
-  add_executable(GeometryTests tests/GeometryTests.cpp engine/Geometry.cpp engine/Skinning.cpp engine/HandSkinning.cpp game/CharacterPose.cpp)
+  add_executable(GeometryTests tests/GeometryTests.cpp engine/Geometry.cpp engine/Skinning.cpp engine/HandSkinning.cpp game/CharacterPose.cpp engine/PlayerClips.cpp assets/authored/Collection.rc)
   target_include_directories(GeometryTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   target_include_directories(GeometryTests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>")
   add_dependencies(GeometryTests EmbeddedMeshes)

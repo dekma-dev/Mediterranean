@@ -1,3 +1,4 @@
 #include <windows.h>
 301 RCDATA "collection01.masset"
 302 RCDATA "frostfang.motion"
+303 RCDATA "player.clips"
