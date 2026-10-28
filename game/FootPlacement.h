@@ -29,23 +29,29 @@ public:
     const float startYaw=heading_,turn=motion::AngleDelta(startYaw,yaw);
     // Fixed contact decisions avoid different left/right step ordering at
     // different frame rates. Interpolate the actor path at each 240 Hz tick;
-    // swing sampling can lag by at most 4.17 ms, while support stays fixed.
+    // Contact decisions stay fixed; swing poses below extrapolate the remainder
+    // so high-refresh rendering does not staircase at this decision frequency.
     constexpr float interval=1.f/240;
     const int steps=int((pending_+dt+1e-7f)/interval);
     for (int step=0;step<steps;++step) {
       const float t=std::clamp((interval-pending_+step*interval)/dt,0.f,1.f);
-      Tick(interval,{start.x+(position.x-start.x)*t,start.z+(position.z-start.z)*t},startYaw+turn*t,velocity);
+      Tick(interval,{start.x+(position.x-start.x)*t,start.z+(position.z-start.z)*t},startYaw+turn*t,velocity,sample);
     }
     pending_=std::max(0.f,pending_+dt-steps*interval);
     previous_=position; heading_=yaw;
     sample.feetActive=true;
-    sample.support=support_;
     const float c=std::cos(yaw),s=std::sin(yaw);
+    std::array<Foot,2> visible{};
     for (int i=0;i<2;++i) {
-      const auto& p=feet_[i].point;
+      auto step=feet_[i];
+      if(step.stepping&&pending_>0) AdvanceSwing(step,i,pending_,position,yaw,velocity,sample);
+      const auto& p=step.point;visible[i]=p;
       const float dx=p.x-position.x,dz=p.z-position.z;
       sample.feet[i]={c*dx-s*dz,p.y,s*dx+c*dz,motion::AngleDelta(yaw,p.yaw)};
     }
+    auto support=support_,supportVelocity=supportVelocity_;
+    motion::Spring(support,supportVelocity,std::clamp((visible[0].y-visible[1].y)/.10f,-1.f,1.f),20.f,pending_);
+    sample.support=support;
   }
   bool Planted(int side) const { return ready_ && !feet_[side].stepping; }
 private:
@@ -64,7 +70,26 @@ private:
     const float offset=side==0?-.18f:.18f;
     return {position.x+std::cos(yaw)*offset,.17f,position.z-std::sin(yaw)*offset,yaw};
   }
-  void Tick(float dt,rpg::Vec2 position,float yaw,rpg::Vec2 velocity) {
+  static void AdvanceSwing(Step& foot,int i,float dt,rpg::Vec2 position,float yaw,rpg::Vec2 velocity,const Sample& sample) {
+    foot.age=std::min(foot.duration,foot.age+dt);
+    auto desired=Neutral(position,yaw,i);
+    desired.x+=velocity.x*(foot.duration-foot.age+.035f);
+    desired.z+=velocity.z*(foot.duration-foot.age+.035f);
+    foot.goal.x=motion::Ease(foot.goal.x,desired.x,24,dt);
+    foot.goal.z=motion::Ease(foot.goal.z,desired.z,24,dt);
+    foot.goal.yaw=motion::FollowAngle(foot.goal.yaw,yaw,24,dt);
+    const float t=foot.age/foot.duration,u=SmoothStep(t);
+    float height=foot.lift*16*t*t*(1-t)*(1-t);
+    if(sample.authoredGait) {
+      float amount=0;for(float w:sample.gaitWeights)amount+=Unit(w);
+      // Sample the imported recovery shape inside the accepted step interval.
+      height=height*(1-Unit(amount))+playerclips::SwingHeight(sample.gaitWeights,sample.runBlend,i,t);
+    }
+    foot.point={foot.from.x+(foot.goal.x-foot.from.x)*u,.17f+height,
+      foot.from.z+(foot.goal.z-foot.from.z)*u,foot.from.yaw+motion::AngleDelta(foot.from.yaw,foot.goal.yaw)*u};
+    if(foot.age>=foot.duration){foot.point=foot.goal;foot.point.y=.17f;foot.stepping=false;}
+  }
+  void Tick(float dt,rpg::Vec2 position,float yaw,rpg::Vec2 velocity,const Sample& sample) {
     const float speed=std::hypot(velocity.x,velocity.z);
     // Alternate ordinary steps. A supporting foot may release early during a
     // fast run/reversal to keep the leg reachable instead of sliding its contact.
@@ -89,18 +114,7 @@ private:
     for (int i=0;i<2;++i) {
       auto& foot=feet_[i];
       if (!foot.stepping) continue;
-      foot.age=std::min(foot.duration,foot.age+dt);
-      auto desired=Neutral(position,yaw,i);
-      desired.x+=velocity.x*(foot.duration-foot.age+.035f);
-      desired.z+=velocity.z*(foot.duration-foot.age+.035f);
-      foot.goal.x=motion::Ease(foot.goal.x,desired.x,24,dt);
-      foot.goal.z=motion::Ease(foot.goal.z,desired.z,24,dt);
-      foot.goal.yaw=motion::FollowAngle(foot.goal.yaw,yaw,24,dt);
-      const float t=foot.age/foot.duration,u=SmoothStep(t);
-      foot.point={foot.from.x+(foot.goal.x-foot.from.x)*u,
-        .17f+foot.lift*16*t*t*(1-t)*(1-t),foot.from.z+(foot.goal.z-foot.from.z)*u,
-        foot.from.yaw+motion::AngleDelta(foot.from.yaw,foot.goal.yaw)*u};
-      if (foot.age>=foot.duration) { foot.point=foot.goal; foot.point.y=.17f; foot.stepping=false; }
+      AdvanceSwing(foot,i,dt,position,yaw,velocity,sample);
     }
     // Shift weight toward the planted leg, using actual swing height rather
     // than an unrelated sine cycle. The spring avoids a snap at foot exchange.

@@ -89,10 +89,17 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   // Clip body motion is layered before foot/hand IK. Committed combat keeps
   // priority over locomotion, while contacts still compensate pelvis height.
   const float clipWeight=(1-swing)*(1-burst)*(1-hit);
+  const float authoredWeight=dynamics.authoredGait?clipWeight*(1-air)*(1-cast):0;
+  float gaitAmount=0;for(float w:dynamics.gaitWeights)gaitAmount+=animation::Unit(w);
+  gaitAmount=animation::Unit(gaitAmount);
+  const auto& gaitClip=dynamics.authoredMotion;
+  pose.bodyLift+=gaitClip.hip*authoredWeight;
+  pose.upperPitch+=gaitClip.torso.x*authoredWeight;
   pose.bodyLift+=dynamics.motion.hip*clipWeight;
   pose.upperPitch+=dynamics.motion.pitch*clipWeight;
   pose.upperYaw=animation::Signed(dynamics.bank)*.08f;
   pose.upperYaw+=dynamics.motion.yaw*clipWeight;
+  pose.upperYaw+=gaitClip.torso.y*authoredWeight;
   const float carrying=(1-air)*(1-burst)*(1-swing)*(1-hit)*(1-animation::Unit(dynamics.action.open));
   if(rpg::PhysicalLauncher(form)) {pose.upperYaw-=.045f*carrying;pose.upperPitch+=.02f*carrying;}
   else if(rpg::StaffWeapon(form)) {pose.upperYaw+=.025f*carrying;pose.upperPitch-=.018f*carrying;}
@@ -108,6 +115,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   // Feet remain solved against their planted targets below.
   if(timed)pose.bodyShift+=stroke.weight*(stroke.cut*2-1)*(heavy?.035f:.022f)*(1-air)*(1-burst);
   pose.upperRoll=-support*.035f-bank*.08f+dynamics.motion.roll*clipWeight;
+  pose.upperRoll+=gaitClip.torso.z*authoredWeight;
   // Lateral contacts roll away from the blow and twist the shoulders slightly.
   // This remains above the pelvis; the existing limb IK retains foot support.
   pose.upperRoll-=animation::Signed(dynamics.hitSide)*.10f;
@@ -186,6 +194,9 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     XMFLOAT3 hand{side*(.40f+air*.035f),1.02f+attack*.52f+air*.12f+landing*.08f+hit*.08f+dash*.12f+brake*.07f,
       .10f-armStride*.13f+attack*.21f+sway*side*.014f-dash*.20f+brake*.12f};
     hand.z+=dynamics.motion.reach*clipWeight;
+    hand.x+=gaitClip.hands[i].x*authoredWeight;
+    hand.y+=gaitClip.hands[i].y*authoredWeight;
+    hand.z+=(gaitClip.hands[i].z+armStride*.13f*gaitAmount)*authoredWeight;
     // Reach forward on descent to brace for impact; rising arms trail the push.
     hand.z+=air*(.18f*animation::SmoothStep(-rise)-.10f*std::max(0.f,rise))*(1-swing);
     if(authoredAir>0) {
@@ -195,6 +206,10 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     }
     if(authoredLanding) {hand.y+=landClip.hands[i].y*landing;hand.z+=landClip.hands[i].z*landing;}
     if (i==0 && shield) hand={-.39f,1.13f+air*.08f+landing*.08f,.23f-armStride*.04f+dash*.09f};
+    if(i==0 && shield) {
+      hand.y+=gaitClip.hands[i].y*authoredWeight*.25f;
+      hand.z+=gaitClip.hands[i].z*authoredWeight*.25f;
+    }
     if (timed) {
       const float cut=stroke.cut,weight=stroke.weight*(1-burst);
       // Coil beside the shoulder, cut across the body, then return to guard.

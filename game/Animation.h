@@ -4,6 +4,7 @@
 #include "game/LocomotionClips.h"
 #include "game/FaceMotion.h"
 #include "game/ActionClips.h"
+#include "engine/PlayerClips.h"
 #include <array>
 
 // Presentation-only channels; no collision, combat timing or durable save data.
@@ -30,6 +31,11 @@ struct Sample {
   std::array<Foot,2> departureFeet{};
   float departure=0,departureSupport=0;
   MotionChannels motion;
+  // Player-only authored gait. World foot anchors remain authoritative.
+  playerclips::Frame authoredMotion{};
+  std::array<float,4> gaitWeights{};
+  float runBlend=0;
+  bool authoredGait=false;
   facial::Pose face;
   ActionChannels action;
   bool retreat=false;
@@ -81,6 +87,7 @@ struct State {
   LocomotionController locomotion;
   ActionController actions;
   float phase=0,airBlend=0,riseBlend=0,travelBlend=0;
+  float runBlend=0,runVelocity=0;
   float landingAge=2,landingStrength=0,hitAge=2,hitCarry=0;
   float lateralCarry=0,lateralImpulse=0;
   float restWeight=1;

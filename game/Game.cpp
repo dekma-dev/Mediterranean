@@ -5,6 +5,7 @@
 #include "engine/Renderer.h"
 #include "game/WorldView.h"
 #include "game/AuthoredActorMotion.h"
+#include "game/AuthoredLocomotion.h"
 #include "game/CharacterView.h"
 #include "game/HandPose.h"
 #include "game/CharacterPose.h"
@@ -373,14 +374,15 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   if (command.haltMovement) effects_.CancelTrail(0);
   if (command.haltMovement) playerAnimation_.CancelDash();
   playerAnimation_.pose.lean*=1-playerAnimation_.pose.dash;
-  playerFeet_.Update(dt,simulation_.Player(),playerPose_.facing,simulation_.Grounded() && !simulation_.Dashing(),
-    simulation_.Health()>0,playerAnimation_.pose);
   const float dx=simulation_.Player().x-previousPosition.x,dz=simulation_.Player().z-previousPosition.z;
   const float moved=std::hypot(dx,dz),c=std::cos(playerPose_.facing),s=std::sin(playerPose_.facing);
   playerAnimation_.locomotion.Update(dt,simulation_.GroundMovementDistance(),moved>.000001f?(s*dx+c*dz)/moved:0,
     moved>.000001f?(c*dx-s*dz)/moved:0,motion::AngleDelta(previousFacing,playerPose_.facing)/dt,
     simulation_.Grounded(),simulation_.VerticalSpeed(),simulation_.Height(),simulation_.Health()>0,simulation_.LandingElapsed());
   playerAnimation_.pose.motion=playerAnimation_.locomotion.pose;
+  if(simulation_.Health()>0) animation::ApplyAuthoredLocomotion(playerAnimation_,dt);
+  playerFeet_.Update(dt,simulation_.Player(),playerPose_.facing,simulation_.Grounded() && !simulation_.Dashing(),
+    simulation_.Health()>0,playerAnimation_.pose);
   const auto& enemies=simulation_.Enemies();
   if (enemyPoses_.size()!=enemies.size()+1) ResetMotion();
   for (std::size_t i=0;i<enemyPoses_.size();++i) {

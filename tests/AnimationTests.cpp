@@ -308,7 +308,7 @@ void TransitionRegressions() {
 int main() {
   {
     const auto bytes=playerclips::EmbeddedBytes();
-    Require(playerclips::Decode(bytes).size()==4,"All four Blender player clips must be embedded");
+    Require(playerclips::Decode(bytes).size()==unsigned(playerclips::Clip::Count),"All Blender player action and gait clips must be embedded");
     for(auto length : {std::size_t(0),std::size_t(12),bytes.size()-1}) {
       bool rejected=false;
       try { playerclips::Decode(bytes.substr(0,length)); } catch(const std::exception&) { rejected=true; }

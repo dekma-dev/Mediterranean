@@ -42,6 +42,7 @@ inline MotionChannels SampleClip(MotionClip clip,float seconds) {
 }
 struct LocomotionController {
   MotionChannels pose;
+  MotionChannels gaitPose,transitionPose;
   std::array<float,6> weights{};
   std::array<float,6> weightVelocities{};
   float turnLag=0,turnLagVelocity=0,turnLean=0,turnLeanVelocity=0;
@@ -87,12 +88,13 @@ struct LocomotionController {
     for(unsigned i=0;i<4;++i) target[i]=sum>.0001f?target[i]/sum*moving:0;
     const float turn=grounded?std::clamp(turnRate/3.f,-1.f,1.f)*(1-moving*.7f):0;
     target[4]=std::max(0.f,-turn); target[5]=std::max(0.f,turn);
-    pose={};
+    pose={};gaitPose={};transitionPose={};
     for(unsigned i=0;i<6;++i) {
       // Carry blend velocity through changes of direction instead of snapping
       // the rate of the torso/hip response on every input edge.
       motion::Spring(weights[i],weightVelocities[i],target[i],24,dt);
       pose=pose+SampleClip(MotionClip(i),phase)*weights[i];
+      if(i<4)gaitPose=gaitPose+SampleClip(MotionClip(i),phase)*weights[i];
     }
     // Shoulders trail a turn while the body banks into a travelling arc.
     // Keep this independent of the foot cycle: pivot reversals must not reset
@@ -105,8 +107,9 @@ struct LocomotionController {
       const float pitch=clip.pitch;clip.pitch*=forward;clip.roll-=pitch*right;
       return clip;
     };
-    pose=pose+directed(SampleClip(MotionClip::Start,startAge),startForward,startRight)+
+    transitionPose=directed(SampleClip(MotionClip::Start,startAge),startForward,startRight)+
       directed(SampleClip(MotionClip::Stop,stopAge),stopForward,stopRight);
+    pose=pose+transitionPose;
     // A rapid reversal catches weight along the old direction while the
     // directional gait blends toward the new one. It never moves the actor.
     pose=pose+directed(SampleClip(MotionClip::Stop,reverseAge),reverseForward,reverseRight)*.65f;
