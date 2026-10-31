@@ -53,6 +53,24 @@ visual::SkinInfluence Influence(DirectX::XMFLOAT3 p) {
  static const auto lookup=[] {std::map<std::array<float,3>,visual::SkinInfluence> m;const auto& d=Collection();for(unsigned l=0;l<3;++l){const auto& v=authored::Collection()[unsigned(Asset::Wolf)*3+l].geometry.vertices;for(unsigned i=0;i<v.size();++i)m.emplace(std::array<float,3>{v[i].position.x,v[i].position.y,v[i].position.z},d.weights[l][i]);}return m;}();
  auto it=lookup.find({p.x,p.y,p.z});return it==lookup.end()?visual::SkinInfluence{{0,0,0,0},{1,0,0,0}}:it->second;
 }
+GaitBlend Blend(float travel) {
+ travel=std::clamp(std::isfinite(travel)?travel:0.f,0.f,1.f);
+ const float g=std::clamp((travel-.35f)/.65f*2,0.f,2.f);
+ GaitBlend result;result.first=1+std::min(1u,unsigned(g));result.second=result.first+1;
+ result.blend=g-float(result.first-1);result.moving=std::clamp(travel/.18f,0.f,1.f);
+ const auto& clips=Collection().clips;
+ result.stride=std::max(.1f,clips[result.first].distance*(1-result.blend)+clips[result.second].distance*result.blend);
+ return result;
+}
+float TravelAtSpeed(float speed) {
+ speed=std::max(0.f,std::isfinite(speed)?speed:0.f);
+ const auto& clips=Collection().clips;
+ const float walk=clips[1].distance/clips[1].duration,trot=clips[2].distance/clips[2].duration,
+   gallop=clips[3].distance/clips[3].duration;
+ if(speed<=walk)return .35f*speed/std::max(.01f,walk);
+ if(speed<=trot)return .35f+.325f*std::clamp((speed-walk)/std::max(.01f,trot-walk),0.f,1.f);
+ return .675f+.325f*std::clamp((speed-trot)/std::max(.01f,gallop-trot),0.f,1.f);
+}
 visual::BodyPalette Pose(float time,float gait,float travel) {
  using namespace DirectX;const auto& d=Collection();visual::BodyPalette out{};
  time=std::isfinite(time)?time:0;gait=std::isfinite(gait)?gait:0;travel=std::clamp(std::isfinite(travel)?travel:0.f,0.f,1.f);
@@ -65,7 +83,8 @@ visual::BodyPalette Pose(float time,float gait,float travel) {
   const auto& a=clip.samples[i*d.bones+b];const auto& z=clip.samples[(i+1)*d.bones+b];Sample s;
   XMStoreFloat4(&s.rotation,XMQuaternionSlerp(XMLoadFloat4(&a.rotation),XMLoadFloat4(&z.rotation),t));XMStoreFloat3(&s.translation,XMVectorLerp(XMLoadFloat3(&a.translation),XMLoadFloat3(&z.translation),t));return s;
  };
- const float g=std::clamp((travel-.35f)/.65f*2,0.f,2.f);const unsigned lo=1+std::min(1u,unsigned(g)),hi=std::min(3u,lo+1);const float blend=g-float(lo-1),moving=std::clamp(travel/.18f,0.f,1.f);
+ const auto locomotion=Blend(travel);const auto lo=locomotion.first,hi=locomotion.second;
+ const float blend=locomotion.blend,moving=locomotion.moving;
  for(unsigned b=0;b<d.bones;++b) {
   auto a=sample(lo,b,cycle),z=sample(hi,b,cycle),idle=sample(0,b,time/d.clips[0].duration);
   auto q=XMQuaternionSlerp(XMLoadFloat4(&a.rotation),XMLoadFloat4(&z.rotation),blend);auto p=XMVectorLerp(XMLoadFloat3(&a.translation),XMLoadFloat3(&z.translation),blend);

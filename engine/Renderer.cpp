@@ -419,6 +419,7 @@ void Renderer::Queue(visual::Mesh mesh,const XMMATRIX& transform,const XMFLOAT4&
  // A face is smaller than the PCF footprint: extrapolating each tiny triangle's
  // receiver plane across the curved nose produces triangular self-shadow marks.
  if(visual::IsHeadMesh(mesh)) item.instance.surface.w=-1;
+ if(visual::IsHairMesh(mesh)) item.instance.surface.w=-7;
  const auto& m=item.instance.world; item.center={m._41,m._42,m._43};
  item.radius=meshes_[static_cast<unsigned>(mesh)].radius*prepared.radiusScale;
  world_[static_cast<unsigned>(mesh)].push_back(item);
@@ -460,9 +461,10 @@ void Renderer::DrawCoatPanel(visual::Mesh mesh,XMFLOAT3 hem,XMFLOAT3 waist,XMFLO
  item.instance.normal._43=std::max(0.f,local.z-clearance);
  item.radius+=.4f;
 }
-void Renderer::DrawHead(const XMMATRIX& transform,const XMFLOAT4& color,float blink,float expression) {
- Queue(visual::Mesh::Head,transform,color,visual::Material::Skin,visual::ShadowMode::Cast,2);
- auto& item=world_[unsigned(visual::Mesh::Head)].back();
+void Renderer::DrawHead(const XMMATRIX& transform,const XMFLOAT4& color,float blink,float expression,visual::Mesh mesh) {
+ if(!visual::IsHeadMesh(mesh))mesh=visual::Mesh::Head;
+ Queue(mesh,transform,color,visual::Material::Skin,visual::ShadowMode::Cast,2);
+ auto& item=world_[unsigned(mesh)].back();
  item.instance.surface.z=std::isfinite(blink)?std::clamp(blink,0.f,1.f):0;
  // [-5,-3] identifies facial deformation, separate from cloth and receiver bias.
  item.instance.surface.w=-4-(std::isfinite(expression)?std::clamp(expression,-1.f,1.f):0);

@@ -1,5 +1,19 @@
 # Player anatomy source
 
+The six current face identities also use the bundle's **realistic female** base.
+`assets/authored/human-faces.blend` contains the editable derived heads and scalps;
+`human-faces.json` records the upstream and source hashes, identity edits and all
+thirty runtime LOD exports. The player retains the male foundation. Five additional
+identities give residents distinct jaw, cheek, nose, age, hairline and complexion
+combinations. These are modified CC0 foundations, not six original scanned people.
+
+The 2026-11-01 fit excludes the mandible from the neck-socket deformation. Earlier
+exports incorrectly pulled the lower face down into the neck. The current source
+keeps the lower cervical cut and socket extension explicit in the metadata.
+Identity skin coloration lives in mesh vertex colors; scalp fibers use filtered
+native shading. These materials are not photographic skin textures or strand-hair
+simulation. All Blender/export helpers remain in ignored `.blender-local`.
+
 The head exports (`player-head*.obj`), fitted scalp (`player-hair*.obj`) and
 retargeted torso/limbs (`assets/authored/player-body.skin`) derive
 from the realistic male in **Blender Studio Human Base Meshes v1.4.1**, released

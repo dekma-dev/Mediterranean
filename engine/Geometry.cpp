@@ -1,3 +1,28 @@
+#include "FaceBroadHead.generated.h"
+#include "FaceBroadHeadMedium.generated.h"
+#include "FaceBroadHeadFar.generated.h"
+#include "FaceBroadHair.generated.h"
+#include "FaceBroadHairLow.generated.h"
+#include "FaceLeanHead.generated.h"
+#include "FaceLeanHeadMedium.generated.h"
+#include "FaceLeanHeadFar.generated.h"
+#include "FaceLeanHair.generated.h"
+#include "FaceLeanHairLow.generated.h"
+#include "FaceYoungHead.generated.h"
+#include "FaceYoungHeadMedium.generated.h"
+#include "FaceYoungHeadFar.generated.h"
+#include "FaceYoungHair.generated.h"
+#include "FaceYoungHairLow.generated.h"
+#include "FaceMatureHead.generated.h"
+#include "FaceMatureHeadMedium.generated.h"
+#include "FaceMatureHeadFar.generated.h"
+#include "FaceMatureHair.generated.h"
+#include "FaceMatureHairLow.generated.h"
+#include "FaceElderHead.generated.h"
+#include "FaceElderHeadMedium.generated.h"
+#include "FaceElderHeadFar.generated.h"
+#include "FaceElderHair.generated.h"
+#include "FaceElderHairLow.generated.h"
 #include "PlayerHead.generated.h"
 #include "PlayerHeadMedium.generated.h"
 #include "PlayerHeadFar.generated.h"
@@ -540,6 +565,31 @@ Geometry BuildMesh(Mesh mesh) {
     }
     Normals(g); return g;
   }
+  if(mesh==Mesh::FaceBroadHead) return compiled_mesh::FaceBroadHead();
+  if(mesh==Mesh::FaceBroadHeadMedium) return compiled_mesh::FaceBroadHeadMedium();
+  if(mesh==Mesh::FaceBroadHeadFar) return compiled_mesh::FaceBroadHeadFar();
+  if(mesh==Mesh::FaceBroadHair) return compiled_mesh::FaceBroadHair();
+  if(mesh==Mesh::FaceBroadHairLow) return compiled_mesh::FaceBroadHairLow();
+  if(mesh==Mesh::FaceLeanHead) return compiled_mesh::FaceLeanHead();
+  if(mesh==Mesh::FaceLeanHeadMedium) return compiled_mesh::FaceLeanHeadMedium();
+  if(mesh==Mesh::FaceLeanHeadFar) return compiled_mesh::FaceLeanHeadFar();
+  if(mesh==Mesh::FaceLeanHair) return compiled_mesh::FaceLeanHair();
+  if(mesh==Mesh::FaceLeanHairLow) return compiled_mesh::FaceLeanHairLow();
+  if(mesh==Mesh::FaceYoungHead) return compiled_mesh::FaceYoungHead();
+  if(mesh==Mesh::FaceYoungHeadMedium) return compiled_mesh::FaceYoungHeadMedium();
+  if(mesh==Mesh::FaceYoungHeadFar) return compiled_mesh::FaceYoungHeadFar();
+  if(mesh==Mesh::FaceYoungHair) return compiled_mesh::FaceYoungHair();
+  if(mesh==Mesh::FaceYoungHairLow) return compiled_mesh::FaceYoungHairLow();
+  if(mesh==Mesh::FaceMatureHead) return compiled_mesh::FaceMatureHead();
+  if(mesh==Mesh::FaceMatureHeadMedium) return compiled_mesh::FaceMatureHeadMedium();
+  if(mesh==Mesh::FaceMatureHeadFar) return compiled_mesh::FaceMatureHeadFar();
+  if(mesh==Mesh::FaceMatureHair) return compiled_mesh::FaceMatureHair();
+  if(mesh==Mesh::FaceMatureHairLow) return compiled_mesh::FaceMatureHairLow();
+  if(mesh==Mesh::FaceElderHead) return compiled_mesh::FaceElderHead();
+  if(mesh==Mesh::FaceElderHeadMedium) return compiled_mesh::FaceElderHeadMedium();
+  if(mesh==Mesh::FaceElderHeadFar) return compiled_mesh::FaceElderHeadFar();
+  if(mesh==Mesh::FaceElderHair) return compiled_mesh::FaceElderHair();
+  if(mesh==Mesh::FaceElderHairLow) return compiled_mesh::FaceElderHairLow();
   if(mesh==Mesh::Head) return compiled_mesh::PlayerHead();
   if(mesh==Mesh::HeadMedium) return compiled_mesh::PlayerHeadMedium();
   if(mesh==Mesh::HeadFar) return compiled_mesh::PlayerHeadFar();

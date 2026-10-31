@@ -107,6 +107,23 @@ foreach(detail IN ITEMS Head HeadMedium HeadFar Hair HairLow Boot BootLow)
     VERBATIM)
   list(APPEND head_headers "${head_header}")
 endforeach()
+# Distinct anatomical faces share the bounded, immutable equipment compiler.
+foreach(identity IN ITEMS Broad Lean Young Mature Elder)
+  foreach(part IN ITEMS Head HeadMedium HeadFar Hair HairLow)
+    set(symbol "Face${identity}${part}")
+    string(REGEX REPLACE "([a-z])([A-Z])" "\\1-\\2" source_name "${symbol}")
+    string(TOLOWER "${source_name}" source_name)
+    set(face_source "${CMAKE_CURRENT_SOURCE_DIR}/assets/characters/${source_name}.obj")
+    set(face_header "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>/${symbol}.generated.h")
+    add_custom_command(OUTPUT "${face_header}"
+      COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>"
+      COMMAND $<TARGET_FILE:MeshAssetCompiler> "${face_source}" "${face_header}" ${symbol}
+      DEPENDS MeshAssetCompiler "${face_source}"
+      COMMENT "Embedding anatomical face identity"
+      VERBATIM)
+    list(APPEND head_headers "${face_header}")
+  endforeach()
+endforeach()
 add_custom_target(EmbeddedMeshes DEPENDS "${blade_header}" ${armor_headers} ${head_headers})
 
 add_library(MediterraneanClient STATIC
@@ -199,6 +216,9 @@ if (BUILD_TESTING)
   add_executable(AuthoredAssetTests tests/AuthoredAssetTests.cpp)
   target_link_libraries(AuthoredAssetTests PRIVATE MediterraneanClient)
   add_test(NAME AuthoredAssetTests COMMAND AuthoredAssetTests)
+  add_executable(ActorPresentationTests tests/ActorPresentationTests.cpp)
+  target_link_libraries(ActorPresentationTests PRIVATE MediterraneanClient)
+  add_test(NAME ActorPresentationTests COMMAND ActorPresentationTests)
   add_executable(ImportedBodyTests tests/ImportedBodyTests.cpp)
   target_link_libraries(ImportedBodyTests PRIVATE MediterraneanClient GltfRigImport)
   target_compile_definitions(ImportedBodyTests PRIVATE RPG_MESH_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/assets/characters/hinge-mesh.glb")
@@ -229,6 +249,9 @@ if (BUILD_TESTING)
   add_executable(CharacterArtTests tests/CharacterArtTests.cpp)
   target_link_libraries(CharacterArtTests PRIVATE MediterraneanClient)
   add_test(NAME CharacterArtTests COMMAND CharacterArtTests)
+  add_executable(HumanFaceTests tests/HumanFaceTests.cpp)
+  target_link_libraries(HumanFaceTests PRIVATE MediterraneanClient)
+  add_test(NAME HumanFaceTests COMMAND HumanFaceTests)
   target_link_libraries(ActionClipTests PRIVATE MediterraneanClient)
   add_test(NAME ActionClipTests COMMAND ActionClipTests)
   set_tests_properties(ActionClipTests PROPERTIES TIMEOUT 45)

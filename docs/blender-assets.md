@@ -1,5 +1,90 @@
 # Blender collection in the native renderer
 
+## Game binary synchronization (2026-11-01)
+
+The face revision below is now embedded in all six advertised game outputs:
+Ninja Release/Debug, Visual Studio `build-local/Release` / `Debug`, and
+`build-frontier-expansion/native` / `debug`. Each matching launcher is rebuilt.
+This closes the gap where an older executable could still display intermediate
+or original faces despite the source integration being complete. Existing player
+profiles retain their class, appearance choices and equipment.
+
+The six identities, thirty LOD exports and both collection source copies were
+checked against their recorded hashes before rebuilding; no Blender source was
+regenerated. Build logs, runtime checks and native captures for this synchronization
+are local under `.blender-local/faces-integration-20261101`. For normal play, open
+`build-ninja-release/MediterraneanLauncher.exe`.
+
+Synchronization validation: four integration suites pass in each Visual Studio
+configuration (authored assets, six face identities, character selection and
+launcher); launcher checks pass in both normal Ninja configurations; face checks
+pass in both frontier outputs. All six actual `RPGNative.exe` files also pass
+smoke launches with fixture saves (farm district or mage). This is twelve targeted
+suite passes plus six actual game launches. User profiles were not modified.
+
+## Human face revision (2026-11-01)
+
+The player head's previous neck fitting included the mandible and stretched it
+downward, removing the chin/neck separation. The corrected export confines the
+fit to the lower cervical socket. Six distinct anatomical heads now derive from
+the already approved Blender Studio CC0 realistic male/female foundations. Their
+editable source is `assets/authored/human-faces.blend`; provenance, regional edits
+and thirty bounded LOD exports are in `assets/characters/human-faces.json`.
+
+Named residents use stable face/complexion/hair combinations, including the target
+portraits. The quartermaster, keeper and training opponent also differ from the
+player. Existing player customization, equipment and saved appearance fields keep
+their meaning. Skin coloration follows each face's actual lips and cheeks instead
+of applying one shared beard/mouth mask to everybody. The native head/scalp shadow
+receiver offset removes close-up self-shadow striping; caster geometry is unchanged.
+
+Moonweaver and Ironjaw also receive corrected necks, distinct faces and fitted
+scalps within the original collection. Only their six head-containing LOD records
+change. The other **96 records remain byte-identical**. Fifteen obsolete overlays
+(old pupils, eyelids, nostrils, lips and the mage's neck primitive) are hidden in
+the editable source and excluded from export. The new head assemblies and their
+ornaments sit 65 mm lower, with the lower neck fitted into the collar and the
+orc's old upper neck trimmed inside the new socket. Both collection source copies
+were compared before editing and now match SHA-256
+`f9742477b9e3dd2cbfc966edc751e45e33d8a24ce162c26e1f09f507e2caeb0c`.
+`assets/authored/collection-face-revision.json` records the before/after hashes;
+`world-art-revision.json` points to the adopted revision. The older hashes below
+describe the preceding art pass. Original anatomy, equipment sources and motion
+archives remain preserved. Local authoring/export helpers and backups are under
+`.blender-local/faces-20261101` and are not tracked.
+
+Validation: `HumanFaceTests`, `CharacterArtTests`, `GeometryTests`,
+`AttachmentLodTests`, `ShadowTests`, `AuthoredAssetTests`, `ClassEquipmentTests`,
+`CharacterSelectionTests`, `PlayerBodyTests` and `PopulationTests` pass in both
+Ninja Release and Debug. The face suite captures forty native views and checks
+that blinking stays inside the ocular region, distinct identities contain
+different geometry, and every chin projects in front of the neck socket. Actual
+game smoke launches pass in the farm district (Release) and with the mage fixture
+(Debug), using only test saves. Captures and logs are in the ignored directory
+above; forty close-ups are also in `build-ninja-release/human-face-check`.
+Use the refreshed `build-ninja-release/MediterraneanLauncher.exe` to review.
+
+## Runtime integration verification (2026-11-01)
+
+All 34 collection models have live world roles through the existing population,
+building, foliage and actor render paths. The normal Ninja Release/Debug outputs
+and their launchers are synchronized with the populated world; Visual Studio
+Debug is also verified. The previously stale Ninja Debug output now includes
+the same population and version-22 save support.
+
+`AuthoredAssetTests`, `PopulationTests`, `CharacterSelectionTests` and
+`LauncherTests` pass in both Ninja configurations. Native views cover all six
+districts and their accessible NPC/creature routes. The actual Release game
+passes smoke checks in the farm district and with the archer/mage fixtures;
+Visual Studio Debug passes in the timber district. Only build-directory fixture
+saves were used. Logs, world captures and the six-location contact sheet are
+under `.blender-local/integration-20261101`.
+
+Launch `build-ninja-release/MediterraneanLauncher.exe`. Nearby places to inspect
+the props are Farmer Darya at (-27,-30), southwest of the starting outpost, and
+Sawyer Boris at (29,-30), southeast. The accepted Blender sources and exports
+retain the hashes recorded in `world-art-revision.json`.
+
 ## Gameplay population integration (2026-10-31)
 
 The six new frontier districts place 186 instances of fifteen authored prop

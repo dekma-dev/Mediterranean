@@ -181,6 +181,16 @@ void DrawScenery(Renderer& r,const rpg::WorldMap& map,bool sparring) {
   }
 }
 }
+void WorldView::UpdateResidents(float dt,rpg::Vec2 player,bool alive,bool talking,rpg::Vec2 speaker) {
+  for(unsigned i=0;i<residents_.size();++i) {
+    const auto p=rpg::WorldMap::residents[i].position;
+    const float distance=std::hypot(player.x-p.x,player.z-p.z);
+    const auto aim=alive && distance<4?facial::LookAt(player.x-p.x,
+      rpg::WorldMap::Height(player)-rpg::WorldMap::Height(p),player.z-p.z,3.14159f):facial::Aim{};
+    const bool speaking=alive && talking && std::hypot(speaker.x-p.x,speaker.z-p.z)<.1f;
+    residents_[i].Update(dt,aim,0,0,speaking?.5f:alive && distance<3?.12f:0);
+  }
+}
 void WorldView::Draw(Renderer& r,const rpg::WorldMap& map,float time,bool sparring,facial::Pose merchantFace,facial::Pose keeperFace,rpg::Vec2 observer) {
   // The map is immutable between Game::Initialize calls. Sparring temporarily
   // replaces one authored dummy with an animated opponent.
@@ -199,21 +209,30 @@ void WorldView::Draw(Renderer& r,const rpg::WorldMap& map,float time,bool sparri
       {.35f,.68f,.81f,1},S::Glow,time*.3f,0,visual::ShadowMode::None);
   const auto giver=rpg::WorldMap::questGiver;
   CharacterOutfit merchant; merchant.weapon=false; merchant.helm=true;
+  merchant.face=HumanFace::Broad;merchant.appearance={2,1,0};
   auto merchantMotion=animation::Idle(time,1.7f); merchantMotion.face=merchantFace;
   DrawCharacter(r,rpg::WorldMap::quartermaster,0,0,{.28f,.39f,.22f,1},0,0,merchant,merchantMotion,2);
   CharacterOutfit keeper; keeper.weapon=false;
+  keeper.face=HumanFace::Lean;keeper.appearance={1,4,0};
   auto keeperMotion=animation::Idle(time,4.1f); keeperMotion.face=keeperFace;
   DrawCharacter(r,giver,0,1.25f,{.57f,.45f,.26f,1},0,0,keeper,keeperMotion,3);
   for(unsigned i=0;i<rpg::WorldMap::residents.size();++i) {
     const auto& npc=rpg::WorldMap::residents[i];
     if(std::hypot(npc.position.x-observer.x,npc.position.z-observer.z)>42)continue;
     const auto elevation=r.Elevate(map.Height(npc.position));CharacterOutfit outfit;
+    static_assert(residentAppearances.size()==rpg::WorldMap::residents.size());
+    outfit.face=residentAppearances[i].face;outfit.appearance=residentAppearances[i].colors;
     outfit.weapon=i==0 || i==12;outfit.armor=i==0 || i==12;outfit.cloak=i<9 || i==11 || i==12;outfit.helm=i==0 || i==14;
     outfit.classId=i==0?rpg::ClassId::Paladin:i==1 || i==12?rpg::ClassId::Scout:i==9 || i==10 || i==14?rpg::ClassId::Warrior:rpg::ClassId::Mage;
     const DirectX::XMFLOAT4 colors[]={{.47f,.30f,.17f,1},{.26f,.46f,.34f,1},{.38f,.30f,.55f,1}};
-    if(i==0 || i==2)
-      r.DrawAnimatedAsset(i==0?authored::Asset::Guardian:authored::Asset::Mage,{npc.position.x,0,npc.position.z},3.14159f,time+i);
-    else DrawCharacter(r,npc.position,0,3.14159f,colors[i%3],0,0,outfit,animation::Idle(time,6.1f+i),4+i);
+    auto idle=animation::Idle(time,6.1f+i);idle.face=residents_[i].pose;
+    if(i==0 || i==2) {
+      // These authored rigs have a chest joint, not independent facial bones.
+      // A small upper-body acknowledgement preserves the planted lower body.
+      authored::Gesture attention;attention.yaw=idle.face.yaw*.23f;
+      attention.pitch=idle.face.pitch*.18f-idle.face.smile*.025f;
+      r.DrawAnimatedAsset(i==0?authored::Asset::Guardian:authored::Asset::Mage,{npc.position.x,0,npc.position.z},3.14159f,time+i,0,0,0,3,{1,1,1,1},attention);
+    } else DrawCharacter(r,npc.position,0,3.14159f,colors[i%3],0,0,outfit,idle,4+i);
     if(i<9) r.DrawMesh(M::Crystal,{npc.position.x,2.75f+std::sin(time*2+i)*.08f,npc.position.z},
       {.17f,.3f,.17f},{.85f,.67f,.27f,1},S::Glow,time,0,visual::ShadowMode::None);
   }

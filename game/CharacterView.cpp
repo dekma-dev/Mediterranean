@@ -119,19 +119,23 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
     const float pain=facial::Unit(face.pain),focus=facial::Unit(face.focus),smile=facial::Unit(face.smile)*(1-pain);
     const float closed=std::max(facial::Unit(face.blink),pain*.68f+focus*.16f);
     renderer.DrawHead(XMMatrixScaling(.265f,.42f,.26f)*XMMatrixTranslation(0,1.71f,.012f)*headTransform,
-      skin,closed,smile-pain);
-    if (!outfit.helm) head(M::Hair,0,1.71f,.012f,{.265f,.42f,.26f},hairTint,S::Hair);
+      skin,closed,smile-pain,FaceHead(outfit.face));
+    if (!outfit.helm) head(FaceHair(outfit.face),0,1.71f,.012f,{.265f,.42f,.26f},hairTint,S::Hair);
     // Eye centres come from the study's eyeballs, fitted by the same export
     // transform as the face. The sculpt already includes lips, nose and ears.
     const float eyeX=animation::Signed(face.eyeYaw/.22f)*.003f,eyeY=-animation::Signed(face.eyePitch/.105f)*.002f;
+      const bool feminine=outfit.face>=HumanFace::Young && outfit.face<=HumanFace::Elder;
+      const XMFLOAT4 irises[]={{.19f,.27f,.25f,1},{.22f,.15f,.07f,1},{.20f,.22f,.23f,1},
+        {.15f,.24f,.30f,1},{.27f,.16f,.08f,1},{.23f,.22f,.14f,1}};
+      const auto iris=irises[unsigned(outfit.face)<unsigned(HumanFace::Count)?unsigned(outfit.face):0];
     for(float side : {-1.f,1.f}) {
       const float x=side*.04205f,y=1.78241f,z=.09406f;
       head(M::Sphere,x,y,z,{.0307f,.02775f,.0266f},{.55f,.56f,.51f,1},S::Plain,0,1);
       // Spherical eye surface and restrained iris/pupil stay behind the lids.
-      head(M::Feature,x+eyeX,y+eyeY,z+.0129f,{.0105f,.011f,.0017f},{.19f,.27f,.25f,1},S::Plain);
+        head(M::Feature,x+eyeX,y+eyeY,z+.0129f,{.0105f,.011f,.0017f},iris,S::Plain);
       head(M::Feature,x+eyeX,y+eyeY,z+.014f,{.0043f,.0055f,.0012f},{.025f,.028f,.025f,1},S::Plain);
       const float browRoll=-side*(.05f+focus*.15f-pain*.12f);
-      head(M::Feature,x,1.805f-focus*.002f+pain*.002f,.100f,{.041f,.0045f,.006f},hairTint,S::Hair,browRoll);
+        head(M::Feature,x,1.805f-focus*.002f+pain*.002f,.100f,{feminine?.036f:.041f,feminine?.0032f:.0045f,.006f},hairTint,S::Hair,browRoll);
     }
     if (outfit.helm) {
       if(oldStyle)renderer.DrawMeshTransformed(oldstyle::Mesh(outfit.classId,3),headTransform,classPaint,S::Count);

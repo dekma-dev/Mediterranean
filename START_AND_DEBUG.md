@@ -1,3 +1,16 @@
+## Current model integration and launch (2026-11-01)
+
+Open `build-ninja-release/MediterraneanLauncher.exe` for normal play. The updated
+player face, five additional human face identities and corrected authored NPC
+heads are embedded in the game and used by world actors and interface portraits.
+Existing characters and saves use them automatically; no Blender export or new
+character is required.
+
+Both Ninja configurations, `build-local/Debug`, `build-local/Release`, and the
+`build-frontier-expansion/native` / `debug` copies are rebuilt with these assets.
+The matching launcher always runs `RPGNative.exe` beside it. See
+[model integration](docs/blender-assets.md) for the editable sources and checks.
+
 ## Latest gameplay checkpoint: populated frontier (2026-10-31)
 
 Six new local commissions and six residents populate the current map, with 36 combat wolves/boars, twelve buildings, 105 trees and 186 authored prop placements. Start southwest at Darya (-27,-30) or southeast at Boris (29,-30), press E and accept the assignment. J > Local commissions lists and tracks this independent work. Existing profiles migrate automatically; a new character is not required. See [districts, rules and validation](docs/populated-frontier.md).

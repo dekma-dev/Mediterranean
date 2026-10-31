@@ -1,0 +1,277 @@
+{
+  "license": "CC0-1.0",
+  "upstream": "https://download.blender.org/demo/asset-bundles/human-base-meshes/human-base-meshes-bundle-v1.4.1.zip",
+  "upstream_blend_sha256": "3c121505651140ceb4d69fd1d8923f7788ffadd81672f5be14845a5f2c75c137",
+  "anatomy_source_sha256": "bbb0590a5dd6a06c0ea20004ac5c6cdda0f3f1754dc18407dde3ed6b53625e79",
+  "note": "Continuous realistic male/female Blender Studio bases. Localized identity edits preserve the mandible and eye anchors.",
+  "neck_cut": 1.606275,
+  "neck_fit_ceiling": 1.64208,
+  "neck_socket_extension": 0.045,
+  "runtime_origin": [
+    0.0,
+    1.7100000381469727,
+    0.012000000104308128
+  ],
+  "runtime_scale": [
+    0.26499998569488525,
+    0.41999998688697815,
+    0.25999999046325684
+  ],
+  "identities": [
+    {
+      "key": "player",
+      "label": "Player | adult male",
+      "female": false,
+      "jaw": 0,
+      "chin": 0,
+      "nose": 0,
+      "cheek": 0,
+      "brow": 0,
+      "age": 0,
+      "hair": 0
+    },
+    {
+      "key": "face-broad",
+      "label": "Boris / Radan | broad mature male",
+      "female": false,
+      "jaw": 0.01,
+      "chin": 0.006,
+      "nose": 0.004,
+      "cheek": 0.004,
+      "brow": 0.003,
+      "age": 0.45,
+      "hair": 1
+    },
+    {
+      "key": "face-lean",
+      "label": "Orin / Sevastian | lean older male",
+      "female": false,
+      "jaw": -0.005,
+      "chin": 0.003,
+      "nose": 0.01,
+      "cheek": -0.006,
+      "brow": 0.0015,
+      "age": 0.85,
+      "hair": 2
+    },
+    {
+      "key": "face-young",
+      "label": "Mara / Veyra | young adult female",
+      "female": true,
+      "jaw": -0.006,
+      "chin": -0.002,
+      "nose": -0.004,
+      "cheek": 0.003,
+      "brow": -0.001,
+      "age": 0.08,
+      "hair": 3
+    },
+    {
+      "key": "face-mature",
+      "label": "Tessa / Darya | mature female",
+      "female": true,
+      "jaw": 0.004,
+      "chin": 0.003,
+      "nose": 0.002,
+      "cheek": 0.004,
+      "brow": 0.0008,
+      "age": 0.38,
+      "hair": 4
+    },
+    {
+      "key": "face-elder",
+      "label": "Lada / Yana | older female",
+      "female": true,
+      "jaw": -0.003,
+      "chin": 0.004,
+      "nose": 0.006,
+      "cheek": -0.004,
+      "brow": 0.001,
+      "age": 0.9,
+      "hair": 5
+    }
+  ],
+  "outputs": [
+    {
+      "file": "player-head.obj",
+      "vertices": 8001,
+      "triangles": 15997,
+      "sha256": "79362157a4fe63a9470208131584540f44bbe532eba605236354d4d14bc6aa5a"
+    },
+    {
+      "file": "player-head-medium.obj",
+      "vertices": 1502,
+      "triangles": 3000,
+      "sha256": "f1885af456c697c0fb10cca16528cb5e49f53154ac5c663df0543d24878e64a7"
+    },
+    {
+      "file": "player-head-far.obj",
+      "vertices": 242,
+      "triangles": 480,
+      "sha256": "015ee66ad74f5ce2af0456e49c5c97fcac8f0a6614ffd3e2ab90d5e2bea68ded"
+    },
+    {
+      "file": "player-hair.obj",
+      "vertices": 2600,
+      "triangles": 5000,
+      "sha256": "aa7b1d72024bca4ba3b81469a1b3881a4fc70abdadbf6b64d6cf753f44c8fe13"
+    },
+    {
+      "file": "player-hair-low.obj",
+      "vertices": 225,
+      "triangles": 399,
+      "sha256": "30a807fb7a168a5213f6a6730f424466aaf96a488591a7982edaf718d0c48711"
+    },
+    {
+      "file": "face-broad-head.obj",
+      "vertices": 8001,
+      "triangles": 15998,
+      "sha256": "04e86c79ae377cba45500a903608923fcb834247f52d60cbc91993d5de37994b"
+    },
+    {
+      "file": "face-broad-head-medium.obj",
+      "vertices": 1502,
+      "triangles": 3000,
+      "sha256": "13ec512e9f9bdf51859c6d26a2ef6e19583b899547aa2062e96351e2258d77ce"
+    },
+    {
+      "file": "face-broad-head-far.obj",
+      "vertices": 242,
+      "triangles": 480,
+      "sha256": "e76e65fcbae8639347b92b71e013d80156c5289037d04de97e9a09b28bbc8aa7"
+    },
+    {
+      "file": "face-broad-hair.obj",
+      "vertices": 2598,
+      "triangles": 4999,
+      "sha256": "84adcf873513b9156d99d782471ecb9c29cf5381a065b3bbb90a6d791e79538a"
+    },
+    {
+      "file": "face-broad-hair-low.obj",
+      "vertices": 225,
+      "triangles": 399,
+      "sha256": "a66d2c8c263cfd214a05ab5dc442b3f70f13215a8a1262c657833f39078dc896"
+    },
+    {
+      "file": "face-lean-head.obj",
+      "vertices": 8001,
+      "triangles": 15998,
+      "sha256": "de88c6e5827f3cf04d582aa441381b24c9b18b9ce449a167140e33c646413be6"
+    },
+    {
+      "file": "face-lean-head-medium.obj",
+      "vertices": 1502,
+      "triangles": 3000,
+      "sha256": "e25c1a6d913c537b61756fd22d53925fd3dec9c118f4e5132650dfdc3a9951fd"
+    },
+    {
+      "file": "face-lean-head-far.obj",
+      "vertices": 242,
+      "triangles": 480,
+      "sha256": "5f29349adc4be15d691d6e62d528315e49aa86d4170e36b2d18fe1388e7a02f0"
+    },
+    {
+      "file": "face-lean-hair.obj",
+      "vertices": 2610,
+      "triangles": 4999,
+      "sha256": "2f7257aac270efeb84f2920ddcde701abccfbb91caf29cbc0ecb58b988efa772"
+    },
+    {
+      "file": "face-lean-hair-low.obj",
+      "vertices": 226,
+      "triangles": 399,
+      "sha256": "dce84a18ad88641a37a3685ee62a9ce090331eda5b3963feb5c575e199d3c5fe"
+    },
+    {
+      "file": "face-young-head.obj",
+      "vertices": 8002,
+      "triangles": 15999,
+      "sha256": "0d4cd7a889b69cc5a436859e304d5f38e26b011856abf1f76fd4b36b2671bcc9"
+    },
+    {
+      "file": "face-young-head-medium.obj",
+      "vertices": 1502,
+      "triangles": 3000,
+      "sha256": "30b6a446e34e2dcb80e1e85c50c7334b631a00ee0eba3444d66289b8a399094a"
+    },
+    {
+      "file": "face-young-head-far.obj",
+      "vertices": 242,
+      "triangles": 480,
+      "sha256": "d4b2217e3f0632405a22fb7f0b583edf4d7967622a3bd6a8d375198634cb75ef"
+    },
+    {
+      "file": "face-young-hair.obj",
+      "vertices": 2603,
+      "triangles": 5000,
+      "sha256": "e04bf85e72b18b5610955bba004cf65a2aa0d4e590b8065dfc95d41a81848fcb"
+    },
+    {
+      "file": "face-young-hair-low.obj",
+      "vertices": 227,
+      "triangles": 399,
+      "sha256": "c08e6e6ed72bd7236f074e99bcd900e22425f8f8911b820d3436f82d32e0c306"
+    },
+    {
+      "file": "face-mature-head.obj",
+      "vertices": 8002,
+      "triangles": 15999,
+      "sha256": "527dbc97a512f166d2f6471ab122a962f30e24733392daa40a79e656fce184f4"
+    },
+    {
+      "file": "face-mature-head-medium.obj",
+      "vertices": 1502,
+      "triangles": 3000,
+      "sha256": "956fd2417fa8c7399d27b8592b89c955969f995ce6fff65e68157a19119a7069"
+    },
+    {
+      "file": "face-mature-head-far.obj",
+      "vertices": 242,
+      "triangles": 480,
+      "sha256": "197cdfa3961df1df1a35f937c3dd32bb798d0dcb962429b1465795f753fad134"
+    },
+    {
+      "file": "face-mature-hair.obj",
+      "vertices": 2603,
+      "triangles": 5000,
+      "sha256": "41f5198db9bc0e101fba17ab940810d0c7d9165dd011f5e61fd0d99ba1be43af"
+    },
+    {
+      "file": "face-mature-hair-low.obj",
+      "vertices": 227,
+      "triangles": 399,
+      "sha256": "290f36cb28307797ec2511c48e2008b59481ac686467bf282cd135a9e5e0b303"
+    },
+    {
+      "file": "face-elder-head.obj",
+      "vertices": 8002,
+      "triangles": 16000,
+      "sha256": "1caa57a1464913f276bcca5040557a6d3db7be3656d7bb1b7be2a8b2bced5852"
+    },
+    {
+      "file": "face-elder-head-medium.obj",
+      "vertices": 1502,
+      "triangles": 3000,
+      "sha256": "a74a11526fd27793f813b0c55de0f17ebf9021ba2213d3d4653c286d12c090bc"
+    },
+    {
+      "file": "face-elder-head-far.obj",
+      "vertices": 242,
+      "triangles": 480,
+      "sha256": "34107b4b743b9bd272add1c4dae732e3a332f26f6eb58f58efcd6b6663c27908"
+    },
+    {
+      "file": "face-elder-hair.obj",
+      "vertices": 2601,
+      "triangles": 4999,
+      "sha256": "470b4002e0cd49c297604c5602090f512111c45093a4ecaa61ffed8bfd732983"
+    },
+    {
+      "file": "face-elder-hair-low.obj",
+      "vertices": 227,
+      "triangles": 399,
+      "sha256": "22eabce1677e79f76c6cd39716f68a5522e902bc1bebe1aff4be19083064bce3"
+    }
+  ],
+  "editable_sha256": "8d4eba8818ff97964bccf2477f57cec3abb250333f6e6b2ce423a3b002c4dbd9"
+}

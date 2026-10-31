@@ -2,9 +2,9 @@
   "version": 1,
   "coordinate_system": "Y up, +Z forward, metres",
   "source": "collection01.blend + world-details.blend + frostfang.blend",
-  "refinement": "World art: 21 new models, anatomical NPC faces, worn surfaces, creature and tree contours; all native LODs",
-  "sha256": "920e222f1e8fa8d53ef7f28661ace6d480d12d96ac14cefcc6ae9c3c31a7f9cf",
-  "bytes": 73900472,
+  "refinement": "2026-11-01: two anatomical actor heads, legacy facial overlays removed, neck/collar fit corrected; other 32 models preserved",
+  "sha256": "9675ca539a9c1218c51f5e1dba20f15b3ec7bde0b787c1df2e89e4b402ab4b4f",
+  "bytes": 73883044,
   "meshes": [
     {
       "asset": "01 \u2022 Dawnwarden",
@@ -63,12 +63,12 @@
     {
       "asset": "02 \u2022 Moonweaver",
       "lod": 0,
-      "vertices": 26989,
+      "vertices": 26875,
       "triangles": 51372,
       "bounds": [
         [
           -0.610991895198822,
-          0.022142134606838226,
+          0.02204696647822857,
           -0.31728044152259827
         ],
         [
@@ -81,8 +81,8 @@
     {
       "asset": "02 \u2022 Moonweaver",
       "lod": 1,
-      "vertices": 8003,
-      "triangles": 12646,
+      "vertices": 7927,
+      "triangles": 12647,
       "bounds": [
         [
           -0.6092116236686707,
@@ -92,15 +92,15 @@
         [
           0.763670027256012,
           2.711367130279541,
-          0.28802168369293213
+          0.28729522228240967
         ]
       ]
     },
     {
       "asset": "02 \u2022 Moonweaver",
       "lod": 2,
-      "vertices": 2606,
-      "triangles": 3104,
+      "vertices": 2577,
+      "triangles": 3105,
       "bounds": [
         [
           -0.6158860921859741,
@@ -108,7 +108,7 @@
           -0.31645911931991577
         ],
         [
-          0.7669723629951477,
+          0.7763015031814575,
           2.7119433879852295,
           0.28785666823387146
         ]
@@ -117,8 +117,8 @@
     {
       "asset": "03 \u2022 Ironjaw",
       "lod": 0,
-      "vertices": 27268,
-      "triangles": 51372,
+      "vertices": 27136,
+      "triangles": 51373,
       "bounds": [
         [
           -0.6961146593093872,
@@ -127,7 +127,7 @@
         ],
         [
           1.0954313278198242,
-          2.299835681915283,
+          2.265200614929199,
           0.29401612281799316
         ]
       ]
@@ -135,17 +135,17 @@
     {
       "asset": "03 \u2022 Ironjaw",
       "lod": 1,
-      "vertices": 8442,
+      "vertices": 8395,
       "triangles": 12649,
       "bounds": [
         [
           -0.698337197303772,
           0.011416000314056873,
-          -0.32178187370300293
+          -0.3187847435474396
         ],
         [
           1.098687767982483,
-          2.299669027328491,
+          2.265200614929199,
           0.29133063554763794
         ]
       ]
@@ -153,8 +153,8 @@
     {
       "asset": "03 \u2022 Ironjaw",
       "lod": 2,
-      "vertices": 2995,
-      "triangles": 3109,
+      "vertices": 2957,
+      "triangles": 3107,
       "bounds": [
         [
           -0.6920762062072754,
@@ -163,7 +163,7 @@
         ],
         [
           1.0972579717636108,
-          2.299614906311035,
+          2.265200614929199,
           0.3028538227081299
         ]
       ]
@@ -1907,8 +1907,5 @@
     }
   ],
   "limitations": "Static exports. Procedural Blender materials mapped to native material layers and vertex colors. No Blender light baking or texture dependencies.",
-  "asset_count": 34,
-  "source_sha256": "d1bcfb6f00405bfa4e8989387a042057005e7e6f5157594e8f318bd258961564",
-  "wolf_source_sha256": "8183461ec6624b53c4cff0dd19ba40f3131fa4d37ac7659653d10550236fd530",
-  "world_detail_source_sha256": "c6164fdeae8caf9aa90ab3d6e93e780890a4ee692870fe98a7c98b0d9231b1ca"
+  "asset_count": 34
 }

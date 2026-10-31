@@ -2,6 +2,7 @@
 #include "game/WorldMap.h"
 #include "game/ClassEquipment.h"
 #include "game/Appearance.h"
+#include "game/CharacterFace.h"
 #include <DirectXMath.h>
 #include <cstdint>
 #include "game/Animation.h"
@@ -12,6 +13,7 @@ struct CharacterOutfit {
   bool shoulders=false,gloves=false,belt=true,cloak=false;
   rpg::ClassId classId=rpg::ClassId::Warrior;
   rpg::Appearance appearance;
+  HumanFace face=HumanFace::Player;
   static CharacterOutfit From(const rpg::Inventory& inventory,rpg::ClassId id=rpg::ClassId::Warrior,rpg::Appearance look={});
 };
 void DrawCharacter(Renderer& renderer,rpg::Vec2 position,float base,float yaw,DirectX::XMFLOAT4 color,

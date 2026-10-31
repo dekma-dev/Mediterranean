@@ -403,17 +403,18 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   playerFeet_.Update(dt,simulation_.Player(),playerPose_.facing,simulation_.Grounded() && !simulation_.Dashing(),
     simulation_.Health()>0,playerAnimation_.pose);
   const auto enemies=simulation_.Combatants();
-  if (enemyPoses_.size()!=enemies.size()+1) ResetMotion();
-  for (std::size_t i=0;i<enemyPoses_.size();++i) {
+  presentation::Bind(enemyActors_,enemies,simulation_.SparringOpponent());
+  for (std::size_t i=0;i<enemyActors_.size();++i) {
     const auto& enemy=i<enemies.size()?enemies[i]:simulation_.SparringOpponent();
     if (i==enemies.size() && !wasSparring && simulation_.Sparring()) {
-      enemyPoses_[i].Reset(enemy.facing); enemyAnimations_[i].Reset(float(enemy.id)*.37f);
-      enemyFeet_[i].Reset(enemy.position,enemy.facing);
-      enemyMovement_[i].Reset(enemy.position.x,enemy.position.z);
+      enemyActors_[i].Reset(enemy);
     }
     const bool active=simulation_.Health()>0 && enemy.health>0 && (i<enemies.size() || simulation_.Sparring());
-    enemyDefeats_[i].Update(dt,enemy.health>0,enemyPoses_[i].attack,enemyPoses_[i].phase,enemyAnimations_[i].pose);
-    auto& releaseAge=enemyAnimations_[i].enemyReleaseAge;
+    auto& actor=enemyActors_[i];
+    actor.defeat.UpdatePose(dt,enemy.health>0,actor.motion.attack,actor.motion.phase,
+      actor.animation.pose.travel,actor.Gesture(),float(actor.clock));
+    if(enemy.health>0)actor.clock+=dt;
+    auto& releaseAge=enemyActors_[i].animation.enemyReleaseAge;
     releaseAge=std::min(1.f,releaseAge+dt);
     for(std::size_t eventIndex=0;eventIndex<simulation_.VisualEventCount();++eventIndex) {
       const auto& event=simulation_.VisualEvents()[eventIndex];
@@ -422,33 +423,38 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
     }
     if(!active || enemy.windup>0) releaseAge=1;
     const float strike=EnemyStrike(enemy,active,releaseAge);
-    const float turnRate=motion::AngleDelta(enemyPoses_[i].facing,enemy.facing)/dt;
+    const float turnRate=motion::AngleDelta(enemyActors_[i].motion.facing,enemy.facing)/dt;
     // Enemy heading is already smoothed by simulation, then frozen for attacks.
     // Use it exactly so the character always faces the displayed damage cone.
-    enemyPoses_[i].Update(enemy.facing,enemy.movementDistance,true,enemy.health>0,strike,dt,true);
-    auto& movement=enemyMovement_[i];
+    enemyActors_[i].motion.Update(enemy.facing,enemy.movementDistance,true,enemy.health>0,strike,dt,true);
+    auto& movement=enemyActors_[i].movement;
     movement.Update(enemy.position.x,enemy.position.z,enemy.facing,dt,enemy.health>0);
-    enemyAnimations_[i].Update(dt,0,0,enemy.movementDistance,enemy.health>0,strike,0,0,movement.acceleration);
-    motion::Spring(enemyAnimations_[i].pose.bank,enemyAnimations_[i].bankVelocity,
+    enemyActors_[i].animation.Update(dt,0,0,enemy.movementDistance,enemy.health>0,strike,0,0,movement.acceleration);
+    motion::Spring(enemyActors_[i].animation.pose.bank,enemyActors_[i].animation.bankVelocity,
       enemy.health>0?std::clamp(movement.lateralAcceleration/50.f,-1.f,1.f):0.f,18.f,dt);
-    applyImpacts(enemyAnimations_[i],enemy.id,enemy.health>0,enemy.facing);
-    if(enemy.Beast())continue;
+    applyImpacts(enemyActors_[i].animation,enemy.id,enemy.health>0,enemy.facing);
+    if(enemy.Beast()) {
+      actor.beast.Update(dt,enemy,movement,actor.animation.pose,releaseAge,active);
+      actor.motion.phase=actor.beast.phase;
+      actor.animation.pose.travel=actor.beast.travel;
+      continue;
+    }
     const float actionSeconds=EnemyAttackSeconds(enemy,active,releaseAge);
-    enemyAnimations_[i].pose.attackSeconds=actionSeconds;
-    enemyAnimations_[i].pose.heavyAttack=enemy.kind==rpg::EnemyKind::Captain || enemy.kind==rpg::EnemyKind::Reaver;
+    enemyActors_[i].animation.pose.attackSeconds=actionSeconds;
+    enemyActors_[i].animation.pose.heavyAttack=enemy.kind==rpg::EnemyKind::Captain || enemy.kind==rpg::EnemyKind::Reaver;
     const auto gestureClass=enemy.kind==rpg::EnemyKind::Wraith?rpg::ClassId::Mage:
       enemy.kind==rpg::EnemyKind::Reaver?rpg::ClassId::Demonologist:enemy.Boss()?rpg::ClassId::Paladin:rpg::ClassId::Warrior;
-    enemyAnimations_[i].actions.Update(dt,gestureClass,actionSeconds,
-      enemyAnimations_[i].pose.heavyAttack || enemy.kind==rpg::EnemyKind::Wraith,-1,active,false,enemy.Boss(),false,enemy.Boss()?int(enemy.bossAttack):-1);
-    enemyAnimations_[i].pose.action=enemyAnimations_[i].actions.pose;
+    enemyActors_[i].animation.actions.Update(dt,gestureClass,actionSeconds,
+      enemyActors_[i].animation.pose.heavyAttack || enemy.kind==rpg::EnemyKind::Wraith,-1,active,false,enemy.Boss(),false,enemy.Boss()?int(enemy.bossAttack):-1);
+    enemyActors_[i].animation.pose.action=enemyActors_[i].animation.actions.pose;
     if(enemy.kind==rpg::EnemyKind::Wraith) {
-      enemyAnimations_[i].pose.attackSeconds=-1;
-      enemyAnimations_[i].pose.cast=0;
+      enemyActors_[i].animation.pose.attackSeconds=-1;
+      enemyActors_[i].animation.pose.cast=0;
     }
-    enemyAnimations_[i].SettleWeapon(dt,active);
-    enemyFeet_[i].Update(dt,enemy.position,enemy.facing,true,enemy.health>0,enemyAnimations_[i].pose);
-    enemyAnimations_[i].locomotion.Update(dt,enemy.movementDistance,movement.forward,movement.right,turnRate,true,0,0,enemy.health>0);
-    enemyAnimations_[i].pose.motion=enemyAnimations_[i].locomotion.pose;
+    enemyActors_[i].animation.SettleWeapon(dt,active);
+    enemyActors_[i].feet.Update(dt,enemy.position,enemy.facing,true,enemy.health>0,enemyActors_[i].animation.pose);
+    enemyActors_[i].animation.locomotion.Update(dt,enemy.movementDistance,movement.forward,movement.right,turnRate,true,0,0,enemy.health>0);
+    enemyActors_[i].animation.pose.motion=enemyActors_[i].animation.locomotion.pose;
   }
   UpdateFaces(dt);
   const auto track=[&](rpg::EntityId id,rpg::Vec2 position,float height,const motion::Actor& motion,
@@ -468,9 +474,9 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   track(0,simulation_.Player(),simulation_.WorldHeight(),playerPose_,playerAnimation_.pose,
     simulation_.Items().Worn(rpg::GearSlot::Offhand)!=rpg::Item::None,
     simulation_.Health()>0 && simulation_.Items().Worn(rpg::GearSlot::Weapon)!=rpg::Item::None);
-  for (std::size_t i=0;i<enemyPoses_.size();++i) {
+  for (std::size_t i=0;i<enemyActors_.size();++i) {
     const auto& enemy=i<enemies.size()?enemies[i]:simulation_.SparringOpponent();
-    track(enemy.id,enemy.position,rpg::WorldMap::Height(enemy.position),enemyPoses_[i],enemyAnimations_[i].pose,false,
+    track(enemy.id,enemy.position,rpg::WorldMap::Height(enemy.position),enemyActors_[i].motion,enemyActors_[i].animation.pose,false,
       simulation_.Health()>0 && enemy.health>0 && !enemy.Beast() && enemy.kind!=rpg::EnemyKind::Wraith && (i<enemies.size() || simulation_.Sparring()));
   }
   UpdateCamera(dt);
@@ -492,14 +498,14 @@ void Game::UpdateFaces(float dt) {
     playerAnimation_.pose.hit,talking?.18f:0,alive);
   playerAnimation_.pose.face=playerFace_.pose;
   const auto enemies=simulation_.Combatants();
-  for(std::size_t i=0;i<enemyFaces_.size();++i) {
+  for(std::size_t i=0;i<enemyActors_.size();++i) {
     const auto& enemy=i<enemies.size()?enemies[i]:simulation_.SparringOpponent();
     const bool active=alive && enemy.health>0 && (i<enemies.size() || simulation_.Sparring());
     const float distance=std::hypot(enemy.position.x-player.x,enemy.position.z-player.z);
     const auto gaze=active && distance<8?facial::LookAt(player.x-enemy.position.x,simulation_.WorldHeight()-rpg::WorldMap::Height(enemy.position),
-      player.z-enemy.position.z,enemyPoses_[i].facing):facial::Aim{};
-    enemyFaces_[i].Update(dt,gaze,active && distance<8?.65f:0,enemyAnimations_[i].pose.hit,0,active);
-    enemyAnimations_[i].pose.face=enemyFaces_[i].pose;
+      player.z-enemy.position.z,enemyActors_[i].motion.facing):facial::Aim{};
+    enemyActors_[i].face.Update(dt,gaze,active && distance<8?.65f:0,enemyActors_[i].animation.pose.hit,0,active);
+    enemyActors_[i].animation.pose.face=enemyActors_[i].face.pose;
   }
   const auto npc=[&](facial::State& state,rpg::Vec2 position,float facing,bool interaction) {
     const float distance=std::hypot(player.x-position.x,player.z-position.z);
@@ -508,6 +514,7 @@ void Game::UpdateFaces(float dt) {
   };
   npc(keeperFace_,rpg::WorldMap::questGiver,1.25f,talking && simulation_.QuestDialogue()<rpg::QuestId::Watch8);
   npc(merchantFace_,rpg::WorldMap::quartermaster,0,shopping);
+  worldView_.UpdateResidents(dt,player,alive,talking,simulation_.DialoguePosition());
 }
 void Game::SetCameraOrbit(float yaw,float pitch,float distance) {
   if (!std::isfinite(yaw) || !std::isfinite(pitch) || !std::isfinite(distance)) return;
@@ -523,23 +530,15 @@ void Game::ResetMotion() {
   playerPose_.Reset(simulation_.Facing());
   playerAnimation_.Reset();
   playerFace_.Reset(1); keeperFace_.Reset(3); merchantFace_.Reset(2);
+  worldView_.ResetResidents();
   playerFeet_.Reset(simulation_.Player(),simulation_.Facing());
-  enemyPoses_.resize(simulation_.Combatants().size()+1);
-  enemyAnimations_.resize(enemyPoses_.size());
-  enemyDefeats_.resize(enemyPoses_.size());
-  enemyFaces_.resize(enemyPoses_.size());
-  enemyFeet_.resize(enemyPoses_.size());
-  enemyMovement_.resize(enemyPoses_.size());
-  for (std::size_t i=0;i<enemyPoses_.size();++i) {
-    const auto& enemy=i<simulation_.Combatants().size()?simulation_.Combatants()[i]:simulation_.SparringOpponent();
-    enemyPoses_[i].Reset(enemy.facing);
-    enemyDefeats_[i].Reset(enemy.health>0);
-    enemyAnimations_[i].Reset(float(enemy.id)*.37f);
-    enemyFaces_[i].Reset(enemy.id+16);
-    enemyFeet_[i].Reset(enemy.position,enemy.facing);
-    enemyMovement_[i].Reset(enemy.position.x,enemy.position.z);
-    enemyPoses_[i].attack=EnemyStrike(enemy,simulation_.Health()>0 &&
-      (i<simulation_.Combatants().size() || simulation_.Sparring()));
+  enemyActors_.clear();
+  presentation::Bind(enemyActors_,simulation_.Combatants(),simulation_.SparringOpponent());
+  for(std::size_t i=0;i<enemyActors_.size();++i) {
+    if(simulation_.Health()<=0 || (i==simulation_.Combatants().size() && !simulation_.Sparring())) {
+      enemyActors_[i].motion.attack=0;
+      enemyActors_[i].beast.gesture.jaw=enemyActors_[i].beast.jaw=0;
+    }
   }
   UpdateCamera(0,true);
 }
@@ -624,8 +623,8 @@ void Game::Render(Renderer& renderer,bool showInterface) {
         if(enemy.kind!=rpg::EnemyKind::Trainer) {
           const auto asset=enemy.kind==rpg::EnemyKind::Wolf?authored::Asset::Wolf:enemy.kind==rpg::EnemyKind::Boar?authored::Asset::Boar:enemy.kind==rpg::EnemyKind::Wraith?authored::Asset::Revenant:
             (enemy.kind==rpg::EnemyKind::Captain||enemy.kind==rpg::EnemyKind::Reaver)?authored::Asset::Orc:authored::Asset::Skeleton;
-          const auto& defeat=enemyDefeats_[i];const float keep=defeat.Remaining();
-          renderer.DrawAnimatedAsset(asset,{enemy.position.x,ground,enemy.position.z},enemy.facing,0,
+          const auto& defeat=enemyActors_[i].defeat;const float keep=defeat.Remaining();
+          renderer.DrawAnimatedAsset(asset,{enemy.position.x,ground,enemy.position.z},enemy.facing,defeat.time,
             defeat.gait,defeat.attack*keep,defeat.travel*keep,3,{.8f,.8f,.8f,1},defeat.Gesture());
         } else renderer.DrawMesh(M::Rock,{enemy.position.x,ground+.22f,enemy.position.z},{.55f,.44f,.45f},{.51f,.34f,.15f,1},S::Cloth);
         renderer.DrawMesh(M::Crystal,{enemy.position.x,ground+1.f+std::sin(time_*3)*.1f,enemy.position.z},{.18f,.3f,.18f},{1,.82f,.3f,1},S::Glow,0,0,visual::ShadowMode::None);
@@ -634,21 +633,19 @@ void Game::Render(Renderer& renderer,bool showInterface) {
     }
     const bool captain=enemy.kind==rpg::EnemyKind::Captain;
     CharacterOutfit enemyOutfit; enemyOutfit.armor=captain; enemyOutfit.helm=captain;
+    enemyOutfit.face=HumanFace::Broad;enemyOutfit.appearance={0,1,0};
     if(enemy.kind==rpg::EnemyKind::Wraith) {enemyOutfit.weapon=false;enemyOutfit.cloak=true;}
     if(enemy.Boss()) {enemyOutfit.shoulders=true;enemyOutfit.cloak=true;enemyOutfit.gloves=true;}
-    const auto& pose=enemyPoses_[i];
+    const auto& pose=enemyActors_[i].motion;
     if(enemy.kind!=rpg::EnemyKind::Trainer) {
       const auto asset=enemy.kind==rpg::EnemyKind::Wolf?authored::Asset::Wolf:enemy.kind==rpg::EnemyKind::Boar?authored::Asset::Boar:enemy.kind==rpg::EnemyKind::Wraith?authored::Asset::Revenant:
         (captain||enemy.kind==rpg::EnemyKind::Reaver)?authored::Asset::Orc:authored::Asset::Skeleton;
-      auto gesture=AuthoredActorGesture(enemyAnimations_[i].pose);
-      if(enemy.kind==rpg::EnemyKind::Wolf) gesture.jaw=enemy.windup>0?
-        combat::Smooth(1-enemy.windup/enemy.WindupDuration()):
-        1-combat::Smooth(enemyAnimations_[i].enemyReleaseAge/.09f);
-      renderer.DrawAnimatedAsset(asset,{enemy.position.x,ground,enemy.position.z},pose.facing,time_,pose.phase,pose.attack,enemyAnimations_[i].pose.travel,3,
+      const auto gesture=enemyActors_[i].Gesture();
+      renderer.DrawAnimatedAsset(asset,{enemy.position.x,ground,enemy.position.z},pose.facing,float(enemyActors_[i].clock),pose.phase,pose.attack,enemyActors_[i].animation.pose.travel,3,
         enemy.hitFlash>0?XMFLOAT4{1,.7f,.55f,1}:XMFLOAT4{1,1,1,1},gesture);
     } else DrawCharacter(renderer,enemy.position,ground,pose.facing,
       enemy.hitFlash>0?XMFLOAT4{1,.7f,.55f,1}:enemy.kind==rpg::EnemyKind::Trainer?XMFLOAT4{.55f,.46f,.22f,1}:enemy.kind==rpg::EnemyKind::Wraith?XMFLOAT4{.35f,.30f,.61f,1}:enemy.kind==rpg::EnemyKind::Reaver?XMFLOAT4{.53f,.34f,.19f,1}:captain?XMFLOAT4{.36f,.19f,.48f,1}:XMFLOAT4{.65f,.2f,.25f,1},
-      enemy.kind==rpg::EnemyKind::Wraith?0.f:pose.attack,pose.gait,enemyOutfit,enemyAnimations_[i].pose,std::uint64_t(enemy.id)+16);
+      enemy.kind==rpg::EnemyKind::Wraith?0.f:pose.attack,pose.gait,enemyOutfit,enemyActors_[i].animation.pose,std::uint64_t(enemy.id)+16);
     if (enemy.windup>0 && simulation_.Health()>0) {
       const float progress=1-enemy.windup/enemy.WindupDuration();
       const XMFLOAT4 warning=enemy.Interruptible()?XMFLOAT4{1,.55f*(1-progress),.12f,.68f}:XMFLOAT4{.85f,.4f,.95f,.75f};

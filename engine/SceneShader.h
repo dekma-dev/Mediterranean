@@ -44,18 +44,27 @@ VOut VSMain(VIn i) {
  VOut o; o.p=mul(float4(i.p,1),wvp); o.wp=i.n; o.n=i.n;
  o.tint=i.tint; o.shadow=o.detailShadow=0; o.material=0; o.tp=o.tn=0; o.cloudLight=1; o.receiverPlane=1; o.bodyStyle=0; return o;
 }
-float FaceLift(float3 p,float blink,float expression) {
+float3 FaceDisplacement(float3 p,float blink,float expression) {
  // Express the fitted facial regions in metres, independent of the taller
  // normalized neck envelope used by the exported mesh.
  float3 q=p*float3(.265,.42,.26)+float3(0,1.71,.012);
  float ex=(abs(q.x)-.04203)/.017225,ey=(q.y-1.78325)/.0279;
- float mx=(abs(q.x)-.019875)/.0212,my=(q.y-1.6794)/.02325;
+ float mx=(abs(q.x)-.019875)/.0212,my=(q.y-1.699)/.020;
  // Explicit products avoid pow's undefined negative-base case on SM5 GPUs.
  float eye=exp(-(ex*ex)*(ex*ex))*smoothstep(.0744,.1004,q.z);
  float upper=smoothstep(1.7786,1.78356,q.y);
  float lid=lerp(.0031,-.01333,upper)*exp(-ey*ey);
  float mouth=exp(-mx*mx-my*my)*smoothstep(.0744,.0952,q.z);
- return (blink*eye*lid+expression*.00372*mouth)/.42;
+ float dy=blink*eye*lid+expression*.00372*mouth;
+ // Follow the eyeball surface as the upper lid closes. A purely vertical
+ // translation leaves the iris sticking through the skin at full closure.
+ float2 orbital=float2((abs(q.x)-.04205)/.01535,(q.y+dy-1.78241)/.013875);
+ float sphere=sqrt(saturate(1-dot(orbital,orbital)));
+ float cover=.09406+.0133*sphere+.0025;
+ float closure=(abs(q.x)-.04205)/.023;
+ float orbitMask=1-smoothstep(1.0,1.35,dot(orbital,orbital));
+ float dz=blink*orbitMask*exp(-closure*closure*closure*closure)*smoothstep(.075,.085,q.z)*max(0,cover-q.z);
+ return float3(0,dy/.42,dz/.26);
 }
 void DeformCloth(inout float3 p,inout float3 n,float4 surface,float partMaterial,float3 bend) {
  [branch] if(surface.w==-6) {
@@ -79,11 +88,12 @@ void DeformCloth(inout float3 p,inout float3 n,float4 surface,float partMaterial
  }
  [branch] if(surface.w<=-3 && surface.w>=-5) {
   float blink=saturate(surface.z),expression=clamp(-surface.w-4,-1,1);
-  float lift=FaceLift(p,blink,expression),e=.001;
-  float3 gradient=float3(FaceLift(p+float3(e,0,0),blink,expression)-FaceLift(p-float3(e,0,0),blink,expression),
-   FaceLift(p+float3(0,e,0),blink,expression)-FaceLift(p-float3(0,e,0),blink,expression),
-   FaceLift(p+float3(0,0,e),blink,expression)-FaceLift(p-float3(0,0,e),blink,expression))/(2*e);
-  n-=gradient*n.y/max(.15,1+gradient.y); p.y+=lift;
+  float e=.001;
+  float3 dx=float3(1,0,0)+(FaceDisplacement(p+float3(e,0,0),blink,expression)-FaceDisplacement(p-float3(e,0,0),blink,expression))/(2*e);
+  float3 dy=float3(0,1,0)+(FaceDisplacement(p+float3(0,e,0),blink,expression)-FaceDisplacement(p-float3(0,e,0),blink,expression))/(2*e);
+  float3 dz=float3(0,0,1)+(FaceDisplacement(p+float3(0,0,e),blink,expression)-FaceDisplacement(p-float3(0,0,e),blink,expression))/(2*e);
+  n=n.x*cross(dy,dz)+n.y*cross(dz,dx)+n.z*cross(dx,dy);
+  p+=FaceDisplacement(p,blink,expression);
  }
  [branch] if (surface.w>0) {
   float t=saturate(-p.y/.82),side=surface.z,back=surface.w-.001;
@@ -99,7 +109,7 @@ float4 VSShadow(InstanceIn i) : SV_POSITION {
 }
 VOut VSWorld(InstanceIn i) {
  VOut o;
- o.bodyStyle=i.surface.w<=-3 && i.surface.w>=-5?0xffffffff:0;
+ o.bodyStyle=i.surface.w<=-3 && i.surface.w>=-5?0xffffffff:i.surface.w==-7?0xfffffffe:0;
  float4x4 object=float4x4(i.w0,i.w1,i.w2,i.w3);
  float4x4 normals=float4x4(i.n0,i.n1,i.n2,i.n3);
  float3 undeformed=i.p,undeformedNormal=i.n;
@@ -109,7 +119,12 @@ VOut VSWorld(InstanceIn i) {
  o.n=normalize(mul(float4(i.n,0),normals).xyz);
  o.receiverPlane=i.surface.w<0?0:1;
  float4 receiver=position;
- if (i.surface.w<0) receiver.xyz+=o.n*(i.surface.w<=-3 && i.surface.w>=-5?.0080:i.surface.w<-1?.0007:.0025);
+ bool authoredSkin=i.surface.x==16 && i.tint.w==9;
+ // The detailed cascade covers 20 m: a face is only a few shadow texels wide.
+ // A local normal offset prevents curved skin/scalp self-shadow striping while
+ // leaving the caster silhouette and every other world receiver unchanged.
+ if (i.surface.w<0) receiver.xyz+=o.n*((i.surface.w<=-3 && i.surface.w>=-5) || i.surface.w==-7?.0200:i.surface.w<-1?.0007:.0025);
+ else if(authoredSkin) {receiver.xyz+=o.n*.0200;o.receiverPlane=0;}
  o.tint=i.tint*i.paint; o.shadow=mul(receiver,shadowVP[0]);
  o.detailShadow=mul(receiver,shadowVP[1]); o.material=i.surface.x;
  // Authored vertices carry a validated native material ID in alpha.
@@ -410,7 +425,7 @@ float4 PSMain(VOut i) : SV_TARGET {
   else if (i.wp.z>.5) result.a*=fontAtlas.Sample(fontSampler,i.wp.xy);
   return result;
  }
- [branch] if(i.bodyStyle && i.bodyStyle!=0xffffffff) {
+ [branch] if(i.bodyStyle && i.bodyStyle<0xfffffffe) {
   float4 style=bodyRows[(i.bodyStyle-1)*263+256+BodyRegion(i.tp)];
   i.tint=float4(style.rgb,1);i.material=style.w;
  }
@@ -428,18 +443,25 @@ float4 PSMain(VOut i) : SV_TARGET {
  float3 albedo=i.tint.rgb*detail;
  [branch] if(i.bodyStyle==0xffffffff) {
   // Local metric masks follow the head, retaining the selected complexion.
-  // Low-contrast stubble, lips and eye creases replace a uniform skin coating.
+  // Identity-specific skin coloration (including stubble) comes from the mesh.
+  // Shared microdetail must not paint a beard onto every face.
   float3 q=i.tp;
-  float front=smoothstep(.025,.065,q.z);
-  float beard=front*(1-smoothstep(-.005,.025,q.y))*smoothstep(-.15,-.085,q.y);
   float grain=Noise(q.xy*850);
-  albedo*=lerp(float3(1,1,1),float3(.77,.79,.80),beard*(.50+.30*grain));
-  float lips=(1-smoothstep(.024,.038,abs(q.x)))*(1-smoothstep(.003,.010,abs(q.y+.031)))*front;
-  albedo*=lerp(float3(1,1,1),float3(1.02,.78,.74),lips*.65);
-  float eyeCrease=(1-smoothstep(.014,.028,abs(abs(q.x)-.040)))*(1-smoothstep(.004,.010,abs(q.y-.052)))*front;
-  albedo*=1-.07*eyeCrease;
   float mottling=Noise(q.xy*73+q.z*17);
   albedo*=.96+.08*mottling;roughness=max(roughness,.70+.06*grain);
+ }
+ [branch] if(i.bodyStyle==0xfffffffe) {
+  // Fine fibers follow the fitted scalp instead of projecting cloth/noise onto
+  // a helmet shape. Derivative filtering fades subpixel strands at distance.
+  float3 q=i.tp-float3(0,.105,-.010);
+  float theta=atan2(q.x,q.z),latitude=atan2(q.y,max(length(q.xz),.001));
+  float phase=theta*175+latitude*65+3*sin(latitude*3+theta);
+  float resolved=1-smoothstep(.6,2.8,fwidth(phase));
+  float fiber=sin(phase)*resolved;
+  albedo*=.88+.10*fiber;
+  float relief=.00012*fiber;
+  heightDerivative+=float2(ddx(relief),ddy(relief));
+  roughness=.66+.10*(.5-.5*fiber);
  }
  float cavity=1;
  if (i.material==1) {

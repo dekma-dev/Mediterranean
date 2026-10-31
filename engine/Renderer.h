@@ -48,7 +48,8 @@ public:
   void DrawBow(visual::Mesh mesh,const DirectX::XMMATRIX& transform,float draw,float arrow);
   void DrawCoatPanel(visual::Mesh mesh,DirectX::XMFLOAT3 hem,DirectX::XMFLOAT3 waist,DirectX::XMFLOAT3 knee,
     float width,float depth,DirectX::XMFLOAT3 facing,const DirectX::XMFLOAT4& paint={1,1,1,1});
-  void DrawHead(const DirectX::XMMATRIX& transform,const DirectX::XMFLOAT4& color,float blink,float expression);
+  void DrawHead(const DirectX::XMMATRIX& transform,const DirectX::XMFLOAT4& color,float blink,float expression,
+    visual::Mesh mesh=visual::Mesh::Head);
   void DrawMeshTransformed(visual::Mesh mesh,const DirectX::XMMATRIX& transform,
     const DirectX::XMFLOAT4& color,visual::Material material,visual::ShadowMode shadow=visual::ShadowMode::Cast,unsigned maxDetail=2) {
     Queue(mesh,transform,color,material,shadow,maxDetail);

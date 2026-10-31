@@ -8,6 +8,8 @@
   "upstream_url": "https://www.blender.org/download/demo-files/",
   "read_only": true,
   "neck_cut_z": 1.545,
+  "neck_fit_ceiling": 1.578,
+  "neck_fit_note": "Only lower cervical socket is fitted. Mandible remains outside the deformation region.",
   "runtime_origin": [
     0,
     1.71,
@@ -23,31 +25,34 @@
       "name": "player-head",
       "vertices": 8001,
       "triangles": 15997,
-      "sha256": "6e5e7c339b02a145658523632aa20931ce24b996d8f1706a6734d96b4b95812e"
+      "sha256": "79362157a4fe63a9470208131584540f44bbe532eba605236354d4d14bc6aa5a"
     },
     {
       "name": "player-head-medium",
       "vertices": 1502,
       "triangles": 3000,
-      "sha256": "9d26d74419cab7080836d928a79badfc51afe7f6c2e0cb90fbc607d39b63554f"
+      "sha256": "f1885af456c697c0fb10cca16528cb5e49f53154ac5c663df0543d24878e64a7"
     },
     {
       "name": "player-head-far",
       "vertices": 242,
       "triangles": 480,
-      "sha256": "608a319c1eadf89fb3218ba6e36ac1c67cfcb7acf0e8fdcd02049ebbe9140afe"
+      "sha256": "015ee66ad74f5ce2af0456e49c5c97fcac8f0a6614ffd3e2ab90d5e2bea68ded"
     },
     {
       "name": "player-hair",
-      "vertices": 2664,
-      "triangles": 4993,
-      "sha256": "1d9c1b06741edcd5cd8beeedaa0b7fd2b88d9f5d6f6c618d14d18953c7d813c9"
+      "vertices": 2600,
+      "triangles": 5000,
+      "sha256": "aa7b1d72024bca4ba3b81469a1b3881a4fc70abdadbf6b64d6cf753f44c8fe13"
     },
     {
       "name": "player-hair-low",
-      "vertices": 240,
+      "vertices": 225,
       "triangles": 399,
-      "sha256": "18a6dd975f07100402a5680e04581004dc99dbcf3e7001be287f21d03b26eb50"
+      "sha256": "30a807fb7a168a5213f6a6730f424466aaf96a488591a7982edaf718d0c48711"
     }
-  ]
+  ],
+  "derived_editable_source": "assets/authored/human-faces.blend",
+  "identity_report": "assets/characters/human-faces.json",
+  "neck_socket_extension": 0.045
 }

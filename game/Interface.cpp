@@ -301,6 +301,9 @@ struct Canvas {
    } else {
     auto outfit=CharacterOutfit::From(s.Items(),s.Class(),s.Look());
     if(friendly>=0 || enemy) {outfit=CharacterOutfit{};outfit.weapon=false;outfit.helm=false;outfit.classId=friendly==1?rpg::ClassId::Scout:rpg::ClassId::Paladin;}
+    if(friendly>=0 && unsigned(friendly)<residentAppearances.size()) {
+     outfit.face=residentAppearances[friendly].face;outfit.appearance=residentAppearances[friendly].colors;
+    } else if(enemy) {outfit.face=HumanFace::Broad;outfit.appearance={0,1,0};}
     DrawCharacter(r,{0,0},0,0,{s.ClassInfo().color[0],s.ClassInfo().color[1],s.ClassInfo().color[2],1},0,0,outfit,animation::Idle(0));
    }
    r.EndPortrait();
