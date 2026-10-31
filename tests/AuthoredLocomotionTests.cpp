@@ -3,6 +3,7 @@
 #include "game/CharacterPose.h"
 #include "game/CharacterView.h"
 #include "game/Game.h"
+#include "game/HandPose.h"
 #include "engine/Renderer.h"
 #include "platform/Win32Window.h"
 #include <filesystem>
@@ -20,7 +21,7 @@ float Difference(const playerclips::Frame& a,const playerclips::Frame& b){
 }
 void LibraryChecks(){
   const auto bytes=playerclips::EmbeddedBytes();const auto clips=playerclips::Decode(bytes);
-  Check(clips.size()==14&&bytes.size()<48*1024,"Four actions and ten movement tracks must fit the small motion budget");
+  Check(clips.size()==33&&bytes.size()<384*1024,"Twenty-seven authored actions and six compatibility tracks must fit the motion budget");
   for(unsigned i=4;i<12;++i){
     const auto clip=playerclips::Clip(i);
     Check(Difference(playerclips::Sample(clip,-.000001f),playerclips::Sample(clip,.000001f))<.0001f,"Gait loop seam");
@@ -40,8 +41,8 @@ void LibraryChecks(){
   const auto rejected=[](std::string data){try{playerclips::Decode(data);return false;}catch(const std::exception&){return true;}};
   Check(rejected(std::string(bytes.substr(0,bytes.size()-1))),"Truncated gait archive");
   auto corrupt=std::string(bytes);corrupt[8]=4;Check(rejected(corrupt),"Stale four-action resource must be rejected");
-  std::size_t offset=12;for(unsigned i=0;i<4;++i)offset+=8+clips[i].frames.size()*sizeof(playerclips::Frame);
-  corrupt=std::string(bytes);float bad=.5f;std::memcpy(corrupt.data()+offset+8,&bad,sizeof(bad));
+  std::size_t offset=12;for(unsigned i=0;i<4;++i)offset+=36+clips[i].frames.size()*sizeof(playerclips::Frame);
+  corrupt=std::string(bytes);float bad=.5f;std::memcpy(corrupt.data()+offset+36,&bad,sizeof(bad));
   Check(rejected(corrupt),"Broken imported loop must be rejected");
 }
 struct Walker {
@@ -82,7 +83,10 @@ void ContactsAndTransitions(){
     const int direction=i/150%4;const float speed=i%150<110?6.f:0.f;
     taps.Update(.001f,speed,direction==0?1.f:direction==1?-1.f:0.f,direction==2?-1.f:direction==3?1.f:0.f);
     const auto pose=BuildCharacterPose(0,0,false,taps.state.pose);
-    for(int side=0;side<2;++side)worstJump=std::max(worstJump,Distance(previous.arms[side].end,pose.arms[side].end));
+    for(int side=0;side<2;++side) {
+      const float delta=Distance(previous.arms[side].end,pose.arms[side].end);
+      worstJump=std::max(worstJump,delta);
+    }
     previous=pose;
   }
   std::cout<<"Authored gait: maximum planted slip "<<worstSlip<<" m, hand change per ms "<<worstJump<<" m\n";
@@ -109,6 +113,101 @@ void ContactsAndTransitions(){
     Check(game.State().Save()==simulation.Save(),"Authored locomotion changed simulation/save state");
   }
   const auto save=game.State().Save();Check(game.RestoreSnapshot(save)&&!game.PlayerAnimation().authoredGait,"Loading retained transient authored pose");
+}
+void WeaponMotionChecks(){
+  float worstGrip=0,worstStep=0,worstFinger=0;
+  for(bool staff:{false,true})for(bool heavy:{false,true})for(int hz:{30,60,144,1000}) {
+    animation::AuthoredWeaponController controller;CharacterPose previous;bool havePrevious=false;
+    XMFLOAT3 first{};float excursion=0;
+    for(int tick=0;tick<hz*2;++tick) {
+      const float t=float(tick)/hz;
+      controller.Update(1.f/hz,t<combat::Duration(heavy)?t:-1,heavy,staff,true);
+      animation::Sample sample;sample.authoredGait=true;sample.authoredBlend=1;
+      sample.authoredEquipment=staff?playerclips::Equipment::Staff:playerclips::Equipment::Sword;
+      sample.authoredStrike=controller.frame;sample.authoredStrikeWeight=controller.weight;
+      sample.authoredStrikePhase=controller.phase;sample.authoredStrikeHeavy=heavy;
+      const auto pose=BuildCharacterPose(0,0,false,sample,staff?rpg::WeaponForm::AstralStaff:rpg::WeaponForm::Blade);
+      const auto tip=pose.WeaponPoint(.96f);
+      if(tick==0)first=tip;excursion=std::max(excursion,Distance(first,tip));
+      Check(std::isfinite(tip.x)&&std::isfinite(tip.y)&&std::isfinite(tip.z),"Imported weapon pose is not finite");
+      Check(tip.y>.025f,"Imported weapon tip pierced floor");
+      if(staff) {
+        worstGrip=std::max(worstGrip,Distance(pose.arms[0].end,pose.WeaponPoint(.26f)));
+        const auto hand=BuildHandPose(pose,0,true,false,pose.handCast);
+        Check(hand.curl>.99f,"Supporting staff hand did not close on shaft");
+      }
+      if(havePrevious&&hz==1000) {
+        const float step=Distance(previous.WeaponPoint(.96f),tip);
+        worstStep=std::max(worstStep,step);
+        for(unsigned side=0;side<2;++side) {
+          const auto before=BuildHandPose(previous,side,true,false,previous.handCast),after=BuildHandPose(pose,side,true,false,pose.handCast);
+          worstFinger=std::max(worstFinger,Distance(before.Point(before.fingers[0].joints[3]),after.Point(after.fingers[0].joints[3])));
+        }
+      }
+      if(t>combat::Duration(heavy)+.01f&&t<combat::Duration(heavy)+.05f)Check(controller.weight>0,"Recovery was cut off by the gameplay timer");
+      previous=pose;havePrevious=true;
+    }
+    Check(excursion>.4f,"Equipped sword/staff remained static through the attack");
+    Check(controller.weight==0,"Authored recovery did not finish");
+    // Cancelling before release must freeze, then fade, never reach contact.
+    controller={};for(int k=0;k<5;++k)controller.Update(.01f,k*.01f,heavy,staff,true);
+    const auto cancelled=controller.frame;
+    for(int k=0;k<25;++k) {controller.Update(.01f,-1,heavy,staff,true);Check(Difference(controller.frame,cancelled)<.0001f,"Cancelled attack advanced into phantom contact");}
+    Check(controller.weight==0,"Cancelled authored strike persisted");
+  }
+  std::cout<<"V2 staff grip error "<<worstGrip<<" m; 1 ms weapon tip change "<<worstStep<<" m; fingertip "<<worstFinger<<" m\n";
+  Check(worstGrip<.003f,"Second hand detached from staff");
+  Check(worstStep<.055f,"Authored recovery or weapon orientation snapped");
+  Check(worstFinger<.02f,"Authored weapon wrist or fingers snapped");
+  // Exercise the actual player adapter, including ranged staff releases. The
+  // same command stream must leave combat and saves identical to Simulation.
+  for(auto id:{rpg::ClassId::Warrior,rpg::ClassId::Scout,rpg::ClassId::Mage})for(bool heavy:{false,true})for(int hz:{30,60,144}) {
+    rpg::Simulation seed;
+    Check(seed.Load("MEDITERRANEAN 3\n-4 5.2 50 0 0 0\n2 0 0 0\n0\n0 0 0 0\n100 -4 7 80 0 0 0 0 0\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n"),"V2 combat fixture");
+    auto snapshot=seed.Save();const auto p=snapshot.find("PROFILE ");
+    snapshot.replace(p,snapshot.find('\n',p)-p,"PROFILE "+std::to_string(int(id))+" \"Motion\" 0 0 0");
+    Game game;rpg::Simulation reference;Check(game.RestoreSnapshot(snapshot)&&reference.Load(snapshot),"V2 player setup");
+    float peak=0;bool recovery=false;
+    const float duration=1.3f/rpg::ClassAttackRate(id,heavy)+.5f;
+    for(int k=0;k<int(hz*duration);++k) {
+      rpg::Command command;if(k==0){command.ability=heavy?1:0;command.nextTarget=true;}
+      game.ExecuteCommand(command,1.f/hz);reference.Update(1.f/hz,command);
+      const auto& pose=game.PlayerAnimation();peak=std::max(peak,pose.authoredStrikeWeight);
+      recovery|=!game.State().Attacking()&&pose.authoredStrikeWeight>.02f;
+      Check(game.State().Save()==reference.Save(),"V2 presentation changed combat/save state");
+      Check(pose.authoredEquipment==(id==rpg::ClassId::Mage?playerclips::Equipment::Staff:id==rpg::ClassId::Scout?playerclips::Equipment::Bow:playerclips::Equipment::Sword),"Live equipment did not select its authored clips");
+    }
+    if(peak<=.95f||!recovery)std::cerr<<"Live v2 class "<<int(id)<<" heavy "<<heavy<<" Hz "<<hz<<" peak "<<peak<<" recovery "<<recovery<<" attack "<<game.State().AttackSeconds()<<'\n';
+    Check(peak>.95f&&recovery,"Live player did not play its full authored attack/recovery");
+    Check(game.PlayerAnimation().authoredStrikeWeight==0,"Live authored recovery did not settle");
+    game.SuspendInput();Check(game.PlayerAnimation().authoredStrikeWeight==0,"Focus loss retained v2 attack");
+  }
+}
+void BowMotionChecks(){
+  float worstStep=0,worstNock=0;
+  for(bool heavy:{false,true}) {
+    animation::AuthoredWeaponController controller;CharacterPose previous;bool havePrevious=false,drawn=false,released=false;
+    for(int tick=0;tick<2000;++tick) {
+      const float t=tick*.001f;controller.Update(.001f,t<combat::Duration(heavy)?t:-1,heavy,false,true,1,true);
+      animation::Sample sample;sample.authoredGait=true;sample.authoredBlend=1;sample.authoredEquipment=playerclips::Equipment::Bow;
+      sample.authoredStrike=controller.frame;sample.authoredStrikeWeight=controller.weight;sample.authoredStrikePhase=controller.phase;sample.authoredStrikeHeavy=heavy;
+      const auto pose=BuildCharacterPose(0,0,true,sample,rpg::WeaponForm::Handbow);
+      if(havePrevious)for(unsigned side=0;side<2;++side){const float step=Distance(previous.arms[side].end,pose.arms[side].end);worstStep=std::max(worstStep,step);
+        if(step>.025f)std::cout<<"Bow jump heavy "<<heavy<<" t "<<t<<" side "<<side<<" phase "<<controller.phase<<" draw "<<previous.bowDraw<<" -> "<<pose.bowDraw<<" delta "<<step<<'\n';}
+      if(pose.bowDraw>.95f) {
+        XMFLOAT3 nock;XMStoreFloat3(&nock,XMVector3TransformCoord(XMVectorSet(0,.035f,-.07f-.40f*pose.bowDraw,1),WeaponFrame(pose)));
+        worstNock=std::max(worstNock,Distance(nock,pose.arms[0].end));drawn=true;
+        Check(BuildHandPose(pose,0,true,false,0).curl>.75f,"Archer drawing hand stayed open");
+      }
+      released|=pose.bowArrow<.01f;
+      Check(pose.bowDraw>=0&&pose.bowDraw<=1&&pose.bowArrow>=0&&pose.bowArrow<=1,"Invalid bow draw/release channel");
+      previous=pose;havePrevious=true;
+    }
+    Check(drawn&&released&&controller.weight==0,"Bow did not draw, release and settle");
+  }
+  std::cout<<"Bow nock error "<<worstNock<<" m; hand step per ms "<<worstStep<<" m\n";
+  Check(worstNock<.01f,"Drawing hand detached from the string");
+  Check(worstStep<.025f,"Archery draw/release snapped the wrist");
 }
 void Captures(){
   const auto root=std::filesystem::current_path()/"authored-locomotion-check";std::filesystem::create_directories(root);
@@ -137,7 +236,24 @@ void Captures(){
     Check(renderer.Capture((root/("direction-"+std::to_string(direction)+"-"+std::to_string(pace)+".png")).wstring())&&renderer.EndFrame(false),"Directional native gait capture");
   }
   Check(renderer.ValidateDebugMessages(),"Authored locomotion GPU diagnostics");
+  for(bool staff:{false,true})for(bool heavy:{false,true}) {
+    animation::AuthoredWeaponController controller;
+    auto kit=CharacterOutfit::From(rpg::Inventory{},staff?rpg::ClassId::Mage:rpg::ClassId::Warrior);
+    kit.helm=false;kit.shield=false;
+    for(int frame=0;frame<42;++frame) {
+      const float t=frame/30.f;controller.Update(1.f/30,t<combat::Duration(heavy)?t:-1,heavy,staff,true);
+      animation::Sample sample;sample.authoredGait=true;sample.authoredEquipment=staff?playerclips::Equipment::Staff:playerclips::Equipment::Sword;
+      sample.authoredStrike=controller.frame;sample.authoredStrikeWeight=controller.weight;sample.authoredStrikePhase=controller.phase;sample.authoredStrikeHeavy=heavy;
+      renderer.BeginFrame();renderer.SetCamera({1.9f,1.5f,3.8f},{0,.95f,0});
+      renderer.DrawMesh(visual::Mesh::Box,{0,-.1f,0},{8,.2f,8},{.24f,.23f,.21f,1},visual::Material::Stone);
+      DrawCharacter(renderer,{0,0},0,0,{.4f,.45f,.50f,1},0,0,kit,sample,1);
+      Check(renderer.Capture((root/(std::string(staff?"staff-":"sword-")+(heavy?"heavy-":"basic-")+std::to_string(frame)+".png")).wstring())&&renderer.EndFrame(false),"V2 weapon capture");
+    }
+  }
 }
 }
-int main(){try{LibraryChecks();ContactsAndTransitions();Captures();std::cout<<"PASS: imported gait loops, walk/run distinction, contacts, transition continuity, gameplay isolation and native comparison\n";}
+int main(int argc,char** argv){try{
+  if(argc==2&&std::string_view(argv[1])=="--weapons-only") {WeaponMotionChecks();std::cout<<"PASS: v2 weapon motion\n";return 0;}
+  if(argc==2&&std::string_view(argv[1])=="--capture-only") {Captures();return 0;}
+  LibraryChecks();ContactsAndTransitions();WeaponMotionChecks();BowMotionChecks();Captures();std::cout<<"PASS: imported gait loops, walk/run distinction, contacts, transition continuity, gameplay isolation and native comparison\n";}
 catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

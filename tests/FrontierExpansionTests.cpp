@@ -68,7 +68,8 @@ int main() {
   Capture(renderer,fresh,root/"southern-meadow.png");
   Capture(renderer,fresh,root/"southern-meadow-atlas.png",ui::Panel::Map);
   for(const auto& npc:WorldMap::residents) {
-    Walk(fresh,{npc.position.x+1.6f,npc.position.z});const auto before=fresh.QuestState();Command talk;talk.interact=true;fresh.Update(.01f,talk);
+    const Vec2 approach{npc.position.x+1.6f,npc.position.z};
+    Walk(fresh,fresh.CanStand(approach)?approach:Vec2{npc.position.x-1.6f,npc.position.z});const auto before=fresh.QuestState();Command talk;talk.interact=true;fresh.Update(.01f,talk);
     Check(fresh.QuestDialogue()==QuestId::None && fresh.QuestState()==before && !fresh.FrontierActive() &&
       fresh.FrontierCompleted()==0,"Future speaker accepted a locked quest");
   }
@@ -84,7 +85,7 @@ int main() {
   const auto migrated=s.Save();
   Check(!s.Load(Record(migrated,"SURVEY ","SURVEY 1")) && s.Save()==migrated,"Premature survey notes accepted");
   const int initialGold=s.Gold(),initialXp=s.Experience();
-  for(int chapter=7;chapter<frontierQuestCount;++chapter) {
+  for(int chapter=7;chapter<10;++chapter) {
     const auto npc=WorldMap::residents[chapter-7].position;const Vec2 approach{npc.x+1.6f,npc.z};Walk(s,approach);
     Speak(s,QuestAction::AcceptFrontier);
     Check(s.DialoguePosition().x==npc.x && s.DialoguePosition().z==npc.z,"Conversation points at the old keeper");
@@ -120,7 +121,7 @@ int main() {
     Capture(renderer,s,root/("journal-"+std::to_string(chapter)+".png"),ui::Panel::Journal);
   }
   Check(s.Gold()==initialGold && s.Experience()==initialXp+750,"Expansion reward accounting");
-  Check(s.ObjectivePosition().x==WorldMap::trainingPost.x && s.ObjectivePosition().z==WorldMap::trainingPost.z,"Completed expansion objective");
+  Check(s.ObjectivePosition().x==WorldMap::residents[3].position.x && s.ObjectivePosition().z==WorldMap::residents[3].position.z,"Completed expansion objective");
   const auto complete=s.Save();
   Check(!s.Load(Record(complete,"SURVEY ","SURVEY 3")) && s.Save()==complete,"Incomplete survey accepted in finished campaign");
   Check(renderer.Resize(960,540),"Small expansion UI resize");

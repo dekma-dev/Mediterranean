@@ -1,3 +1,8 @@
+#include "PlayerHead.generated.h"
+#include "PlayerHeadMedium.generated.h"
+#include "PlayerHeadFar.generated.h"
+#include "PlayerHair.generated.h"
+#include "PlayerHairLow.generated.h"
 #include "FauldLow.generated.h"
 #include "Fauld.generated.h"
 #include "ShoulderRightLow.generated.h"
@@ -5,6 +10,7 @@
 #include "ShoulderLeftLow.generated.h"
 #include "ShoulderLeft.generated.h"
 #include "engine/Geometry.h"
+#include "engine/ClassArt.h"
 #include "engine/Landscape.h"
 #include "game/WorldMap.h"
 #include "engine/Skinning.h"
@@ -311,6 +317,7 @@ float Hash(int x,int y) {
 }
 
 Geometry BuildMesh(Mesh mesh) {
+  if(IsClassArt(mesh)){const unsigned index=unsigned(mesh)-unsigned(Mesh::OldWarriorChest);return classart::Collection()[index/2][index%2];}
   if(mesh==Mesh::GuardShoulderLeft) return compiled_mesh::ShoulderLeft();
   if(mesh==Mesh::GuardShoulderLeftLow) return compiled_mesh::ShoulderLeftLow();
   if(mesh==Mesh::GuardShoulderRight) return compiled_mesh::ShoulderRight();
@@ -531,72 +538,11 @@ Geometry BuildMesh(Mesh mesh) {
     }
     Normals(g); return g;
   }
-  if (mesh==Mesh::Hair || mesh==Mesh::HairLow) {
-    auto g=Lathe({{.17f,.46f,.45f},{.24f,.45f,.44f},{.32f,.43f,.42f},{.39f,.39f,.38f},{.46f,.30f,.30f},{.51f,.19f,.19f}},mesh==Mesh::Hair?32:12);
-    for (auto& v : g.vertices) {
-      auto& p=v.position;
-      const float angle=std::atan2(p.x,p.z),lower=std::clamp((.34f-p.y)/.17f,0.f,1.f);
-      const float back=std::clamp((.18f-p.z)/.50f,0.f,1.f);
-      // A swept, uneven hairline and longer nape replace the straight cap edge.
-      p.y-=lower*(.45f*back+.012f*std::sin(angle*3+.6f));
-      // Stretching only the old cap's height left it inside the wider skull,
-      // producing islands of exposed scalp. Refit every lowered ring to the
-      // head contour, with a small continuous shell allowance at both LODs.
-      if(p.x*p.x+p.z*p.z>.001f && p.y<.49f) {
-        const std::array<XMFLOAT3,9> skull{{{-.36f,.34f,.36f},{-.25f,.40f,.39f},
-          {-.10f,.46f,.42f},{.05f,.45f,.44f},{.15f,.44f,.44f},
-          {.26f,.44f,.43f},{.32f,.42f,.40f},{.38f,.38f,.37f},{.49f,.19f,.19f}}};
-        unsigned row=0;while(row+2<skull.size() && p.y>skull[row+1].x) ++row;
-        const auto a=skull[row],b=skull[row+1];const float t=std::clamp((p.y-a.x)/(b.x-a.x),0.f,1.f);
-        p.x=std::sin(angle)*(a.y+(b.y-a.y)*t+.024f);
-        p.z=std::cos(angle)*(a.z+(b.z-a.z)*t+.024f);
-      }
-      const float lock=std::sin(angle*11+p.y*13);
-      const float relief=.009f*lock*std::clamp((.51f-p.y)/.15f,0.f,1.f);
-      p.x+=std::sin(angle)*relief;p.z+=std::cos(angle)*relief;
-      if(p.z>0) p.z=std::min(p.z,.36f+.012f*std::sin(p.x*12));
-      const float shade=.88f+.10f*(lock*.5f+.5f);v.color={shade,shade,shade,1};
-    }
-    Normals(g); return g;
-  }
-  if (IsHeadMesh(mesh)) {
-    const std::vector<XMFLOAT3> profile={{-.5f,.16f,.23f},{-.46f,.23f,.29f},{-.42f,.29f,.33f},{-.36f,.34f,.36f},
-      {-.30f,.38f,.38f},{-.25f,.40f,.39f},{-.20f,.43f,.40f},{-.15f,.45f,.41f},
-      {-.10f,.46f,.42f},{-.05f,.46f,.43f},{0,.46f,.44f},{.05f,.45f,.44f},
-      {.10f,.44f,.43f},{.15f,.44f,.44f},{.20f,.45f,.44f},{.26f,.44f,.43f},
-      {.32f,.42f,.40f},{.38f,.38f,.37f},{.44f,.30f,.29f},{.49f,.19f,.19f}};
-    std::vector<XMFLOAT3> rings;
-    for(std::size_t row=0;row<profile.size();++row) {
-      rings.push_back(profile[row]);
-      if(mesh==Mesh::Head && row+1<profile.size()) {
-        const auto a=profile[row],b=profile[row+1];
-        rings.push_back({(a.x+b.x)*.5f,(a.y+b.y)*.5f,(a.z+b.z)*.5f});
-      }
-    }
-    auto g=Lathe(rings,mesh==Mesh::Head?64:mesh==Mesh::HeadMedium?24:12);
-    // Continuous bridge, nose tip, cheeks, philtrum and chin. Extra rings are
-    // concentrated around the features; the nose is no longer a floating ball.
-    for (auto& v : g.vertices) {
-      auto& p=v.position;
-      if (p.z>0) {
-        const float front=std::clamp(p.z/.20f,0.f,1.f);
-        p.z=std::min(p.z,.34f);
-        const auto bump=[](float x,float y) { return std::exp(-x*x-y*y); };
-        p.z+=front*(.035f*bump((std::abs(p.x)-.20f)/.18f,(p.y-.15f)/.065f)
-          +.055f*bump((std::abs(p.x)-.29f)/.14f,(p.y+.055f)/.10f)
-          -.050f*bump((std::abs(p.x)-.20f)/.12f,(p.y-.07f)/.06f)
-          +.105f*bump(p.x/.075f,(p.y-.01f)/.17f)
-          +.180f*bump(p.x/.105f,(p.y+.10f)/.075f)
-          +.040f*bump((std::abs(p.x)-.10f)/.055f,(p.y+.14f)/.05f)
-          -.018f*bump(p.x/.035f,(p.y+.20f)/.06f)
-          +.030f*bump(p.x/.20f,(p.y+.35f)/.075f));
-        const float cheek=bump((std::abs(p.x)-.26f)/.15f,(p.y+.10f)/.13f)*front;
-        const float beard=bump(p.x/.30f,(p.y+.34f)/.17f)*front;
-        v.color={1-.08f*beard,1-.055f*cheek-.11f*beard,1-.055f*cheek-.13f*beard,1};
-      }
-    }
-    Normals(g); return g;
-  }
+  if(mesh==Mesh::Head) return compiled_mesh::PlayerHead();
+  if(mesh==Mesh::HeadMedium) return compiled_mesh::PlayerHeadMedium();
+  if(mesh==Mesh::HeadFar) return compiled_mesh::PlayerHeadFar();
+  if(mesh==Mesh::Hair) return compiled_mesh::PlayerHair();
+  if(mesh==Mesh::HairLow) return compiled_mesh::PlayerHairLow();
   if (mesh==Mesh::Boot || mesh==Mesh::BootLow) {
     auto g=Lathe({{-.5f,.37f,.44f},{-.38f,.44f,.49f},{-.18f,.43f,.47f},{.02f,.36f,.37f},
       {.19f,.28f,.24f},{.5f,.27f,.24f}},mesh==Mesh::Boot?24:12);
@@ -652,23 +598,23 @@ Geometry BuildMesh(Mesh mesh) {
     const auto bottom=unsigned(g.vertices.size());g.vertices.push_back({{0,-.7f,0},{}});
     for(unsigned i=0;i<segments;++i) Triangle(g,bottom,skirt+(i+1)%segments,skirt+i);
   } else if (mesh==Mesh::Terrain || mesh==Mesh::Cliff) {
-    const auto angles=BoundaryAngles(); const auto count=static_cast<unsigned>(angles.size());
-    if (mesh==Mesh::Terrain) {
-      g.vertices.push_back({{0,0,0},{}});
-      for (float angle : angles) g.vertices.push_back({Edge(angle,1,0),{}});
-      for (unsigned i=0;i<count;++i) Triangle(g,0,i+1,(i+1)%count+1);
+    using namespace rpg::terrain;
+    if(mesh==Mesh::Terrain) {
+      for(int z=0;z<rows;++z) for(int x=0;x<columns;++x)
+        g.vertices.push_back({{left+x*cell,Heights()[z*columns+x],front+z*cell},{}});
+      for(int z=0;z<rows-1;++z) for(int x=0;x<columns-1;++x) {
+        const unsigned i=z*columns+x;Triangle(g,i,i+columns,i+1);Triangle(g,i+1,i+columns,i+columns+1);
+      }
     } else {
-      for (int ring=0;ring<4;++ring) for (float angle : angles) {
-        const float scale=ring==0?1.f:ring==1?1.02f:ring==2?.75f:.25f;
-        const float y=ring==0?0.f:ring==1?-1.8f:ring==2?-4.5f:-7.5f;
-        auto p=Edge(angle,scale,y+(ring==0?0.f:std::sin(angle*9+ring)*.5f));
-        const float shade=1.f-ring*.12f;
-        g.vertices.push_back({p,{},{shade,shade,shade,1}});
-      }
-      for (unsigned ring=0;ring<3;++ring) for (unsigned i=0;i<count;++i) {
-        const auto a=ring*count+i,b=ring*count+(i+1)%count,c=b+count,d=a+count;
-        Triangle(g,a,d,b); Triangle(g,b,d,c);
-      }
+      std::vector<XMFLOAT3> rim;
+      for(int x=0;x<columns;++x)rim.push_back({left+x*cell,Height(left+x*cell,front),front});
+      for(int z=1;z<rows;++z)rim.push_back({-left,Height(-left,front+z*cell),front+z*cell});
+      for(int x=columns-2;x>=0;--x)rim.push_back({left+x*cell,Height(left+x*cell,-front),-front});
+      for(int z=rows-2;z>0;--z)rim.push_back({left,Height(left,front+z*cell),front+z*cell});
+      for(auto p:rim)g.vertices.push_back({p,{}});
+      for(auto p:rim)g.vertices.push_back({{p.x,-8,p.z},{},{.65f,.65f,.65f,1}});
+      const auto count=unsigned(rim.size());
+      for(unsigned i=0;i<count;++i) {const auto j=(i+1)%count;Triangle(g,i,j,i+count);Triangle(g,j,j+count,i+count);}
     }
   }
   Normals(g); return g;
@@ -718,7 +664,7 @@ std::vector<std::uint8_t> BuildMaterialLayer(Material material,unsigned size) {
       height=.005f*noise(u,v,16)+.002f*grain+.006f*gravel;
       roughness=.86f+.10f*fine-.07f*gravel; break;
     }
-    case Material::Cloth: {
+    case Material::WornCloth: case Material::Cloth: {
       // Uneven warp/weft and diagonal twill; periodic and mip-filtered by the
       // existing material array. No extra samples or resident texture layers.
       const float warp=std::sin(u*2*pi*24),weft=std::sin(v*2*pi*24);
@@ -739,7 +685,7 @@ std::vector<std::uint8_t> BuildMaterialLayer(Material material,unsigned size) {
     }
     case Material::Plaster:
       value=.87f+.10f*broad+.03f*fine; height=.004f*fine; roughness=.94f; break;
-    case Material::Metal: {
+    case Material::WornMetal: case Material::Metal: {
       const float scratch=noise(u,v*4,32);
       const float tarnish=smooth((noise(u,v,8)-.45f)*3);
       const float brushed=.5f+.5f*std::sin(2*pi*(u*48+.12f*noise(u,v,8)));
@@ -750,11 +696,11 @@ std::vector<std::uint8_t> BuildMaterialLayer(Material material,unsigned size) {
     }
     case Material::Hair: {
       // Swept strands, not the cloth weave previously used by the hair cap.
-      const float strand=.5f+.5f*std::sin(2*pi*(u*20+.18f*std::sin(v*2*pi)));
-      value=.77f+.11f*broad+.10f*strand;
-      height=.0005f*strand;roughness=.52f+.15f*broad;break;
+      const float strand=.5f+.5f*std::sin(2*pi*(u*45+.25f*std::sin(v*2*pi)));
+      value=.80f+.09f*broad+.055f*strand;
+      height=.00022f*strand;roughness=.69f+.12f*broad;break;
     }
-    case Material::Leather: {
+    case Material::WornLeather: case Material::Leather: {
       // Broad irregular grain and shallow creases, rather than woven cloth.
       const float grain=noise(u,v,40),creases=smooth((.32f-noise(u,v,12))*5);
       const float wear=smooth((noise(u,v,8)-.52f)*3)*(1-creases);
@@ -778,6 +724,9 @@ std::vector<std::uint8_t> BuildMaterialLayer(Material material,unsigned size) {
     case Material::Plain: case Material::Glow: value=1; break;
     default: break;
     }
+    if(material==Material::WornMetal) {value*=.91f+.09f*broad;roughness=std::min(.92f,roughness+.22f);}
+    if(material==Material::WornLeather) {value*=.94f+.06f*fine;roughness=std::max(.72f,roughness);}
+    if(material==Material::WornCloth) {value*=.95f+.05f*broad;roughness=std::max(.92f,roughness);}
     const auto i=(static_cast<std::size_t>(y)*size+x)*4;
     pixels[i]=static_cast<std::uint8_t>(std::clamp(value,0.f,1.f)*255);
     pixels[i+3]=static_cast<std::uint8_t>(roughness*255);

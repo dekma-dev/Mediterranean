@@ -87,11 +87,12 @@ void ShapesAndSockets() {
   const auto pose=BuildCharacterPose(0,0,false);
   const auto hand=BuildHandPose(pose,1,true,false,0);const auto palette=BuildHandRig(hand);
   for(int i=1;i<int(ClassId::Count);++i) {
-    const auto form=WeaponFor(ClassId(i)).form;const auto mesh=visual::BuildMesh(WeaponMesh(form));
+    const auto form=WeaponFor(ClassId(i)).form;const bool focused=oldstyle::Focused(ClassId(i));
+    const auto mesh=visual::BuildMesh(focused?oldstyle::Mesh(ClassId(i),5):WeaponMesh(form));
     std::cout<<WeaponFor(ClassId(i)).starter<<": "<<mesh.indices.size()/3<<" triangles\n";
-    Check(!mesh.vertices.empty() && mesh.indices.size()/3<1300,"Weapon mesh missing/too expensive");
+    Check(!mesh.vertices.empty() && mesh.indices.size()/3<(focused?16000u:1300u),"Weapon mesh missing/too expensive");
     // All grips share the same conservative .025 m clearance envelope.
-    for(const auto& v:mesh.vertices) if(std::abs(v.position.y)<.085f && std::abs(v.position.z)<.04f)
+    for(const auto& v:mesh.vertices) if(std::abs(v.position.y)<.085f && std::abs(v.position.z)<.04f && !(focused&&form==WeaponForm::Handbow&&v.color.w==6))
       Check(std::hypot(v.position.x,v.position.z)<=.0256f,"Fitted handle exceeds the skinned hand's grip envelope");
     for(float t:{0.f,.04f,.09f,.15f,.21f,.30f,.50f,.76f}) for(bool shield:{false,true}) for(int layer=0;layer<4;++layer) {
       animation::Sample sample;sample.action=animation::SampleAction(ClassId(i),animation::ActionClip::Heavy,t);
@@ -106,7 +107,7 @@ void ShapesAndSockets() {
         Check(point.y>.04f && Distance(point,posed.arms[1].end)<1.1f,"Equipped weapon penetrated floor or escaped grip bounds");
       }
       if(PhysicalLauncher(form)) {
-        const XMFLOAT3 local{0,form==WeaponForm::Pistol?.16f:.191f,form==WeaponForm::Pistol?.40f:.36f};XMFLOAT3 muzzle;
+        const XMFLOAT3 local{0,form==WeaponForm::Pistol?.16f:.035f,form==WeaponForm::Pistol?.40f:.78f};XMFLOAT3 muzzle;
         XMStoreFloat3(&muzzle,XMVector3TransformCoord(XMLoadFloat3(&local),frame));
         Check(Distance(muzzle,WeaponReleasePoint(posed,form))<.000001f,"Physical shot detached from its visible muzzle");
         Check(Distance(muzzle,SpellReleasePoint(posed,shield))>.20f,"Physical shot originated at the casting palm");
@@ -197,13 +198,13 @@ void ClothingContracts() {
     auto outfit=CharacterOutfit::From(hero.Items(),ClassId(i));
     const auto all=clothing::Build(outfit);
     unsigned cuirasses=0;
-    for(unsigned n=0;n<all.count;++n) cuirasses+=all.parts[n].mesh==visual::Mesh::GuardCuirass;
+    for(unsigned n=0;n<all.count;++n) cuirasses+=all.parts[n].mesh==visual::Mesh::OldWarriorChest;
     Check(cuirasses==(ClassId(i)==ClassId::Warrior?1u:0u),"Guard harness must belong only to the equipped Warrior chest");
     Check(all.count>0 && all.count<48,"Class fittings missing or over budget");
     std::string signature;
     for(unsigned n=0;n<all.count;++n) {
       const auto& p=all.parts[n];
-      Check(p.position.y>.65f && p.position.y<1.7f && std::abs(p.position.x)<.5f &&
+      Check((visual::IsClassArt(p.mesh)?p.position.y>=0:p.position.y>.65f) && p.position.y<1.7f && std::abs(p.position.x)<.5f &&
         p.scale.x>0 && p.scale.y>0 && p.scale.z>0,"Clothing escaped torso envelope");
       signature+=std::to_string(int(p.mesh))+":"+std::to_string(p.position.x)+":"+
         std::to_string(p.position.y)+":"+std::to_string(p.scale.x)+":"+std::to_string(p.scale.y)+";";
@@ -211,7 +212,7 @@ void ClothingContracts() {
     silhouettes.insert(signature);
     outfit.tunic=false;outfit.shoulders=false;outfit.belt=false;
     Check(clothing::Build(outfit).count==0,"Unequipped fittings remain visible");
-    const unsigned shoulderParts=i==int(ClassId::Warrior)?2u:8u;
+    const unsigned shoulderParts=oldstyle::Focused(ClassId(i))?2u:8u;
       outfit.shoulders=true;Check(clothing::Build(outfit).count==shoulderParts,"Shoulder ownership depends on chest equipment");
     outfit.appearance.dye=2;const auto dyed=clothing::Build(outfit);
     Check(dyed.count==shoulderParts,"Dye changed garment topology");

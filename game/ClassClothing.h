@@ -1,6 +1,7 @@
 #pragma once
 #include "game/CharacterView.h"
 #include "engine/Geometry.h"
+#include "game/OldStyle.h"
 #include <array>
 #include <cmath>
 
@@ -30,6 +31,14 @@ inline Fittings Build(const CharacterOutfit& outfit) {
  const auto chest=[&](float x,float y,DirectX::XMFLOAT3 scale,C c,S material) {
   add(M::Torso,x,y,.194f,scale,c,material);
  };
+ if(oldstyle::Focused(outfit.classId)) {
+  const auto paint=oldstyle::Paint(outfit.classId,outfit.appearance);
+  if(outfit.tunic)add(oldstyle::Mesh(outfit.classId,outfit.armor?1:0),0,0,0,{1,1,1},paint,S::Count);
+  if(outfit.shoulders)for(float side:{-1.f,1.f})
+    add(oldstyle::Mesh(outfit.classId,2),side*.335f,1.465f,0,{1,1,1},paint,S::Count);
+  if(outfit.belt)add(classart::Mesh(classart::Part(unsigned(classart::Part::WarriorBelt)+oldstyle::Index(outfit.classId))),0,0,0,{1,1,1},{1,1,1,1},S::Count);
+  return result;
+ }
  if(outfit.tunic) {
   switch(outfit.classId) {
    case rpg::ClassId::Warrior:

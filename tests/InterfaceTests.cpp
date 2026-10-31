@@ -252,7 +252,7 @@ int main() {
     const auto pixels=BuildTerrainSurface(map);
     Require(pixels.size()==terrainSurfaceSize*terrainSurfaceSize*4,"Invalid ground weight texture dimensions.");
     for (std::size_t i=0;i<pixels.size();i+=4)
-      Require(unsigned(pixels[i])+pixels[i+1]<=255 && pixels[i+2]==0 && pixels[i+3]==255,
+      Require(unsigned(pixels[i])+pixels[i+1]<=255 && pixels[i+2]<=90 && pixels[i+3]==255,
         "Ground weights must survive quantization without negative grass weights or transparency.");
     // A vertically inverted upload would put the paved village at the enemy camp.
     const auto sample=[&](float x,float z,int channel) {
@@ -262,6 +262,9 @@ int main() {
     };
     Require(sample(0,-10,1)==255 && sample(0,10,1)==0 && sample(0,10,0)>245 && sample(12,-2,0)==255 &&
       sample(-15,16,0)==0 && sample(-15,16,1)==0,"Ground texture orientation must match world and atlas coordinates.");
+    Require(sample(0,-10,2)==0,"Open village ground should not inherit hill occlusion");
+    unsigned sheltered=0;for(std::size_t i=2;i<pixels.size();i+=4)sheltered+=pixels[i]>12;
+    Require(sheltered>500,"Terrain shelter mask must follow the hills");
   }
   ui::Interface screen;
   for(auto panel:{ui::Panel::Character,ui::Panel::Inventory,ui::Panel::Map,ui::Panel::Journal,ui::Panel::Build,ui::Panel::Quest,ui::Panel::Merchant}) {
@@ -269,7 +272,7 @@ int main() {
   }
   screen.SetOnly(ui::Panel::None);
   screen.MoveHotbar(0,9,rpg::ClassId::Warrior);
-  Require(screen.HotbarSpell(9,rpg::ClassId::Warrior)==0 && screen.HotbarSpell(9,rpg::ClassId::Mage)==-1,"Hotbar layouts are class-specific");
+  Require(screen.HotbarSpell(9,rpg::ClassId::Warrior)==0 && screen.HotbarSpell(9,rpg::ClassId::Mage)==9,"Hotbar layouts are class-specific");
   const auto bindings=screen.SaveHotbars();ui::Interface copied;
   Require(copied.LoadHotbars(bindings) && copied.SaveHotbars()==bindings,"Hotbar bindings round trip");
   Require(!copied.LoadHotbars(bindings+"junk") && copied.SaveHotbars()==bindings,"Malformed settings must preserve bindings");
@@ -778,7 +781,7 @@ int main() {
     };
     Require(gesture(493,true,true,false).action==ui::Action::None,"Hotbar press must not cast before a potential drag");
     gesture(898,false,true,false);const auto drop=gesture(898,false,false,true);
-    Require(drop.action==ui::Action::None && screen.HotbarSpell(9,simulation.Class())==2 && screen.HotbarSpell(2,simulation.Class())==-1,"Drag must move spell to key zero without casting");
+      Require(drop.action==ui::Action::None && screen.HotbarSpell(9,simulation.Class())==2 && screen.HotbarSpell(2,simulation.Class())==9,"Drag must swap spells without casting");
     renderer.BeginFrame();screen.Render(renderer,simulation,0,false);Require(renderer.EndFrame(false),"Moved hotbar render");
     Require(click(898,681).action==ui::Action::Ability && click(493,681).action==ui::Action::None,"Moved action uses its new slot; old slot is empty");
     screen.MoveHotbar(9,2,simulation.Class());
@@ -1273,7 +1276,7 @@ int main() {
     };
     render();
     for(int chapter=0;chapter<rpg::frontierQuestCount+2;++chapter) {
-      const auto event=journal.Pointer(layout.x+400*layout.scale,layout.y+(169+chapter*30.f)*layout.scale,
+        const auto event=journal.Pointer(layout.x+400*layout.scale,layout.y+(166+chapter*21.f)*layout.scale,
         float(size.first),float(size.second),true,false);
       Require(event.action==ui::Action::SelectJournal && event.value==chapter,"Journal row must select its own chapter");
       journal.journalSelection=event.value;journal.InvalidateHitRegions();render();

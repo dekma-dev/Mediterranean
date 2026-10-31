@@ -23,11 +23,12 @@ void DrawScenery(Renderer& r,const rpg::WorldMap& map,bool sparring) {
   // the cliff silhouette without introducing invisible collision in the meadow.
   for(int n=0;n<15;++n) {
     const float x=-26.f+n*3.7f;
-    r.DrawMesh(M::Rock,{x,-.8f,-32.5f-float(n%3)*.35f},
+    r.DrawMesh(M::Rock,{x,-.8f,-130.5f-float(n%3)*.35f},
       {3.4f+float(n%2)*.5f,1.4f+float(n%3)*.25f,2.5f},
       {.40f,.405f,.35f,1},S::Stone,float(n)*.7f);
   }
   for (const auto& cover : map.Cover()) {
+    const auto elevation=r.Elevate(map.Height(cover.position));
     const float scale=cover.scale;
     if (cover.shrub) {
       r.DrawMesh(M::Foliage,{cover.position.x,.30f*scale,cover.position.z},{1.1f*scale,.65f*scale,1.05f*scale},
@@ -37,7 +38,8 @@ void DrawScenery(Renderer& r,const rpg::WorldMap& map,bool sparring) {
       r.DrawMesh(M::Grass,{cover.position.x,0,cover.position.z},{scale,(meadow?.9f:.65f)*scale,scale},
         meadow?XMFLOAT4{.40f,.37f,.25f,1}:XMFLOAT4{.29f,.34f,.23f,1},S::Leaves,cover.yaw,0,visual::ShadowMode::None);
       // Low, offset tufts make irregular patches instead of evenly spaced spikes.
-      for(int tuft=0;tuft<2;++tuft) {
+      const bool outer=std::abs(cover.position.x)>68 || std::abs(cover.position.z)>76;
+      for(int tuft=0;tuft<(outer?1:2);++tuft) {
         const float a=cover.yaw+tuft*2.4f;
         const rpg::Vec2 p{cover.position.x+std::sin(a)*.26f,cover.position.z+std::cos(a)*.26f};
         const auto surface=map.SurfaceAt(p);
@@ -45,7 +47,7 @@ void DrawScenery(Renderer& r,const rpg::WorldMap& map,bool sparring) {
           r.DrawMesh(M::Grass,{p.x,0,p.z},{scale*.75f,scale*.32f,scale*.75f},
             {.33f,.34f,.24f,1},S::Leaves,a,0,visual::ShadowMode::None);
       }
-      if(meadow) {
+      if(meadow && !outer) {
         r.DrawMesh(M::Grass,{cover.position.x+.22f,0,cover.position.z-.18f},{scale*.6f,scale*.52f,scale*.6f},
           {.33f,.40f,.20f,1},S::Leaves,cover.yaw+1.7f,0,visual::ShadowMode::None);
         for(int stem=0;stem<3;++stem) r.DrawMesh(M::Feature,
@@ -61,10 +63,11 @@ void DrawScenery(Renderer& r,const rpg::WorldMap& map,bool sparring) {
       const float t=(i+.5f)*1.4f/length,side=i%2?-1.f:1.f,offset=trail.halfWidth+.35f;
       const rpg::Vec2 p{trail.from.x+dx*t+dz/length*offset*side,trail.from.z+dz*t-dx/length*offset*side};
       if (!map.CanStand(p,.25f) || map.SurfaceAt(p).paving>.2f) continue;
-      r.DrawMesh(M::Rock,{p.x,.025f,p.z},{.21f+i%3*.045f,.095f,.25f+i%2*.07f},rock,S::Stone,float(i));
+      r.DrawMesh(M::Rock,{p.x,map.Height(p)+.025f,p.z},{.21f+i%3*.045f,.095f,.25f+i%2*.07f},rock,S::Stone,float(i));
     }
   }
   for (const auto& o : map.Obstacles()) {
+    const auto elevation=r.Elevate(map.Height(o.center));
     const float x=o.center.x,z=o.center.z;
     if(o.kind==rpg::PropKind::SurveyStone) continue; // Detailed marker assembly below.
     if (o.kind==rpg::PropKind::Counter) { DrawSupplyStall(r,o); continue; }
@@ -106,14 +109,28 @@ void DrawScenery(Renderer& r,const rpg::WorldMap& map,bool sparring) {
     r.DrawMesh(M::Sphere,{x,2.85f,-3},{.26f,.36f,.26f},brass,S::Metal);
   }
   for(const auto site:rpg::WorldMap::surveySites) {
+    const auto elevation=r.Elevate(map.Height(site));
     r.DrawMesh(M::Rock,{site.x,.35f,site.z},{.7f,.7f,.5f},rock,S::Stone);
     r.DrawMesh(M::Crystal,{site.x,1.05f,site.z},{.12f,.22f,.12f},{.42f,.69f,.76f,1},S::Glow,0,0,visual::ShadowMode::None);
     box({site.x,.75f,site.z-.25f},{.35f,.20f,.04f},brass,S::Metal);
   }
+  for(unsigned i=0;i<rpg::WorldMap::expeditionSites.size();++i) {
+    const auto site=rpg::WorldMap::expeditionSites[i];const auto elevation=r.Elevate(map.Height(site));
+    if(i>=6) {
+      r.DrawMesh(M::Barrel,{site.x,.5f,site.z},{.8f,1,.8f},timber,S::Wood);
+      box({site.x+.42f,.25f,site.z+.16f},{.55f,.5f,.55f},rock,S::Cloth);continue;
+    }
+    r.DrawMesh(M::Rock,{site.x,.55f,site.z},{.7f,1.1f,.5f},rock,S::Stone);
+    r.DrawMesh(M::Crystal,{site.x,1.3f,site.z},{.16f,.3f,.16f},i<3?XMFLOAT4{.7f,.26f,.10f,1}:XMFLOAT4{.3f,.55f,.75f,1},S::Glow);
+  }
+  {const auto p=rpg::WorldMap::ritualSite;const auto elevation=r.Elevate(map.Height(p));
+    r.DrawMesh(M::Rock,{p.x,.5f,p.z},{1.1f,1,1.1f},rock,S::Stone);
+    r.DrawMesh(M::Crystal,{p.x,1.75f,p.z},{.4f,1.4f,.4f},{.34f,.62f,.75f,1},S::Glow);
+  }
   // Wooded outcrops frame the horizon, outside the navigable/camera rectangle.
   // Shared authored trees use the existing view-dependent LOD and static cache.
   for (int i=0;i<11;++i) {
-    const float angle=i*6.2831853f/11+.15f,x=std::cos(angle)*55,z=std::sin(angle)*58;
+    const float angle=i*6.2831853f/11+.15f,x=std::cos(angle)*152,z=std::sin(angle)*164;
     const float sx=11.f+i%3*1.5f,sz=10.f+(i+1)%3*1.5f,sy=3.5f+(i%4)*.6f,y=-1.8f;
     r.DrawMesh(M::Ridge,{x,y,z},{sx,sy,sz},{1,1,1,1},S::Ground);
     for(int tree=0;tree<11;++tree) {
@@ -137,12 +154,12 @@ void WorldView::Draw(Renderer& r,const rpg::WorldMap& map,float time,bool sparri
   for(unsigned i=0;i<wildlife_.Animals().size();++i) {
     const auto& a=wildlife_.Animals()[i];
     r.DrawAnimatedAsset(i==0?authored::Asset::Wolf:authored::Asset::Boar,
-      {a.position.x,0,a.position.z},a.yaw,time+i*2,a.gait,0,a.travel);
+      {a.position.x,map.Height(a.position),a.position.z},a.yaw,time+i*2,a.gait,0,a.travel);
   }
   using M=visual::Mesh;
   using S=visual::Material;
   for (const auto& o : map.Obstacles()) if (o.kind==rpg::PropKind::Ruin)
-    r.DrawMesh(M::Crystal,{o.center.x,3.4f+std::sin(time)*.12f,o.center.z},{.7f,1.5f,.7f},
+    r.DrawMesh(M::Crystal,{o.center.x,map.Height(o.center)+3.4f+std::sin(time)*.12f,o.center.z},{.7f,1.5f,.7f},
       {.35f,.68f,.81f,1},S::Glow,time*.3f,0,visual::ShadowMode::None);
   const auto giver=rpg::WorldMap::questGiver;
   CharacterOutfit merchant; merchant.weapon=false; merchant.helm=true;
@@ -152,13 +169,13 @@ void WorldView::Draw(Renderer& r,const rpg::WorldMap& map,float time,bool sparri
   auto keeperMotion=animation::Idle(time,4.1f); keeperMotion.face=keeperFace;
   DrawCharacter(r,giver,0,1.25f,{.57f,.45f,.26f,1},0,0,keeper,keeperMotion,3);
   for(unsigned i=0;i<rpg::WorldMap::residents.size();++i) {
-    const auto& npc=rpg::WorldMap::residents[i];CharacterOutfit outfit;
+    const auto& npc=rpg::WorldMap::residents[i];const auto elevation=r.Elevate(map.Height(npc.position));CharacterOutfit outfit;
     outfit.weapon=i==0;outfit.armor=i==0;outfit.cloak=true;outfit.helm=i==0;
     outfit.classId=i==0?rpg::ClassId::Paladin:i==1?rpg::ClassId::Scout:rpg::ClassId::Mage;
     const DirectX::XMFLOAT4 colors[]={{.47f,.30f,.17f,1},{.26f,.46f,.34f,1},{.38f,.30f,.55f,1}};
     if(i==0 || i==2)
       r.DrawAnimatedAsset(i==0?authored::Asset::Guardian:authored::Asset::Mage,{npc.position.x,0,npc.position.z},3.14159f,time+i);
-    else DrawCharacter(r,npc.position,0,3.14159f,colors[i],0,0,outfit,animation::Idle(time,6.1f+i),4+i);
+    else DrawCharacter(r,npc.position,0,3.14159f,colors[i%3],0,0,outfit,animation::Idle(time,6.1f+i),4+i);
     r.DrawMesh(M::Crystal,{npc.position.x,2.75f+std::sin(time*2+i)*.08f,npc.position.z},
       {.17f,.3f,.17f},{.85f,.67f,.27f,1},S::Glow,time,0,visual::ShadowMode::None);
   }

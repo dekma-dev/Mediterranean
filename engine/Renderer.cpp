@@ -36,7 +36,7 @@ using Vertex = visual::Vertex;
 struct Constants {
  XMFLOAT4X4 world,wvp,normalWorld,shadowVP[visual::shadowLayers]; XMFLOAT4 color,eyeAndHud;
  XMFLOAT4 sun=visual::daylightSun;
- XMFLOAT4 atmosphere{0,.85f,.004f,.57f}; // cloud phase, exposure, haze density, cloud threshold
+ XMFLOAT4 atmosphere{0,.85f,.006f,.53f}; // cloud phase, exposure, haze density, cloud threshold
 };
 static_assert(sizeof(Constants)==384,"Keep the HLSL Scene layout and offscreen shader diagnostics in sync.");
 static_assert(visual::shadowLayers==2,"The scene shader uses a whole-island and a detail shadow layer.");
@@ -127,7 +127,7 @@ bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
  elements.push_back({"BLENDWEIGHT",0,DXGI_FORMAT_R32G32B32A32_FLOAT,2,16,D3D11_INPUT_PER_VERTEX_DATA,0});
  if (!Check(device_->CreateInputLayout(elements.data(),static_cast<UINT>(elements.size()),body->GetBufferPointer(),body->GetBufferSize(),bodyLayout_.GetAddressOf()),L"Create skinned layout")) return false;
  static_assert(sizeof(Instance)==160,"Instance layout must match the shader.");
- static_assert(sizeof(visual::SkinInfluence)==32 && sizeof(visual::BodyPalette)==4192,"Keep skinning layouts synchronized with HLSL.");
+ static_assert(sizeof(visual::SkinInfluence)==32 && sizeof(visual::BodyPalette)==4208,"Keep skinning layouts synchronized with HLSL.");
  static_assert(sizeof(visual::HandPalette)==1024 && sizeof(handPalettes_)==65536,"Hand palettes must match HLSL and the D3D11 constant limit.");
  std::vector<Vertex> vertices; std::vector<std::uint32_t> indices;
  std::vector<visual::SkinInfluence> influences;
@@ -351,7 +351,7 @@ void Renderer::PrepareCloudLight() {
 void Renderer::SetCamera(const XMFLOAT3& eye,const XMFLOAT3& target) {
  eye_=eye;
  auto view=XMMatrixLookAtLH(XMLoadFloat3(&eye),XMLoadFloat3(&target),XMVectorSet(0,1,0,0));
- auto projection=XMMatrixPerspectiveFovLH(XM_PIDIV4,static_cast<float>(width_)/height_,.1f,160.f);
+ auto projection=XMMatrixPerspectiveFovLH(XM_PIDIV4,static_cast<float>(width_)/height_,.1f,280.f);
  XMStoreFloat4x4(&viewProjection_,view*projection);
  if (!portrait_) SetShadowFocus(target);
 }
@@ -411,8 +411,9 @@ void Renderer::Queue(visual::Mesh mesh,const XMMATRIX& transform,const XMFLOAT4&
  // Private callers construct scaled orthonormal bases, never sheared matrices.
  Item item{};
  item.body=attachmentBody_; item.maxDetail=std::uint8_t(std::min(maxDetail,2u));
- XMStoreFloat4x4(&item.instance.world,transform);
- const auto prepared=visual::PrepareInstanceTransform(transform);
+ const auto elevated=transform*XMMatrixTranslation(0,elevation_,0);
+ XMStoreFloat4x4(&item.instance.world,elevated);
+ const auto prepared=visual::PrepareInstanceTransform(elevated);
  XMStoreFloat4x4(&item.instance.normal,prepared.normal);
  item.instance.color=color; item.instance.surface={static_cast<float>(material),shadow==visual::ShadowMode::Cast?1.f:0.f,0,0};
  // A face is smaller than the PCF footprint: extrapolating each tiny triangle's
@@ -428,14 +429,40 @@ void Renderer::DrawMesh(visual::Mesh mesh,const XMFLOAT3& p,const XMFLOAT3& s,co
  Queue(mesh,XMMatrixScaling(s.x,s.y,s.z)*XMMatrixRotationX(pitch)*XMMatrixRotationZ(roll)*XMMatrixRotationY(yaw)*
   XMMatrixTranslation(p.x,p.y,p.z),color,material,shadow,maxDetail);
 }
-void Renderer::DrawCloak(const XMFLOAT3& shoulder,float yaw,float pitch,float roll,float side,float back,bool guard) {
+void Renderer::DrawCloak(const XMFLOAT3& shoulder,float yaw,float pitch,float roll,float side,float back,bool guard,const XMFLOAT4& tint) {
  const auto mesh=guard?visual::Mesh::GuardCloak:visual::Mesh::Cloak;
- DrawMesh(mesh,shoulder,{1,1,1},{1,1,1,1},visual::Material::Cloth,yaw,pitch,visual::ShadowMode::Cast,roll);
+ DrawMesh(mesh,shoulder,{1,1,1},tint,(tint.x==1&&tint.y==1&&tint.z==1)?visual::Material::Cloth:visual::Material::WornCloth,yaw,pitch,visual::ShadowMode::Cast,roll);
  auto& item=world_[static_cast<unsigned>(mesh)].back();
  item.instance.surface.z=std::isfinite(side)?std::clamp(side,-.20f,.20f):0;
  // Positive w identifies cloth. Both shadow and color use the same deformation.
  item.instance.surface.w=.001f+(std::isfinite(back)?std::clamp(back,0.f,.35f):0);
  item.radius+=.41f;
+}
+void Renderer::DrawBow(visual::Mesh mesh,const XMMATRIX& transform,float draw,float arrow) {
+ Queue(mesh,transform,{1,1,1,1},visual::Material::Count,visual::ShadowMode::Cast,2);
+ auto& item=world_[unsigned(mesh)].back();
+ item.instance.surface.z=std::isfinite(draw)?std::clamp(draw,0.f,1.f):0;
+ // (-3,-2) is reserved for archery, separate from hands (-2) and faces (<=-3).
+ item.instance.surface.w=-2.1f-.8f*(std::isfinite(arrow)?std::clamp(arrow,0.f,1.f):1);
+ item.radius+=.45f;
+}
+void Renderer::DrawCoatPanel(visual::Mesh mesh,XMFLOAT3 hem,XMFLOAT3 waist,XMFLOAT3 knee,float width,float depth,XMFLOAT3 facing,const XMFLOAT4& paint) {
+ DrawMeshBetween(mesh,hem,waist,width,depth,paint,visual::Material::Count,facing);
+ auto& item=world_[unsigned(mesh)].back();knee.y+=elevation_;
+ XMFLOAT3 local;XMStoreFloat3(&local,XMVector3TransformCoord(XMLoadFloat3(&knee),XMMatrixInverse(nullptr,XMLoadFloat4x4(&item.instance.world))));
+ item.instance.surface.z=std::clamp(local.y+.5f,.15f,.85f);item.instance.surface.w=-6;
+ // Row 3 is unused by direction transforms (normal.w=0). It carries the
+ // knee's lateral deviation from the waist-to-hem chord, in panel space.
+ item.instance.normal._41=local.x;item.instance.normal._42=0;item.instance.normal._43=local.z;
+ item.radius+=.4f;
+}
+void Renderer::DrawHead(const XMMATRIX& transform,const XMFLOAT4& color,float blink,float expression) {
+ Queue(visual::Mesh::Head,transform,color,visual::Material::Skin,visual::ShadowMode::Cast,2);
+ auto& item=world_[unsigned(visual::Mesh::Head)].back();
+ item.instance.surface.z=std::isfinite(blink)?std::clamp(blink,0.f,1.f):0;
+ // [-5,-3] identifies facial deformation, separate from cloth and receiver bias.
+ item.instance.surface.w=-4-(std::isfinite(expression)?std::clamp(expression,-1.f,1.f):0);
+ item.radius+=.012f;
 }
 unsigned Renderer::DrawBody(XMFLOAT3 position,float yaw,const visual::BodyPalette& palette,std::uint64_t actor) {
  if(bodyCount_>=visual::maxBodies) { error_=L"Scene exceeded the 32 skinned-body budget."; frameFailed_=true; return visual::maxBodies; }
@@ -447,6 +474,9 @@ unsigned Renderer::DrawBody(XMFLOAT3 position,float yaw,const visual::BodyPalett
  }
  DrawMesh(visual::Mesh::Body,position,{1,1,1},{1,1,1,1},visual::Material::Cloth,yaw);
  auto& item=world_[unsigned(visual::Mesh::Body)].back(); item.instance.surface.z=float(bodyCount_++);
+ // Shader-only marker: fitted player garments use metric seams. Imported
+ // preview bodies retain their own vertex material regions and coordinates.
+ if(previewBodyRadius_==0) item.instance.surface.x=14;
  // Covers every solved limb/torso pose, including fully raised arms. Bounds are
  // intentionally conservative; the simulation's collision body is unchanged.
  item.radius=3.f;
@@ -593,7 +623,7 @@ bool Renderer::FlushWorld() {
   UINT end=static_cast<UINT>(instanceScratch_.size());
   for (unsigned mask : maskOrder) {
    const UINT start=end,count=counts[mask]; offsets[mask]=start;
-   if (count>maxInstances-end) { error_=L"Scene exceeded the 4096 visible-instance budget."; return false; }
+   if (count>maxInstances-end) { error_=L"Scene exceeded the "+std::to_wstring(maxInstances)+L" visible-instance budget."; return false; }
    end+=count;
    if (!count) continue;
    for (unsigned pass=0;pass<passCount;++pass) if (mask&(1u<<pass)) {
@@ -621,6 +651,7 @@ bool Renderer::FlushWorld() {
   context_->UpdateSubresource(skinConstants_.Get(),0,nullptr,bodyPalettes_.data(),0,0);
  }
  context_->VSSetShaderResources(9,1,skinPaletteView_.GetAddressOf());
+ context_->PSSetShaderResources(9,1,skinPaletteView_.GetAddressOf());
  if(handCount_) {
   D3D11_MAPPED_SUBRESOURCE mapped{};
   if(!Check(context_->Map(handConstants_.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&mapped),L"Upload hand palettes")) return false;

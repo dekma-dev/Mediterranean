@@ -147,7 +147,7 @@ int main(int argc,char** argv) {
   CheckRoute(map,{0,-10},{-15,3});
   CheckRoute(map,{-13,10},{15,10});
   Require(map.FindPath({-8,-8},{0,0}).empty(),"Blocked starting point must not create a route");
-  Require(map.FindPath({0,0},{40,0}).empty(),"Outside goal must not create a route");
+  Require(map.FindPath({0,0},{rpg::WorldMap::halfWidth+1,0}).empty(),"Outside goal must not create a route");
   Require(!map.CanStand({std::numeric_limits<float>::quiet_NaN(),0},.4f),"NaN coordinates must be rejected");
   Require(!map.CanStand({14,-2},.4f),"Visible tree trunk must be solid");
   Require(!map.CanTravel({3,-15},{3,-11},.45f),"The visible shop counter must block a direct route.");

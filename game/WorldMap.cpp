@@ -35,6 +35,41 @@ WorldMap::WorldMap() {
     {{-10,-25},{-19,-21},.8f,false},{{-19,-21},{-19,-16},.8f,false},
     {{0,-22},{10,-25},.8f,false},{{10,-25},{16,-22},.8f,false},
     {{16,-22},{16,-16},.8f,false}};
+  // Three expeditions branch off the established roads. All services have
+  // open approaches; buildings sit beside, rather than across, their routes.
+  const Trail extensions[]={
+    {{-21,23},{-34,21},1.1f,false},{{-34,21},{-46,20},1.1f,false},
+    {{-46,20},{-54,32},1,false},{{-54,32},{-45,44},1,false},{{-45,44},{-36,49},1,false},
+    {{23,20},{29,18},1.1f,false},{{29,18},{34,27},1.1f,false},{{34,27},{44,32},1.1f,false},
+    {{44,32},{53,40},1,false},{{53,40},{46,50},1,false},{{46,50},{36,56},1,false},
+    {{3,22},{8,36},1.2f,false},{{8,36},{-8,56},1.2f,false},
+    {{-8,56},{-18,64},1.2f,false},{{-18,64},{0,71},1.2f,false},{{0,71},{15,64},1.2f,false},
+    {{0,-22},{6,-39},1,false},{{6,-39},{22,-55},1,false},{{22,-55},{40,-60},1,false}};
+  trails_.insert(trails_.end(),std::begin(extensions),std::end(extensions));
+  for(const auto p:{Vec2{-50,18},Vec2{48,30},Vec2{-12,53},Vec2{25,-60}})
+    obstacles_.push_back({p,2.3f,2.1f,4.f,PropKind::Building,BuildingRole::WatchHall});
+  for(const auto p:{Vec2{-58,38},Vec2{57,46},Vec2{-3,74},Vec2{17,-60}})
+    obstacles_.push_back({p,2,1.5f,3.4f,PropKind::Ruin});
+  for(const auto p:expeditionSites) obstacles_.push_back({p,.35f,.25f,1.2f,PropKind::SurveyStone});
+  obstacles_.push_back({ritualSite,.45f,.45f,1.5f,PropKind::SurveyStone});
+  const Trail southRoads[]={
+    {{6,-39},{-12,-57},1.2f,false},{{-12,-57},{-29,-72},1.2f,false},{{-29,-72},{-39,-85},1.2f,false},
+    {{-39,-85},{-53,-96},1,false},{{-53,-96},{-37,-107},1,false},{{-37,-107},{-23,-98},1,false},
+    {{-39,-85},{-60,-76},1.2f,false},{{-60,-76},{-74,-70},1.2f,false},{{-74,-70},{-86,-88},1.1f,false},
+    {{40,-60},{58,-74},1.2f,false},{{58,-74},{73,-91},1.2f,false},{{73,-91},{87,-101},1.2f,false},
+    {{87,-101},{99,-109},1.1f,false},{{73,-91},{63,-112},1,false}};
+  trails_.insert(trails_.end(),std::begin(southRoads),std::end(southRoads));
+  for(const auto p:{Vec2{-39,-91},Vec2{-79,-66},Vec2{79,-87}})
+    obstacles_.push_back({p,2.3f,2.1f,4.f,PropKind::Building,BuildingRole::WatchHall});
+  for(const auto p:{Vec2{-94,-104},Vec2{102,-115},Vec2{64,-119}})
+    obstacles_.push_back({p,2,1.5f,3.5f,PropKind::Ruin});
+  // Small groves frame the roads and leave sightlines around encounter camps.
+  for(const auto grove:{Vec2{-60,10},Vec2{-61,52},Vec2{61,23},Vec2{59,61},Vec2{-32,65},Vec2{28,70},Vec2{-28,-51},Vec2{48,-48},
+      Vec2{-55,-118},Vec2{-96,-70},Vec2{-102,-110},Vec2{95,-80},Vec2{53,-102},Vec2{107,-118},Vec2{-94,95},Vec2{92,96}})
+    for(int i=0;i<5;++i) {
+      Vec2 p{grove.x+std::cos(i*2.4f)*float(2+i),grove.z+std::sin(i*2.4f)*float(2+i)};
+      if(CanStand(p,1.8f) && SurfaceAt(p).dirt<.01f) obstacles_.push_back({p,.4f,.4f,5.2f,PropKind::Tree});
+    }
   // Stable decoration, generated once. Keep routes, services and the arena clear.
   const auto hash=[](int x,int z) {
     std::uint32_t h=std::uint32_t(x)*374761393u+std::uint32_t(z)*668265263u;
@@ -57,9 +92,9 @@ WorldMap::WorldMap() {
     cover_.push_back({p,.7f+hash(x+17,z-3)*.5f,seed*6.2831853f,shrub});
   }
   // A separately bounded scatter keeps the original village cover intact.
-  for(int z=-27;z<=27;z+=2) for(int x=-25;x<=25;x+=2) {
+  for(int z=-75;z<=75;z+=3) for(int x=-67;x<=67;x+=3) {
     if(std::abs(x)<17 && std::abs(z)<19) continue;
-    const float seed=hash(x+91,z-53);if(seed<.48f || cover_.size()>=maxCover) continue;
+    const float seed=hash(x+91,z-53);if(seed<.67f || cover_.size()>=maxCover) continue;
     const Vec2 p{float(x)+(seed-.5f)*.5f,float(z)};
     bool service=false;
     for(const auto& npc:residents) service|=std::hypot(p.x-npc.position.x,p.z-npc.position.z)<2;
@@ -67,6 +102,15 @@ WorldMap::WorldMap() {
     if(service || !CanStand(p,.8f) || SurfaceAt(p).dirt+SurfaceAt(p).paving>.06f) continue;
     const bool shrub=seed>.94f && shrubs<maxShrubs;if(shrub) ++shrubs;
     cover_.push_back({p,.7f+seed*.4f,seed*6.2831853f,shrub});
+  }
+  for(int z=-120;z<=120;z+=5) for(int x=-110;x<=110;x+=5) {
+    if(std::abs(x)<70 && std::abs(z)<78) continue;
+    const float seed=hash(x+43,z+67);if(seed<.70f || cover_.size()>=maxCover)continue;
+    const Vec2 p{float(x),float(z)};bool service=false;
+    for(const auto& npc:residents)service|=std::hypot(x-npc.position.x,z-npc.position.z)<3;
+    if(service || std::hypot(x-ritualSite.x,z-ritualSite.z)<5 || !CanStand(p,1) || SurfaceAt(p).dirt>.01f)continue;
+    const bool shrub=seed>.92f && shrubs<maxShrubs;if(shrub)++shrubs;
+    cover_.push_back({p,.8f+seed*.5f,seed*6.2831853f,shrub});
   }
 }
 
@@ -209,10 +253,17 @@ std::vector<Vec2> WorldMap::FindPath(Vec2 from,Vec2 to,float radius) const {
   // Anchor to a visible free grid point rather than rounding into an obstacle.
   const auto anchor=[&](Vec2 p) {
     int best=-1; float nearest=std::numeric_limits<float>::max();
-    for (int i=0;i<total;++i) {
-      const Vec2 candidate=point(i);
-      const float distance=std::hypot(candidate.x-p.x,candidate.z-p.z);
-      if (distance<nearest && CanTravel(p,candidate,radius)) { nearest=distance; best=i; }
+    const auto origin=point(0);
+    const int cx=int(std::round(p.x-origin.x)),cz=int(std::round(p.z-origin.z));
+    for(int ring=0;ring<std::max(columns,rows);++ring) {
+      for(int dz=-ring;dz<=ring;++dz) for(int dx=-ring;dx<=ring;++dx) {
+        if(std::max(std::abs(dx),std::abs(dz))!=ring) continue;
+        const int x=cx+dx,z=cz+dz;if(x<0 || z<0 || x>=columns || z>=rows) continue;
+        const int i=z*columns+x;const auto candidate=point(i);
+        const float distance=std::hypot(candidate.x-p.x,candidate.z-p.z);
+        if(distance<nearest && CanTravel(p,candidate,radius)) {nearest=distance;best=i;}
+      }
+      if(best>=0 && ring+.5f>nearest) break;
     }
     return best;
   };
@@ -223,9 +274,11 @@ std::vector<Vec2> WorldMap::FindPath(Vec2 from,Vec2 to,float radius) const {
     return a.score==b.score?a.index>b.index:a.score>b.score;
   }};
   std::priority_queue<Visit,std::vector<Visit>,Later> open;
-  std::array<float,total> costs; costs.fill(std::numeric_limits<float>::max());
-  std::array<int,total> previous; previous.fill(-1);
-  std::array<bool,total> closed{};
+  // A province-sized search cannot live on the Windows thread stack (a path
+  // may be requested while rendering UI previews or updating nested actors).
+  std::vector<float> costs(total,std::numeric_limits<float>::max());
+  std::vector<int> previous(total,-1);
+  std::vector<unsigned char> closed(total,0);
   costs[start]=0; open.push({0,start});
   while (!open.empty()) {
     const int current=open.top().index; open.pop();
@@ -237,7 +290,7 @@ std::vector<Vec2> WorldMap::FindPath(Vec2 from,Vec2 to,float radius) const {
       if ((dx==0 && dz==0) || x+dx<0 || x+dx>=columns || z+dz<0 || z+dz>=rows) continue;
       const int next=(z+dz)*columns+x+dx;
       if (closed[next] || !CanTravel(point(current),point(next),radius)) continue;
-      const float nextCost=costs[current]+(dx!=0 && dz!=0?1.41421356f:1.f);
+      const float nextCost=costs[current]+std::hypot(dx!=0 && dz!=0?1.41421356f:1.f,Height(point(next))-Height(point(current)));
       if (nextCost>=costs[next]) continue;
       costs[next]=nextCost; previous[next]=current;
       const Vec2 p=point(next), g=point(goal);
@@ -261,6 +314,11 @@ std::vector<Vec2> WorldMap::FindPath(Vec2 from,Vec2 to,float radius) const {
 }
 
 const char* WorldMap::AreaName(Vec2 p) const {
+  if(p.z<-76) return p.x<-60?"THE MISTWARD RIDGE":p.x>40?"THE IRON COURT":"THE BROKEN CARAVAN ROAD";
+  if(p.z>50) return "THE ASHEN PASS";
+  if(p.x<-33) return "THE SIGNAL HILLS";
+  if(p.x>33) return "THE EASTERN OBSERVATORY";
+  if(p.z<-36) return "THE WEATHERED HEATH";
   if(p.z<-19) return "THE WINDWORN MEADOW";
   if(p.x<-17) return "WESTWARD REACH";
   if(p.x>17) return "THE SURVEY COAST";

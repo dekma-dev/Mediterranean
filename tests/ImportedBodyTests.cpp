@@ -34,7 +34,7 @@ int main() {
   bad=geometry;bad.mesh.indices[0]=65535;Reject([&]{visual::ValidateBodyGeometry(bad);});
   bad=geometry;bad.influences[0].weights.x=2;Reject([&]{visual::ValidateBodyGeometry(bad);});
   bad=geometry;bad.mesh.vertices[0].normal={0,0,0};Reject([&]{visual::ValidateBodyGeometry(bad);});
-  bad=geometry;bad.mesh.vertices[0].color.w=6;Reject([&]{visual::ValidateBodyGeometry(bad);});
+  bad=geometry;bad.mesh.vertices[0].color.w=float(visual::bodyRegions);Reject([&]{visual::ValidateBodyGeometry(bad);});
   auto wrong=asset.skeleton.RestPose();wrong.skin.pop_back();Reject([&]{assets::BodyPose(asset,wrong);});
   std::vector<animation::Joint> joints(11);for(int i=0;i<11;++i) {joints[i].name="joint"+std::to_string(i);joints[i].parent=i-1;}
   assets::RigAsset large{animation::Skeleton(joints),{},asset.mesh};Reject([&]{assets::BodyGeometry(large);});

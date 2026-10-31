@@ -31,13 +31,13 @@ int main() {
     rpg::Simulation hero;check(hero.CreateCharacter(rpg::ClassId(id),"Алёна-Ёж"));
     const auto saved=hero.Save();
     check(translated(hero.ClassInfo().name) && translated(hero.ClassInfo().title) && translated(hero.ClassInfo().role) && translated(hero.ClassInfo().identity));
-    for(int spell:{0,1,2,3,5,6,7}) {
+    for(int spell:{0,1,2,3,5,6,7,8,9}) {
       const auto data=hero.Spell(spell);
       check(translated(data.name) && translated(data.description) && translated(data.targeting));
     }
     check(hero.Save()==saved);
   }
-  for(int id=int(rpg::QuestId::Patrol);id<=int(rpg::QuestId::Watch10);++id) {
+  for(int id=int(rpg::QuestId::Patrol);id<=int(rpg::QuestId::Watch13);++id) {
     const auto& quest=rpg::DescribeQuest(rpg::QuestId(id));
     check(translated(quest.title) && translated(quest.objective));
     for(auto stage:{rpg::QuestStage::Offer,rpg::QuestStage::Progress,rpg::QuestStage::TurnIn,rpg::QuestStage::Complete})

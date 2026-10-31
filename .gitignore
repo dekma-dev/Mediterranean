@@ -5,3 +5,7 @@ build-*/
 build_vs/
 out/
 saves/
+.blender-local/
+/scripts/export-player-body.py
+/scripts/export-player-head.py
+/assets/authored/*.blend1

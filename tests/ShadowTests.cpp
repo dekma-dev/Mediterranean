@@ -496,13 +496,13 @@ int main() {
   Check(denseFrame,"A supported scene must not overflow merely because objects appear in both shadow maps.");
   // Sharing uploaded instances must preserve a hard scene bound, including its exact
   // edge. Keep overflow last: a rejected frame is not submitted for presentation.
-  for (int count : {4096,4097}) {
+  for (const unsigned count : {Renderer::maxWorldInstances,Renderer::maxWorldInstances+1}) {
     renderer.BeginFrame(); renderer.SetCamera({3,4,5},{0,0,0});
-    for (int i=0;i<count;++i)
+    for (int i=0;i<int(count);++i)
       renderer.DrawMesh(M::Box,{(i%64-32)*.025f,.5f,(i/64-32)*.025f},{.02f,.5f,.02f},white,S::Plain);
     const bool rendered=renderer.EndFrame(false);
-    Check(rendered==(count==4096),"The scene instance budget must accept its boundary and reject overflow.");
-    if (!rendered) Check(renderer.Error()==L"Scene exceeded the 4096 visible-instance budget.",
+    Check(rendered==(count==Renderer::maxWorldInstances),"The scene instance budget must accept its boundary and reject overflow.");
+    if (!rendered) Check(renderer.Error()==L"Scene exceeded the "+std::to_wstring(Renderer::maxWorldInstances)+L" visible-instance budget.",
       "An over-budget scene must report the actual capacity error.");
   }
   Require(renderer.ValidateDebugMessages(),"Queue regressions emitted a DirectX warning/error.");

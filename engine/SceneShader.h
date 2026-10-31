@@ -36,14 +36,55 @@ struct VOut {
  float3 tp : TEXCOORD4; float3 tn : TEXCOORD5;
  float cloudLight : TEXCOORD6;
  nointerpolation float receiverPlane : TEXCOORD7;
+ nointerpolation uint bodyStyle : TEXCOORD8;
 };
 float CloudSunlight(float3 position);
 float SurfaceCloudSunlight(float3 position);
 VOut VSMain(VIn i) {
  VOut o; o.p=mul(float4(i.p,1),wvp); o.wp=i.n; o.n=i.n;
- o.tint=i.tint; o.shadow=o.detailShadow=0; o.material=0; o.tp=o.tn=0; o.cloudLight=1; o.receiverPlane=1; return o;
+ o.tint=i.tint; o.shadow=o.detailShadow=0; o.material=0; o.tp=o.tn=0; o.cloudLight=1; o.receiverPlane=1; o.bodyStyle=0; return o;
 }
-void DeformCloth(inout float3 p,inout float3 n,float4 surface) {
+float FaceLift(float3 p,float blink,float expression) {
+ // Express the fitted facial regions in metres, independent of the taller
+ // normalized neck envelope used by the exported mesh.
+ float3 q=p*float3(.265,.42,.26)+float3(0,1.71,.012);
+ float ex=(abs(q.x)-.04203)/.017225,ey=(q.y-1.78325)/.0279;
+ float mx=(abs(q.x)-.019875)/.0212,my=(q.y-1.6794)/.02325;
+ // Explicit products avoid pow's undefined negative-base case on SM5 GPUs.
+ float eye=exp(-(ex*ex)*(ex*ex))*smoothstep(.0744,.1004,q.z);
+ float upper=smoothstep(1.7786,1.78356,q.y);
+ float lid=lerp(.0031,-.01333,upper)*exp(-ey*ey);
+ float mouth=exp(-mx*mx-my*my)*smoothstep(.0744,.0952,q.z);
+ return (blink*eye*lid+expression*.00372*mouth)/.42;
+}
+void DeformCloth(inout float3 p,inout float3 n,float4 surface,float partMaterial,float3 bend) {
+ [branch] if(surface.w==-6) {
+  float t=saturate(p.y+.5),k=surface.z;
+  float u=t<k?t/k:(1-t)/(1-k),direction=t<k?1/k:-1/(1-k);
+  float weight=u*u*(3-2*u),derivative=6*u*(1-u)*direction;
+  n.y-=dot(n,bend)*derivative;p+=bend*weight;
+ }
+ [branch] if(surface.w<-2 && surface.w>-3) {
+  float draw=saturate(surface.z),height=abs(p.y)/.64;
+  if(partMaterial==6) {
+   // Arrow parts have their own material tag in the authored bow mesh.
+   float visible=saturate((-surface.w-2.1)/.8);
+   p=(p-float3(0,.035,0))*visible+float3(0,.035,-.40*draw);
+  } else if(partMaterial==15) {
+   p.z-=draw*lerp(.40,.08,saturate(height));
+  } else {
+   p.z-=draw*.08*height*height;
+   n.y+=draw*.16*p.y/(.64*.64)*n.z;
+  }
+ }
+ [branch] if(surface.w<=-3 && surface.w>=-5) {
+  float blink=saturate(surface.z),expression=clamp(-surface.w-4,-1,1);
+  float lift=FaceLift(p,blink,expression),e=.001;
+  float3 gradient=float3(FaceLift(p+float3(e,0,0),blink,expression)-FaceLift(p-float3(e,0,0),blink,expression),
+   FaceLift(p+float3(0,e,0),blink,expression)-FaceLift(p-float3(0,e,0),blink,expression),
+   FaceLift(p+float3(0,0,e),blink,expression)-FaceLift(p-float3(0,0,e),blink,expression))/(2*e);
+  n-=gradient*n.y/max(.15,1+gradient.y); p.y+=lift;
+ }
  [branch] if (surface.w>0) {
   float t=saturate(-p.y/.82),side=surface.z,back=surface.w-.001;
   p.x+=side*t*t; p.z-=back*t*t;
@@ -53,26 +94,30 @@ void DeformCloth(inout float3 p,inout float3 n,float4 surface) {
 }
 float4 VSShadow(InstanceIn i) : SV_POSITION {
  float4x4 object=float4x4(i.w0,i.w1,i.w2,i.w3);
- DeformCloth(i.p,i.n,i.surface);
+ DeformCloth(i.p,i.n,i.surface,i.tint.w,i.n3.xyz);
  return mul(mul(float4(i.p,1),object),wvp);
 }
 VOut VSWorld(InstanceIn i) {
  VOut o;
+ o.bodyStyle=i.surface.w<=-3 && i.surface.w>=-5?0xffffffff:0;
  float4x4 object=float4x4(i.w0,i.w1,i.w2,i.w3);
  float4x4 normals=float4x4(i.n0,i.n1,i.n2,i.n3);
  float3 undeformed=i.p,undeformedNormal=i.n;
- DeformCloth(i.p,i.n,i.surface);
+ DeformCloth(i.p,i.n,i.surface,i.tint.w,i.n3.xyz);
  float4 position=mul(float4(i.p,1),object);
  o.wp=position.xyz; o.p=mul(position,wvp);
  o.n=normalize(mul(float4(i.n,0),normals).xyz);
  o.receiverPlane=i.surface.w<0?0:1;
  float4 receiver=position;
- if (i.surface.w<0) receiver.xyz+=o.n*(i.surface.w<-1?.0007:.0025);
+ if (i.surface.w<0) receiver.xyz+=o.n*(i.surface.w<=-3 && i.surface.w>=-5?.0080:i.surface.w<-1?.0007:.0025);
  o.tint=i.tint*i.paint; o.shadow=mul(receiver,shadowVP[0]);
  o.detailShadow=mul(receiver,shadowVP[1]); o.material=i.surface.x;
  // Authored vertices carry a validated native material ID in alpha.
  // The special instance material leaves ordinary tint/opacity unchanged.
- if (i.surface.x==13) { o.material=i.tint.w; o.tint.a=i.paint.a; }
+ if (i.surface.x==16) {
+  o.material=i.tint.w;o.tint.a=abs(i.paint.a);
+  if(i.paint.a<0)o.tint.rgb=i.tint.rgb*(i.tint.w==15?i.paint.rgb:float3(1,1,1));
+ }
  // Metric object coordinates follow animated parts instead of sliding through
  // a world-space texture. Projection weights account for nonuniform scaling.
  float3 size=float3(length(i.w0.xyz),length(i.w1.xyz),length(i.w2.xyz));
@@ -88,27 +133,43 @@ VOut VSWorld(InstanceIn i) {
 // Float4 elements avoid the SM5 2048-byte structured-element limit.
 StructuredBuffer<float4> bodyRows : register(t9);
 matrix BodyMatrix(uint actor,uint joint,bool normal) {
- uint base=actor*262+(normal?128:0)+joint*4;
+ uint base=actor*263+(normal?128:0)+joint*4;
  return transpose(matrix(bodyRows[base],bodyRows[base+1],bodyRows[base+2],bodyRows[base+3]));
 }
 struct SkinIn { InstanceIn object; uint4 bones : BLENDINDICES; float4 weights : BLENDWEIGHT; };
 void SkinBody(inout InstanceIn i,uint4 joints,float4 weights) {
  uint actor=(uint)i.surface.z;
+ // Compress only the covered torso beneath the fitted rigid doublet/jerkin.
+ // Keep the bare anatomical body, arms and neck at their authored dimensions.
+ if(i.surface.x==14 && i.tint.w==0 && bodyRows[actor*263+256].w==15) {
+  i.p.z*=.82; i.n.z/=.82;
+ }
  float3 p=0,n=0;
  [unroll] for(uint k=0;k<4;++k) {
   p+=mul(float4(i.p,1),BodyMatrix(actor,joints[k],false)).xyz*weights[k];
   n+=mul(float4(i.n,0),BodyMatrix(actor,joints[k],true)).xyz*weights[k];
  }
  i.p=p; i.n=normalize(n);
- if(i.surface.x!=13) {
-  float4 style=bodyRows[actor*262+256+(uint)i.tint.w];
+ if(i.surface.x!=16) {
+  float4 style=bodyRows[actor*263+256+(uint)i.tint.w];
   i.tint=float4(style.rgb,1); i.surface.x=style.w;
  }
 }
 VOut VSBody(SkinIn v) {
  float3 bindPosition=v.object.p,bindNormal=v.object.n;
+ uint bodyStyle=v.object.surface.x==14?(uint)v.object.surface.z+1:0;
  SkinBody(v.object,v.bones,v.weights);
- VOut o=VSWorld(v.object); o.tp=bindPosition; o.tn=bindNormal; return o;
+ VOut o=VSWorld(v.object); o.tp=bindPosition; o.tn=bindNormal; o.bodyStyle=bodyStyle; return o;
+}
+// Evaluate garment seams in metric bind space. A vertex-region ID alone makes
+// sleeves and shorts follow triangle diagonals and change shape at each LOD.
+uint BodyRegion(float3 p) {
+ float x=abs(p.x);
+ if(p.y>1.465 && dot(p.xz/float2(.106,.098),p.xz/float2(.106,.098))<1) return 5;
+ float sleeve=dot(float2(x-.305,p.y-1.43),float2(.145,-.24))/.078625;
+ if(x>.30 && p.y>.72) return sleeve>.85?2:1;
+ if(p.y<1.01) return p.y>.79?6:(p.y<.53?4:3);
+ return 0;
 }
 float4 VSBodyShadow(SkinIn v) : SV_POSITION {
  SkinBody(v.object,v.bones,v.weights); return VSShadow(v.object);
@@ -341,9 +402,13 @@ float4 PSMain(VOut i) : SV_TARGET {
   else if (i.wp.z>.5) result.a*=fontAtlas.Sample(fontSampler,i.wp.xy);
   return result;
  }
+ [branch] if(i.bodyStyle && i.bodyStyle!=0xffffffff) {
+  float4 style=bodyRows[(i.bodyStyle-1)*263+256+BodyRegion(i.tp)];
+  i.tint=float4(style.rgb,1);i.material=style.w;
+ }
  float3 geometric=normalize(i.n),n=geometric;
  float3 weights=pow(abs(normalize(i.tn)),4); weights/=max(dot(weights,1),.00001);
- float scale=i.material==1?1.4:i.material==3?.8:i.material==5?1.1:i.material==6 || i.material==12?3:i.material==11?2: .6;
+ float scale=i.material==1?1.4:i.material==3?.8:i.material==5?1.1:i.material==15?12:i.material==6 || i.material==12?3:(i.material==11 || i.material==14)?2: .6;
  float4 mx=materials.Sample(surfaceSampler,float3(i.tp.zy*scale,i.material));
  float4 my=materials.Sample(surfaceSampler,float3(i.tp.xz*scale,i.material));
  float4 mz=materials.Sample(surfaceSampler,float3(i.tp.xy*scale,i.material));
@@ -353,6 +418,21 @@ float4 PSMain(VOut i) : SV_TARGET {
  float3 slope=weights.x*float3(0,gx.y,gx.x)+weights.y*float3(gy.x,0,gy.y)+weights.z*float3(gz.x,gz.y,0);
  float2 heightDerivative=float2(dot(slope,ddx(i.tp)),dot(slope,ddy(i.tp)))*scale;
  float3 albedo=i.tint.rgb*detail;
+ [branch] if(i.bodyStyle==0xffffffff) {
+  // Local metric masks follow the head, retaining the selected complexion.
+  // Low-contrast stubble, lips and eye creases replace a uniform skin coating.
+  float3 q=i.tp;
+  float front=smoothstep(.025,.065,q.z);
+  float beard=front*(1-smoothstep(-.005,.025,q.y))*smoothstep(-.15,-.085,q.y);
+  float grain=Noise(q.xy*850);
+  albedo*=lerp(float3(1,1,1),float3(.77,.79,.80),beard*(.50+.30*grain));
+  float lips=(1-smoothstep(.024,.038,abs(q.x)))*(1-smoothstep(.003,.010,abs(q.y+.031)))*front;
+  albedo*=lerp(float3(1,1,1),float3(1.02,.78,.74),lips*.65);
+  float eyeCrease=(1-smoothstep(.014,.028,abs(abs(q.x)-.040)))*(1-smoothstep(.004,.010,abs(q.y-.052)))*front;
+  albedo*=1-.07*eyeCrease;
+  float mottling=Noise(q.xy*73+q.z*17);
+  albedo*=.96+.08*mottling;roughness=max(roughness,.70+.06*grain);
+ }
  float cavity=1;
  if (i.material==1) {
   float broad=Noise(i.wp.xz*.16),fine=Noise(i.wp.xz*1.7);
@@ -364,9 +444,10 @@ float4 PSMain(VOut i) : SV_TARGET {
   float3 earth=lerp(float3(.255,.235,.20),float3(.36,.315,.245),fine);
   albedo=lerp(grass,earth,exposed*.82)*groundDetail;
   // The 256-square weight map shares authored routes with the atlas and cover.
-  // WorldMap survey bounds: 58 x 62 m playable land, plus a 4 m paper gutter.
-  float2 groundUV=float2((i.wp.x+33)/66,(35-i.wp.z)/70);
-  float2 routes=terrainSurface.Sample(fontSampler,groundUV).rg;
+  // WorldMap survey bounds: 240 x 256 m playable land, plus a 4 m paper gutter.
+  float2 groundUV=float2((i.wp.x+124)/248,(132-i.wp.z)/264);
+  float3 groundWeights=terrainSurface.Sample(fontSampler,groundUV).rgb;
+  float2 routes=groundWeights.rg;
   routes*=all(groundUV>=0) && all(groundUV<=1);
   float3 soil=float3(.34,.285,.225)*(.87+fine*.18)*groundDetail;
   float2 tile=i.wp.xz*float2(2.2,3.3);
@@ -390,7 +471,7 @@ float4 PSMain(VOut i) : SV_TARGET {
   float relief=routes.y*(.042*mortar*(.7+stoneVariation*.3)+.002*chips*mortar);
   heightDerivative+=float2(ddx(relief),ddy(relief));
   roughness=lerp(.96,lerp(.93,.68+.14*stoneVariation,mortar),routes.y);
-  cavity=lerp(1,lerp(.65,1,mortar),routes.y);
+  cavity=lerp(1,lerp(.65,1,mortar),routes.y)*(1-groundWeights.b);
   // Exposed ridge faces use weathered rock, while gentle slopes retain heath.
   float escarpment=1-smoothstep(.38,.78,geometric.y);
   albedo=lerp(albedo,lerp(float3(.24,.25,.235),float3(.39,.365,.31),fine),escarpment);
@@ -453,7 +534,7 @@ float4 PSMain(VOut i) : SV_TARGET {
  // A small transmitted-light term keeps the backs of opaque leaves readable.
  if (i.material==8) { hemisphere=max(hemisphere,.48); diffuse+=saturate(dot(-n,lightDir))*.32; }
  float3 base=pow(saturate(albedo),2.2);
- float metal=i.material==7?.8:0;
+ float metal=i.material==7?.8:i.material==13?.62:0;
  float3 view=normalize(eyeAndHud.xyz-i.wp),halfVector=normalize(lightDir+view);
  // GGX microfacets: roughness controls highlight width, while masking keeps
  // grazing highlights bounded. Derivative variance damps distant sparkle.
@@ -480,7 +561,7 @@ float4 PSMain(VOut i) : SV_TARGET {
   float wrapped=saturate((dot(n,lightDir)+.28)/1.28)/1.28;
   diffuseLight=lerp(diffuse.xxx,wrapped.xxx,float3(.28,.16,.09));
  }
- float clothSheen=i.material==6?.22*pow(1-nv,5):0;
+ float clothSheen=(i.material==6 || i.material==15)?.22*pow(1-nv,5):0;
  diffuseWeight*=1-clothSheen;
  float3 result=base*diffuseWeight*(ambient*cavity+sunlight*diffuseLight*visibility);
  result+=specular*sunlight*diffuse*visibility*3.14159265;
@@ -501,6 +582,7 @@ float4 PSMain(VOut i) : SV_TARGET {
  result=lerp(haze,result,transmission);
  return float4(DisplayDaylight(result),1);
 }
+)" R"(
 struct EffectOut { float4 p : SV_POSITION; float3 uv : TEXCOORD0; float4 tint : COLOR; float fog : TEXCOORD1; };
 EffectOut VSEffect(VIn i) {
  EffectOut o; o.p=mul(float4(i.p,1),wvp); o.uv=i.n; o.tint=i.tint;

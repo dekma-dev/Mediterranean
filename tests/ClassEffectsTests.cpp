@@ -188,6 +188,34 @@ void SchoolHues(Renderer& r,const std::filesystem::path& root) {
     if(id==ClassId::Psionic) Check(energy[2]>energy[1]*1.6,"Mind core lost its violet hue");
   }
 }
+void SlopeEffects(Renderer& r,const std::filesystem::path& root) {
+  Simulation s;
+  Check(s.Load("MEDITERRANEAN 3\n-40 25 100 0 3 90\n5 1 1 0\n4\n0 0 0 0\n"
+    "100 -4 7 0 0 1 3 0 0\n101 4 9 0 0 1 3 0 0\n102 0 12 0 0 1 3 0 0\n"),"Slope effects fixture");
+  const auto p=s.Player();const float y=s.WorldHeight();
+  Check(y>2,"Slope fixture must expose zero-height effects");
+  const auto begin=[&] {
+    r.BeginFrame();r.SetCamera({p.x+3,y+4,p.z-6},{p.x,y+.7f,p.z});
+    r.DrawMesh(visual::Mesh::Terrain,{0,0,0},{1,1,1},{.22f,.24f,.22f,1},visual::Material::Stone);
+  };
+  begin();const auto base=Capture(r,root/"slope-base.png");
+  Command ward;ward.ability=3;s.Update(.001f,ward);Check(s.Barrier()>0,"Slope ward rejected");
+  begin();classfx::States(r,s,1);
+  Check(VisiblePixels(base,Capture(r,root/"slope-ward.png"))>30,"Barrier is buried below hillside");
+  Tick(s,20);
+  auto& enemy=const_cast<Enemy&>(s.Enemies()[0]);enemy.health=100;enemy.position={p.x+.7f,p.z+.8f};
+  for(int i=0;i<4;++i) {
+    enemy.rooted=i==0?2.f:0;enemy.snared=i==1?2.f:0;enemy.stunned=i==2?2.f:0;enemy.exposed=i==3?2.f:0;
+    begin();classfx::States(r,s,1);
+    Check(VisiblePixels(base,Capture(r,root/("slope-status-"+std::to_string(i)+".png")))>30,"Control status is buried below hillside");
+  }
+  for(auto kind:{K::EnemyQuake,K::EnemyLance,K::EnemyTempest,K::EnemyExecution,K::DashStop}) {
+    CombatEffects effects;CombatVisualEvent e{kind,p,y,0,100};effects.Emit(e);
+    effects.Advance(.05f);effects.Advance(.05f);begin();effects.Render(r);
+    Check(r.EffectVertices()<3000,"Slope effect exceeds bounded geometry");
+    Check(VisiblePixels(base,Capture(r,root/("slope-burst-"+std::to_string(int(kind))+".png")))>30,"Ground burst is buried below hillside");
+  }
+}
 }
 int main() {
   Check(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"COM initialization");
@@ -208,7 +236,7 @@ int main() {
     Check(r.EffectVertices()>0 && r.EffectVertices()<5000,"Opening impact exceeded bounded geometry");
     Capture(r,root/(std::to_string(id)+"-opening.png"));
   }
-  Captures(r,root);Recoveries(r,root);LiveStates(r,root);SchoolHues(r,root);
+  Captures(r,root);Recoveries(r,root);LiveStates(r,root);SchoolHues(r,root);SlopeEffects(r,root);
   Check(sizeof(CombatEffects)<=16384,"Class effects exceeded the fixed CPU budget");
   Check(r.ValidateDebugMessages(),"D3D validation errors");
   std::cout<<"PASS: 11 class impacts, empowered layers, timed projectiles, live states, cancellation and GPU captures\n";

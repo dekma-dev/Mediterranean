@@ -14,6 +14,8 @@
 #include <functional>
 class Renderer {
 public:
+  // Expanded highlands share one bounded upload across color and shadow passes.
+  static constexpr unsigned maxWorldInstances=8192;
   // Optional immutable preview mesh replaces all three body LODs for this
   // renderer only. Read synchronously; no borrowed pointer survives this call.
   bool Initialize(HWND window, int width, int height,const visual::BodyGeometry* previewBody=nullptr);
@@ -41,7 +43,12 @@ public:
   void DrawMesh(visual::Mesh mesh,const DirectX::XMFLOAT3& position,const DirectX::XMFLOAT3& scale,
     const DirectX::XMFLOAT4& color,visual::Material material,float yaw = 0,float pitch = 0,
     visual::ShadowMode shadow = visual::ShadowMode::Cast,float roll = 0,unsigned maxDetail=2);
-  void DrawCloak(const DirectX::XMFLOAT3& shoulder,float yaw,float pitch,float roll,float side,float back,bool guard=false);
+  void DrawCloak(const DirectX::XMFLOAT3& shoulder,float yaw,float pitch,float roll,float side,float back,bool guard=false,
+    const DirectX::XMFLOAT4& tint={1,1,1,1});
+  void DrawBow(visual::Mesh mesh,const DirectX::XMMATRIX& transform,float draw,float arrow);
+  void DrawCoatPanel(visual::Mesh mesh,DirectX::XMFLOAT3 hem,DirectX::XMFLOAT3 waist,DirectX::XMFLOAT3 knee,
+    float width,float depth,DirectX::XMFLOAT3 facing,const DirectX::XMFLOAT4& paint={1,1,1,1});
+  void DrawHead(const DirectX::XMMATRIX& transform,const DirectX::XMFLOAT4& color,float blink,float expression);
   void DrawMeshTransformed(visual::Mesh mesh,const DirectX::XMMATRIX& transform,
     const DirectX::XMFLOAT4& color,visual::Material material,visual::ShadowMode shadow=visual::ShadowMode::Cast,unsigned maxDetail=2) {
     Queue(mesh,transform,color,material,shadow,maxDetail);
@@ -61,6 +68,14 @@ public:
     ~AttachmentScope() { renderer_.attachmentBody_=previous_; }
   };
   [[nodiscard]] AttachmentScope AttachToBody(unsigned body) { return {*this,body}; }
+  class ElevationScope {
+    Renderer& renderer_;float previous_;
+  public:
+    ElevationScope(Renderer& r,float h):renderer_(r),previous_(r.elevation_) {r.elevation_+=h;}
+    ElevationScope(const ElevationScope&)=delete;
+    ~ElevationScope(){renderer_.elevation_=previous_;}
+  };
+  [[nodiscard]] ElevationScope Elevate(float h) {return {*this,h};}
   void SetAttachmentLodEnabled(bool enabled) { attachmentLodEnabled_=enabled; }
   // detail=3 chooses a camera-dependent LOD; 0..2 force a review level.
   void DrawAuthoredAsset(authored::Asset asset,const DirectX::XMFLOAT3& position,
@@ -132,7 +147,7 @@ private:
   void Queue(visual::Mesh mesh,const DirectX::XMMATRIX& world,const DirectX::XMFLOAT4& color,visual::Material material,
     visual::ShadowMode shadow = visual::ShadowMode::Cast,unsigned maxDetail=2);
   static constexpr unsigned meshCount = authored::totalMeshes;
-  static constexpr unsigned maxInstances = 4096;
+  static constexpr unsigned maxInstances = maxWorldInstances;
   using Instance=visual::SceneInstance;
   using Item=visual::SceneItem;
   struct MeshRange { UINT start = 0,count = 0; float radius = 0; };
@@ -141,7 +156,7 @@ private:
   std::vector<Instance> instanceScratch_;
   std::array<visual::BodyPalette,visual::maxBodies> bodyPalettes_{};
   unsigned bodyCount_=0;
-  float previewBodyRadius_=0;
+  float previewBodyRadius_=0,elevation_=0;
   std::array<visual::HandPalette,visual::maxHands> handPalettes_{};
   unsigned handCount_=0;
   Microsoft::WRL::ComPtr<ID3D11Buffer> handConstants_;

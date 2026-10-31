@@ -8,12 +8,14 @@
 namespace visual {
 enum class ShadowMode { Cast, None };
 inline constexpr unsigned materialSize=128,shadowSize=1024,shadowLayers=2;
-enum class Mesh : unsigned { Box, Roof, Sphere, Rock, Trunk, Foliage, Torso, Limb, Blade, Crystal, Terrain, Cliff, Head, Boot, Hair, Grass, Barrel,Arch,Canopy,Masonry,Cloak,Body,BodyMedium,BodyFar,Feature,Palm,Finger,HeadMedium,HeadFar,HairLow,BootLow,SphereLow,TorsoLow,LimbLow,Hand,HandMirrored,HandMedium,HandMirroredMedium,HandFar,HandMirroredFar,CoatPanel,Helm,HelmLow,Pauldron,PauldronLow,GuardCuirass,GuardCuirassLow,GuardPlate,GuardPlateLow,GuardCloak,WeaponMace,WeaponHandbow,WeaponScepter,WeaponGroveStaff,WeaponAstralStaff,WeaponAshStaff,WeaponFocus,WeaponBaton,WeaponPistol,WeaponCleaver,Ridge,GuardShoulderLeft,GuardShoulderLeftLow,GuardShoulderRight,GuardShoulderRightLow,GuardFauld,GuardFauldLow,Count };
+enum class Mesh : unsigned { Box, Roof, Sphere, Rock, Trunk, Foliage, Torso, Limb, Blade, Crystal, Terrain, Cliff, Head, Boot, Hair, Grass, Barrel,Arch,Canopy,Masonry,Cloak,Body,BodyMedium,BodyFar,Feature,Palm,Finger,HeadMedium,HeadFar,HairLow,BootLow,SphereLow,TorsoLow,LimbLow,Hand,HandMirrored,HandMedium,HandMirroredMedium,HandFar,HandMirroredFar,CoatPanel,Helm,HelmLow,Pauldron,PauldronLow,GuardCuirass,GuardCuirassLow,GuardPlate,GuardPlateLow,GuardCloak,WeaponMace,WeaponHandbow,WeaponScepter,WeaponGroveStaff,WeaponAstralStaff,WeaponAshStaff,WeaponFocus,WeaponBaton,WeaponPistol,WeaponCleaver,Ridge,GuardShoulderLeft,GuardShoulderLeftLow,GuardShoulderRight,GuardShoulderRightLow,GuardFauld,GuardFauldLow,OldWarriorChest,OldWarriorChestLow,OldWarriorVeteranChest,OldWarriorVeteranChestLow,OldWarriorShoulder,OldWarriorShoulderLow,OldWarriorHelm,OldWarriorHelmLow,OldWarriorShield,OldWarriorShieldLow,OldWarriorSword,OldWarriorSwordLow,OldWarriorVeteranSword,OldWarriorVeteranSwordLow,OldScoutChest,OldScoutChestLow,OldScoutVeteranChest,OldScoutVeteranChestLow,OldScoutShoulder,OldScoutShoulderLow,OldScoutHood,OldScoutHoodLow,OldScoutShield,OldScoutShieldLow,OldScoutBow,OldScoutBowLow,OldScoutVeteranBow,OldScoutVeteranBowLow,OldMageChest,OldMageChestLow,OldMageVeteranChest,OldMageVeteranChestLow,OldMageShoulder,OldMageShoulderLow,OldMageHood,OldMageHoodLow,OldMageShield,OldMageShieldLow,OldMageStaff,OldMageStaffLow,OldMageVeteranStaff,OldMageVeteranStaffLow,OldWarriorSkirt,OldWarriorSkirtLow,OldScoutSkirt,OldScoutSkirtLow,OldMageSkirt,OldMageSkirtLow,OldWarriorBelt,OldWarriorBeltLow,OldScoutBelt,OldScoutBeltLow,OldMageBelt,OldMageBeltLow,Count };
+inline bool IsClassArt(Mesh mesh) {return mesh>=Mesh::OldWarriorChest && mesh<Mesh::Count;}
 inline bool IsBodyMesh(Mesh mesh) { return mesh>=Mesh::Body && mesh<=Mesh::BodyFar; }
 inline bool IsHandMesh(Mesh mesh) { return mesh>=Mesh::Hand && mesh<=Mesh::HandMirroredFar; }
 inline bool IsHeadMesh(Mesh mesh) { return mesh==Mesh::Head || mesh==Mesh::HeadMedium || mesh==Mesh::HeadFar; }
 inline Mesh AttachmentMesh(Mesh mesh,unsigned level) {
   if(!level) return mesh;
+  if(IsClassArt(mesh))return Mesh(unsigned(Mesh::OldWarriorChest)+(unsigned(mesh)-unsigned(Mesh::OldWarriorChest))/2*2+1);
   switch(mesh) {
     case Mesh::Head: return level==1?Mesh::HeadMedium:Mesh::HeadFar;
     case Mesh::Hair: return Mesh::HairLow;
@@ -32,7 +34,7 @@ inline Mesh AttachmentMesh(Mesh mesh,unsigned level) {
     default: return mesh;
   }
 }
-enum class Material : unsigned { Plain, Ground, Stone, Wood, Plaster, Roof, Cloth, Metal, Leaves, Skin, Glow, Leather, Hair, Count };
+enum class Material : unsigned { Plain, Ground, Stone, Wood, Plaster, Roof, Cloth, Metal, Leaves, Skin, Glow, Leather, Hair, WornMetal, WornLeather, WornCloth, Count };
 struct Vertex {
   DirectX::XMFLOAT3 position, normal;
   DirectX::XMFLOAT4 color{1,1,1,1};

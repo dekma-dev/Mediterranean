@@ -142,9 +142,53 @@ inline float ClassRecoveryBarrier(ClassId id) {
  constexpr float wards[]{30,18,0,10,0,35,40,18,0,40,45};
  return wards[ValidClass(id)?int(id):0];
 }
+inline bool AdvancedClass(ClassId id) {return id==ClassId::Warrior || id==ClassId::Mage || id==ClassId::Scout;}
+inline float AdvancedRate(ClassId id,int index) {
+ if(index==10) return id==ClassId::Warrior?1.1f:id==ClassId::Scout?.7f:.85f;
+ if(index==11) return id==ClassId::Warrior?.32f:id==ClassId::Scout?.15f:.12f;
+ return index==8?(id==ClassId::Warrior?.70f:id==ClassId::Scout?.50f:.32f):
+   (id==ClassId::Warrior?.48f:id==ClassId::Scout?.25f:.18f);
+}
 inline SpellInfo ClassSpell(ClassId id,int index) {
  if(!ValidSpell(index)) return spells[0];
  auto result=spells[index];const auto& info=DescribeClass(id);
+ if(index>=8) {
+   result.range=info.range>3?info.range:3.2f;
+   result.contact/=AdvancedRate(id,index);result.recovery/=AdvancedRate(id,index);
+   if(!AdvancedClass(id)) {result.name="Untrained discipline";result.description="This discipline is not available to this class.";return result;}
+   if(index>=10) {
+     if(index==11) result.targeting="Full reserve / living enemy";
+     if(id==ClassId::Warrior) {
+       result.range=index==11?3.8f:2.5f;
+       result.name=index==10?"Pommel strike":"Iron cyclone";
+       result.description=index==10?"Level 6. A quick 50% heavy blow stuns for 1.4 seconds, interrupts a vulnerable cast and grants one Rage on contact.":
+         "Level 10. Spend full Rage to strike every enemy within 3.8 metres for 150% heavy damage. Grants a 25-point ward on contact. Requires a living selected target.";
+     } else if(id==ClassId::Mage) {
+       result.name=index==10?"Arcane severance":"Firestorm";
+       result.description=index==10?"Level 6. A mobile 60% heavy arcane bolt interrupts a vulnerable cast and grants one Ember on contact. No root or healing.":
+         "Level 10. Spend full Embers on a stationary 2.5-second cast. Deal 175% heavy damage within 4.5 metres of the selected target. Moving before release cancels it without refund.";
+     } else {
+       result.name=index==10?"Disarming arrow":"Horizon shot";
+       result.description=index==10?"Level 6. A mobile 55% heavy arrow interrupts a vulnerable cast and slows for four seconds. Keep distance while controlling the enemy.":
+         "Level 10. Spend full Focus on a stationary two-second shot for 175% heavy damage. Gain 80% additional heavy damage when the target is over six metres away at contact.";
+     }
+     return result;
+   }
+   if(id==ClassId::Warrior) {
+     result.name=index==8?"Sweeping steel":"Shieldbreaker";
+     result.description=index==8?"Level 5. Strike enemies in a forward 3.2 m arc for 85% heavy damage. Targets beyond the arc or behind obstacles are safe.":
+       "Level 8. A deliberate 125% heavy blow. Exposes for four seconds, stuns for one second and interrupts a vulnerable enemy. Grants a ten-point ward on contact.";
+   } else if(id==ClassId::Mage) {
+     result.name=index==8?"Frost bloom":"Falling star";
+     result.description=index==8?"Level 5. Freeze enemies within three metres of the selected target for two seconds; deal 65% heavy damage. Stand still until release.":
+       "Level 8. A long stationary cast strikes enemies within three metres of the selected target for 140% heavy damage. Movement before release cancels it.";
+   } else {
+     result.name=index==8?"Fanned arrows":"Piercing shot";
+     result.description=index==8?"Level 5. A narrow forward fan deals 70% heavy damage and slows for two seconds. Can be fired while moving; each arrow checks line of sight.":
+       "Level 8. A stationary 130% heavy shot exposes the target for five seconds. Rooted targets take 35% additional heavy damage.";
+   }
+   return result;
+ }
  if(index==7) {
   static constexpr const char* names[]={"Rending cut","Oath strike","Trail shot","Guiding light","Thorn dart","Kindle","Grave touch","Thought spike","Upbeat","Tracer round","Predator claw"};
   static constexpr const char* effects[]={

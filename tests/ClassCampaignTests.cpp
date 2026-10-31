@@ -279,7 +279,7 @@ void Captures(const std::filesystem::path& root,const std::string& levelTen) {
   renderer.BeginFrame();book.Render(renderer,master,1,false);
   Check(renderer.Capture((root/("mastery-"+std::to_string(size.first)+".png")).wstring()) && renderer.EndFrame(false),"Mastery UI capture");
   const ui::Layout layout(float(size.first),float(size.second));
-  const auto hit=book.Pointer(layout.x+200*layout.scale,layout.y+490*layout.scale,float(size.first),float(size.second),true,false);
+  const auto hit=book.Pointer(layout.x+360*layout.scale,layout.y+515*layout.scale,float(size.first),float(size.second),true,false);
   Check(hit.action==ui::Action::SelectTalent && hit.value==15,"Mastery node hit routing");
  }
  Check(renderer.Resize(1280,720),"Restore capture size");

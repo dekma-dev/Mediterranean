@@ -4,15 +4,19 @@
 namespace animation {
 // Retarget imported gait targets; simulation owns translation and contact times.
 // The existing directional springs retain their velocity across input changes.
-inline void ApplyAuthoredLocomotion(State& state,float dt) {
+inline void ApplyAuthoredLocomotion(State& state,float dt,playerclips::Equipment equipment=playerclips::Equipment::None) {
   auto& sample=state.pose;
   const auto& c=state.locomotion;
   const float run=SmoothStep((c.previousSpeed-3.f)/3.f);
   motion::Spring(state.runBlend,state.runVelocity,run,18.f,dt);
   sample.runBlend=Unit(state.runBlend);
   sample.authoredGait=true;
+  state.authoredAge=std::min(.18f,state.authoredAge+std::max(0.f,dt));
+  sample.authoredBlend=SmoothStep(state.authoredAge/.18f);
+  sample.authoredPhase=c.phase;sample.authoredClock=state.phase/1.8f;
+  sample.authoredEquipment=equipment;
   std::copy_n(c.weights.begin(),4,sample.gaitWeights.begin());
-  sample.authoredMotion=playerclips::Locomotion(sample.gaitWeights,sample.runBlend,c.phase);
+  sample.authoredMotion=playerclips::Locomotion(sample.gaitWeights,sample.runBlend,c.phase,equipment);
   sample.motion=c.pose-c.gaitPose-c.transitionPose;
   const auto transition=[&](playerclips::Clip clip,float age,float duration,float forward,float right) {
     if(age<=0 || age>=duration)return;

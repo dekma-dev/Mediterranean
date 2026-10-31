@@ -113,11 +113,7 @@ struct Survey {
 }
 std::vector<std::uint8_t> BuildMapArtwork(const rpg::WorldMap& world) {
  // Fixed-size ink-and-wash survey. Coast, routes and symbols use real map data.
- const auto terrain=visual::BuildMesh(visual::Mesh::Terrain);
- std::vector<Point> coast;
- for (std::size_t i=1;i<terrain.vertices.size();++i) {
-  const auto p=terrain.vertices[i].position; coast.push_back(Map(p.x,p.z));
- }
+ std::vector<Point> coast{Map(-74,-82),Map(74,-82),Map(74,82),Map(-74,82)};
  Survey survey;
  for (unsigned row=0;row<size;++row) for (unsigned column=0;column<size;++column) {
   const float x=((column+.5f)/size-.5f)*rpg::WorldMap::surveyWidth,z=(.5f-(row+.5f)/size)*rpg::WorldMap::surveyDepth;
@@ -128,6 +124,10 @@ std::vector<std::uint8_t> BuildMapArtwork(const rpg::WorldMap& world) {
   color=Mix(color,{.51f,.42f,.28f},edge*(.018f+.025f*fine));
   if (Inside(coast,column+.5f,row+.5f)) {
    color=Mix(color,{.62f,.67f,.43f},.10f+n*.16f);
+   const float height=rpg::WorldMap::Height({x,z});
+   const float contour=std::abs(height*.5f-std::round(height*.5f));
+   color=Mix(color,ink,(height>.4f && contour<.035f)?.20f:0.f);
+   color=Mix(color,{.45f,.41f,.30f},std::min(.25f,rpg::terrain::Slope(x,z)*.38f));
    const auto surface=world.SurfaceAt({x,z});
    const float road=std::max(surface.dirt,surface.paving);
    color=Mix(color,{.94f,.86f,.66f},road*.78f);

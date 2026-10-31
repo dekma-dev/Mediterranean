@@ -188,5 +188,11 @@
   "@ANCHOR_OFFER@": "CMake substitution; corresponding quest prose audited separately",
   "@ANCHOR_PROGRESS@": "CMake substitution; corresponding quest prose audited separately",
   "@ANCHOR_TURN_IN@": "CMake substitution; corresponding quest prose audited separately",
-  "@ANCHOR_COMPLETE@": "CMake substitution; corresponding quest prose audited separately"
+  "@ANCHOR_COMPLETE@": "CMake substitution; corresponding quest prose audited separately",
+  "HOTBARS 6\n": "Versioned hotbar file header",
+  "EXPEDITION": "Versioned save record",
+  "VIII": "Roman icon level label",
+  "HOTBARS 7\n": "Versioned hotbar file header",
+  "SOUTHERN ": "Versioned southern province save record",
+  "SOUTHERN": "Versioned southern province save record"
 }

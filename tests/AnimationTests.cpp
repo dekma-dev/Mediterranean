@@ -315,10 +315,11 @@ int main() {
       Require(rejected,"Truncated player motion must be rejected");
     }
     for(bool heavy : {false,true}) {
-      Require(std::abs(playerclips::AttackPhase(combat::Contact(heavy),combat::StrokeStart(heavy),combat::Contact(heavy),combat::Duration(heavy))-.55f)<1e-6f,
-        "Blender contact must follow the authoritative combat clock");
       const auto clip=heavy?playerclips::Clip::Overhead:playerclips::Clip::Slash;
-      Require(Distance(playerclips::Sample(clip,.34f).hands[1],playerclips::Sample(clip,.55f).hands[1])>.10f,
+      const auto& track=playerclips::Collection()[unsigned(clip)];
+      Require(std::abs(playerclips::AttackPhase(clip,combat::Contact(heavy),combat::StrokeStart(heavy),combat::Contact(heavy),combat::Duration(heavy))-track.contact)<1e-6f,
+        "Blender contact must follow the authoritative combat clock");
+      Require(Distance(playerclips::Sample(clip,track.load).hands[1],playerclips::Sample(clip,track.contact).hands[1])>.10f,
         "Imported weapon hand must travel through the strike");
     }
     Require(Distance(playerclips::Sample(playerclips::Clip::Jump,.3f).feet[0],playerclips::Sample(playerclips::Clip::Jump,.6f).feet[0])>.01f,

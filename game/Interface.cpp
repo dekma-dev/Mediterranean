@@ -42,6 +42,12 @@ std::string Number(float value) {
  std::ostringstream text; text<<std::setprecision(4)<<value; return text.str();
 }
 std::string SpellEffect(const rpg::Simulation& s,int ability) {
+ if(ability>=8) {
+   const float scale=ability==8?(s.Class()==rpg::ClassId::Warrior?.85f:s.Class()==rpg::ClassId::Scout?.70f:.65f):
+     ability==9?(s.Class()==rpg::ClassId::Warrior?1.25f:s.Class()==rpg::ClassId::Scout?1.30f:1.40f):
+     ability==10?(s.Class()==rpg::ClassId::Warrior?.50f:s.Class()==rpg::ClassId::Scout?.55f:.60f):(s.Class()==rpg::ClassId::Warrior?1.5f:1.75f);
+   return Number(s.HeavyDamage()*scale)+" base damage / level "+std::to_string(rpg::SpellLevel(ability));
+ }
  if (ability==7) return Number(s.StrikeDamage()*.9f)+" damage / builds reserve";
  if (ability==6) return Number(s.HeavyDamage()*(s.Class()==rpg::ClassId::Demonologist?1.6f:1.1f))+" base damage / full reserve";
  if (ability==5) return Number(s.HeavyDamage()*(s.Class()==rpg::ClassId::Demonologist?.85f:.65f))+" base damage / tactical contact";
@@ -339,6 +345,12 @@ void AbilityArtwork(Canvas& c,Rect rect,int ability,rpg::ClassId id=rpg::ClassId
  }
  else if(ability>=5) {
   ClassSigil(c,rect,id,1);
+  if(ability>=8) {
+   const Color accent=id==rpg::ClassId::Mage?(ability==8?Color{.5f,.85f,1,1}:Color{1,.45f,.17f,1}):gold;
+   for(int n=0;n<(ability==8?3:1);++n)
+    c.Line(rect.x+4+n*5.f,rect.y+rect.h-5,rect.x+rect.w-4,rect.y+4+n*5.f,2,accent);
+   c.Text(rect.x+rect.w-13,rect.y+rect.h-14,ability==8?"V":ability==9?"VIII":ability==10?"VI":"X",9,ink);
+  }
   if(ability==6) for(float side:{0.f,1.f}) {
    const float x=rect.x+2+side*(rect.w-4);
    c.Line(x,rect.y+2,x,rect.y+rect.h-2,1.5f,gold);
@@ -400,12 +412,16 @@ void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoin
   lettering(a.x+a.w-94,a.y+a.h*.48f,"Training\ngrounds",14);
   const auto post=MapPoint(a,rpg::WorldMap::trainingPost);
   c.Line(post.x+12,post.y,a.x+a.w-103,a.y+a.h*.48f+17,.65f,{.40f,.32f,.20f,.65f});
-  const std::pair<const char*,float> labels[]={{"SUNDERED BASTION",.06f},{"DAWNWATCH VILLAGE",.74f}};
+  const std::pair<const char*,rpg::Vec2> labels[]={{"THE ASHEN PASS",{0,77}},
+    {"THE SIGNAL HILLS",{-45,60}},{"THE EASTERN OBSERVATORY",{42,66}},{"DAWNWATCH VILLAGE",{0,-23}},
+    {"THE WEATHERED HEATH",{12,-58}},{"THE MISTWARD RIDGE",{-78,-113}},
+    {"THE IRON COURT",{80,-122}},{"THE BROKEN CARAVAN ROAD",{-30,-122}}};
   for (const auto& label : labels) {
-   const float width=c.Width(label.first,16),x=a.x+(a.w-width)*.5f,y=a.y+a.h*label.second;
-   c.RectFill({x-7,y-2,width+14,23},{.90f,.83f,.66f,.92f});
-   lettering(x,y,label.first,16);
-   c.Line(x,y+20,x+width,y+20,.65f,{.40f,.32f,.20f,.45f});
+   const auto p=MapPoint(a,label.second);
+   const float width=c.Width(label.first,11),x=std::clamp(p.x-width*.5f,a.x+10,a.x+a.w-width-10),y=p.y;
+   c.RectFill({x-4,y-2,width+8,18},{.90f,.83f,.66f,.92f});
+   lettering(x,y,label.first,11);
+   c.Line(x,y+14,x+width,y+14,.65f,{.40f,.32f,.20f,.45f});
   }
   const float x=a.x+20,y=a.y+a.h-34,span=5*a.h/rpg::WorldMap::surveyDepth;
   c.Line(x,y,x+span,y,1,mapInk);
@@ -427,6 +443,9 @@ void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoin
  }
  if(sim.SurveyActive()) for(unsigned i=0;i<rpg::WorldMap::surveySites.size();++i)
   marker(rpg::WorldMap::surveySites[i],sim.SurveyMask()&(1u<<i)?Color{.4f,.58f,.34f,1}:Color{.35f,.69f,.88f,1},compact?2.f:4.f);
+ if(sim.ExpeditionActive()) for(int i=0;i<3;++i)
+  marker(sim.ExpeditionSite(i),sim.ExpeditionMask()&(1u<<i)?Color{.4f,.58f,.34f,1}:Color{.95f,.55f,.22f,1},compact?3.f:5.f);
+ if(sim.RitualActive()) marker(rpg::WorldMap::ritualSite,{.5f,.7f,.95f,1},compact?4.f:7.f);
  if (sim.AnchorState()!=rpg::AnchorQuest::Complete || sim.FrontierCompleted()<rpg::frontierQuestCount) {
   const auto p=MapPoint(a,sim.ObjectivePosition());
   c.Ring(p.x,p.y,compact?5.f:10.f,mapInk,compact?2.5f:3.5f);
@@ -718,7 +737,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  const auto worldTarget=[&](rpg::EntityId id,rpg::Vec2 position,const char* name,bool friendly,const rpg::Enemy* actor=nullptr) {
   if(std::hypot(position.x-s.Player().x,position.z-s.Player().z)>22 || !s.Map().CanTravel(s.Player(),position,.05f)) return;
   Point head,foot;
-  if(!renderer.Project({position.x,2.35f,position.z},head) || !renderer.Project({position.x,0,position.z},foot)) return;
+  if(!renderer.Project({position.x,rpg::WorldMap::Height(position)+2.35f,position.z},head) || !renderer.Project({position.x,rpg::WorldMap::Height(position),position.z},foot)) return;
   const float x=c.layout.LocalX(head.x*renderer.Width()),y=c.layout.LocalY(head.y*renderer.Height());
   const float bottom=c.layout.LocalY(foot.y*renderer.Height()),height=std::clamp(bottom-y,25.f,220.f);
   if(x<0 || x>1280 || y<0 || y>720) return;
@@ -930,6 +949,9 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Frame({1001,193,265,hasWaypoint?183.f:158.f},{.025f,.045f,.025f,.82f},border);
   c.Text(1013,202,"EXPEDITION",14,gold); c.Line(1010,226,1260,226,1,border);
   c.Wrap(1013,236,244,s.Objective(),15,ink,4);
+  if(s.RitualActive() && s.RitualStage()>0 && s.RitualStage()<4) {
+    c.Inset({1013,312,241,12});c.RectFill({1015,314,237*s.RitualCharge(),8},{.36f,.65f,.79f,1});
+  }
   const auto objective=s.ObjectivePosition();
   if (s.AnchorState()!=rpg::AnchorQuest::Complete || s.FrontierCompleted()<rpg::frontierQuestCount)
    c.Text(1013,332,std::to_string(int(std::ceil(std::hypot(s.Player().x-objective.x,s.Player().z-objective.z))))+" m to objective",13,gold);
@@ -1384,21 +1406,23 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    }
    c.Frame(buildlayout::Spells,{.15f,.075f,.045f,1});
    c.Center(132,160,176,"SPELLS",14,gold);
-   for(int card=0;card<7;++card) {
+   const int spellCount=rpg::AdvancedClass(s.Class())?11:7;
+   for(int card=0;card<spellCount;++card) {
     const int i=card>=4?card+1:card;
-    const Rect spellSlot=buildlayout::Spell(card);
+    const Rect spellSlot=buildlayout::Spell(card,spellCount);
     const bool hovered=spellSlot.Contains(mouseX_,mouseY_);
     c.Inset(spellSlot,hovered?1.f:0.f,selectedSpell==i);
-    const Rect art{spellSlot.x+4,spellSlot.y+5,34,34};
+    const float icon=spellCount>9?23.f:29.f;
+    const Rect art{spellSlot.x+4,spellSlot.y+4,icon,icon};
     c.Frame({art.x-2,art.y-2,art.w+4,art.h+4});
     AbilityArtwork(c,art,i,s.Class());
     const float remaining=s.Cooldown(i);
     if(remaining>0) c.CooldownSweep(art,std::clamp(remaining/s.AbilityCooldown(i),0.f,1.f));
-    c.Paragraph({spellSlot.x+44,spellSlot.y+3,128,27},s.Spell(i).name,13,ink,1);
+    c.Paragraph({spellSlot.x+36,spellSlot.y+1,136,spellCount>9?16.f:21.f},s.Spell(i).name,spellCount>9?11.f:13.f,ink,1);
     std::string bindings;
     for(int binding=0;binding<hotbarSlots;++binding) if(HotbarSpell(binding,s.Class())==i) {if(!bindings.empty()) bindings+="/";bindings+=BindingLabel(binding);}
-    c.FitText(spellSlot.x+44,spellSlot.y+31,128,(bindings.empty()?"Unbound":"Key "+bindings)+
-      (remaining>0?" / "+Seconds(remaining)+"s remaining":""),10,remaining>0?gold:muted);
+    c.FitText(spellSlot.x+36,spellSlot.y+(spellCount>9?18:23),136,(bindings.empty()?"Unbound":"Key "+bindings)+
+      (s.Level()<rpg::SpellLevel(i)?" / Lv "+std::to_string(rpg::SpellLevel(i)):remaining>0?" / "+Seconds(remaining)+"s remaining":""),10,remaining>0?gold:muted);
     if(hovered)
       c.Line(spellSlot.x+4,spellSlot.y+spellSlot.h-2,spellSlot.x+spellSlot.w-4,spellSlot.y+spellSlot.h-2,1,gold);
     regions_.push_back({spellSlot,{Action::SelectSpell,i},true});
@@ -1457,8 +1481,8 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    } else if (rpg::ValidSpell(selectedSpell)) {
     const auto& spell=s.Spell(selectedSpell);
     AbilityArtwork(c,{874,166,48,48},selectedSpell,s.Class());
-    c.FitText(937,175,195,selectedSpell==7?"SETUP SPELL":selectedSpell==6?"SIGNATURE SPELL":selectedSpell==5?"CLASS TECHNIQUE":"FOUNDATION SPELL",13,gold);
-    c.Paragraph({937,195,195,27},"Drag the card to bind / level 1",11,muted,2);
+    c.FitText(937,175,195,selectedSpell>=8?"ADVANCED DISCIPLINE":selectedSpell==7?"SETUP SPELL":selectedSpell==6?"SIGNATURE SPELL":selectedSpell==5?"CLASS TECHNIQUE":"FOUNDATION SPELL",13,gold);
+    c.Paragraph({937,195,195,27},"Drag the card to bind / level "+std::to_string(rpg::SpellLevel(selectedSpell)),11,muted,2);
     c.FitText(874,231,258,spell.name,22,ink);
     c.Paragraph({874,264,258,35},SpellEffect(s,selectedSpell),14,gold,2);
     c.Paragraph({874,305,258,98},selectedSpell==1?std::string(style.resource)+": "+std::to_string(style.capacity)+
@@ -1571,14 +1595,14 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    for(int i=0;i<rpg::frontierQuestCount+2;++i) {
     const auto id=rpg::QuestId(int(rpg::QuestId::Patrol)+i);const auto& quest=rpg::DescribeQuest(id);
     const bool done=completed(i);
-    const Rect row{218,156+i*30.f,377,30};
+    const Rect row{218,156+i*21.f,377,21};
     if(i==selected) {
      c.RectFill(row,{.28f,.16f,.06f,.24f});
-     c.RectFill({218,row.y,3,30},{.40f,.20f,.07f,.9f});
+     c.RectFill({218,row.y,3,row.h},{.40f,.20f,.07f,.9f});
     } else if(row.Contains(mouseX_,mouseY_)) c.RectFill(row,{.40f,.25f,.10f,.12f});
     regions_.push_back({row,{Action::SelectJournal,i},true});
-    c.FitText(227,160+i*30.f,359,std::to_string(i+1)+". "+quest.title,13,{.22f,.15f,.09f,1});
-    c.Text(227,175+i*30.f,done?"Completed":id>s.CurrentQuest()?"Locked":id==s.CurrentQuest()?"Current assignment":"Campaign assignment",9,{.32f,.22f,.13f,1});
+    c.FitText(227,row.y+3,270,std::to_string(i+1)+". "+quest.title,12,{.22f,.15f,.09f,1});
+    c.FitText(501,row.y+5,86,done?"Completed":id>s.CurrentQuest()?"Locked":id==s.CurrentQuest()?"Current assignment":"Campaign assignment",9,{.32f,.22f,.13f,1});
    }
    const auto id=rpg::QuestId(int(rpg::QuestId::Patrol)+selected);
    const auto& quest=rpg::DescribeQuest(id);

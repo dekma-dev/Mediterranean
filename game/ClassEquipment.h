@@ -16,7 +16,7 @@ struct ClassWeapon {
 inline constexpr std::array<ClassWeapon,int(ClassId::Count)> classWeapons={{
   {WeaponForm::Blade,"Frontier sword","Watchguard blade","Sword","A balanced blade with a leather-bound grip."},
   {WeaponForm::Mace,"Dawnwatch mace","Dawn oath mace","Mace","A flanged steel head above a reinforced haft."},
-  {WeaponForm::Handbow,"Trail handbow","Watchguard handbow","Hand crossbow","Curved limbs and a fitted stock for aimed bolts."},
+  {WeaponForm::Handbow,"Trail bow","Watchguard longbow","Bow","Seasoned yew, a wrapped grip and a waxed bowstring."},
   {WeaponForm::Scepter,"Dawn censer","Dawn reliquary","Scepter","An open brass crown holds a sacred stone."},
   {WeaponForm::GroveStaff,"Grove staff","Living bough","Staff","A carved branch crowned with curling green shoots."},
   {WeaponForm::AstralStaff,"Apprentice staff","Astral conduit","Staff","A bound shaft carries a crystal within a metal cradle."},

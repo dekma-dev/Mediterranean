@@ -20,7 +20,9 @@ XMMATRIX WeaponFrame(const CharacterPose& pose) {
 }
 HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool shield,float cast) {
   side=std::min(side,1u);
-  const bool gripping=side?weapon:shield;
+  const float staffGrip=side||shield||!weapon?0:animation::Unit(pose.staffGripWeight);
+  const float bowGrip=!side&&weapon&&!shield?pose.bowDraw*(1.1f-.1f*pose.bowDraw):0;
+  const bool gripping=side?weapon:shield||staffGrip>0||bowGrip>0;
   const auto& arm=pose.arms[side];
   const auto forearm=XMVector3Normalize(XMLoadFloat3(&arm.end)-XMLoadFloat3(&arm.joint));
   XMMATRIX frame;
@@ -49,9 +51,19 @@ HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool 
     const auto wrist=XMVector3TransformNormal(XMVectorSet(0,-.055f,-.043f,0),frame);
     frame.r[3]=XMVectorSetW(XMLoadFloat3(&arm.end)-wrist,1);
   }
+  if(staffGrip>0 || bowGrip>0) {
+    const auto shaft=WeaponFrame(pose);
+    const XMMATRIX held(shaft.r[1],shaft.r[0],-shaft.r[2],XMVectorSetW(XMLoadFloat3(&arm.end),1));
+    const float grip=std::max(staffGrip,bowGrip);
+    const auto position=XMVectorLerp(frame.r[3],held.r[3],grip);
+    frame=XMMatrixRotationQuaternion(XMQuaternionSlerp(XMQuaternionRotationMatrix(frame),XMQuaternionRotationMatrix(held),grip));
+    frame.r[3]=position;
+  }
   HandPose result;
   XMStoreFloat4x4(&result.frame,frame);
-  result.curl=gripping?1.f:.32f*(1-animation::SmoothStep(cast));
+  result.curl=side?weapon?1.f:.32f*(1-animation::SmoothStep(cast)):
+    shield?1.f:staffGrip+(1-staffGrip)*.32f*(1-animation::SmoothStep(cast));
+  if(!side && weapon && !shield)result.curl=std::max(result.curl,.85f*pose.bowDraw);
   constexpr float lengths[4][3]={{.041f,.026f,.021f},{.045f,.028f,.023f},{.042f,.026f,.022f},{.033f,.022f,.019f}};
   // Free palms face forward when casting: thumbs point toward the body's
   // centre. Grip frames turn their X axis along the held item's shaft.
@@ -111,7 +123,7 @@ visual::HandPalette BuildHandRig(const HandPose& pose) {
 
 DirectX::XMFLOAT3 WeaponReleasePoint(const CharacterPose& pose,rpg::WeaponForm form) {
   // These sockets match the barrel/bolt rail endpoints in cached weapon geometry.
-  const DirectX::XMFLOAT3 muzzle{0,form==rpg::WeaponForm::Pistol?.16f:.191f,form==rpg::WeaponForm::Pistol?.40f:.36f};
+  const DirectX::XMFLOAT3 muzzle{0,form==rpg::WeaponForm::Pistol?.16f:.035f,form==rpg::WeaponForm::Pistol?.40f:.78f};
   DirectX::XMFLOAT3 result;
   DirectX::XMStoreFloat3(&result,DirectX::XMVector3TransformCoord(DirectX::XMLoadFloat3(&muzzle),WeaponFrame(pose)));
   return result;

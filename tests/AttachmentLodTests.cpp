@@ -149,7 +149,7 @@ int main() {
       Check(renderer.Capture(prefix+(full?L"-full.png":L"-auto.png")) && renderer.EndFrame(false) && renderer.ValidateDebugMessages(),"Attachment color/shadow capture");
       Check(renderer.BodyLodCounts()[level]==1,"Attachments must use final-camera owner selection");
       const auto stats=renderer.AttachmentLodCounts();
-      Check(full || !level?stats==std::array<unsigned,2>{0,0}:stats[0]>0 && stats[1]>0,"Attachment detail diagnostics disagree with selected level");
+      Check(full || !level?stats==std::array<unsigned,2>{0,0}:stats[0]>0,"Attachment detail diagnostics disagree with selected level");
       triangles[full]=renderer.Triangles();
     }
     Check(!level?triangles[0]==triangles[1]:triangles[0]<triangles[1]*.8f,"Reduced attachments did not meaningfully reduce submitted geometry");

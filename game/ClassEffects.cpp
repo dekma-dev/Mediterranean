@@ -14,16 +14,22 @@ XMFLOAT3 Add(XMFLOAT3 a,XMFLOAT3 b) { return {a.x+b.x,a.y+b.y,a.z+b.z}; }
 XMFLOAT3 Lerp(XMFLOAT3 a,XMFLOAT3 b,float t) { return {a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t,a.z+(b.z-a.z)*t}; }
 // Open contours, rather than filled discs, preserve silhouettes and telegraphs.
 void Arc(Renderer& r,XMFLOAT3 p,float radius,float start,float span,float width,XMFLOAT4 color,
-         bool ground=false,float tilt=0) {
+         bool ground=false,float tilt=0,bool conform=false) {
   constexpr int segments=20;
   const auto point=[&](float a,float offset) -> XMFLOAT3 {
     const float x=std::cos(a)*(radius+offset),v=std::sin(a)*(radius+offset);
-    return Add(p,ground?XMFLOAT3{x,v*tilt,v}:XMFLOAT3{x,v,v*tilt});
+    auto result=Add(p,ground?XMFLOAT3{x,v*tilt,v}:XMFLOAT3{x,v,v*tilt});
+    if(conform) result.y+=rpg::WorldMap::Height({result.x,result.z})-rpg::WorldMap::Height({p.x,p.z});
+    return result;
   };
   for(int i=0;i<segments;++i) {
     const float a=start+span*float(i)/segments,b=start+span*float(i+1)/segments;
     r.DrawEffectRibbon(point(a,-width),point(a,width),point(b,width),point(b,-width),color,1,1);
   }
+}
+XMFLOAT3 Floor(rpg::Vec2 p,float lift=.06f) {return {p.x,rpg::WorldMap::Height(p)+lift,p.z};}
+void GroundArc(Renderer& r,XMFLOAT3 p,float radius,float start,float span,float width,XMFLOAT4 color) {
+  Arc(r,p,radius,start,span,width,color,true,0,true);
 }
 void Ray(Renderer& r,XMFLOAT3 p,float angle,float inner,float outer,float width,XMFLOAT4 c) {
   r.DrawEffectStreak(Add(p,{std::cos(angle)*inner,std::sin(angle)*inner,0}),
@@ -70,7 +76,12 @@ void Projectile(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,floa
   const auto point=[&](float u) { return CombatEffects::SpellTracePoint(origin,e.destination,Unit(u),arc); };
   auto c=Color(e.school,fade*.72f);
   const auto head=point(t);
-  if((e.technique || e.signature) && e.school==C::Mage) {
+  if(e.school==C::Mage && e.ability==10) {
+    const XMFLOAT4 violet{.68f,.55f,1,fade*.8f};
+    Bolt(r,point(t-.23f),head,.08f,t*13,violet);
+    Arc(r,head,.10f,age*9,pi*1.5f,.013f,violet);return;
+  }
+  if((e.technique || e.signature || e.ability==8) && e.school==C::Mage) {
     c={.35f,.78f,1.f,fade*.8f};
     r.DrawEffectStreak(point(t-.17f),head,.035f,c);
     for(int n=0;n<3;++n) r.DrawEffectStreak(Add(head,{(n-1)*.05f,.06f,0}),point(t-.07f),.012f,c);
@@ -83,6 +94,7 @@ void Projectile(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,floa
       // A solid, narrow bolt and paired fletching; no spell orb on the handbow.
       for(float side:{-1.f,1.f}) r.DrawEffectStreak(Add(tail,{side*.055f,.02f,0}),point(t-.045f),.009f,c);
       if(e.heavy) r.DrawEffectStreak(point(t-.14f),head,.025f,Color(e.school,fade*.23f));
+      if(e.ability==11) r.DrawEffectStreak(point(t-.5f),head,.018f,{.9f,.94f,1,fade*.7f});
     } else {
       const float flash=std::pow(1-Unit(age/.065f),2.f);
       r.DrawEffectGlow(origin,.19f*power,{1,.68f,.26f,flash*.8f});
@@ -140,7 +152,62 @@ void Impact(Renderer& r,const rpg::CombatVisualEvent& e,float age) {
   const float flash=std::pow(1-Unit(age/.095f),2.f);
   const float size=(e.heavy?1.1f:.72f)*(e.empowered?1.2f:1);
   const XMFLOAT3 p{e.position.x-std::sin(e.facing)*.34f,e.height,e.position.z-std::cos(e.facing)*.34f};
-  auto c=(e.technique || e.signature) && e.school==C::Mage?XMFLOAT4{.35f,.78f,1.f,fade*.8f}:Color(e.school,fade*.8f);
+  auto c=(e.technique || e.signature || e.ability==8) && e.school==C::Mage?XMFLOAT4{.35f,.78f,1.f,fade*.8f}:Color(e.school,fade*.8f);
+  if(e.ability==10) {
+    const auto tint=e.school==C::Mage?XMFLOAT4{.68f,.55f,1,fade*.8f}:XMFLOAT4{.82f,.86f,.74f,fade*.8f};
+    // Control contacts stay small, keeping an interrupted foe's pose readable.
+    for(int i=0;i<4;++i) Ray(r,p,i*pi*.5f+pi*.25f,.08f+phase*.12f,.18f+phase*.4f,.02f,tint);
+    if(e.school==C::Mage) Arc(r,p,.38f*(1-phase)+.08f,phase*3,tau,.018f,tint);
+    r.DrawEffectGlow(p,.14f,{1,.95f,.8f,flash*.65f});return;
+  }
+  if(e.ability==11) {
+    if(e.school==C::Mage) {
+      const auto floor=Floor(e.position);
+      GroundArc(r,floor,.4f+phase*4.1f,0,tau,.035f,{1,.43f,.15f,fade*.65f});
+      for(int i=0;i<12;++i) {
+        const float a=i*2.39996f+phase,rad=.45f+(i%4)*.85f;
+        const auto base=Floor({e.position.x+std::cos(a)*rad,e.position.z+std::sin(a)*rad},.08f);
+        const auto tip=Add(base,{std::sin(a+phase*3)*.35f,(.7f+(i%3)*.4f)*(1-phase),std::cos(a)*.22f});
+        r.DrawEffectStreak(base,tip,.13f,{.92f,.27f,.06f,fade*.27f});
+        r.DrawEffectStreak(base,tip,.027f,{1,.78f,.4f,fade*.8f});
+      }
+      r.DrawEffectGlow(p,.25f,{1,.77f,.4f,flash*.7f});
+    } else if(e.school==C::Warrior) {
+      const auto center=Floor(e.source,.85f);
+      for(int i=0;i<3;++i) Arc(r,center,1.4f+phase*2.4f,i*tau/3+phase*3,1.2f,.035f,
+        {.75f,.84f,.92f,fade*.65f},true,.04f,true);
+    } else {
+      const XMFLOAT3 from{e.source.x,e.sourceHeight+1.35f,e.source.z};
+      const auto through=Lerp(from,p,1.12f);
+      r.DrawEffectStreak(Lerp(from,p,.8f),through,.018f,{.87f,.94f,1,fade*.8f});
+      for(int i=0;i<6;++i) Ray(r,p,i*tau/6,.1f,.2f+phase*.6f,.012f,{.9f,.84f,.66f,fade*.7f});
+    }
+    return;
+  }
+  if(e.ability>=8) {
+    const XMFLOAT3 floor{e.position.x,rpg::WorldMap::Height(e.position)+.07f,e.position.z};
+    if(e.school==C::Mage) {
+      const XMFLOAT4 tint=e.ability==8?XMFLOAT4{.40f,.78f,1,fade*.82f}:XMFLOAT4{1,.36f,.08f,fade*.82f};
+      GroundArc(r,floor,.25f+phase*2.75f,0,tau,.055f,tint);
+      for(int n=0;n<10;++n) {
+        const float a=n*tau/10,rad=.4f+phase*1.9f;
+        auto tip=Add(floor,{std::cos(a)*rad,(e.ability==8?.7f:1.7f)*(1-phase),std::sin(a)*rad});
+        tip.y+=rpg::WorldMap::Height({tip.x,tip.z})-rpg::WorldMap::Height(e.position);
+        r.DrawEffectStreak(Add(tip,{0,e.ability==8?-.4f:1.4f,0}),tip,.045f,tint);
+      }
+      if(e.ability==8) {
+        r.DrawEffectGlow(p,.18f,{.65f,.9f,1,flash*.8f});
+        return; // Frost bloom must not inherit the default fire impact layer.
+      }
+    } else if(e.school==C::Warrior) {
+      Arc(r,Add(floor,{0,.85f,0}),.8f+phase*1.5f,e.facing-1.2f,2.4f,.035f,{1,.66f,.3f,fade*.65f});
+    } else {
+      for(int n=-1;n<=1;++n) {
+        const auto tip=Add(p,{std::cos(e.facing)*n*.16f,phase*.25f,-std::sin(e.facing)*n*.16f});
+        r.DrawEffectStreak(Add(tip,{-std::sin(e.facing)*.8f,0,-std::cos(e.facing)*.8f}),tip,.032f,{.75f,.9f,.50f,fade*.8f});
+      }
+    }
+  }
   if(e.opening) {
     for(int n=0;n<3;++n) {
       const float angle=n*tau/3+e.facing;
@@ -150,8 +217,8 @@ void Impact(Renderer& r,const rpg::CombatVisualEvent& e,float age) {
   if(e.signature) {
     // Class-colored paired crescents and rising motes mark the spent reserve.
     // Fixed segment counts keep contact cost independent of frame rate.
-    const XMFLOAT3 ground{e.position.x,.06f,e.position.z};
-    for(int side=0;side<2;++side) Arc(r,ground,.35f+phase*.85f,side*pi+phase*2,pi*.7f,.024f,c,true);
+    const auto ground=Floor(e.position);
+    for(int side=0;side<2;++side) GroundArc(r,ground,.35f+phase*.85f,side*pi+phase*2,pi*.7f,.024f,c);
     for(int n=0;n<6;++n) {
       const float angle=n*tau/6;
       const auto mote=Add(p,{std::cos(angle)*phase*.65f,phase*.65f,std::sin(angle)*phase*.65f});
@@ -160,9 +227,9 @@ void Impact(Renderer& r,const rpg::CombatVisualEvent& e,float age) {
   }
   if(e.technique) {
     if(e.school==C::Mage) c={.35f,.78f,1.f,fade*.8f};
-    const XMFLOAT3 ground{e.position.x,.055f,e.position.z};
+    const auto ground=Floor(e.position,.055f);
     // A short broken seal identifies the tactical contact without hiding feet.
-    for(int n=0;n<3;++n) Arc(r,ground,.42f+phase*.30f,n*tau/3+phase,.65f,.012f,c,true);
+    for(int n=0;n<3;++n) GroundArc(r,ground,.42f+phase*.30f,n*tau/3+phase,.65f,.012f,c);
   }
   if((e.technique || e.signature) && e.school==C::Mage) {
     for(int n=0;n<8;++n) Ray(r,p,n*tau/8,.10f+phase*.18f,.28f+phase*.65f,.016f,c);
@@ -236,7 +303,7 @@ void Impact(Renderer& r,const rpg::CombatVisualEvent& e,float age) {
         r.DrawEffectGlow(Lerp(base,tip,.4f),.17f*size,Color(e.school,fade*.24f));
         r.DrawEffectGlow(tip,.045f,Color(e.school,fade*.65f));
       }
-      Arc(r,{e.position.x,.055f,e.position.z},(.25f+phase*.85f)*size,0,tau,.025f,Color(e.school,fade*.42f),true);
+      GroundArc(r,Floor(e.position,.055f),(.25f+phase*.85f)*size,0,tau,.025f,Color(e.school,fade*.42f));
       break;
     }
     case C::Necromancer: {
@@ -286,8 +353,8 @@ void Impact(Renderer& r,const rpg::CombatVisualEvent& e,float age) {
   if(e.empowered) {
     // A second, delayed contour announces the resource payoff without masking contact.
     const float delayed=Unit((age-.035f)/.36f);
-    Arc(r,{e.position.x,.06f,e.position.z},(.3f+delayed*.9f)*size,phase*2,pi*1.7f,.018f,
-      Color(e.school,std::sin(delayed*pi)*.4f),true);
+    GroundArc(r,Floor(e.position),(.3f+delayed*.9f)*size,phase*2,pi*1.7f,.018f,
+      Color(e.school,std::sin(delayed*pi)*.4f));
     for(int i=0;i<4;++i) {
       const float a=i*pi*.5f+phase;
       r.DrawEffectGlow(Add(p,{std::cos(a)*phase*size,phase*size,std::sin(a)*phase*size}),.045f,Color(e.school,fade*.5f));
@@ -312,7 +379,7 @@ void Recovery(Renderer& r,const rpg::CombatVisualEvent& e,float age) {
     break;
   case C::Paladin:case C::Priest: {
     const bool priest=e.school==C::Priest;
-    Arc(r,{p.x,e.height+.06f,p.z},.5f+t*.2f,0,tau,.018f,color,true);
+    GroundArc(r,{p.x,e.height+.06f,p.z},.5f+t*.2f,0,tau,.018f,color);
     for(float side:{-1.f,1.f}) for(int i=0;i<4;++i) {
       const float span=(priest?.58f:.35f)+i*.08f;
       r.DrawEffectStreak(Add(p,{side*.22f,.12f+i*.11f,0}),
@@ -358,7 +425,7 @@ void Recovery(Renderer& r,const rpg::CombatVisualEvent& e,float age) {
     for(int i=0;i<3;++i) {
       const float beat=Unit((t-i*.13f)/.65f);if(beat<=0 || beat>=1) continue;
       auto c=color;c.w*=std::sin(beat*pi);
-      Arc(r,{p.x,e.height+.08f,p.z},.25f+beat*.65f,0,tau,.018f,c,true);
+      GroundArc(r,{p.x,e.height+.08f,p.z},.25f+beat*.65f,0,tau,.018f,c);
       Note(r,Add(p,{(i-1)*.38f,.1f+beat*.7f,0}),.19f,c);
     }break;
   case C::Engineer:
@@ -377,7 +444,8 @@ void Prepare(Renderer& r,const rpg::Simulation& state,XMFLOAT3 p) {
   const float progress=state.CastingRecovery()?state.RecoveryProgress():state.AttackSeconds()/combat::StrokeStart(state.HeavyAttack());
   if(progress<=0 || progress>=1) return;
   const float alpha=std::sin(progress*pi*.5f)*.55f;
-  const auto id=state.Class();const auto c=(state.TechniqueAttack() || state.SignatureAttack()) && id==C::Mage?XMFLOAT4{.35f,.78f,1.f,alpha}:Color(id,alpha);
+  const auto id=state.Class();const auto c=id==C::Mage && state.AttackAbility()==10?XMFLOAT4{.68f,.55f,1,alpha}:
+    (state.TechniqueAttack() || state.SignatureAttack() || state.AttackAbility()==8) && id==C::Mage?XMFLOAT4{.35f,.78f,1.f,alpha}:Color(id,alpha);
   if((id==C::Scout || id==C::Engineer) && !state.CastingRecovery()) {
     if(!state.HeavyAttack()) return;
     // Compact sight brackets at the weapon; no premature muzzle flash.
@@ -386,8 +454,8 @@ void Prepare(Renderer& r,const rpg::Simulation& state,XMFLOAT3 p) {
     return;
   }
   if(state.CastingRecovery()) {
-    const XMFLOAT3 base{state.Player().x,state.Height()+.06f,state.Player().z};
-    Arc(r,base,.45f+progress*.12f,progress*4,pi*1.7f,.012f,c,true);
+    const XMFLOAT3 base{state.Player().x,state.WorldHeight()+.06f,state.Player().z};
+    GroundArc(r,base,.45f+progress*.12f,progress*4,pi*1.7f,.012f,c);
     for(int i=0;i<4;++i) {
       const float a=i*tau/4+progress*5;
       const auto mote=Add(base,{std::cos(a)*.5f,progress*1.1f,std::sin(a)*.5f});
@@ -417,7 +485,7 @@ void States(Renderer& r,const rpg::Simulation& state,float time) {
   const auto player=state.Player();
   if(state.Barrier()>0) {
     const float a=std::min(1.f,state.Barrier()/12.f)*(.28f+.045f*std::sin(time*3));
-    const XMFLOAT3 p{player.x,state.Height()+1,player.z};
+    const XMFLOAT3 p{player.x,state.WorldHeight()+1,player.z};
     const auto color=state.Class()==C::Mage?XMFLOAT4{.35f,.72f,1,a}:Color(state.Class(),a);
     const bool physical=state.Class()==C::Warrior || state.Class()==C::Engineer;
     if(physical) {
@@ -434,19 +502,19 @@ void States(Renderer& r,const rpg::Simulation& state,float time) {
       }
     } else {
       for(int i=0;i<3;++i) Arc(r,p,.64f,i*tau/3+time*.18f,1.3f,.013f,color,false,.35f);
-      Arc(r,{player.x,state.Height()+.08f,player.z},.57f,0,tau,.014f,color,true);
+      GroundArc(r,{player.x,state.WorldHeight()+.08f,player.z},.57f,0,tau,.014f,color);
     }
   }
   if(state.EvasionSeconds()>0) {
     const float alpha=std::min(1.f,state.EvasionSeconds()/.3f)*.3f;
-    for(int i=0;i<3;++i) Arc(r,{player.x,state.Height()+.15f+i*.23f,player.z},.43f,
+    for(int i=0;i<3;++i) Arc(r,{player.x,state.WorldHeight()+.15f+i*.23f,player.z},.43f,
       state.Facing()+time*.5f+i*.8f,.8f,.012f,Color(C::Scout,alpha),true,.15f);
   }
   unsigned shown=0;
   const auto status=[&](const rpg::Enemy& enemy) {
     if(enemy.health<=0 || shown>=8 || (enemy.snared<=0 && enemy.rooted<=0 && enemy.stunned<=0 && enemy.exposed<=0)) return;
     if(std::hypot(enemy.position.x-player.x,enemy.position.z-player.z)>30) return;
-    ++shown;const XMFLOAT3 ground{enemy.position.x,.08f,enemy.position.z};
+    ++shown;const auto ground=Floor(enemy.position,.08f);
     if(enemy.rooted>0) {
       const float alpha=Unit(enemy.rooted/.25f)*.55f;
       for(int j=0;j<3;++j) for(int i=0;i<10;++i) {
@@ -456,7 +524,7 @@ void States(Renderer& r,const rpg::Simulation& state,float time) {
       }
     } else if(enemy.snared>0) {
       const auto c=Color(C::Scout,Unit(enemy.snared/.25f)*.48f);
-      Arc(r,ground,.42f,0,tau,.014f,c,true);
+      GroundArc(r,ground,.42f,0,tau,.014f,c);
       for(int i=0;i<4;++i) {
         const float a=i*pi*.5f;
         r.DrawEffectStreak(Add(ground,{std::cos(a)*.42f,0,std::sin(a)*.42f}),

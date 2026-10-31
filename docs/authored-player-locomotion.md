@@ -1,4 +1,105 @@
-# Authored player locomotion — 2026-10-28
+# Authored player locomotion — v3 class equipment, 2026-10-30
+
+The current archive is v3: 27 authored actions plus six retained compatibility
+tracks, 275,940 bytes. It adds bow guard, two releases, equipped bow walk/run,
+and a weight/settle pass over sword/staff attacks and directional gaits.
+Editable actions are in `assets/authored/player-motion-v3.blend`; the v2 source
+below is preserved. Current equipment, export paths and review are documented
+in [oldstyle-player-art.md](oldstyle-player-art.md).
+
+Archery uses source-time retiming so the held draw is not skipped by an
+arc-length map. The right hand holds the bow and the left draws the string;
+an equipped shield is stowed. The nock, limbs and arrow animate in both color
+and shadow passes. Existing attack contacts remain authoritative.
+
+## Preserved v2 integration notes
+
+The player now uses the 22 actions from the reviewed `Human_Male_Motion_v2.blend`:
+relaxed idle, sword/staff guards, four walks and four runs, equipped sword/staff
+walks and runs, two sword attacks, two staff attacks, jump, airborne fall and
+heavy landing. `assets/authored/player-motion-v2.blend` preserves an editable
+copy of the action rig. The local full character source remains unchanged.
+
+The native pipeline still retargets hand/ankle targets, pelvis displacement,
+torso orientation and weapon direction onto the equipment-compatible body rig.
+It does not play all 57 Blender bones directly. Ground contacts and horizontal
+movement remain native; class appearance, clothing and interchangeable gear
+remain available. This integration does not replace the thirteen collection
+models or claim exact reproduction of Blender deformation and shading.
+
+## Current playback
+
+- Directional gait follows distance actually travelled, with smooth walk/run
+  blending. Entering the authored layer fades over 180 ms, including after load.
+- Sword and staff attacks use a separate presentation controller. Authored
+  contact/release markers align with the existing combat clock. Arc-length
+  retiming spreads rapid source keys across the available wind-up/cut interval;
+  recovery continues after the simulation's attack timer ends at the same class
+  playback rate. Existing damage,
+  movement speed, cooldowns and command acceptance are unchanged. The short
+  gameplay contact window still bounds the duration of anticipation.
+- Interrupted attacks freeze and fade their outgoing pose; they do not advance
+  to a cancelled contact. Focus loss, death and load clear transient playback.
+- Staff direction comes from the clip. Both wrists are fitted to one shaft in
+  their shared reach range, and the supporting fingers close around it. Class
+  spell gestures can release that grip and take precedence over idle/gait.
+- Jump sampling uses the authored takeoff/landing markers. Descent blends into
+  the airborne fall; accepted landings begin at the landing contact pose.
+- Six old tracks remain for start/stop and compatibility with callers using the
+  previous attack/jump presentation. Other actor animation is not replaced.
+
+## Current source and binary contract
+
+The ignored exporter is
+`.blender-local/male-study-20261028/motion-v2/runtime/export_runtime.py`.
+Run it using Blender in background mode with `--python-exit-code 1`. It reads
+the full v2 source, writes the editable action library, and atomically replaces
+the runtime archive. Its compatibility inputs and pre-integration backups live
+in the adjacent `before-integration` directory. Do not run the old tracked
+Collection 04 exporter over this archive.
+
+`player-clips.json` records source/archive/track SHA-256 hashes and timing
+markers. PCL2 is little endian: magic/version/count, followed by 28 tracks.
+Each track has a uint32 frame count, seven float32 values (duration, load,
+contact, takeoff, landing, stance fraction, travel speed), a uint32 loop flag,
+and 19 float32 channels per frame. V2 clips are sampled at 60 Hz; preserved
+tracks retain their original sampling. The 230,768-byte archive stays embedded
+as resource 303. Blender is not required to run the game.
+
+The loader bounds allocation, track/frame counts and duration; validates all
+markers, loop seams, finite channels and normalized weapon axes; and rejects
+truncated or trailing data. Sampling is cubic, periodic for loops and clamped
+for nonloops. Attack arc-length tables are built once when loading.
+
+## Current review
+
+The isolated build is `build-motion-v2-release/RPGNative.exe`, with its launcher
+alongside it. Native screenshots are under
+`build-motion-v2-release/authored-locomotion-check`, including 42-frame sword
+and staff sequences for basic and heavy attacks, start/run/stop and eight
+directional views. These captures use the game's renderer and equipment.
+
+The focused motion test covers 30/60/144/1000 Hz playback, planted-foot slip,
+rapid direction changes, weapon/finger continuity, staff grip, cancellation,
+extended recovery and actual Warrior/Mage command streams compared against
+plain Simulation saves. Build/test logs and source backups are local under
+`.blender-local/male-study-20261028/motion-v2/runtime`.
+
+Final verification: Release passed AuthoredLocomotion, Animation, ActionClip,
+FootPlacement, ClassEquipment, AttachmentLod, PlayerBody, HandSkinning and Motion
+(9/9). Debug passed AuthoredLocomotion, Animation and ActionClip (3/3), including
+native capture/GPU diagnostics. Both executables passed the hidden smoke run.
+The v2 fixture measured 0.00799 m maximum hand displacement per 1 ms during
+rapid direction changes, 0.04357 m maximum attack-tip displacement per 1 ms,
+and less than 0.000001 m staff grip error. These are bounded test measurements,
+not a guarantee that every live pose is artifact-free. The full Blender source
+SHA-256 and runtime manifest SHA-256 were verified unchanged/matching.
+
+## Historical integration record — 2026-10-28
+
+The following records the previous Collection 04 integration and its old
+validation results. The source, archive format and review paths above supersede
+their equivalents below.
 
 The player now consumes ten additional Collection 04 Dawnwarden tracks: forward,
 backward, left and right walking; the same four running directions; Start_Walk

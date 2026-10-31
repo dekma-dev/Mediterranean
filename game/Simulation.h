@@ -96,6 +96,7 @@ struct CombatVisualEvent {
   float elapsed = 0; // time from emission to the end of this update
   Vec2 destination{};
   ClassId school=ClassId::Warrior;
+  int ability=-1;
   float flight=.1f;
   // Snapshot the accepted action: presentation can outlive recovery/selection.
   Vec2 source{};
@@ -121,7 +122,7 @@ public:
   float Barrier() const { return barrier_; }
   bool RetreatMobility() const { return CombatStyleInfo().retreatDistance>0; }
   float MobilityDuration() const { return CombatStyleInfo().retreatDuration; }
-  float AttackRate() const { return ClassAttackRate(class_,HeavyAttack())*(attackAbility_==7?.85f:attackAbility_==6?.7f:attackAbility_==5?.8f:1.f); }
+  float AttackRate() const { if(attackAbility_>=8) return AdvancedRate(class_,attackAbility_); return ClassAttackRate(class_,HeavyAttack())*(attackAbility_==7?.85f:attackAbility_==6?.7f:attackAbility_==5?.8f:1.f); }
   float BuildBonus(unsigned mask,float TalentInfo::*stat) const;
   int FrontierCompleted() const { return frontierCompleted_; }
   bool FrontierActive() const { return frontierActive_; }
@@ -134,6 +135,7 @@ public:
   const std::vector<Enemy>& Enemies() const { return enemies_; }
   Vec2 Player() const { return player_; }
   float Height() const { return height_; }
+  float WorldHeight() const {return map_.Height(player_)+height_;}
   float VerticalSpeed() const { return velocityY_; }
   bool Grounded() const { return height_==0 && velocityY_<=0; }
   // Impact speed and time since contact within the latest update; zero otherwise.
@@ -162,7 +164,7 @@ public:
   bool OpeningAttack() const { return attackAbility_==7; }
   bool SignatureAttack() const { return attackAbility_==6; }
   bool TechniqueAttack() const { return attackAbility_==5; }
-  bool HeavyAttack() const { return attackAbility_==1 || attackAbility_==5 || attackAbility_==6; }
+  bool HeavyAttack() const { return attackAbility_==1 || attackAbility_==5 || attackAbility_==6 || attackAbility_>=8; }
   float AttackSeconds() const { return Attacking()?attackAge_:-1.f; }
   float AttackProgress() const { return Attacking()?attackAge_/combat::Duration(HeavyAttack()):0; }
   float Health() const { return health_; }
@@ -211,9 +213,9 @@ public:
   const Enemy* TargetActor() const;
   const std::array<Enemy,3>& Dummies() const { return dummies_; }
   static constexpr EntityId friendlyBase=300;
-  static constexpr int friendlyCount=5;
-  static Vec2 FriendlyPosition(int index) { return index<3?WorldMap::residents[index].position:index==3?WorldMap::questGiver:WorldMap::quartermaster; }
-  static const char* FriendlyName(int index) { return index<3?WorldMap::residents[index].name:index==3?"Beacon keeper":"Quartermaster"; }
+  static constexpr int friendlyCount=11;
+  static Vec2 FriendlyPosition(int index) { return index>=5?WorldMap::residents[index-2].position:index<3?WorldMap::residents[index].position:index==3?WorldMap::questGiver:WorldMap::quartermaster; }
+  static const char* FriendlyName(int index) { return index>=5?WorldMap::residents[index-2].name:index<3?WorldMap::residents[index].name:index==3?"Beacon keeper":"Quartermaster"; }
   int FriendlyTarget() const { return friendlyTarget_; }
   bool VisibleEnemyCast(const Enemy& enemy) const {
     return enemy.health>0 && enemy.windup>0 && enemy.state==EnemyState::Pursuing &&
@@ -247,7 +249,14 @@ public:
   Vec2 DialoguePosition() const { return QuestLocation(questDialogue_); }
   bool SurveyActive() const { return frontierActive_ && frontierCompleted_==8; }
   unsigned SurveyMask() const { return surveyMask_; }
-  bool FrontierReady() const { return SurveyActive()?surveyMask_==7:DefeatedCount()==3; }
+  bool ExpeditionActive() const { return frontierActive_ && (frontierCompleted_==10 || frontierCompleted_==11 || frontierCompleted_==13); }
+  unsigned ExpeditionMask() const { return expeditionMask_; }
+  Vec2 ExpeditionSite(int index) const { return WorldMap::expeditionSites[index+(frontierCompleted_==13?6:frontierCompleted_==11?3:0)]; }
+  bool RitualActive() const {return frontierActive_ && frontierCompleted_==14;}
+  bool SuppliesActive() const {return frontierActive_ && frontierCompleted_==13;}
+  int RitualStage() const {return ritualStage_;}
+  float RitualCharge() const {return ritualCharge_/4.f;}
+  bool FrontierReady() const { return RitualActive()?ritualStage_==4:SurveyActive()?surveyMask_==7:ExpeditionActive()?expeditionMask_==7:DefeatedCount()==int(enemies_.size()); }
   QuestStage DialogueStage() const;
   QuestAction QuestPrimaryAction() const;
   const char* QuestConfirmStatus() const;
@@ -270,7 +279,11 @@ public:
 private:
   int frontierCompleted_=0,legacyLoot_=0;
   bool frontierActive_=false;
-  unsigned surveyMask_=0;
+  unsigned surveyMask_=0,expeditionMask_=0;
+  int ritualStage_=0;
+  float ritualCharge_=0;
+  void AdvanceRitual();
+  void UpdateRitual(float dt);
   void PrepareFrontierEnemies(int rank);
   ClassId class_=ClassId::Warrior;
   std::string nickname_="Frontier guard";
@@ -282,6 +295,7 @@ private:
   const Enemy* DashTargetActor() const;
   void UseAbility(int index,float visualElapsed=0);
   void ResolveAttack(float elapsed);
+  void ResolveContact(Enemy& enemy,float elapsed);
   void UpdateCombat(float dt,bool advanceAttack);
   void CancelAttack() { attackAbility_=-1; attackAge_=attackDamage_=attackFlash_=0; attackTarget_=0; attackEmpowered_=false; }
   void LearnTalent(int index);
@@ -329,7 +343,7 @@ private:
   float landingSpeed_ = 0, landingElapsed_ = 0;
   bool damagedThisUpdate_ = false;
   bool jumpedThisUpdate_ = false, dashedThisUpdate_ = false;
-  std::array<float,8> cooldowns_{};
+  std::array<float,12> cooldowns_{};
   int target_ = -1, gold_ = 0;
   int friendlyTarget_=-1;
   std::array<Enemy,3> dummies_{};

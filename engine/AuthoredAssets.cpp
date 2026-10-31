@@ -85,7 +85,7 @@ visual::BodyPalette Pose(Asset asset,float time,float gait,float attack,float tr
  }
  return palette;
 }
-static_assert(unsigned(visual::Material::Count)==13,"Update authored shader material sentinel with material layers");
+static_assert(unsigned(visual::Material::Count)==16,"Update authored shader material sentinel with material layers");
 static_assert(sizeof(visual::Vertex)==40,"Authored archive stores ten float32 values per vertex");
 namespace {
 void Require(bool condition,const char* message) {if(!condition) throw std::runtime_error(message);}

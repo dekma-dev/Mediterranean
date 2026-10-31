@@ -1,0 +1,53 @@
+{
+  "source": "assets/authored/player-anatomy.blend",
+  "sha256": "bbb0590a5dd6a06c0ea20004ac5c6cdda0f3f1754dc18407dde3ed6b53625e79",
+  "authoring_copy": ".blender-local/male-study-20261028/Human_Male_Anatomical.blend",
+  "object": "Human | anatomical sculpt body",
+  "upstream": "Blender Studio Human Base Meshes v1.4.1, realistic male",
+  "license": "CC0-1.0",
+  "upstream_url": "https://www.blender.org/download/demo-files/",
+  "read_only": true,
+  "neck_cut_z": 1.545,
+  "runtime_origin": [
+    0,
+    1.71,
+    0.012
+  ],
+  "runtime_scale": [
+    0.265,
+    0.42,
+    0.26
+  ],
+  "lods": [
+    {
+      "name": "player-head",
+      "vertices": 5002,
+      "triangles": 10000,
+      "sha256": "c0bf6f42ac5a317495eed2c8ee565d61b08bd8d98c8316aa68ca9c9ee54851f9"
+    },
+    {
+      "name": "player-head-medium",
+      "vertices": 1502,
+      "triangles": 3000,
+      "sha256": "bec407ce7ea903c2952d727091b458a2aa60f0327241df465f9f8f7d08359779"
+    },
+    {
+      "name": "player-head-far",
+      "vertices": 242,
+      "triangles": 480,
+      "sha256": "bdb559e5f90d5c91a31f5af86e0c20d79dc842762f39d074e4714481d191bead"
+    },
+    {
+      "name": "player-hair",
+      "vertices": 1603,
+      "triangles": 2999,
+      "sha256": "4186cb7c852347b307b52573d17c2c118a4746587c02c2711d9b4616e7e8d334"
+    },
+    {
+      "name": "player-hair-low",
+      "vertices": 241,
+      "triangles": 400,
+      "sha256": "1fdb24db9c4c45960a7e1d7313d27077d9e3ea5aba8348d5d34ccee14695c5b5"
+    }
+  ]
+}

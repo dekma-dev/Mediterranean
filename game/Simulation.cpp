@@ -50,8 +50,10 @@ float Simulation::CameraDistance(Vec2 origin,float originY,Vec2 direction,float 
   // Conservative camera bounds include pitched roofs, chimneys and tree crowns.
   for (float d=.3f;d<desired;d+=.1f) {
     const Vec2 p{origin.x+direction.x*d,origin.z+direction.z*d};
-    const float y=originY+slope*d;
+    const float worldY=originY+slope*d;
+    if(worldY<map_.Height(p)+.30f) return std::max(.25f,d-.2f);
     for (const auto& o : map_.Obstacles()) {
+      const float y=worldY-map_.Height(o.center);
       // Above the counter, test the open frame and bowed cloth separately.
       // A full-height box would pull the ordinary shop camera into the player.
       if (o.kind==PropKind::Counter && y>o.height+.1f) {
@@ -101,7 +103,13 @@ const Enemy* Simulation::TargetActor() const {
 }
 
 bool Simulation::HasLineOfSight(Vec2 from,Vec2 to) const {
-  return map_.CanTravel(from,to,.05f);
+  if(!map_.CanTravel(from,to,.05f))return false;
+  const float a=map_.Height(from)+1.3f,b=map_.Height(to)+1.3f;
+  const int steps=std::max(1,int(std::ceil(Length(Difference(to,from))/.5f)));
+  for(int i=1;i<steps;++i) {const float t=float(i)/steps;
+    const Vec2 p{from.x+(to.x-from.x)*t,from.z+(to.z-from.z)*t};
+    if(map_.Height(p)>a+(b-a)*t)return false;
+  }return true;
 }
 
 Simulation::DashCheck Simulation::CheckDashTarget() const {
@@ -123,15 +131,16 @@ const Enemy* Simulation::DashTargetActor() const {
 
 void Simulation::UseAbility(int index,float visualElapsed) {
   if (!ValidSpell(index) || health_<=0) return;
+  if(index>=8 && (!AdvancedClass(class_) || Level()<SpellLevel(index))) {message_=AbilityStatus(index);return;}
   if (cooldowns_[index]>0) { message_="That ability is cooling down."; return; }
-  if (index==6 && !EmpoweredReady()) {message_="Build a full class reserve first.";return;}
+  if ((index==6 || index==11) && !EmpoweredReady()) {message_="Build a full class reserve first.";return;}
   if (Dashing()) { message_="Finish the dash before using another ability."; return; }
   if (CastingRecovery()) {message_="Finish or interrupt the current cast.";return;}
   if (Attacking()) { message_="Finish the weapon recovery before using another ability."; return; }
   if ((index<2 || index>=5) && PhysicalLauncher(WeaponFor(class_).form) && inventory_.Worn(GearSlot::Weapon)==Item::None) {
     message_="Equip your class weapon before firing."; return;
   }
-  if ((index==1 || index==5 || index==6) && CombatStyleInfo().steadyHeavy && (!Grounded() || Length(movementVelocity_)>.15f)) {
+  if ((index==1 || index==5 || index==6 || index==9 || index==11 || (index==8 && class_==ClassId::Mage)) && CombatStyleInfo().steadyHeavy && (!Grounded() || Length(movementVelocity_)>.15f)) {
     message_="Stand still to prepare this heavy attack.";return;
   }
   if (index==3) {
@@ -183,6 +192,10 @@ void Simulation::UseAbility(int index,float visualElapsed) {
     attackEmpowered_=index==1 && EmpoweredReady();
     if(attackEmpowered_) classResource_=0;
     attackDamage_=index==0?StrikeDamage():HeavyDamage();
+    if(index==8) attackDamage_*=class_==ClassId::Warrior?.85f:class_==ClassId::Scout?.70f:.65f;
+    if(index==9) attackDamage_*=class_==ClassId::Warrior?1.25f:class_==ClassId::Scout?1.30f:1.40f;
+    if(index==10) attackDamage_*=class_==ClassId::Warrior?.50f:class_==ClassId::Scout?.55f:.60f;
+    if(index==11) {classResource_=0;attackDamage_*=class_==ClassId::Warrior?1.50f:1.75f;}
     if(index==7) attackDamage_=StrikeDamage()*.9f;
     if(index==6) {
       classResource_=0;attackDamage_*=class_==ClassId::Demonologist?1.6f:1.1f;
@@ -228,9 +241,30 @@ void Simulation::ResolveAttack(float elapsed) {
       !HasLineOfSight(player_,victim->position)) {
     Emit(FeedbackKind::Miss,player_); message_="The committed strike missed."; return;
   }
-  auto& enemy=*victim;
+  const Vec2 centre=victim->position;const EntityId primary=victim->id;
+  ResolveContact(*victim,elapsed);
+  const bool area=attackAbility_==8 || (attackAbility_==9 && class_==ClassId::Mage) || (attackAbility_==11 && class_!=ClassId::Scout);
+  if(!area) return;
+  const auto secondary=[&](Enemy& enemy) {
+    if(enemy.id==primary || enemy.health<=0 || enemy.state==EnemyState::Returning) return;
+    const auto delta=Difference(enemy.position,player_);const float distance=Length(delta);
+    if(distance>Spell(attackAbility_).range || !HasLineOfSight(player_,enemy.position)) return;
+    if(class_==ClassId::Mage) {
+      if(Length(Difference(enemy.position,centre))>(attackAbility_==11?4.5f:3.f) || !HasLineOfSight(centre,enemy.position)) return;
+    } else if(attackAbility_!=11 && distance>.01f && (delta.x*std::sin(facing_)+delta.z*std::cos(facing_))/distance<
+        std::cos(class_==ClassId::Warrior?1.2f:.48f)) return;
+    ResolveContact(enemy,elapsed);
+  };
+  for(auto& enemy:enemies_) secondary(enemy);
+  for(auto& dummy:dummies_) if(!(sparring_ && dummy.id==210)) secondary(dummy);
+  if(sparring_) secondary(trainer_);
+}
+
+void Simulation::ResolveContact(Enemy& enemy,float elapsed) {
+  const bool trainingTarget=sparring_ && trainer_.id==enemy.id;
   const int index=attackAbility_;
   const int previousLevel=Level();
+  const bool exposedAtContact=enemy.exposed>0;
   // Evaluate the finishing condition at actual contact, after earlier enemy
   // actions, while preserving the weapon damage captured when the cast began.
   const float finishing=index==1?HeavyMultiplier(enemy.health,enemy.MaxHealth()):1.f;
@@ -252,8 +286,24 @@ void Simulation::ResolveAttack(float elapsed) {
     if(class_==ClassId::Scout && enemy.rooted>0) bonus+=HeavyDamage()*.7f;
     if(class_==ClassId::Mage && (enemy.snared>0 || enemy.rooted>0)) {bonus+=attackDamage_;enemy.snared=enemy.rooted=0;}
   }
-  const float mastery=(attackEmpowered_ || index==6) && HasTalent(Talent::Overwhelming)?1.2f:1.f;
-  const float damage=std::min(enemy.health,(attackDamage_*finishing+bonus)*mastery*(enemy.exposed>0?1.25f:1.f));
+  if(index==9 && class_==ClassId::Scout && enemy.rooted>0) bonus+=HeavyDamage()*.35f;
+  if(index==8) {
+    if(class_==ClassId::Mage) enemy.rooted=std::max(enemy.rooted,2.f);
+    if(class_==ClassId::Scout) enemy.snared=std::max(enemy.snared,2.f);
+  }
+  if(index==9 && class_==ClassId::Warrior) {
+    enemy.stunned=std::max(enemy.stunned,1.f);enemy.exposed=std::max(enemy.exposed,4.f);barrier_=std::max(barrier_,10.f);
+  }
+  if(index==9 && class_==ClassId::Scout) enemy.exposed=std::max(enemy.exposed,5.f);
+  if(index==10) {
+    if(class_==ClassId::Warrior) enemy.stunned=std::max(enemy.stunned,1.4f);
+    if(class_==ClassId::Scout) enemy.snared=std::max(enemy.snared,4.f);
+    else classResource_=std::min(CombatStyleInfo().capacity,classResource_+1);
+  }
+  if(index==11 && class_==ClassId::Warrior) barrier_=std::max(barrier_,25.f);
+  if(index==11 && class_==ClassId::Scout && Length(Difference(enemy.position,player_))>6) bonus+=HeavyDamage()*.8f;
+  const float mastery=(attackEmpowered_ || index==6 || index==11) && HasTalent(Talent::Overwhelming)?1.2f:1.f;
+  const float damage=std::min(enemy.health,(attackDamage_*finishing+bonus)*mastery*(exposedAtContact?1.25f:1.f));
   float heal=class_==ClassId::Necromancer?damage*.15f:class_==ClassId::Bard?3.f:class_==ClassId::Priest && index==1?8.f:0.f;
   if(index==5) {
     // Apply tactical effects only after validated contact.
@@ -333,7 +383,7 @@ void Simulation::ResolveAttack(float elapsed) {
   enemy.hitFlash=std::max(0.f,.2f-elapsed); enemy.damagedThisUpdate=true; attackFlash_=.2f;
   message_=attackEmpowered_?CombatStyleInfo().payoff:"Hit.";
   enemy.state=enemy.kind==EnemyKind::Dummy?EnemyState::Idle:EnemyState::Pursuing;
-  if ((index==1 || ((index==6 || index==7) && class_==ClassId::Psionic) || (index==5 && (class_==ClassId::Psionic || class_==ClassId::Bard))) && enemy.windup>0 && enemy.Interruptible()) {
+  if ((index==1 || index==10 || (index==9 && class_==ClassId::Warrior) || ((index==6 || index==7) && class_==ClassId::Psionic) || (index==5 && (class_==ClassId::Psionic || class_==ClassId::Bard))) && enemy.windup>0 && enemy.Interruptible()) {
     enemy.windup=0; enemy.attackCooldown=class_==ClassId::Psionic?1.5f:.8f;
     Emit(FeedbackKind::Interrupt,enemy.position);
     EmitVisual(CombatVisualKind::Interrupt,enemy.position,1.4f,facing_,enemy.id,elapsed);
@@ -345,7 +395,7 @@ void Simulation::ResolveAttack(float elapsed) {
     if (trainingTarget) { EndSparring("Victory"); return; }
     if(frontierActive_) {
       enemy.looted=true;
-      message_=DefeatedCount()==3?std::string("Squad defeated. Report to ")+DescribeQuest(CurrentQuest()).speaker+".":
+      message_=FrontierReady()?std::string("Squad defeated. Report to ")+DescribeQuest(CurrentQuest()).speaker+".":
         "Frontier enemy defeated. Clear the remaining positions.";
       return;
     }
@@ -400,14 +450,15 @@ void Simulation::UpdateCombat(float dt,bool advanceAttack) {
 }
 
 const char* Simulation::AbilityStatus(int index) const {
-  if (!ValidSpell(index) || health_<=0) return "DISABLED";
+  if (!ValidSpell(index) || health_<=0 || (index>=8 && !AdvancedClass(class_))) return "DISABLED";
+  if(Level()<SpellLevel(index)) return index==8?"REQUIRES LEVEL 5":index==9?"REQUIRES LEVEL 8":index==10?"REQUIRES LEVEL 6":"REQUIRES LEVEL 10";
   if (cooldowns_[index]>0) return "COOLDOWN";
-  if (index==6 && !EmpoweredReady()) return "LOW RESERVE";
+  if ((index==6 || index==11) && !EmpoweredReady()) return "LOW RESERVE";
   if (Dashing()) return "DASHING";
   if (CastingRecovery()) return "CASTING";
   if (Attacking()) return "RECOVERING";
   if ((index<2 || index>=5) && PhysicalLauncher(WeaponFor(class_).form) && inventory_.Worn(GearSlot::Weapon)==Item::None) return "NO WEAPON";
-  if((index==1 || index==5 || index==6) && CombatStyleInfo().steadyHeavy && (!Grounded() || Length(movementVelocity_)>.15f)) return "STAND STILL";
+  if((index==1 || index==5 || index==6 || index==9 || index==11 || (index==8 && class_==ClassId::Mage)) && CombatStyleInfo().steadyHeavy && (!Grounded() || Length(movementVelocity_)>.15f)) return "STAND STILL";
   if (index==3) {
     if(ClassHealer(class_) && health_>=MaxHealth()) return "FULL HEALTH";
     if(health_<=ClassRecoveryCost(class_)) return "LOW HEALTH";
@@ -435,17 +486,48 @@ const char* Simulation::AbilityStatus(int index) const {
 void Simulation::PrepareFrontierEnemies(int rank) {
   constexpr Vec2 west[]={{-23,15},{-19,19},{-24,23}};
   constexpr Vec2 north[]={{-6,25},{0,27},{6,25}};
+  constexpr Vec2 highlands[6][6]={
+    {{-55,30},{-51,35},{-47,42},{-42,47},{-38,48},{-33,53}},
+    {{50,39},{56,44},{43,49},{49,54},{33,55},{39,61}},
+    {{-20,61},{-16,65},{11,62},{17,66},{-6,68},{0,71}},
+    {{-55,-94},{-50,-100},{-40,-105},{-33,-111},{-26,-97},{-20,-104}},
+    {{-90,-87},{-82,-87},{-92,-94},{-80,-94},{-89,-98},{-83,-98}},
+    {{83,-99},{91,-102},{64,-110},{69,-114},{94,-109},{99,-111}}};
+  enemies_.resize(rank>=11?6:3);
   for(std::size_t i=0;i<enemies_.size();++i) {
-    const auto home=rank==8?west[i]:rank>=9?north[i]:enemies_[i].home;const auto id=enemies_[i].id;
+    const auto home=rank>=11?highlands[std::min(rank-11,5)][i]:rank==8?west[i]:rank>=9?north[i]:enemies_[i].home;const EntityId id=100+EntityId(i);
     enemies_[i]=Enemy{};auto& enemy=enemies_[i];enemy.home=enemy.position=home;enemy.id=id;enemy.rank=rank;
-    enemy.kind=i==2?EnemyKind::Captain:(rank+i)%2?EnemyKind::Reaver:EnemyKind::Wraith;
+    enemy.kind=(rank>=11?(rank==13 || rank>=15) && i==5:i==2)?EnemyKind::Captain:(rank+i)%2?EnemyKind::Reaver:EnemyKind::Wraith;
     enemy.health=enemy.MaxHealth();
-    if(rank==9) {enemy.health=0;enemy.looted=true;enemy.state=EnemyState::Dead;}
+    if(rank==9 || rank==15) {enemy.health=0;enemy.looted=true;enemy.state=EnemyState::Dead;}
   }
   StopMovement();target_=-1;
 }
+void Simulation::AdvanceRitual() {
+  if(!RitualActive() || ritualStage_>=4) return;
+  ++ritualStage_;ritualCharge_=0;StopMovement();
+  if(ritualStage_==4) {message_="The ridge beacon is secure. Return to Warden Ilar.";return;}
+  for(int i=(ritualStage_-1)*2;i<ritualStage_*2;++i) {
+    auto& enemy=enemies_[i];enemy.position=enemy.home;enemy.health=enemy.MaxHealth();enemy.looted=false;
+    enemy.state=EnemyState::Idle;enemy.attackCooldown=.8f;enemy.windup=0;enemy.path.clear();
+  }
+  EmitVisual(CombatVisualKind::EnemyQuake,WorldMap::ritualSite,0,0);
+  message_="A new wave approaches the beacon. Defeat both attackers.";
+}
+void Simulation::UpdateRitual(float dt) {
+  if(!RitualActive() || ritualStage_==0 || ritualStage_==4) return;
+  if(health_<=0 || !Grounded() || Dashing() || Attacking() || damagedThisUpdate_ ||
+      Length(Difference(player_,WorldMap::ritualSite))>5 || DefeatedCount()!=int(enemies_.size())) {ritualCharge_=0;return;}
+  ritualCharge_+=dt;if(ritualCharge_>=4) AdvanceRitual();
+}
 void Simulation::Interact() {
   if (sparring_) { EndSparring("Stopped"); return; }
+  if(RitualActive() && CanReadSurvey(WorldMap::ritualSite)) {
+    if(!Grounded() || Dashing() || Attacking()) {message_="Stand beside the beacon before beginning the vigil.";return;}
+    if(ritualStage_==0) AdvanceRitual();
+    else message_=ritualStage_==4?"The ridge beacon is secure. Return to Warden Ilar.":"Defeat the wave, then remain within five metres of the beacon for four seconds.";
+    return;
+  }
   if(SurveyActive()) for(unsigned i=0;i<WorldMap::surveySites.size();++i) {
     const auto site=WorldMap::surveySites[i];
     if(!CanReadSurvey(site)) continue;
@@ -454,6 +536,16 @@ void Simulation::Interact() {
     if(surveyMask_&bit) message_="This bearing is already recorded.";
     else {surveyMask_|=bit;StopMovement();message_=surveyMask_==7?"All three bearings recorded. Return to Surveyor Mara.":"Bearing recorded. The atlas marks the next unread stone.";}
     return;
+  }
+  if(ExpeditionActive()) for(int i=0;i<3;++i) {
+    const auto site=ExpeditionSite(i);if(!CanReadSurvey(site)) continue;
+    if(!Grounded() || Dashing() || Attacking()) {message_=SuppliesActive()?"Stand on the ground to recover supplies.":"Stand on the ground to inspect the stone.";return;}
+    if(frontierCompleted_==10 && std::any_of(enemies_.begin(),enemies_.end(),[&](const Enemy& e){return e.health>0 && Length(Difference(e.position,site))<7;})) {
+      message_="The signal is guarded. Clear enemies within seven metres.";return;
+    }
+    expeditionMask_|=1u<<i;StopMovement();
+    message_=SuppliesActive()?(expeditionMask_==7?"All three caches recovered. Return to Tessa.":"Supplies recovered. The atlas marks the next cache."):
+      expeditionMask_==7?"All three sites secured. Return to the expedition leader.":"Site recorded. The atlas marks the next objective.";return;
   }
   const bool nearbyLoot=std::any_of(enemies_.begin(),enemies_.end(),[&](const Enemy& e) {
     return e.health<=0 && !e.looted && Length(Difference(player_,e.position))<=2.5f && HasLineOfSight(player_,e.position);
@@ -573,11 +665,11 @@ void Simulation::ConfirmQuest(QuestAction action) {
   if (std::string(QuestConfirmStatus())!="READY") { message_=QuestConfirmStatus(); return; }
   if(action==QuestAction::AcceptFrontier) {
     if(frontierCompleted_==0) legacyLoot_=int(std::count_if(enemies_.begin(),enemies_.end(),[](const Enemy& e){return e.looted;}));
-    frontierActive_=true;PrepareFrontierEnemies(frontierCompleted_+1);
+    expeditionMask_=0;ritualStage_=0;ritualCharge_=0;frontierActive_=true;PrepareFrontierEnemies(frontierCompleted_+1);
     message_=DescribeQuest(questDialogue_).objective;return;
   }
   if(action==QuestAction::CompleteFrontier) {
-    const int old=Level();++frontierCompleted_;frontierActive_=false;RestoreForLevel(old);
+    const int old=Level();++frontierCompleted_;frontierActive_=false;expeditionMask_=0;ritualStage_=0;ritualCharge_=0;RestoreForLevel(old);
     Emit(FeedbackKind::Experience,player_,250);message_="Dispatch completed. Earned 250 experience.";return;
   }
   if (action==QuestAction::AcceptPatrol) {
@@ -649,7 +741,7 @@ void Simulation::Update(float seconds,const Command& command) {
     EmitVisual(CombatVisualKind::CastCancelled,player_,height_,facing_);
     recoveryCast_=0;message_="Cast interrupted by movement.";
   }
-  if(HeavyAttack() && CombatStyleInfo().steadyHeavy && attackAge_<combat::StrokeStart(true) &&
+  if(HeavyAttack() && attackAbility_!=10 && !(attackAbility_==8 && class_==ClassId::Scout) && CombatStyleInfo().steadyHeavy && attackAge_<combat::StrokeStart(true) &&
       (moving || command.jump || !Grounded())) {
     if(!PhysicalLauncher(WeaponFor(class_).form)) EmitVisual(CombatVisualKind::CastCancelled,player_,height_,facing_);
     CancelAttack();message_="Preparation interrupted by movement.";
@@ -695,7 +787,9 @@ void Simulation::Update(float seconds,const Command& command) {
     for(int slice=0;slice<steps;++slice) {
     Vec2 target{};
     if (moving) {
-      const float speed=(airborne?airSpeedLimit_:(command.sprint?7.f:4.f)*pace)*std::min(1.f,length);
+      const Vec2 ahead{player_.x+command.movement.x/length*.5f,player_.z+command.movement.z/length*.5f};
+      const float grade=airborne?0:(map_.Height(ahead)-map_.Height(player_))*2;
+      const float speed=(airborne?airSpeedLimit_:(command.sprint?7.f:4.f)*pace)*std::min(1.f,length)/std::sqrt(1+grade*grade);
       target={command.movement.x/length*speed,command.movement.z/length*speed};
     } else if (airborne) target=movementVelocity_; // Keep takeoff momentum without input.
     // Extra planted traction opposes an existing stride during a reversal,
@@ -751,11 +845,36 @@ void Simulation::Update(float seconds,const Command& command) {
   const bool dashMotion=Dashing() || (command.ability==2 && !Attacking() && cooldowns_[2]==0 &&
     !command.haltMovement && CheckDashTarget()==DashCheck::Ready);
   if (command.haltMovement || dashMotion) movementVelocity_={};
+  else if (inFlight && (std::abs(player_.x)>28 || std::abs(player_.z)>30)) {
+    // Integrate altitude in world space. A jumping actor must not ride the
+    // heightfield upwards or downwards as its horizontal position changes.
+    const int steps=std::max(1,int(std::ceil(dt*120)));
+    const float step=dt/steps;
+    for(int i=0;i<steps;++i) {
+      const bool airborne=!Grounded();
+      const Vec2 before=player_;const float floor=map_.Height(before),worldY=floor+height_,vy=velocityY_;
+      integrateHorizontal(step,airborne);
+      const float nextFloor=map_.Height(player_);
+      if(!airborne) continue;
+      const float nextY=worldY+vy*step-.5f*motion::gravity*step*step;
+      if(nextY>nextFloor) {height_=nextY-nextFloor;velocityY_=vy-motion::gravity*step;continue;}
+      float low=0,high=step;
+      for(int n=0;n<12;++n) {
+        const float t=(low+high)*.5f,u=t/step;
+        const Vec2 p{before.x+(player_.x-before.x)*u,before.z+(player_.z-before.z)*u};
+        if(worldY+vy*t-.5f*motion::gravity*t*t>map_.Height(p)) low=t;else high=t;
+      }
+      landingSpeed_=std::max(0.f,motion::gravity*high-vy);
+      landingElapsed_=std::max(0.f,dt-i*step-high);height_=velocityY_=0;
+      if(jumpBuffer_>i*step+high) launch();
+    }
+    contact=-1; // Terrain contact has already been resolved above.
+  }
   else if (inFlight) integrateHorizontal(std::min(dt,contact),true);
   else integrateHorizontal(dt,false);
   // Solve contact inside the step, retaining its speed and elapsed time for
   // presentation. End-of-frame velocity has already been zeroed at the floor.
-  if (inFlight) {
+  if (inFlight && contact>=0) {
     if (contact<=dt+1e-6f) {
       landingSpeed_=impact; landingElapsed_=std::max(0.f,dt-contact);
       height_=velocityY_=0;
@@ -852,6 +971,7 @@ void Simulation::Update(float seconds,const Command& command) {
     else if (sparringRemaining_==0) EndSparring("Time complete");
   }
   UpdateCombat(dt,advanceAttack);
+  UpdateRitual(dt);
   if(queuedAttack_>=0) {
     queueRemaining_=std::max(0.f,queueRemaining_-dt);
     const auto* target=TargetActor();
@@ -1112,7 +1232,7 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
 
 std::string Simulation::Save() const {
   std::ostringstream out;
-  out << std::setprecision(9) << "MEDITERRANEAN 18\n" << "PROFILE " << int(class_) << ' ' << std::quoted(nickname_) << ' ' << frontierCompleted_ << ' ' << frontierActive_ << ' ' << legacyLoot_ << '\n' << player_.x << ' ' << player_.z << ' '
+  out << std::setprecision(9) << "MEDITERRANEAN 20\n" << "PROFILE " << int(class_) << ' ' << std::quoted(nickname_) << ' ' << frontierCompleted_ << ' ' << frontierActive_ << ' ' << legacyLoot_ << '\n' << player_.x << ' ' << player_.z << ' '
     << health_ << ' ' << facing_ << ' ' << static_cast<int>(quest_) << ' ' << gold_ << '\n';
   out << Potions() << ' ' << HasRewardWeapon() << ' ' << RewardWeaponEquipped() << ' ' << potionCooldown_ << '\n';
   out << static_cast<int>(anchorQuest_) << '\n';
@@ -1133,6 +1253,8 @@ std::string Simulation::Save() const {
   out<<"SIGNATURE "<<cooldowns_[6]<<'\n';
   out<<"OPENING "<<cooldowns_[7]<<'\n';
   out<<"ENCOUNTERS";for(const auto& enemy:enemies_) out<<' '<<enemy.bossAttack<<' '<<enemy.nextBossAttack;out<<'\n';
+  out<<"EXPEDITION "<<expeditionMask_<<' '<<cooldowns_[8]<<' '<<cooldowns_[9]<<'\n';
+  out<<"SOUTHERN "<<ritualStage_<<' '<<ritualCharge_<<' '<<cooldowns_[10]<<' '<<cooldowns_[11]<<'\n';
   return out.str();
 }
 
@@ -1141,12 +1263,12 @@ bool Simulation::Load(const std::string& data) {
   std::istringstream input(data);
   std::string magic; int version=0, quest=0,potions=2,owned=0,equipped=0;
   Simulation candidate;
-  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>18) return false;
+  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>20) return false;
   if(version>=11) {
     std::string tag,name;int id=0,completed=0,active=0,looted=0;
     if(!(input>>tag>>id>>std::quoted(name)>>completed>>active>>looted) || tag!="PROFILE" ||
-      !candidate.CreateCharacter(ClassId(id),name) || completed<0 || completed>(version>=13?frontierQuestCount:7) || active<0 || active>1 ||
-      (completed==(version>=13?frontierQuestCount:7) && active) || looted<0 || looted>3 || (completed==0 && !active && looted!=0)) return false;
+      !candidate.CreateCharacter(ClassId(id),name) || completed<0 || completed>(version>=20?frontierQuestCount:version==19?13:version>=13?10:7) || active<0 || active>1 ||
+      (completed==(version>=20?frontierQuestCount:version==19?13:version>=13?10:7) && active) || looted<0 || looted>3 || (completed==0 && !active && looted!=0)) return false;
     candidate.frontierCompleted_=completed;candidate.frontierActive_=active!=0;candidate.legacyLoot_=looted;
     if(completed || active) candidate.PrepareFrontierEnemies(completed+active);
   }
@@ -1231,7 +1353,7 @@ bool Simulation::Load(const std::string& data) {
   }
   const bool frontier=candidate.frontierCompleted_>0 || candidate.frontierActive_;
   if(frontier && (candidate.anchorQuest_!=AnchorQuest::Complete || quest!=3 ||
-      (!candidate.frontierActive_ && defeated!=3))) return false;
+      (!candidate.frontierActive_ && candidate.frontierCompleted_!=12 && candidate.frontierCompleted_!=14 && defeated!=int(candidate.enemies_.size())))) return false;
   if(frontier && std::any_of(candidate.enemies_.begin(),candidate.enemies_.end(),
       [](const Enemy& enemy){return enemy.health<=0 && !enemy.looted;})) return false;
   if(frontier) looted=candidate.legacyLoot_;
@@ -1290,6 +1412,24 @@ bool Simulation::Load(const std::string& data) {
     }
   } else {
     for(auto& enemy:candidate.enemies_) if(enemy.Boss() && enemy.windup>0) enemy.nextBossAttack=1;
+  }
+  if(version>=19) {
+    std::string tag;
+    if(!(input>>tag>>candidate.expeditionMask_>>candidate.cooldowns_[8]>>candidate.cooldowns_[9]) || tag!="EXPEDITION" ||
+       candidate.expeditionMask_>7 || (!candidate.ExpeditionActive() && candidate.expeditionMask_!=0) ||
+       !valid(candidate.cooldowns_[8],0,spells[8].cooldown) || !valid(candidate.cooldowns_[9],0,spells[9].cooldown)) return false;
+  }
+  if(version>=20) {
+    std::string tag;
+    if(!(input>>tag>>candidate.ritualStage_>>candidate.ritualCharge_>>candidate.cooldowns_[10]>>candidate.cooldowns_[11]) || tag!="SOUTHERN" ||
+      candidate.ritualStage_<0 || candidate.ritualStage_>4 || !valid(candidate.ritualCharge_,0,3.99999f) ||
+      (!candidate.RitualActive() && (candidate.ritualStage_!=0 || candidate.ritualCharge_!=0)) ||
+      !valid(candidate.cooldowns_[10],0,spells[10].cooldown) || !valid(candidate.cooldowns_[11],0,spells[11].cooldown)) return false;
+    if(candidate.RitualActive()) {
+      if((candidate.ritualStage_==0 || candidate.ritualStage_==4) && (defeated!=6 || candidate.ritualCharge_!=0))return false;
+      for(int i=0;i<6;++i) if((i<(candidate.ritualStage_-1)*2 || i>=candidate.ritualStage_*2) && candidate.enemies_[i].health>0)return false;
+      if(candidate.ritualCharge_>0 && (defeated!=6 || candidate.health_<=0 || Length(Difference(candidate.player_,WorldMap::ritualSite))>5))return false;
+    }
   }
   input >> std::ws;
   if (!input.eof()) return false;

@@ -35,6 +35,7 @@ public:
   }
   void SuspendInput() { CancelUiGesture(); simulation_.StopMovement(); effects_.CancelDash(); playerAnimation_.CancelDash();
     effects_.CancelTrail(0); playerAnimation_.pose.attackSeconds=-1; playerPose_.attack=playerPose_.attackVelocity=0;
+    playerAnimation_.authoredWeapon={};playerAnimation_.pose.authoredStrikeWeight=0;
     simulation_.CloseQuestDialogue(); if (interface_.panel==ui::Panel::Quest) interface_.Close(ui::Panel::Quest); }
   void ExecuteCommand(const rpg::Command& command,float seconds=.01f);
   const rpg::Simulation& State() const { return simulation_; }

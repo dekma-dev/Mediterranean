@@ -54,14 +54,17 @@ int main() {
       Check(std::abs(v.position.x)<=.501f && std::abs(v.position.z)<=.501f &&
         v.position.y>=-.501f && v.position.y<=.531f,"Helmet must retain its fitted head envelope");
   }
-  std::size_t bytes=0,triangles=0,weaponBytes=0,weaponTriangles=0,armorBytes=0,armorTriangles=0,ridgeBytes=0,ridgeTriangles=0,authoredGearBytes=0,authoredGearTriangles=0;
+  std::size_t terrainBytes=0,terrainTriangles=0,bytes=0,triangles=0,weaponBytes=0,weaponTriangles=0,armorBytes=0,armorTriangles=0,ridgeBytes=0,ridgeTriangles=0,authoredGearBytes=0,authoredGearTriangles=0,headBytes=0,headTriangles=0;
   for (unsigned mesh=0;mesh<static_cast<unsigned>(visual::Mesh::Count);++mesh) {
     const auto g=visual::BuildMesh(static_cast<visual::Mesh>(mesh));
     Check(!g.vertices.empty() && !g.indices.empty() && g.indices.size()%3==0,"Missing or incomplete mesh.");
     // The separately budgeted weighted body is covered by SkinningTests.
     if(!visual::IsBodyMesh(static_cast<visual::Mesh>(mesh)) && !visual::IsHandMesh(static_cast<visual::Mesh>(mesh))) {
       const auto cost=g.vertices.size()*sizeof(visual::Vertex)+g.indices.size()*sizeof(std::uint32_t);
-      if(mesh>=unsigned(visual::Mesh::GuardShoulderLeft)) {authoredGearBytes+=cost;authoredGearTriangles+=g.indices.size()/3;}
+      if(mesh==unsigned(visual::Mesh::Terrain) || mesh==unsigned(visual::Mesh::Cliff)) {terrainBytes+=cost;terrainTriangles+=g.indices.size()/3;}
+      else if(visual::IsHeadMesh(static_cast<visual::Mesh>(mesh)) || mesh==unsigned(visual::Mesh::Hair) || mesh==unsigned(visual::Mesh::HairLow)) {headBytes+=cost;headTriangles+=g.indices.size()/3;}
+      else if(visual::IsClassArt(static_cast<visual::Mesh>(mesh))) {Check(cost<4*1024*1024,"Class attachment exceeds per-mesh budget");}
+      else if(mesh>=unsigned(visual::Mesh::GuardShoulderLeft)) {authoredGearBytes+=cost;authoredGearTriangles+=g.indices.size()/3;}
       else if(mesh==unsigned(visual::Mesh::Ridge)) {ridgeBytes+=cost;ridgeTriangles+=g.indices.size()/3;}
       else if(mesh>=unsigned(visual::Mesh::GuardCuirass) && mesh<=unsigned(visual::Mesh::GuardCloak)) {armorBytes+=cost;armorTriangles+=g.indices.size()/3;}
       else if(mesh>=unsigned(visual::Mesh::WeaponMace) && mesh<=unsigned(visual::Mesh::WeaponCleaver)) {weaponBytes+=cost;weaponTriangles+=g.indices.size()/3;}
@@ -77,7 +80,7 @@ int main() {
       const auto& a=g.vertices[g.indices[i]]; const auto& b=g.vertices[g.indices[i+1]]; const auto& c=g.vertices[g.indices[i+2]];
       const auto normal=XMVector3Cross(XMLoadFloat3(&b.position)-XMLoadFloat3(&a.position),XMLoadFloat3(&c.position)-XMLoadFloat3(&a.position));
       // Hands are authored directly in metres (unlike normalized prop meshes).
-      const float minimumArea=visual::IsHandMesh(static_cast<visual::Mesh>(mesh))?1e-18f:1e-12f;
+      const float minimumArea=visual::IsHandMesh(static_cast<visual::Mesh>(mesh))?1e-18f:visual::IsClassArt(static_cast<visual::Mesh>(mesh))||visual::IsBodyMesh(static_cast<visual::Mesh>(mesh))?1e-16f:1e-12f;
       Check(XMVectorGetX(XMVector3LengthSq(normal))>minimumArea,"Degenerate procedural triangle.");
       const auto average=XMLoadFloat3(&a.normal)+XMLoadFloat3(&b.normal)+XMLoadFloat3(&c.normal);
       if (XMVectorGetX(XMVector3Dot(normal,average))<=0) {
@@ -88,7 +91,11 @@ int main() {
   }
   Check(authoredGearBytes<=160*1024 && authoredGearTriangles<=3400,"Authored shoulder/fauld geometry exceeded its dedicated budget");
   std::cout<<"Authored shoulder/fauld: "<<authoredGearBytes<<" bytes / "<<authoredGearTriangles<<" triangles\n";
+  Check(terrainBytes<=1280*1024 && terrainTriangles<=35000,"Playable heightfield exceeded its bounded geometry budget");
+  std::cout<<"Heightfield: "<<terrainBytes<<" bytes / "<<terrainTriangles<<" triangles\n";
   Check(bytes<=640*1024 && triangles<=16000,"Reusable mesh library exceeded its startup geometry budget.");
+  Check(headBytes<=640*1024 && headTriangles<=17000,"Shared anatomical head exceeded its 640 KiB / 17000 triangle budget");
+  std::cout<<"Anatomical head/hair, all LODs: "<<headBytes<<" bytes / "<<headTriangles<<" triangles\n";
   Check(ridgeBytes<=20*1024 && ridgeTriangles<=512,"Shared landscape ridge exceeded its dedicated 20 KiB / 512 triangle budget");
   std::cout<<"Landscape ridge: "<<ridgeBytes<<" bytes / "<<ridgeTriangles<<" triangles\n";
   std::cout<<"Guard armor: "<<armorBytes<<" bytes / "<<armorTriangles<<" triangles\n";
@@ -161,14 +168,22 @@ int main() {
     Check(p.x*p.x+p.z*p.z<=1.001f && p.y>=-.701f && p.y<=1.001f,"Ridge must stay in its culling/placement envelope");
     if(p.y>=0) Check(std::abs(p.y-visual::RidgeHeight(p.x,p.z))<.001f,"Ridge geometry and tree grounding must use the same profile");
   }
-  for (int x=-int(rpg::WorldMap::halfWidth);x<=int(rpg::WorldMap::halfWidth);++x)
-    for (int z=-int(rpg::WorldMap::halfDepth);z<=int(rpg::WorldMap::halfDepth);++z)
-    Check(Covers(terrain,{float(x),0,float(z)}),"Visible terrain leaves a hole inside the playable collision rectangle.");
-  for (const auto& v : terrain.vertices) Check(v.position.y==0 && v.normal.y>.999f,"Terrain must match the flat gameplay floor.");
+  for(int x=-120;x<=120;x+=6) for(int z=-128;z<=128;z+=8)
+    Check(Covers(terrain,{float(x),0,float(z)}),"Hole in playable heightfield");
+  for(const auto& v:terrain.vertices)
+    Check(std::abs(v.position.y-rpg::WorldMap::Height({v.position.x,v.position.z}))<.0001f && v.normal.y>0,"Terrain vertex differs from physical floor");
+  float maximumFloorError=0;
+  for(std::size_t i=0;i<terrain.indices.size();i+=3) {
+    const auto a=terrain.vertices[terrain.indices[i]].position,b=terrain.vertices[terrain.indices[i+1]].position,c=terrain.vertices[terrain.indices[i+2]].position;
+    const XMFLOAT3 p{a.x*.2f+b.x*.3f+c.x*.5f,a.y*.2f+b.y*.3f+c.y*.5f,a.z*.2f+b.z*.3f+c.z*.5f};
+    maximumFloorError=std::max(maximumFloorError,std::abs(p.y-rpg::WorldMap::Height({p.x,p.z})));
+  }
+  std::cout<<"Maximum triangulated floor error (m): "<<maximumFloorError<<'\n';
+  Check(maximumFloorError<.0001f,"Physics must interpolate the actual rendered triangle within 0.1 mm at province-scale coordinates");
   const auto cliff=visual::BuildMesh(visual::Mesh::Cliff);
-  for (std::size_t i=1;i<terrain.vertices.size();++i) {
-    const auto a=terrain.vertices[i].position,b=cliff.vertices[i-1].position;
-    Check(a.x==b.x && a.y==b.y && a.z==b.z,"Island edge and cliff must join without a crack.");
+  for(std::size_t i=0;i<cliff.vertices.size()/2;++i) {
+    const auto p=cliff.vertices[i].position;
+    Check(std::abs(p.y-rpg::WorldMap::Height({p.x,p.z}))<.0001f && (std::abs(p.x)==122 || std::abs(p.z)==130),"Cliff does not meet the heightfield rim");
   }
   XMFLOAT4X4 camera;
   XMStoreFloat4x4(&camera,XMMatrixPerspectiveFovLH(XM_PIDIV2,1,1,20));

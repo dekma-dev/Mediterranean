@@ -1,0 +1,360 @@
+{
+  "format": "KIT1",
+  "source_collection_sha256": "533e343d20fc977fa38e42e9ed1abc44940435c7fe0328efadb8a7c37533b4b2",
+  "items": [
+    {
+      "name": "WarriorChest",
+      "lods": [
+        {
+          "vertices": 12466,
+          "triangles": 23387
+        },
+        {
+          "vertices": 5416,
+          "triangles": 8856
+        }
+      ]
+    },
+    {
+      "name": "WarriorVeteranChest",
+      "lods": [
+        {
+          "vertices": 12466,
+          "triangles": 23387
+        },
+        {
+          "vertices": 5416,
+          "triangles": 8856
+        }
+      ]
+    },
+    {
+      "name": "WarriorShoulder",
+      "lods": [
+        {
+          "vertices": 1143,
+          "triangles": 900
+        },
+        {
+          "vertices": 613,
+          "triangles": 342
+        }
+      ]
+    },
+    {
+      "name": "WarriorHelm",
+      "lods": [
+        {
+          "vertices": 6074,
+          "triangles": 12088
+        },
+        {
+          "vertices": 2317,
+          "triangles": 4584
+        }
+      ]
+    },
+    {
+      "name": "WarriorShield",
+      "lods": [
+        {
+          "vertices": 4879,
+          "triangles": 9180
+        },
+        {
+          "vertices": 1994,
+          "triangles": 3472
+        }
+      ]
+    },
+    {
+      "name": "WarriorSword",
+      "lods": [
+        {
+          "vertices": 2498,
+          "triangles": 4880
+        },
+        {
+          "vertices": 1074,
+          "triangles": 1866
+        }
+      ]
+    },
+    {
+      "name": "WarriorVeteranSword",
+      "lods": [
+        {
+          "vertices": 2494,
+          "triangles": 4880
+        },
+        {
+          "vertices": 1068,
+          "triangles": 1865
+        }
+      ]
+    },
+    {
+      "name": "ScoutChest",
+      "lods": [
+        {
+          "vertices": 16702,
+          "triangles": 32772
+        },
+        {
+          "vertices": 6709,
+          "triangles": 12423
+        }
+      ]
+    },
+    {
+      "name": "ScoutVeteranChest",
+      "lods": [
+        {
+          "vertices": 16702,
+          "triangles": 32772
+        },
+        {
+          "vertices": 6709,
+          "triangles": 12423
+        }
+      ]
+    },
+    {
+      "name": "ScoutShoulder",
+      "lods": [
+        {
+          "vertices": 3666,
+          "triangles": 7192
+        },
+        {
+          "vertices": 1407,
+          "triangles": 2728
+        }
+      ]
+    },
+    {
+      "name": "ScoutHood",
+      "lods": [
+        {
+          "vertices": 1201,
+          "triangles": 2388
+        },
+        {
+          "vertices": 462,
+          "triangles": 904
+        }
+      ]
+    },
+    {
+      "name": "ScoutShield",
+      "lods": [
+        {
+          "vertices": 5818,
+          "triangles": 10624
+        },
+        {
+          "vertices": 2452,
+          "triangles": 4017
+        }
+      ]
+    },
+    {
+      "name": "ScoutBow",
+      "lods": [
+        {
+          "vertices": 2240,
+          "triangles": 3986
+        },
+        {
+          "vertices": 938,
+          "triangles": 1490
+        }
+      ]
+    },
+    {
+      "name": "ScoutVeteranBow",
+      "lods": [
+        {
+          "vertices": 2240,
+          "triangles": 3986
+        },
+        {
+          "vertices": 938,
+          "triangles": 1490
+        }
+      ]
+    },
+    {
+      "name": "MageChest",
+      "lods": [
+        {
+          "vertices": 9700,
+          "triangles": 19080
+        },
+        {
+          "vertices": 3910,
+          "triangles": 7236
+        }
+      ]
+    },
+    {
+      "name": "MageVeteranChest",
+      "lods": [
+        {
+          "vertices": 10612,
+          "triangles": 20896
+        },
+        {
+          "vertices": 4258,
+          "triangles": 7924
+        }
+      ]
+    },
+    {
+      "name": "MageShoulder",
+      "lods": [
+        {
+          "vertices": 3666,
+          "triangles": 7192
+        },
+        {
+          "vertices": 1407,
+          "triangles": 2728
+        }
+      ]
+    },
+    {
+      "name": "MageHood",
+      "lods": [
+        {
+          "vertices": 1200,
+          "triangles": 2388
+        },
+        {
+          "vertices": 460,
+          "triangles": 904
+        }
+      ]
+    },
+    {
+      "name": "MageShield",
+      "lods": [
+        {
+          "vertices": 5806,
+          "triangles": 10624
+        },
+        {
+          "vertices": 2426,
+          "triangles": 4017
+        }
+      ]
+    },
+    {
+      "name": "MageStaff",
+      "lods": [
+        {
+          "vertices": 3392,
+          "triangles": 6768
+        },
+        {
+          "vertices": 1459,
+          "triangles": 2562
+        }
+      ]
+    },
+    {
+      "name": "MageVeteranStaff",
+      "lods": [
+        {
+          "vertices": 4472,
+          "triangles": 8720
+        },
+        {
+          "vertices": 1925,
+          "triangles": 3298
+        }
+      ]
+    },
+    {
+      "name": "WarriorSkirt",
+      "lods": [
+        {
+          "vertices": 2715,
+          "triangles": 5400
+        },
+        {
+          "vertices": 1038,
+          "triangles": 2048
+        }
+      ]
+    },
+    {
+      "name": "ScoutSkirt",
+      "lods": [
+        {
+          "vertices": 2715,
+          "triangles": 5400
+        },
+        {
+          "vertices": 1038,
+          "triangles": 2048
+        }
+      ]
+    },
+    {
+      "name": "MageSkirt",
+      "lods": [
+        {
+          "vertices": 2715,
+          "triangles": 5400
+        },
+        {
+          "vertices": 1038,
+          "triangles": 2048
+        }
+      ]
+    },
+    {
+      "name": "WarriorBelt",
+      "lods": [
+        {
+          "vertices": 1000,
+          "triangles": 1996
+        },
+        {
+          "vertices": 388,
+          "triangles": 754
+        }
+      ]
+    },
+    {
+      "name": "ScoutBelt",
+      "lods": [
+        {
+          "vertices": 1272,
+          "triangles": 2490
+        },
+        {
+          "vertices": 530,
+          "triangles": 938
+        }
+      ]
+    },
+    {
+      "name": "MageBelt",
+      "lods": [
+        {
+          "vertices": 1196,
+          "triangles": 2352
+        },
+        {
+          "vertices": 495,
+          "triangles": 876
+        }
+      ]
+    }
+  ],
+  "bytes": 12443748,
+  "sha256": "b7832ea26f1431864a64451d014fed044784d6d1be34c7d1d89bb4d6cae8f02c",
+  "blend_sha256": "afe8ba66268d740799e871a0c1116b6bdac2e4705a3e5f63b7393e358c9d6b5a"
+}

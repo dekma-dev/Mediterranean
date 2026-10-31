@@ -12,6 +12,15 @@ bool Healing(K kind) { return kind==K::Mend || kind==K::Potion; }
 bool Dashing(K kind) { return kind==K::DashStart || kind==K::DashStop || kind==K::DashImpact; }
 float BurstLife(K kind) { return Healing(kind)?.8f:Dashing(kind)?.42f:burstLife; }
 float Unit(float x) { return std::clamp(x,0.f,1.f); }
+XMFLOAT3 GroundPoint(float x,float z,float lift) {return {x,rpg::WorldMap::Height({x,z})+lift,z};}
+void GroundRing(Renderer& renderer,rpg::Vec2 center,float radius,XMFLOAT4 color) {
+  const auto point=[&](float angle,float r) {return GroundPoint(center.x+std::sin(angle)*r,center.z+std::cos(angle)*r,.07f);};
+  for(int i=0;i<32;++i) {
+    const float a=i*motion::tau/32,b=(i+1)*motion::tau/32;
+    renderer.DrawEffectRibbon(point(a,radius-.025f),point(a,radius+.025f),
+      point(b,radius+.025f),point(b,radius-.025f),color,1,1);
+  }
+}
 XMFLOAT4 Tint(K kind) {
   if (kind==K::Interrupt) return {.67f,.30f,1,1};
   if (kind==K::HeavyStrike || kind==K::HeavyHit) return {.18f,.65f,1,1};
@@ -63,13 +72,14 @@ void DashPulse(Renderer& renderer,const rpg::CombatVisualEvent& event,float age)
   XMFLOAT4 color=impact?XMFLOAT4{1,.64f,.28f,1}:event.school==rpg::ClassId::Warrior?
     XMFLOAT4{.24f,.78f,1,1}:XMFLOAT4{tint[0],tint[1],tint[2],1};
   const float radius=.32f+phase*(start?.85f:.55f);
-  const bool groundStop=!start && !impact && event.height<.08f;
+  const bool grounded=event.height-rpg::WorldMap::Height(event.position)<.08f;
+  const bool groundStop=!start && !impact && grounded;
   const auto ringPoint=[&](float a,float width) -> XMFLOAT3 {
     const float r=radius+width,side=std::cos(a)*r;
     const float back=(start?-.35f:.10f)*phase;
     if (groundStop) {
       const float forward=std::sin(a)*r*.65f;
-      return {event.position.x+cx*side+sx*forward,.055f,event.position.z-sx*side+cx*forward};
+      return GroundPoint(event.position.x+cx*side+sx*forward,event.position.z-sx*side+cx*forward,.055f);
     }
     return {event.position.x+cx*side+sx*back,
       event.height+.85f+std::sin(a)*r*.85f,event.position.z-sx*side+cx*back};
@@ -85,12 +95,12 @@ void DashPulse(Renderer& renderer,const rpg::CombatVisualEvent& event,float age)
   for (int i=0;i<10;++i) {
     const float angle=i*2.3999632f,spread=.6f+Noise(i*37+5)*1.4f;
     const float side=std::cos(angle)*spread,forward=(start?-2.6f:impact?-1.5f:.8f);
-    const bool grit=event.height<.08f && i<4;
+    const bool grit=grounded && i<4;
     const auto at=[&](float t) -> XMFLOAT3 {
       const float travel=-std::expm1(-5*t)/5;
-      return {event.position.x+(cx*side+sx*forward)*travel,
-        std::max(.035f,event.height+(grit?.07f:.4f+float(i%4)*.3f)+(grit?1.2f:.5f)*t-(grit?4.f:1.f)*t*t),
-        event.position.z+(-sx*side+cx*forward)*travel};
+      auto p=GroundPoint(event.position.x+(cx*side+sx*forward)*travel,event.position.z+(-sx*side+cx*forward)*travel,.035f);
+      p.y=std::max(p.y,event.height+(grit?.07f:.4f+float(i%4)*.3f)+(grit?1.2f:.5f)*t-(grit?4.f:1.f)*t*t);
+      return p;
     };
     auto mote=grit?XMFLOAT4{.62f,.49f,.29f,fade*.22f}:color;
     if (!grit) mote.w=fade*.65f;
@@ -161,7 +171,7 @@ XMFLOAT3 CombatEffects::SpellTracePoint(XMFLOAT3 origin,rpg::Vec2 destination,fl
   const float u=std::isfinite(progress)?Unit(progress):0;
   arc=std::isfinite(arc)?std::clamp(arc,0.f,.5f):0;
   // Current enemy capsules stand on map ground, including when the caster jumps.
-  return {origin.x+(destination.x-origin.x)*u,origin.y+(1.25f-origin.y)*u+arc*std::sin(u*3.14159265f),
+  return {origin.x+(destination.x-origin.x)*u,origin.y+(rpg::WorldMap::Height(destination)+1.25f-origin.y)*u+arc*std::sin(u*3.14159265f),
     origin.z+(destination.z-origin.z)*u};
 }
 void CombatEffects::Emit(const rpg::CombatVisualEvent& event,const XMFLOAT3* spellOrigin) {
@@ -322,12 +332,12 @@ void CombatEffects::Render(Renderer& renderer) const {
     if(e.kind==K::EnemyQuake || e.kind==K::EnemyLance || e.kind==K::EnemyTempest || e.kind==K::EnemyExecution) {
       const float fade=std::pow(Unit(1-burst.age/.35f),2.f);
       const auto point=[&](float angle,float radius,float y) -> XMFLOAT3 {
-        return {e.position.x+std::sin(angle)*radius,y,e.position.z+std::cos(angle)*radius};
+        return GroundPoint(e.position.x+std::sin(angle)*radius,e.position.z+std::cos(angle)*radius,y);
       };
       if(e.kind==K::EnemyQuake || e.kind==K::EnemyTempest) {
         const bool tempest=e.kind==K::EnemyTempest;
         for(float radius:{tempest?1.9f:rpg::Enemy::shockInner,tempest?3.8f:rpg::Enemy::shockOuter})
-          renderer.DrawEffectRing({e.position.x,.07f,e.position.z},radius,{1,.27f,.06f,fade});
+          GroundRing(renderer,e.position,radius,{1,.27f,.06f,fade});
         for(int i=0;i<24;++i) {
           const float angle=i*motion::tau/24;
           renderer.DrawEffectGlow(point(angle,tempest?2.8f:4.2f,.15f+burst.age*1.6f),.18f,{1,.37f,.08f,fade});
@@ -383,14 +393,14 @@ void CombatEffects::Render(Renderer& renderer) const {
       pulse.w=std::sin(phase*3.14159265f)*(interrupt?.38f:.18f);
       renderer.DrawEffectRing(origin,.18f+phase*(interrupt?.85f:.65f),pulse);
     }
-    if (heavy && e.height<1.7f) {
+    if (heavy && e.height-rpg::WorldMap::Height(e.position)<1.7f) {
       // A low pressure skirt in the ground plane anchors the impact to the
       // target. The transparent centre keeps boots and collision cues visible.
       const float radius=.25f+1.3f*std::sqrt(Unit(t/.48f));
       for(int i=0;i<24;++i) {
         const float a=i*motion::tau/24,b=(i+1)*motion::tau/24;
         const auto point=[&](float angle,float r) -> XMFLOAT3 {
-          return {e.position.x+std::cos(angle)*r,.035f,e.position.z+std::sin(angle)*r};
+          return GroundPoint(e.position.x+std::cos(angle)*r,e.position.z+std::sin(angle)*r,.035f);
         };
         renderer.DrawEffectRibbon(point(a,radius),point(a,radius+.10f),point(b,radius+.10f),point(b,radius),
           {.18f,.46f,.64f,fade*.27f},1,1);

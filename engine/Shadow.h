@@ -12,11 +12,12 @@ inline std::array<DirectX::XMFLOAT4X4,shadowLayers> ShadowProjections(DirectX::X
   using namespace DirectX;
   const auto view=XMMatrixLookAtLH(XMVectorSet(daylightSun.x,daylightSun.y,daylightSun.z,1),XMVectorZero(),XMVectorSet(0,1,0,0));
   std::array<XMFLOAT4X4,shadowLayers> result;
-  XMStoreFloat4x4(&result[0],view*XMMatrixOrthographicLH(62,62,1,110));
+  XMStoreFloat4x4(&result[0],view*XMMatrixOrthographicLH(360,360,-210,350));
   XMFLOAT3 center; XMStoreFloat3(&center,XMVector3TransformCoord(XMLoadFloat3(&focus),view));
   constexpr float span=20,texel=span/shadowSize;
   const float x=std::round(center.x/texel)*texel,y=std::round(center.y/texel)*texel;
-  XMStoreFloat4x4(&result[1],view*XMMatrixOrthographicOffCenterLH(x-span*.5f,x+span*.5f,y-span*.5f,y+span*.5f,1,110));
+  const float depth=std::round(center.z);
+  XMStoreFloat4x4(&result[1],view*XMMatrixOrthographicOffCenterLH(x-span*.5f,x+span*.5f,y-span*.5f,y+span*.5f,depth-55,depth+55));
   return result;
 }
 }

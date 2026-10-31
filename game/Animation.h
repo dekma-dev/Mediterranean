@@ -5,6 +5,7 @@
 #include "game/FaceMotion.h"
 #include "game/ActionClips.h"
 #include "engine/PlayerClips.h"
+#include "game/AuthoredWeapon.h"
 #include <array>
 
 // Presentation-only channels; no collision, combat timing or durable save data.
@@ -36,6 +37,12 @@ struct Sample {
   std::array<float,4> gaitWeights{};
   float runBlend=0;
   bool authoredGait=false;
+  float authoredBlend=1;
+  float authoredPhase=0,authoredClock=0;
+  playerclips::Equipment authoredEquipment=playerclips::Equipment::None;
+  playerclips::Frame authoredStrike{};
+  float authoredStrikeWeight=0,authoredStrikePhase=0;
+  bool authoredStrikeHeavy=false;
   facial::Pose face;
   ActionChannels action;
   bool retreat=false;
@@ -86,8 +93,9 @@ struct State {
   Sample pose;
   LocomotionController locomotion;
   ActionController actions;
+  AuthoredWeaponController authoredWeapon;
   float phase=0,airBlend=0,riseBlend=0,travelBlend=0;
-  float runBlend=0,runVelocity=0;
+  float runBlend=0,runVelocity=0,authoredAge=0;
   float landingAge=2,landingStrength=0,hitAge=2,hitCarry=0;
   float lateralCarry=0,lateralImpulse=0;
   float restWeight=1;

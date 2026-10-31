@@ -93,7 +93,21 @@ foreach(detail IN ITEMS Cuirass CuirassLow ShoulderLeft ShoulderLeftLow Shoulder
     VERBATIM)
   list(APPEND armor_headers "${armor_header}")
 endforeach()
-add_custom_target(EmbeddedMeshes DEPENDS "${blade_header}" ${armor_headers})
+set(head_headers "")
+foreach(detail IN ITEMS Head HeadMedium HeadFar Hair HairLow)
+  string(REGEX REPLACE "([a-z])([A-Z])" "\\1-\\2" head_name "${detail}")
+  string(TOLOWER "${head_name}" head_name)
+  set(head_source "${CMAKE_CURRENT_SOURCE_DIR}/assets/characters/player-${head_name}.obj")
+  set(head_header "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>/Player${detail}.generated.h")
+  add_custom_command(OUTPUT "${head_header}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>"
+    COMMAND $<TARGET_FILE:MeshAssetCompiler> "${head_source}" "${head_header}" Player${detail}
+    DEPENDS MeshAssetCompiler "${head_source}"
+    COMMENT "Embedding anatomical player head"
+    VERBATIM)
+  list(APPEND head_headers "${head_header}")
+endforeach()
+add_custom_target(EmbeddedMeshes DEPENDS "${blade_header}" ${armor_headers} ${head_headers})
 
 add_library(MediterraneanClient STATIC
   "${scene_shader_header}"
@@ -103,9 +117,11 @@ add_library(MediterraneanClient STATIC
   engine/AuthoredAssets.cpp
   engine/WolfAnimation.cpp
   engine/PlayerClips.cpp
+  engine/ClassArt.cpp
   engine/GpuTimer.cpp
   engine/Geometry.cpp
   engine/Skinning.cpp
+  engine/PlayerBody.cpp
   engine/HandSkinning.cpp
   engine/FontAtlas.cpp
   platform/Win32Window.cpp
@@ -126,11 +142,14 @@ add_library(MediterraneanClient STATIC
   game/TerrainSurface.cpp
 )
 add_dependencies(MediterraneanClient EmbeddedMeshes)
+if(MSVC)
+  set_property(SOURCE engine/Geometry.cpp APPEND PROPERTY COMPILE_OPTIONS /bigobj)
+endif()
 # Embed artwork in every native client host (including offscreen test hosts).
 # Resource include paths make RC independent of the build working directory.
 target_sources(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/UiArtwork.rc")
 target_sources(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/Collection.rc")
-set_source_files_properties(assets/authored/Collection.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/collection01.masset;${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/frostfang.motion;${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/player.clips")
+set_source_files_properties(assets/authored/Collection.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/collection01.masset;${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/frostfang.motion;${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/player.clips;${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/player-body.skin;${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/oldstyle-classes.kit")
 target_include_directories(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored")
 target_include_directories(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui")
 add_library(LaunchSupport STATIC launcher/LaunchSupport.cpp)
@@ -207,6 +226,9 @@ if (BUILD_TESTING)
   add_test(NAME ClassEquipmentTests COMMAND ClassEquipmentTests)
   set_tests_properties(ClassEquipmentTests PROPERTIES TIMEOUT 45)
   add_executable(ActionClipTests tests/ActionClipTests.cpp)
+  add_executable(CharacterArtTests tests/CharacterArtTests.cpp)
+  target_link_libraries(CharacterArtTests PRIVATE MediterraneanClient)
+  add_test(NAME CharacterArtTests COMMAND CharacterArtTests)
   target_link_libraries(ActionClipTests PRIVATE MediterraneanClient)
   add_test(NAME ActionClipTests COMMAND ActionClipTests)
   set_tests_properties(ActionClipTests PROPERTIES TIMEOUT 45)
@@ -255,6 +277,12 @@ if (BUILD_TESTING)
   add_executable(SkinningTests tests/SkinningTests.cpp)
   target_link_libraries(SkinningTests PRIVATE MediterraneanClient)
   add_test(NAME SkinningTests COMMAND SkinningTests)
+  add_executable(PlayerBodyTests tests/PlayerBodyTests.cpp)
+  add_executable(OldStyleArtTests tests/OldStyleArtTests.cpp)
+  target_link_libraries(OldStyleArtTests PRIVATE MediterraneanClient)
+  add_test(NAME OldStyleArtTests COMMAND OldStyleArtTests)
+  target_link_libraries(PlayerBodyTests PRIVATE MediterraneanClient)
+  add_test(NAME PlayerBodyTests COMMAND PlayerBodyTests)
   add_executable(AudioTests tests/AudioTests.cpp)
   target_link_libraries(AudioTests PRIVATE MediterraneanClient)
   add_test(NAME AudioTests COMMAND AudioTests)
@@ -289,7 +317,7 @@ if (BUILD_TESTING)
   target_link_libraries(InterfaceTests PRIVATE MediterraneanClient)
   target_compile_definitions(InterfaceTests PRIVATE RPG_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
   add_test(NAME InterfaceTests COMMAND InterfaceTests)
-  add_executable(GeometryTests tests/GeometryTests.cpp engine/Geometry.cpp engine/Skinning.cpp engine/HandSkinning.cpp game/CharacterPose.cpp engine/PlayerClips.cpp assets/authored/Collection.rc)
+  add_executable(GeometryTests tests/GeometryTests.cpp engine/ClassArt.cpp engine/Geometry.cpp engine/Skinning.cpp engine/PlayerBody.cpp engine/HandSkinning.cpp game/CharacterPose.cpp engine/PlayerClips.cpp assets/authored/Collection.rc)
   target_include_directories(GeometryTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   target_include_directories(GeometryTests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>")
   add_dependencies(GeometryTests EmbeddedMeshes)
@@ -323,6 +351,15 @@ if (BUILD_TESTING)
   target_link_libraries(LoadoutTests PRIVATE MediterraneanSimulation)
   add_test(NAME LoadoutTests COMMAND LoadoutTests)
   add_executable(QuestDialogueTests tests/QuestDialogueTests.cpp)
+  add_executable(HighlandsTests tests/HighlandsTests.cpp)
+  add_executable(SouthernTests tests/SouthernTests.cpp)
+  target_link_libraries(SouthernTests PRIVATE MediterraneanClient)
+  add_test(NAME SouthernTests COMMAND SouthernTests)
+  target_link_libraries(HighlandsTests PRIVATE MediterraneanClient)
+  add_test(NAME HighlandsTests COMMAND HighlandsTests)
+  add_executable(ClassArtDecoderTests tests/ClassArtDecoderTests.cpp)
+  target_link_libraries(ClassArtDecoderTests PRIVATE MediterraneanClient)
+  add_test(NAME ClassArtDecoderTests COMMAND ClassArtDecoderTests)
   target_link_libraries(QuestDialogueTests PRIVATE MediterraneanSimulation)
   add_test(NAME QuestDialogueTests COMMAND QuestDialogueTests)
   add_test(NAME QuestTextTests COMMAND ${CMAKE_COMMAND}
