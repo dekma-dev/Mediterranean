@@ -49,7 +49,7 @@ std::filesystem::path SavePath() { return std::filesystem::path(RPG_SAVE_DIRECTO
 std::filesystem::path GuidePath() { return std::filesystem::path(RPG_PROJECT_DIRECTORY)/"START_AND_DEBUG.md"; }
 bool ReadSnapshot(const std::filesystem::path& path,std::string& content) {
   std::error_code error;const auto size=std::filesystem::file_size(path,error);
-  if(error || !size || size>4096) return false;
+  if(error || !size || size>16384) return false;
   std::ifstream input(path,std::ios::binary);std::string candidate(std::size_t(size),'\0');
   if(!input.read(candidate.data(),std::streamsize(size)) || input.peek()!=std::char_traits<char>::eof()) return false;
   content=std::move(candidate);return true;

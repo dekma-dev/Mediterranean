@@ -1,8 +1,8 @@
 {
   "format": "PCL2",
-  "source": "Human_Male_Motion_v3.blend / 27 actions",
-  "source_sha256": "9b7f99acf149657823324792c430f664bcabdf4a9d2251c263b6af8ef6a280e7",
-  "editable_source": "player-motion-v3.blend",
+  "source": "Human_Male_Motion_v4.blend / 48 actions",
+  "source_sha256": "0a6eb3f589fccaee1973da2ea8439078a64a9fb44d486f977877068ea45e8f67",
+  "editable_source": "player-motion-v4.blend",
   "clips": [
     {
       "clip": "Sword_Attack_Diagonal",
@@ -14,8 +14,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v3 Blender action",
-      "sha256": "e858bd308b12d8f9ad92139f26ed819e19673df4a2ecbd0188f8042ff5a3163e"
+      "source": "v4 Blender action",
+      "sha256": "6a047c0478cfe85e9d3bf9823dd1c3335bc13f3793b83755cef47a74c0a685ec"
     },
     {
       "clip": "Sword_Attack_Overhead",
@@ -27,8 +27,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v3 Blender action",
-      "sha256": "f21bb67f2f603b126e45d55192a868ce1fd448d996bd9e8465157a4cde193fea"
+      "source": "v4 Blender action",
+      "sha256": "151ee1c389ffd36a0fbbaeb5e281776669362c51eae67fd0ae517963876bea4f"
     },
     {
       "clip": "Jump_Full",
@@ -40,7 +40,7 @@
       "takeoff": 0.3103448275862069,
       "landing": 0.5057471264367815,
       "stance": 0.0,
-      "source": "v3 Blender action",
+      "source": "v4 Blender action",
       "sha256": "60fc976ae63a38eaf7ac23f74b0c1cc47766386fa3d4072de28f64d2c8530fbe"
     },
     {
@@ -53,7 +53,7 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v3 Blender action",
+      "source": "v4 Blender action",
       "sha256": "8ed1c6793a71c8cebee5570e7515e3aebd945216ca66164ad9290ea744551036"
     },
     {
@@ -66,7 +66,7 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.66,
-      "source": "v3 Blender action",
+      "source": "v4 Blender action",
       "sha256": "21f523c4647ad430e5b6d4a09b057b2a62708c4653f2f0a63fc67292bc067267"
     },
     {
@@ -79,7 +79,7 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.66,
-      "source": "v3 Blender action",
+      "source": "v4 Blender action",
       "sha256": "9a5ac7efa3713c07e021211ed7b9cc1ef8192a91df54de8d78607448d98cbf2b"
     },
     {
@@ -92,7 +92,7 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.66,
-      "source": "v3 Blender action",
+      "source": "v4 Blender action",
       "sha256": "0db6192d5713190dff3e7148185f47efb540b46dbfbf88e9ffbdaa5e924cb88f"
     },
     {
@@ -105,7 +105,7 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.66,
-      "source": "v3 Blender action",
+      "source": "v4 Blender action",
       "sha256": "837ea1a609d3e180ea7410e7a46c206dba6558a4b02170d85adb2c17faf6d9f2"
     },
     {
@@ -118,7 +118,7 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.39,
-      "source": "v3 Blender action",
+      "source": "v4 Blender action",
       "sha256": "cc2ad7f226ab2a73a2a57c6ee61fac1ecdaab1a5224f15991ade28b9e2b43829"
     },
     {
@@ -131,7 +131,7 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.39,
-      "source": "v3 Blender action",
+      "source": "v4 Blender action",
       "sha256": "f55d4a898678ba96b6da730c69c530b737e8236da57b569854f85efac17d0ce7"
     },
     {
@@ -144,7 +144,7 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.39,
-      "source": "v3 Blender action",
+      "source": "v4 Blender action",
       "sha256": "925d74d1826fc28cd1b4c1529c79edab33b35cfcc981a04d1f9d6d5681210e56"
     },
     {
@@ -157,7 +157,7 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.39,
-      "source": "v3 Blender action",
+      "source": "v4 Blender action",
       "sha256": "27e61f20f805816b607745706b5d0815696aa32604342ee68e4e3438e8d95de2"
     },
     {
@@ -196,8 +196,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v3 Blender action",
-      "sha256": "70e6321c653164abd5b4e2e41852e4b5d5a16fc7fcd691d6e3b8e3bf04decc68"
+      "source": "v4 Blender action",
+      "sha256": "4c5fe2ea19eb3b1e176d01c0c00960f76d3d26ffd7aaf46d9b82786ac9ef7c1b"
     },
     {
       "clip": "Staff_Attack_Thrust",
@@ -209,8 +209,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v3 Blender action",
-      "sha256": "f07ab8ef2e432066affec143f72a296b0e2417c24e38e80c94d5b26fde7c1a80"
+      "source": "v4 Blender action",
+      "sha256": "d3794939fe6dc3bc30055fc1bc57de38026b40dee397585e227ff2e8815cd19e"
     },
     {
       "clip": "Sword_Walk",
@@ -222,8 +222,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.66,
-      "source": "v3 Blender action",
-      "sha256": "81653e7970d4b79317b879bbe70db29946135237dc1c3686f980f1e12aa482c0"
+      "source": "v4 Blender action",
+      "sha256": "e3dd2809c711be69af8d0a0c727c73badb92713ff7b20a263e056985742d6c23"
     },
     {
       "clip": "Sword_Run",
@@ -235,8 +235,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.39,
-      "source": "v3 Blender action",
-      "sha256": "b0e714895a602160f1fb631db9ebaa6fa6db3bb6f75e3c347b6c8c726eb77103"
+      "source": "v4 Blender action",
+      "sha256": "d474b12f12fc50ca64e1ad4bf2f69c948ad5c104594c06eb0829db5f76e353e0"
     },
     {
       "clip": "Staff_Walk",
@@ -248,8 +248,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.66,
-      "source": "v3 Blender action",
-      "sha256": "276c1ce9cdb094822406b989184de42433fd14a5af2a2418fee2e339e556c000"
+      "source": "v4 Blender action",
+      "sha256": "924e4d7639341b3f0f27b629a83c028cdb18a6d4e411266ebb648446a7d27fdb"
     },
     {
       "clip": "Staff_Run",
@@ -261,8 +261,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.39,
-      "source": "v3 Blender action",
-      "sha256": "484e13daf99812ed2a8f8a70caa13ddf3a5a7978d5f4fa0080e8ce0c2406f04a"
+      "source": "v4 Blender action",
+      "sha256": "9596595bbac869eb4d1eb6eaab9e015875aa858308f4f0efefabb302de05b42a"
     },
     {
       "clip": "Sword_Guard",
@@ -274,8 +274,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v3 Blender action",
-      "sha256": "a413da4496430c30db09d45d34e578d9f611c6c991d61c0884dfb8643814411d"
+      "source": "v4 Blender action",
+      "sha256": "1c60724bd77b082cf63423bf5644941362bf14126c334089285debcff5ebc401"
     },
     {
       "clip": "Staff_Guard",
@@ -287,8 +287,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v3 Blender action",
-      "sha256": "32b1af0b50ca6ef6f54be4e72227c4f719126021f1666e2a913c9c2086e7f400"
+      "source": "v4 Blender action",
+      "sha256": "aaa081fbec28973e191f46d1ffc6249c32048cb868c0e818a6c095b3b8361062"
     },
     {
       "clip": "Idle_Relaxed",
@@ -300,7 +300,7 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v3 Blender action",
+      "source": "v4 Blender action",
       "sha256": "98d97c3686241733f0bfa884428e1cc1a17f388dbfaabc1b4422b35a0da9dcbe"
     },
     {
@@ -313,7 +313,7 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v3 Blender action",
+      "source": "v4 Blender action",
       "sha256": "4af0ac0017631a2e86f35c1ded14a2a16ba2756254bb27b4d9dcb22c223376ef"
     },
     {
@@ -378,8 +378,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v3 Blender action",
-      "sha256": "2e203485d37ea59bbef188a6635482c60a64596bef852028f92a2a04f1840023"
+      "source": "v4 Blender action",
+      "sha256": "52392782f692fe890eea9823a6b22547b99e29cf8aa143fd8e7beb40274bc9c4"
     },
     {
       "clip": "Bow_Draw_Release",
@@ -391,8 +391,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v3 Blender action",
-      "sha256": "e93ed45823e55cb24be20ae9596269698bafb4eb5cda9ff0a3ea5e4fc67fb896"
+      "source": "v4 Blender action",
+      "sha256": "c0785ea22001312246026615c7a34d4fef64fd50f505e651dcd5c2558516e50b"
     },
     {
       "clip": "Bow_Power_Release",
@@ -404,8 +404,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v3 Blender action",
-      "sha256": "1ef8fb11df5482cd1de7978884445b66de32b8f4b5ddf87d8e3ba21e8039e392"
+      "source": "v4 Blender action",
+      "sha256": "2cb93c29361a7a7c90d3e74403ac7a7498c5688711d1f8e6700d0be26c8ad411"
     },
     {
       "clip": "Bow_Walk",
@@ -417,8 +417,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.66,
-      "source": "v3 Blender action",
-      "sha256": "36a876120093d540f82c6e551f4cd243fd4a28c4898cf625f455f23cf1dfe3ad"
+      "source": "v4 Blender action",
+      "sha256": "eedd73e14adb0aae890586f85ba9e7b2a640df22856248601b5133f200a86518"
     },
     {
       "clip": "Bow_Run",
@@ -430,10 +430,283 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.39,
-      "source": "v3 Blender action",
-      "sha256": "d2f46bb02a8f55104bcdda21055a050b74d6a1dece3ea0360f0ffd7b963f13b5"
+      "source": "v4 Blender action",
+      "sha256": "dfb778fdc37de4668efe56637c02010b1f92323ae107a0e7b33f880a1c9d2cc3"
+    },
+    {
+      "clip": "Sword_Carry",
+      "frames": 241,
+      "duration": 4.0,
+      "loop": true,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.0,
+      "source": "v4 Blender action",
+      "sha256": "c318430f9768b43d452a627c06c13ab79632ecdcd9bc9eb78b313dd1c860e45b"
+    },
+    {
+      "clip": "Staff_Carry",
+      "frames": 241,
+      "duration": 4.0,
+      "loop": true,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.0,
+      "source": "v4 Blender action",
+      "sha256": "b3704f8ad8ac46463ba0163e17b76ef4ee69fd2e992d37ad373c476e345c7641"
+    },
+    {
+      "clip": "Bow_Carry",
+      "frames": 241,
+      "duration": 4.0,
+      "loop": true,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.0,
+      "source": "v4 Blender action",
+      "sha256": "ed37aa4e874569dee04e402691b3ee7128d77bd20cb831a9d9fcc15168a5d356"
+    },
+    {
+      "clip": "Sword_Walk_Backward",
+      "frames": 85,
+      "duration": 1.4,
+      "loop": true,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.66,
+      "source": "v4 Blender action",
+      "sha256": "3cd5041d596aade023840322c82e8b6cffa0d5d3058b9b82e1eff6c43fbf1b0c"
+    },
+    {
+      "clip": "Sword_Walk_Left",
+      "frames": 85,
+      "duration": 1.4,
+      "loop": true,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.66,
+      "source": "v4 Blender action",
+      "sha256": "a26769d828ab6cc74a156043491aa4495b42f85f48101350066a473c7b7f82d7"
+    },
+    {
+      "clip": "Sword_Walk_Right",
+      "frames": 85,
+      "duration": 1.4,
+      "loop": true,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.66,
+      "source": "v4 Blender action",
+      "sha256": "aa9933f40b86c6af039960a50af9ef4754d765dc18c41d5942323b6b9f90c274"
+    },
+    {
+      "clip": "Sword_Run_Backward",
+      "frames": 57,
+      "duration": 0.9333333333333333,
+      "loop": true,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.39,
+      "source": "v4 Blender action",
+      "sha256": "b9de9e8ca7908e6c68263584b5b9033c228e5fa2a50a463b05c0031866cbda9b"
+    },
+    {
+      "clip": "Sword_Run_Left",
+      "frames": 57,
+      "duration": 0.9333333333333333,
+      "loop": true,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.39,
+      "source": "v4 Blender action",
+      "sha256": "ee9f1e48a4ffbc9f89d5bf10e46a36567fd74549f5cc1d078a663bdb43643060"
+    },
+    {
+      "clip": "Sword_Run_Right",
+      "frames": 57,
+      "duration": 0.9333333333333333,
+      "loop": true,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.39,
+      "source": "v4 Blender action",
+      "sha256": "0c39c957542470beeec80428ede8d105cecd9c45e63133544e666c8aa7f0c532"
+    },
+    {
+      "clip": "Staff_Walk_Backward",
+      "frames": 85,
+      "duration": 1.4,
+      "loop": true,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.66,
+      "source": "v4 Blender action",
+      "sha256": "309602038d57a5f8a2fe7c29a4c68cb22b3d2170c14212067ff6c644fcf2ed6e"
+    },
+    {
+      "clip": "Staff_Walk_Left",
+      "frames": 85,
+      "duration": 1.4,
+      "loop": true,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.66,
+      "source": "v4 Blender action",
+      "sha256": "bb4a36180d537887ae48bd1c3383171b423dbbce637decfbff7bcd688cfb14a5"
+    },
+    {
+      "clip": "Staff_Walk_Right",
+      "frames": 85,
+      "duration": 1.4,
+      "loop": true,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.66,
+      "source": "v4 Blender action",
+      "sha256": "9d4c75c9edefa2162b438cafc6d7c84f3d50ecf41a601e359aa4df528f7af313"
+    },
+    {
+      "clip": "Staff_Run_Backward",
+      "frames": 57,
+      "duration": 0.9333333333333333,
+      "loop": true,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.39,
+      "source": "v4 Blender action",
+      "sha256": "abf6900c497217155db68a3e41ed8bfdc3fb8628bd5a3b494e737641e5432c53"
+    },
+    {
+      "clip": "Staff_Run_Left",
+      "frames": 57,
+      "duration": 0.9333333333333333,
+      "loop": true,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.39,
+      "source": "v4 Blender action",
+      "sha256": "d19b55abbb096fc2f26dfb547453909bb8cc9182ffd2d079577241b77bd8de1b"
+    },
+    {
+      "clip": "Staff_Run_Right",
+      "frames": 57,
+      "duration": 0.9333333333333333,
+      "loop": true,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.39,
+      "source": "v4 Blender action",
+      "sha256": "bfe1a8ac293d5973e487cb9f65e8461b2a0615d76cc77198c4d59c16afcda7b4"
+    },
+    {
+      "clip": "Bow_Walk_Backward",
+      "frames": 85,
+      "duration": 1.4,
+      "loop": true,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.66,
+      "source": "v4 Blender action",
+      "sha256": "e75a34e12438fb6e628e9ba1eff3318c646950af52c2af779cd6f3f5958b8945"
+    },
+    {
+      "clip": "Bow_Walk_Left",
+      "frames": 85,
+      "duration": 1.4,
+      "loop": true,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.66,
+      "source": "v4 Blender action",
+      "sha256": "4cf984626ca960904c1afa65ff8781a1103e26637a2fd5c72cde20a3d0921dba"
+    },
+    {
+      "clip": "Bow_Walk_Right",
+      "frames": 85,
+      "duration": 1.4,
+      "loop": true,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.66,
+      "source": "v4 Blender action",
+      "sha256": "d8ec43a4e2a6cfeff608423e68185b7125dcfe6841e1aced93ca93b769375df5"
+    },
+    {
+      "clip": "Bow_Run_Backward",
+      "frames": 57,
+      "duration": 0.9333333333333333,
+      "loop": true,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.39,
+      "source": "v4 Blender action",
+      "sha256": "d1eed2475b6af36f29e711404cf9a4138aba52e0a4680ee6afcede1413b00f7d"
+    },
+    {
+      "clip": "Bow_Run_Left",
+      "frames": 57,
+      "duration": 0.9333333333333333,
+      "loop": true,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.39,
+      "source": "v4 Blender action",
+      "sha256": "c110e1f73b43acbc90701528c57845a308a71a5416817fd72ae4ed19787c5005"
+    },
+    {
+      "clip": "Bow_Run_Right",
+      "frames": 57,
+      "duration": 0.9333333333333333,
+      "loop": true,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.39,
+      "source": "v4 Blender action",
+      "sha256": "5b5124856a7d2ceaa0d953d32140489c9b9c49324b982ec072f6c5ea2055667c"
     }
   ],
-  "sha256": "218029c1ddfd31a01f1b6740bb3f66d3cfe61b12ea71532d99131c4278d6e771",
+  "sha256": "2f88b8e53471e7a2a3184a859e4f9595316a9b15b3ef4e8fad369cf4844ba80b",
   "retarget": "Blender +X-left/-Y-forward/Z-up to native +X-right/+Z-forward/Y-up; shoulders/arm lengths fitted to native IK; world jump displacement removed; native contacts retained."
 }

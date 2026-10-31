@@ -154,10 +154,12 @@ private:
   std::array<MeshRange,meshCount> meshes_{};
   std::array<std::vector<Item>,meshCount> world_;
   std::vector<Instance> instanceScratch_;
-  std::array<visual::BodyPalette,visual::maxBodies> bodyPalettes_{};
+  // Bounded staging storage lives on the heap. Keeping both palettes inline
+  // consumed over 100 KiB of each caller's stack before nested UI/pose work.
+  std::vector<visual::BodyPalette> bodyPalettes_=std::vector<visual::BodyPalette>(visual::maxBodies);
   unsigned bodyCount_=0;
   float previewBodyRadius_=0,elevation_=0;
-  std::array<visual::HandPalette,visual::maxHands> handPalettes_{};
+  std::vector<visual::HandPalette> handPalettes_=std::vector<visual::HandPalette>(visual::maxHands);
   unsigned handCount_=0;
   Microsoft::WRL::ComPtr<ID3D11Buffer> handConstants_;
   Microsoft::WRL::ComPtr<ID3D11VertexShader> handShader_,handShadowShader_;

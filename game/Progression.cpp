@@ -13,7 +13,7 @@ int Simulation::DefeatedCount() const {
 
 int Simulation::Experience() const {
   // Each persistent objective contributes once. Loading or respawning cannot farm XP.
-  return 40*((frontierCompleted_ || frontierActive_)?3:DefeatedCount())+250*frontierCompleted_+(quest_==Quest::Complete?60:0)+(HasWardArmor()?120:0);
+  return WildernessExperience()+40*((frontierCompleted_ || frontierActive_)?3:DefeatedCount())+250*frontierCompleted_+(quest_==Quest::Complete?60:0)+(HasWardArmor()?120:0);
 }
 
 int Simulation::Level() const {
@@ -76,6 +76,7 @@ const char* Simulation::TalentStatus(Talent talent) const {
 const char* Simulation::BuildChangeStatus() const {
  if (health_<=0) return "Recover before changing talents";
  if (!Grounded() || Dashing() || Channeling() || Attacking() || CastingRecovery()) return "Finish your current action";
+ for(const auto& enemy:beasts_)if(enemy.health>0 && enemy.state==EnemyState::Pursuing)return "Finish combat before changing talents";
  if (sparring_ || attackFlash_>0 || hurtFlash_>0 ||
    std::any_of(enemies_.begin(),enemies_.end(),[](const Enemy& e) { return e.health>0 && e.state==EnemyState::Pursuing; }))
   return "Finish combat before changing talents";
@@ -119,7 +120,7 @@ void Simulation::EmitVisual(CombatVisualKind kind,Vec2 position,float height,flo
     event.ability=attack?attackAbility_:-1;
     event.opening=attack && OpeningAttack();event.signature=attack && SignatureAttack();event.technique=attack && TechniqueAttack();event.heavy=attack && HeavyAttack();event.empowered=attack && attackEmpowered_;
     if(kind==CombatVisualKind::SpellCast) {
-      for(const auto& enemy:enemies_) if(enemy.id==attackTarget_) event.destination=enemy.position;
+      for(const auto& enemy:Combatants()) if(enemy.id==attackTarget_) event.destination=enemy.position;
       if(sparring_ && trainer_.id==attackTarget_) event.destination=trainer_.position;
       for(const auto& dummy:dummies_) if(dummy.id==attackTarget_) event.destination=dummy.position;
       event.flight=(combat::Contact(HeavyAttack())-combat::StrokeStart(HeavyAttack()))/AttackRate();
@@ -145,6 +146,7 @@ void Simulation::DamagePlayer(float damage,float incomingFacing,float visualElap
   if(absorbed>0 && class_==ClassId::Warrior) classResource_=std::min(CombatStyleInfo().capacity,classResource_+1);
   const float applied=std::min(sparring_?std::max(0.f,health_-1):health_,incoming-absorbed);
   health_-=applied;
+  if(ReplayActive()) {replayReport_.taken+=applied;replayReport_.absorbed+=absorbed;}
   if(applied>0) hurtFlash_=std::max(0.f,.25f-visualElapsed);
   damagedThisUpdate_=damagedThisUpdate_ || applied>0;
   if (sparring_) sparringTaken_+=int(applied);
@@ -154,11 +156,12 @@ void Simulation::DamagePlayer(float damage,float incomingFacing,float visualElap
   if (applied>0) EmitVisual(CombatVisualKind::Hurt,player_,height_+1.2f,incomingFacing,0,visualElapsed);
   if (Channeling()) { channelRemaining_=0; message_="Damage interrupted stabilization."; }
   if (health_==0) {
+    frostSeconds_=0;
     classResource_=0;barrier_=0;evasion_=0;
     target_=-1; height_=0; velocityY_=0; attackFlash_=0; StopMovement();
     // Defeat suspends combat. Cancel every pending warning, including actors
     // already processed this update, before the remaining actors can advance.
-    for (auto& enemy : enemies_) {
+    for (auto& enemy : CombatantsMutable()) {
       enemy.windup=enemy.movementSpeed=enemy.movementDistance=0;
     }
   }
@@ -169,7 +172,7 @@ void Simulation::StartSparring() {
   trainer_=Enemy{}; trainer_.kind=EnemyKind::Trainer; trainer_.id=200;
   trainer_.position=trainer_.home=WorldMap::trainingPost; trainer_.health=trainer_.MaxHealth();
   trainer_.state=EnemyState::Pursuing; sparring_=true; sparringRemaining_=30; sparringReportTime_=0;
-  sparringDealt_=sparringTaken_=0; sparringResult_.clear(); target_=int(enemies_.size());
+  sparringDealt_=sparringTaken_=0; sparringResult_.clear(); target_=int(Combatants().size());
   message_="Sparring: 30 seconds. E stops. Nonlethal; no XP or loot. Potions are consumed normally.";
 }
 void Simulation::EndSparring(const char* result) {
@@ -180,12 +183,15 @@ void Simulation::EndSparring(const char* result) {
 }
 
 void Simulation::Respawn() {
+  if(ReplayActive()) EndReplay(false);
+  frostSeconds_=0;
+  courtChannel_=0;courtChannelSite_=-1;
   classResource_=0;barrier_=0;evasion_=0;
   player_=WorldMap::spawn; height_=velocityY_=facing_=0; health_=MaxHealth();
   StopMovement();
   target_=-1; attackFlash_=hurtFlash_=channelRemaining_=0;
   cooldowns_.fill(0); potionCooldown_=0; feedback_.clear();
-  for (auto& enemy : enemies_) {
+  for (auto& enemy : CombatantsMutable()) {
     if (enemy.health<=0) continue;
     enemy.position=enemy.home; enemy.health=enemy.MaxHealth(); enemy.state=EnemyState::Idle;
     enemy.windup=enemy.attackCooldown=enemy.hitFlash=enemy.repathTimer=0;
@@ -198,11 +204,13 @@ void Simulation::Respawn() {
 }
 
 std::string Simulation::Objective() const {
+  if(trackedHunt_>=0 && !ReplayActive())return std::string(DescribeQuest(QuestId(int(QuestId::Hunt1)+trackedHunt_)).title)+"\n"+HuntSummary(trackedHunt_);
   if(anchorQuest_==AnchorQuest::Complete) {
-    if(frontierCompleted_==frontierQuestCount) return "THE FRONTIER RECONNECTED\nEighteen assignments complete / level cap 10";
-    const auto& quest=DescribeQuest(QuestId(int(QuestId::Watch1)+frontierCompleted_));
+    if(frontierCompleted_==frontierQuestCount && !ReplayActive()) return "THE FRONTIER RECONNECTED\nRevisit Radan, Ilar or Vesna for veteran rehearsals";
+    const auto& quest=DescribeQuest(CurrentQuest());
     const int bearings=int(bool(surveyMask_&1))+int(bool(surveyMask_&2))+int(bool(surveyMask_&4));
-    return std::string(quest.title)+"\n"+(!frontierActive_?std::string("Speak to ")+quest.speaker:FrontierReady()?std::string("Report to ")+quest.speaker:
+    return std::string(quest.title)+"\n"+(!FrontierActive()?std::string("Speak to ")+quest.speaker:FrontierReady()?std::string("Report to ")+quest.speaker:
+      CourtActive() && courtSeals_!=7?std::string("Court seals broken ")+std::to_string(3-CourtWardCount())+" / 3\nDefeat sentries / E at each seal":
       RitualActive()?(ritualStage_==0?"Press E beside the ridge beacon":std::string("Ritual wave ")+std::to_string(ritualStage_)+" / 3\n"+(DefeatedCount()==6?"Remain within the beacon circle":"Defeat both attackers")):
       SurveyActive()?"Bearings recorded "+std::to_string(bearings)+" / 3":ExpeditionActive()?"Sites secured "+std::to_string(int(bool(expeditionMask_&1))+int(bool(expeditionMask_&2))+int(bool(expeditionMask_&4)))+" / 3":"Enemies defeated "+std::to_string(DefeatedCount())+" / "+std::to_string(enemies_.size()));
   }
@@ -219,6 +227,14 @@ std::string Simulation::Objective() const {
 }
 
 Vec2 Simulation::ObjectivePosition() const {
+  if(trackedHunt_>=0 && !ReplayActive())return HuntObjective(trackedHunt_);
+  if(CourtActive() && courtSeals_!=7) {
+    Vec2 nearest{};float best=10000;
+    for(int i=0;i<3;++i) if(!(courtSeals_&(1u<<i))) {
+      const auto p=WorldMap::courtSeals[i];const float d=Distance(player_,p);if(d<best){best=d;nearest=p;}
+    }
+    return nearest;
+  }
   if(RitualActive() && ritualStage_<4) return WorldMap::ritualSite;
   if(ExpeditionActive() && expeditionMask_!=7) {
     Vec2 nearest{};float best=10000;
@@ -235,17 +251,48 @@ Vec2 Simulation::ObjectivePosition() const {
     }
     return nearest;
   }
-  if ((frontierActive_ && !SurveyActive() && !ExpeditionActive() && DefeatedCount()<int(enemies_.size())) || quest_==Quest::Active || (anchorQuest_==AnchorQuest::Active && DefeatedCount()<3)) {
+  if ((FrontierActive() && !SurveyActive() && !ExpeditionActive() && DefeatedCount()<int(enemies_.size())) || quest_==Quest::Active || (anchorQuest_==AnchorQuest::Active && DefeatedCount()<3)) {
     Vec2 nearest=WorldMap::astralAnchor; float best=1000;
     for (const auto& enemy : enemies_) if (enemy.health>0 && Distance(player_,enemy.position)<best) {
       nearest=enemy.position; best=Distance(player_,nearest);
     }
     return nearest;
   }
-  return frontierCompleted_==frontierQuestCount?WorldMap::trainingPost:anchorQuest_==AnchorQuest::Active?WorldMap::astralAnchor:QuestLocation(CurrentQuest());
+  return frontierCompleted_==frontierQuestCount && !ReplayActive()?WorldMap::residents.back().position:anchorQuest_==AnchorQuest::Active?WorldMap::astralAnchor:QuestLocation(CurrentQuest());
+}
+
+bool Simulation::ReplayAvailable(QuestId id) const {
+  const int chapter=int(id)-int(QuestId::Watch1);
+  return !ReplayActive() && !frontierActive_ && anchorQuest_==AnchorQuest::Complete &&
+    (chapter==12 || chapter==14 || chapter==15) && frontierCompleted_>chapter;
+}
+void Simulation::BeginReplay() {
+  if(!ReplayAvailable(questDialogue_)) return;
+  replayChapter_=int(questDialogue_)-int(QuestId::Watch1);
+  campaignEnemies_=enemies_;replayReport_={};replayReportTime_=0;
+  expeditionMask_=courtSeals_=0;ritualStage_=0;ritualCharge_=courtChannel_=0;courtChannelSite_=-1;
+  frostSeconds_=0;classResource_=0;barrier_=evasion_=0;
+  PrepareFrontierEnemies(replayChapter_+1);CloseQuestDialogue();
+  message_="Veteran rehearsal started. No XP or loot; health, potions and cooldowns are not refunded. Loading leaves the rehearsal.";
+}
+void Simulation::RestoreCampaignEncounter() {
+  enemies_=std::move(campaignEnemies_);replayChapter_=-1;
+  expeditionMask_=courtSeals_=0;ritualStage_=0;ritualCharge_=courtChannel_=0;courtChannelSite_=-1;
+  frostSeconds_=0;target_=-1;friendlyTarget_=-1;StopMovement();CancelAttack();CloseQuestDialogue();
+}
+void Simulation::EndReplay(bool victory) {
+  if(!ReplayActive()) return;
+  replayReport_.victory=victory;replayReportTime_=20;
+  RestoreCampaignEncounter();classResource_=0;barrier_=evasion_=recoveryCast_=0;
+  message_=victory?"Rehearsal complete. Campaign progress retained; no rewards granted.":
+    "Rehearsal ended. Campaign progress retained; health and consumables are not refunded.";
 }
 
 std::string Simulation::InteractionPrompt() const {
+  if(health_>0 && !ReplayActive()) for(int d:{2,5})if(hunts_[d]==1)for(int i=0;i<3;++i)
+    if(!(huntMarks_[d]&(1u<<i)) && CanReadSurvey(population::Cache(d,i)))return "E RECOVER COMMISSION CACHE";
+  if(CourtActive()) for(int i=0;i<3;++i) if(CanReadSurvey(WorldMap::courtSeals[i]))
+    return courtSeals_&(1u<<i)?"SEAL BROKEN":CourtGuarded(i)?"DEFEAT THE SEAL SENTRIES":courtChannelSite_==i?"BREAKING SEAL / REMAIN STILL":"E BREAK COURT SEAL";
   if (health_<=0) return "ENTER RETURN TO DAWNWATCH";
   if (sparring_) return "E END SPARRING ROUND";
   if (Channeling()) return "STABILIZING - STAND STILL";
@@ -267,9 +314,9 @@ std::string Simulation::InteractionPrompt() const {
   if (anchorQuest_==AnchorQuest::Active && DefeatedCount()==3 &&
     Distance(player_,WorldMap::astralAnchor)<=2.5f && HasLineOfSight(player_,WorldMap::astralAnchor))
     return "E STABILIZE ASTRAL ANCHOR";
-  for (const auto& enemy : enemies_)
+  for (const auto& enemy : Combatants())
     if (enemy.health<=0 && !enemy.looted && Distance(player_,enemy.position)<=2.5f && HasLineOfSight(player_,enemy.position))
-      return "E LOOT - 5 GOLD AND A POTION";
+      return enemy.Beast()?"E SEARCH BEAST REMAINS":"E LOOT - 5 GOLD AND A POTION";
   if (NearQuartermaster()) return "E BROWSE QUARTERMASTER SUPPLIES";
   if (Distance(player_,WorldMap::trainingPost)<=2.5f && HasLineOfSight(player_,WorldMap::trainingPost))
     return anchorQuest_==AnchorQuest::Complete?"E START SPARRING - NO XP OR LOOT":"TRAINING UNLOCKS AFTER BOTH QUESTS";

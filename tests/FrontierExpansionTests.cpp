@@ -67,7 +67,10 @@ int main() {
   Walk(fresh,{0,-24});
   Capture(renderer,fresh,root/"southern-meadow.png");
   Capture(renderer,fresh,root/"southern-meadow-atlas.png",ui::Panel::Map);
-  for(const auto& npc:WorldMap::residents) {
+  // The nine campaign speakers are gated; the six local commissions are
+  // intentionally available independently and covered by PopulationTests.
+  for(int resident=0;resident<9;++resident) {
+    const auto& npc=WorldMap::residents[resident];
     const Vec2 approach{npc.position.x+1.6f,npc.position.z};
     Walk(fresh,fresh.CanStand(approach)?approach:Vec2{npc.position.x-1.6f,npc.position.z});const auto before=fresh.QuestState();Command talk;talk.interact=true;fresh.Update(.01f,talk);
     Check(fresh.QuestDialogue()==QuestId::None && fresh.QuestState()==before && !fresh.FrontierActive() &&

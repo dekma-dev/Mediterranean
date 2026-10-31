@@ -1,0 +1,20 @@
+{
+  "source_sha256": "63b5fb93674707a51efa0547c8ba70eacf4eb8ec5e4679b7929546e72e84f66d",
+  "wolf_source_sha256": "f9bc02b79f5d2cb70a6aa8914ebb9faa35fbb6de2a7e58907f60accc34a64c22",
+  "previous_archive_sha256": "8a3082569ba18244053b0c487db3c9dd9457197fc7e7875e54c16eb85dc47875",
+  "changes": [
+    "Near cottage/inn/tower preserve more source bevels; distant records unchanged",
+    "Oak near: 4200 whole two-sided leaves with midribs and smooth normals; independent trunk budget",
+    "Wolf near: 1600 whole weighted two-sided guard-hair clumps, width x6; original body, distant weights and clips preserved"
+  ],
+  "archive_sha256": "b966b0a9b0726af9c655c7428d3e48d4a4af9d3689aa95acd1e977c022c05480",
+  "bytes": 34894696,
+  "motion_sha256": "f0060cc549462e9c393d0dc6bbee3dd418d6345c628766e3c082d55b11072b11",
+  "changed_records": [
+    15,
+    21
+  ],
+  "unchanged_records": 37,
+  "all_distant_records_preserved": true,
+  "wolf_original_surface_and_animation_preserved": true
+}

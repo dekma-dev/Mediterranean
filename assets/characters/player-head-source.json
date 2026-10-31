@@ -21,33 +21,33 @@
   "lods": [
     {
       "name": "player-head",
-      "vertices": 5002,
-      "triangles": 10000,
-      "sha256": "c0bf6f42ac5a317495eed2c8ee565d61b08bd8d98c8316aa68ca9c9ee54851f9"
+      "vertices": 8001,
+      "triangles": 15997,
+      "sha256": "6e5e7c339b02a145658523632aa20931ce24b996d8f1706a6734d96b4b95812e"
     },
     {
       "name": "player-head-medium",
       "vertices": 1502,
       "triangles": 3000,
-      "sha256": "bec407ce7ea903c2952d727091b458a2aa60f0327241df465f9f8f7d08359779"
+      "sha256": "9d26d74419cab7080836d928a79badfc51afe7f6c2e0cb90fbc607d39b63554f"
     },
     {
       "name": "player-head-far",
       "vertices": 242,
       "triangles": 480,
-      "sha256": "bdb559e5f90d5c91a31f5af86e0c20d79dc842762f39d074e4714481d191bead"
+      "sha256": "608a319c1eadf89fb3218ba6e36ac1c67cfcb7acf0e8fdcd02049ebbe9140afe"
     },
     {
       "name": "player-hair",
-      "vertices": 1603,
-      "triangles": 2999,
-      "sha256": "4186cb7c852347b307b52573d17c2c118a4746587c02c2711d9b4616e7e8d334"
+      "vertices": 2664,
+      "triangles": 4993,
+      "sha256": "1d9c1b06741edcd5cd8beeedaa0b7fd2b88d9f5d6f6c618d14d18953c7d813c9"
     },
     {
       "name": "player-hair-low",
-      "vertices": 241,
-      "triangles": 400,
-      "sha256": "1fdb24db9c4c45960a7e1d7313d27077d9e3ea5aba8348d5d34ccee14695c5b5"
+      "vertices": 240,
+      "triangles": 399,
+      "sha256": "18a6dd975f07100402a5680e04581004dc99dbcf3e7001be287f21d03b26eb50"
     }
   ]
 }

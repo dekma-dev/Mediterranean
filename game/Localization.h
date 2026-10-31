@@ -7,6 +7,7 @@
 #include <vector>
 #include <unordered_map>
 #include <array>
+#include <iterator>
 
 namespace localization {
 enum class Language { Russian, English };
@@ -27,9 +28,13 @@ inline bool Select(Language next) {
 struct Entry {std::string_view english,russian;};
 inline const std::vector<Entry>& Dictionary() {
   static const auto entries=[] {
-    std::vector<Entry> values{
+    // The expanding catalog must not become a large temporary initializer-list
+    // on an already busy Debug render stack. Keep source entries read-only and
+    // copy directly into the heap-backed sortable lookup once.
+    static constexpr Entry source[]{
 #include "game/Russian.inc"
     };
+    std::vector<Entry> values(std::begin(source),std::end(source));
     std::stable_sort(values.begin(),values.end(),[](const Entry& a,const Entry& b){return a.english.size()>b.english.size();});
     return values;
   }();return entries;

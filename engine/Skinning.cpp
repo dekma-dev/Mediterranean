@@ -9,8 +9,8 @@ using namespace DirectX;
 void ValidateBodyGeometry(const BodyGeometry& body) {
   const auto& mesh=body.mesh;
   const auto require=[](bool ok) {if(!ok) throw std::runtime_error("Invalid body preview geometry");};
-  require(mesh.vertices.size()>=3 && mesh.vertices.size()<=16384 && body.influences.size()==mesh.vertices.size());
-  require(!mesh.indices.empty() && mesh.indices.size()<=65535 && mesh.indices.size()%3==0);
+  require(mesh.vertices.size()>=3 && mesh.vertices.size()<=24576 && body.influences.size()==mesh.vertices.size());
+  require(!mesh.indices.empty() && mesh.indices.size()<=98304 && mesh.indices.size()%3==0);
   for(std::size_t i=0;i<mesh.vertices.size();++i) {
     const auto& v=mesh.vertices[i];const auto& skin=body.influences[i];
     const float radius=v.position.x*v.position.x+v.position.y*v.position.y+v.position.z*v.position.z;

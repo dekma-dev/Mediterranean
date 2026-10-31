@@ -329,6 +329,17 @@ void CombatEffects::Render(Renderer& renderer) const {
   for (const auto& burst : bursts_) {
     if (burst.age>=BurstLife(burst.event.kind)) continue;
     const auto& e=burst.event;
+    if(e.kind==K::BeastBite || e.kind==K::BeastCharge) {
+      const bool charge=e.kind==K::BeastCharge;const float fade=Unit(1-burst.age/.45f);
+      for(int i=0;i<(charge?12:5);++i) {
+        const float a=e.facing+(Noise(i+burst.seed)*2-1)*1.5f;
+        const float reach=.6f+burst.age*(charge?2.2f:1.2f);
+        const float x=e.position.x+std::sin(a)*reach,z=e.position.z+std::cos(a)*reach;
+        const float y=rpg::WorldMap::Height({x,z})+(charge?.14f:.65f)+burst.age*.6f;
+        renderer.DrawEffectGlow({x,y,z},charge?.10f:.045f,charge?XMFLOAT4{.43f,.34f,.22f,fade*.45f}:XMFLOAT4{.76f,.56f,.37f,fade*.55f});
+      }
+      continue;
+    }
     if(e.kind==K::EnemyQuake || e.kind==K::EnemyLance || e.kind==K::EnemyTempest || e.kind==K::EnemyExecution) {
       const float fade=std::pow(Unit(1-burst.age/.35f),2.f);
       const auto point=[&](float angle,float radius,float y) -> XMFLOAT3 {

@@ -108,14 +108,20 @@ int main() {
     Check(renderer.Capture(L"face-"+std::wstring(names[i])+L".png") && renderer.EndFrame(false) && renderer.ValidateDebugMessages(),"Face color/shadow capture");
   }
   const auto opened=Pixels(L"face-neutral.png"),closed=Pixels(L"face-blink.png");
-  unsigned changed=0,outside=0;
+  // The adopted head is lowered onto the new shoulders. Its smooth eyelid
+  // field also deforms adjacent upper-face skin; the old primitive's 35-pixel
+  // eye strip no longer corresponds to the captured anatomy. Keep all other
+  // pixels (mouth/chin, hair, equipment, scenery and shadows) identical.
+  unsigned changed=0,outside=0,leftEye=0,rightEye=0;
   for(int y=0;y<720;++y) for(int x=0;x<960;++x) {
     const auto at=(y*960+x)*4;
     if(opened[at]!=closed[at] || opened[at+1]!=closed[at+1] || opened[at+2]!=closed[at+2]) {
-      ++changed; outside+=x<380 || x>580 || y<320 || y>355;
+      ++changed; outside+=x<400 || x>560 || y<330 || y>515;
+      leftEye+=x>=418 && x<=454 && y>=403 && y<=428;
+      rightEye+=x>=505 && x<=541 && y>=403 && y<=428;
     }
   }
-  Check(changed>500 && changed<2500 && outside==0,"Blink must visibly close both eyes without changing the rest of the character or its shadows");
+  Check(changed>500 && changed<12000 && leftEye>200 && rightEye>200 && outside==0,"Blink must visibly close both eyes within the fitted upper face without changing other geometry or shadows");
   float cheek[2]{};
   for(int occluded=0;occluded<2;++occluded) {
     renderer.BeginFrame(); renderer.SetCamera({0,1.79f,-.85f},{0,1.76f,0});

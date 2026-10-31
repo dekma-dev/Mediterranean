@@ -28,7 +28,7 @@ endif()
 include(cmake/QuestText.cmake)
 generate_quest_text("${CMAKE_CURRENT_BINARY_DIR}/generated/QuestText.generated.h")
 
-add_library(MediterraneanSimulation STATIC game/Simulation.cpp game/Progression.cpp game/WorldMap.cpp game/Inventory.cpp game/Trade.cpp game/Quests.cpp)
+add_library(MediterraneanSimulation STATIC game/Simulation.cpp game/Population.cpp game/Progression.cpp game/WorldMap.cpp game/Inventory.cpp game/Trade.cpp game/Quests.cpp)
 target_include_directories(MediterraneanSimulation PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_include_directories(MediterraneanSimulation PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -94,7 +94,7 @@ foreach(detail IN ITEMS Cuirass CuirassLow ShoulderLeft ShoulderLeftLow Shoulder
   list(APPEND armor_headers "${armor_header}")
 endforeach()
 set(head_headers "")
-foreach(detail IN ITEMS Head HeadMedium HeadFar Hair HairLow)
+foreach(detail IN ITEMS Head HeadMedium HeadFar Hair HairLow Boot BootLow)
   string(REGEX REPLACE "([a-z])([A-Z])" "\\1-\\2" head_name "${detail}")
   string(TOLOWER "${head_name}" head_name)
   set(head_source "${CMAKE_CURRENT_SOURCE_DIR}/assets/characters/player-${head_name}.obj")
@@ -103,7 +103,7 @@ foreach(detail IN ITEMS Head HeadMedium HeadFar Hair HairLow)
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>"
     COMMAND $<TARGET_FILE:MeshAssetCompiler> "${head_source}" "${head_header}" Player${detail}
     DEPENDS MeshAssetCompiler "${head_source}"
-    COMMENT "Embedding anatomical player head"
+    COMMENT "Embedding authored player detail"
     VERBATIM)
   list(APPEND head_headers "${head_header}")
 endforeach()
@@ -352,6 +352,9 @@ if (BUILD_TESTING)
   add_test(NAME LoadoutTests COMMAND LoadoutTests)
   add_executable(QuestDialogueTests tests/QuestDialogueTests.cpp)
   add_executable(HighlandsTests tests/HighlandsTests.cpp)
+  add_executable(PopulationTests tests/PopulationTests.cpp)
+  target_link_libraries(PopulationTests PRIVATE MediterraneanClient)
+  add_test(NAME PopulationTests COMMAND PopulationTests)
   add_executable(SouthernTests tests/SouthernTests.cpp)
   target_link_libraries(SouthernTests PRIVATE MediterraneanClient)
   add_test(NAME SouthernTests COMMAND SouthernTests)

@@ -6,7 +6,7 @@
 
 namespace profile {
 namespace {
-constexpr std::size_t maxBytes=4096;
+constexpr std::size_t maxBytes=16384;
 struct Mutex {
   HANDLE handle=nullptr;
   bool acquired=false;

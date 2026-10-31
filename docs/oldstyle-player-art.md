@@ -5,6 +5,16 @@ DX11 player and inventory renderer. Scout is the archer; class IDs, item IDs,
 equipment slots, combat rules and saves retain their existing meaning. Starter
 and Watchguard select two different weapon meshes per class.
 
+## Current tailoring pass (2026-10-31)
+
+The world art expansion also updates the editable class source and both runtime
+LODs of each coat panel: waists are narrower, depth folds are softer, and mage
+shoulders are less wide. The same contour field is applied to source and KIT1
+geometry. All 27 items, interchangeable equipment, grip sockets, body anatomy
+and 54 player motion tracks are retained. The earlier source is backed up under
+`.blender-local/world-art-20261031/before`; compare the source hash recorded in
+`oldstyle-classes.json` before later regeneration.
+
 ## Sources and exports
 
 - `assets/authored/oldstyle-classes.blend`: 27 editable equipment parts. The
@@ -14,22 +24,31 @@ and Watchguard select two different weapon meshes per class.
 - `oldstyle-classes.kit`: bounded KIT1 archive, 27 items with two mesh LODs each,
   vertex colors and native material IDs. Resource 305 embeds it in client hosts.
 - `oldstyle-classes.json`: per-item vertex/triangle counts and archive hash.
-- `player-body.skin`: 18,000 / 5,000 / 1,400 body triangles. The anatomical source
+- `player-body.skin`: 26,028 / 5,000 / 1,400 body triangles. The anatomical source
   is unchanged. Covered torso vertices receive a local fit beneath the doublet;
   the bare body, neck and arms keep their original shape.
-- `assets/characters/player-head*.obj`: 10,000 / 3,000 / 480 head triangles;
-  hair uses 2,999 / 400 triangles. Source hashes remain in the provenance JSON.
-- `player-motion-v3.blend`: editable 57-bone action library; `player.clips`
-  contains 27 authored actions plus six compatibility tracks, totaling 275,940
+- `assets/characters/player-head*.obj`: 15,997 / 3,000 / 480 head triangles;
+  hair uses 4,993 / 399 triangles. Source hashes remain in the provenance JSON.
+- `player-boots.blend`: separate editable fitted upper and layered sole from
+  the existing human study. `assets/characters/player-boot*.obj` contains
+  8,000 / 1,000 triangles, with a shaped vamp, ankle, heel and darker welt.
+  Worn boots use this geometry at 0.145 × 0.23 × 0.30 metres instead of the
+  rounded reusable boot and duplicate flattened sole. Bare feet retain their
+  separate fallback. Provenance is in `player-boot-source.json`.
+- `player-motion-v4.blend`: editable 57-bone action library; `player.clips`
+  contains 48 authored actions plus six compatibility tracks, totaling 428,772
   bytes. It retains the PCL2 contract and the earlier track indices.
 
-The original collection and anatomical source were compared to their local
-authoring copies before export and were not overwritten. Their SHA-256 values
-are respectively `533e343d20fc977fa38e42e9ed1abc44940435c7fe0328efadb8a7c37533b4b2`
-and `bbb0590a5dd6a06c0ea20004ac5c6cdda0f3f1754dc18407dde3ed6b53625e79`.
+The anatomical source remains unchanged at SHA-256
+`bbb0590a5dd6a06c0ea20004ac5c6cdda0f3f1754dc18407dde3ed6b53625e79`.
+The original collection was compared, backed up and refined on 2026-10-31;
+both editable copies are synchronized. See `world-art-revision.json`
+and [blender-assets.md](blender-assets.md) for source hashes and geometry counts.
 
-All new authoring/export scripts, full motion study, backups and build logs are
-under the ignored `.blender-local/oldstyle-three-classes` directory. Compare
+Authoring/export scripts, full motion studies, backups and build logs are
+under the ignored `.blender-local/oldstyle-three-classes` and
+`.blender-local/refinement-20261031` and `.blender-local/world-art-20261031`
+directories. Compare
 editable source hashes before any later regeneration to preserve user edits.
 Blender is not needed to build or run the exported game.
 
@@ -47,6 +66,8 @@ equipment follow the selected dye while leather and metal keep their authored
 palettes.
 
 V3 reduces gait bounce and adds stance loading, counterrotation and attack settle.
+V4 adds relaxed weapon carrying, separate directional equipped gaits, socket-based
+grip export, continuous carry/guard transitions and one-handed staff transport.
 Sword/staff hand targets retain the authored paths and two-hand staff constraint.
 Bow guard, draw/release, power release and equipped walk/run are separate actions.
 The archer holds the bow in the right hand, draws with the left and stows an
@@ -60,10 +81,44 @@ windups still limit how slowly anticipation can play without changing gameplay.
 
 This is target retargeting to the existing ten-bone body and finger rig, with
 foot IK; it is not playback of every source bone. Materials approximate the
-Blender source. Coats use articulated panels, not cloth simulation. These are
+Blender source. Coats use articulated panels, not cloth simulation. Knee
+deformation now consumes the panel's existing clearance before moving fabric;
+the front no longer receives the full knee offset twice, and the rear panel
+does not fold inward toward the knee. These are
 game assets and do not establish photorealism or final art acceptance.
 
 ## Review
+
+Current world/tailoring pass: eleven relevant Release suites and five Debug
+suites pass. The final game launches and renders the three class fixtures;
+Visual Studio Debug smoke passes with Mage. Current world captures and the
+34-model gallery are under `.blender-local/world-art-20261031`; the class
+equipment and motion captures remain in `build-ninja-release/oldstyle-review`.
+Two startup tests that timed out during concurrent compilation passed when
+repeated without the builds. The final stationary-spawn CPU p50/p95 is
+1.926/2.777 ms, with 150,400,656 immutable mesh bytes; see
+[blender-assets.md](blender-assets.md) for measurement scope and limitations.
+
+Earlier validation history follows.
+
+2026-10-31 refinement: twelve targeted Release suites and five Debug suites
+pass across geometry, authored actors, body, hands, attachments, equipment,
+character selection, launcher, motion and archive decoding. The final coat
+clearance change was rechecked with native equipment/animation captures,
+attachment LOD and authored-actor tests. Native `GeometryTests` now also passes;
+the older terrain-budget failure described below belongs to the previous pass.
+
+`build-ninja-release/oldstyle-review/weapon-carry-v4.gif` shows the three classes
+at real-time 20 Hz through idle, walking, running, attacking, recovering and
+returning to relaxed carrying. `weapon-carry-v4-contact.png` compares selected
+moments. The images use the actual game renderer and presentation controllers.
+
+Release smoke checks pass with all three class fixtures; Visual Studio Debug
+smoke passes with Mage. The final hidden 1280x720 stationary-spawn benchmark on
+RTX 4060 records CPU p50/p95 1.610/2.263 ms over 240 frames and 76,208,256
+immutable mesh bytes. Only nine GPU observations were available, so no GPU-tail
+or interactive-FPS claim is made. Raw output is in the ignored
+`.blender-local/refinement-20261031/benchmark.txt`; player saves were not used.
 
 Normal launch: `build-ninja-release/MediterraneanLauncher.exe` (or the
 `RPGNative.exe` beside it). The same assets and animation are included in

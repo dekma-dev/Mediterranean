@@ -1,5 +1,6 @@
 #include "engine/AuthoredAssets.h"
 #include "engine/WolfAnimation.h"
+#include "engine/BeastMotion.h"
 #include <Windows.h>
 #include <cmath>
 #include <cstring>
@@ -21,7 +22,14 @@ visual::SkinInfluence Influence(Asset asset,DirectX::XMFLOAT3 p) {
    bone=p.x<0?6:8;weight=std::clamp((std::abs(p.x)/width-.32f)/.15f,0.f,1.f);
   } else {bone=1;weight=std::clamp((p.y-.95f)/.4f,0.f,1.f);}
  }
- if(asset!=Asset::Boar && (bone==2||bone==4||bone==6||bone==8)) {
+ // A rooting boar's muzzle lies below its shoulders. Blend the head field
+ // over the existing weights continuously, including the jaw/neck boundary.
+ if(asset==Asset::Boar) {
+  const auto smooth=[](float v){v=std::clamp(v,0.f,1.f);return v*v*(3-2*v);};
+  const float head=smooth((p.z-.55f)/.35f)*smooth((p.y-.40f)/.25f);
+  return {{1,bone,0,0},{head,(1-head)*weight,(1-head)*(1-weight),0}};
+ }
+ if(bone==2||bone==4||bone==6||bone==8) {
   const bool leg=bone<6;
   const float child=leg?std::clamp((.69f-p.y)/.19f,0.f,1.f):std::clamp((1.49f-p.y)/.23f,0.f,1.f);
   return {{bone,bone+1,0,0},{weight*(1-child),weight*child,1-weight,0}};
@@ -29,7 +37,9 @@ visual::SkinInfluence Influence(Asset asset,DirectX::XMFLOAT3 p) {
  return {{bone,0,0,0},{weight,1-weight,0,0}};
 }
 visual::BodyPalette Pose(Asset asset,float time,float gait,float attack,float travel,Gesture gesture) {
- if(asset==Asset::Wolf)return wolf::Pose(time,gait,travel);
+ if(asset==Asset::Wolf) {
+  auto result=wolf::Pose(time,gait,travel);ApplyBeastCombat(result,asset,attack,gesture);return result;
+ }
  using namespace DirectX;
  visual::BodyPalette palette{};
  const auto finite=[](float v) {return std::isfinite(v)?v:0.f;};
@@ -83,6 +93,7 @@ visual::BodyPalette Pose(Asset asset,float time,float gait,float attack,float tr
    XMStoreFloat4x4(&palette.normals[child],XMMatrixRotationX(bend)*XMLoadFloat4x4(&palette.normals[parent]));
   }
  }
+ if(asset==Asset::Boar)ApplyBeastCombat(palette,asset,attack,gesture);
  return palette;
 }
 static_assert(unsigned(visual::Material::Count)==16,"Update authored shader material sentinel with material layers");
@@ -103,14 +114,17 @@ private:
 bool Finite(DirectX::XMFLOAT3 v) {return std::isfinite(v.x)&&std::isfinite(v.y)&&std::isfinite(v.z);}
 }
 Library Decode(std::string_view bytes) {
-  Require(bytes.size()<=archiveBudget,"Authored asset archive exceeds 32 MiB");Reader read(bytes);
+  Require(bytes.size()<=archiveBudget,"Authored asset archive exceeds 80 MiB");Reader read(bytes);
   Require(read.Read<std::uint32_t>()==0x3141444d,"Invalid authored asset signature");
   Require(read.Read<std::uint32_t>()==1,"Unsupported authored asset version");
   Require(read.Read<std::uint32_t>()==assetCount && read.Read<std::uint32_t>()==lodCount,"Unexpected authored asset/LOD count");
   Library result;
-  for(auto& entry:result) {
+  for(unsigned i=0;i<result.size();++i) {
+    auto& entry=result[i];
     const auto vertices=read.Read<std::uint32_t>(),indices=read.Read<std::uint32_t>();
-    Require(vertices>0&&vertices<=65536&&indices>=3&&indices<=60000&&indices%3==0,"Authored mesh exceeds vertex/triangle budget");
+    const bool highDetail=(i%lodCount)==0;
+    const auto indexBudget=i==unsigned(Asset::Oak)*lodCount?240000u:highDetail?(i<unsigned(Asset::Wolf)*lodCount?180000u:120000u):60000u;
+    Require(vertices>0&&vertices<=(highDetail?180000u:65536u)&&indices>=3&&indices<=indexBudget&&indices%3==0,"Authored mesh exceeds vertex/triangle budget");
     entry.bounds.minimum=read.Read<DirectX::XMFLOAT3>();entry.bounds.maximum=read.Read<DirectX::XMFLOAT3>();
     const auto low=entry.bounds.minimum,high=entry.bounds.maximum;
     Require(Finite(low)&&Finite(high)&&low.x<=high.x&&low.y<=high.y&&low.z<=high.z,"Invalid authored mesh bounds");
@@ -149,7 +163,9 @@ std::string_view EmbeddedBytes() {
 }
 const Library& Collection() {static const auto data=Decode(EmbeddedBytes());return data;}
 const char* Name(Asset asset) {
-  static constexpr const char* names[]={"Dawnwarden","Moonweaver","Ironjaw","Oathless","Ash sentry","Frostfang","Thornback","Elder oak","Highland pine","Blighted elder","Hearth cottage","Moon inn","Border watch"};
+  static constexpr const char* names[]={"Dawnwarden","Moonweaver","Ironjaw","Oathless","Ash sentry","Frostfang","Thornback","Elder oak","Highland pine","Blighted elder","Hearth cottage","Moon inn","Border watch",
+    "Coopered supply barrel","Braced merchant crate","Ironbound travel chest","Oak handcart","Masoned village well","Carpenter bench","Forged amber lantern","Charcoal iron brazier","Smith anvil and stump","Split seasoned firewood","Tied grain sacks","Carved waypost","Split-rail fence","Straw practice dummy","Woodland fern","Hazel undergrowth","Hollow storm stump","Memorial stone","Provision stall","Iron-strapped storehouse","Veteran training hall"};
+  static_assert(std::size(names)==assetCount);
   return unsigned(asset)<assetCount?names[unsigned(asset)]:"Unknown asset";
 }
 unsigned SelectLod(float projectedHeight) {return projectedHeight>=210?0:projectedHeight>=85?1:2;}

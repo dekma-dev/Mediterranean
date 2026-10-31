@@ -249,8 +249,8 @@
   ],
   "lods": [
     {
-      "vertices": 9002,
-      "triangles": 18000,
+      "vertices": 13016,
+      "triangles": 26028,
       "normal_constraints": 0
     },
     {
@@ -264,6 +264,6 @@
       "normal_constraints": 0
     }
   ],
-  "bytes": 1025440,
-  "sha256": "8a139fa9991a24398d0806378b17083726269385d43ec9a109df195312836c11"
+  "bytes": 1362616,
+  "sha256": "cdb11366443aaab16ea1d86dcdb7a11400a214ac28431b19db25d45fcb4bd408"
 }

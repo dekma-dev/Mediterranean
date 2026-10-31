@@ -289,15 +289,15 @@ struct Canvas {
   Skin({x-29,y-29,58,59},17);
   Gradient({x-24,y-24,48,47},{.16f,.20f,.22f,1},{.025f,.035f,.045f,1});
   const auto p=P(x-24,y-24);
-  if(r.BeginPortrait(p.x,p.y,48*layout.scale/r.Width(),47*layout.scale/r.Height(),1)) {
+  if(r.BeginPortrait(p.x,p.y,48*layout.scale/r.Width(),47*layout.scale/r.Height(),enemy && enemy->Beast()?.65f:1.f)) {
    if(enemy && enemy->kind==rpg::EnemyKind::Dummy) {
     r.DrawMesh(visual::Mesh::Sphere,{0,1.9f,0},{.4f,.45f,.35f},{.61f,.49f,.28f,1},visual::Material::Cloth);
     r.DrawMesh(visual::Mesh::Torso,{0,1.3f,0},{.85f,.75f,.4f},{.6f,.49f,.29f,1},visual::Material::Cloth);
    } else if((enemy && enemy->kind!=rpg::EnemyKind::Trainer) || friendly==0 || friendly==2) {
     const auto asset=friendly==0?authored::Asset::Guardian:friendly==2?authored::Asset::Mage:
-     enemy->kind==rpg::EnemyKind::Wraith?authored::Asset::Revenant:
+     enemy->kind==rpg::EnemyKind::Wolf?authored::Asset::Wolf:enemy->kind==rpg::EnemyKind::Boar?authored::Asset::Boar:enemy->kind==rpg::EnemyKind::Wraith?authored::Asset::Revenant:
      enemy->kind==rpg::EnemyKind::Captain || enemy->kind==rpg::EnemyKind::Reaver?authored::Asset::Orc:authored::Asset::Skeleton;
-    r.DrawAnimatedAsset(asset,{0,0,0},0,0,0,0,0,0);
+    r.DrawAnimatedAsset(asset,{enemy && enemy->Beast()?-.18f:0,enemy && enemy->Beast()?.52f:0,enemy && enemy->Beast()?-.35f:0},enemy && enemy->Beast()?.35f:0,0,0,0,0,0);
    } else {
     auto outfit=CharacterOutfit::From(s.Items(),s.Class(),s.Look());
     if(friendly>=0 || enemy) {outfit=CharacterOutfit{};outfit.weapon=false;outfit.helm=false;outfit.classId=friendly==1?rpg::ClassId::Scout:rpg::ClassId::Paladin;}
@@ -431,12 +431,14 @@ void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoin
  const auto marker=[&](rpg::Vec2 position,Color tint,float radius) {
   const auto p=MapPoint(a,position); c.Oval(p.x,p.y,radius+1,radius+1,{.08f,.12f,.13f,1}); c.Oval(p.x,p.y,radius,radius,tint);
  };
- for (const auto& e : sim.Enemies()) if (e.health>0 || !e.looted)
+ for (const auto& e : sim.Combatants()) if (e.health>0 || !e.looted)
   marker(e.position,e.health>0?Color{.72f,.20f,.15f,1}:gold,compact?2.f:4.f);
  marker(rpg::WorldMap::questGiver,{.98f,.77f,.25f,1},compact?3.f:5.f);
  marker(rpg::WorldMap::astralAnchor,{.59f,.38f,.84f,1},compact?3.f:5.f);
  marker(rpg::WorldMap::trainingPost,{.35f,.72f,.76f,1},compact?3.f:5.f);
  marker(rpg::WorldMap::quartermaster,{.95f,.57f,.22f,1},compact?3.f:5.f);
+ for(int d=0;d<6;++d)if(sim.HuntState(d)==1 && rpg::HuntGather(d))for(int i=0;i<3;++i)if(!(sim.HuntMarks(d)&(1u<<i)))
+  marker(rpg::population::Cache(d,i),{.35f,.69f,.88f,1},compact?2.f:4.f);
  for(const auto& npc:rpg::WorldMap::residents) {
   marker(npc.position,{.85f,.67f,.27f,1},compact?3.f:5.f);
   if(!compact) {const auto p=MapPoint(a,npc.position);lettering(p.x-36,p.y+9,npc.name,11);}
@@ -446,7 +448,9 @@ void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoin
  if(sim.ExpeditionActive()) for(int i=0;i<3;++i)
   marker(sim.ExpeditionSite(i),sim.ExpeditionMask()&(1u<<i)?Color{.4f,.58f,.34f,1}:Color{.95f,.55f,.22f,1},compact?3.f:5.f);
  if(sim.RitualActive()) marker(rpg::WorldMap::ritualSite,{.5f,.7f,.95f,1},compact?4.f:7.f);
- if (sim.AnchorState()!=rpg::AnchorQuest::Complete || sim.FrontierCompleted()<rpg::frontierQuestCount) {
+ if(sim.CourtActive()) for(int i=0;i<3;++i)
+   marker(rpg::WorldMap::courtSeals[i],sim.CourtSeals()&(1u<<i)?Color{.35f,.52f,.33f,1}:Color{.92f,.39f,.13f,1},compact?4.f:7.f);
+ if (sim.TrackedHunt()>=0 || sim.AnchorState()!=rpg::AnchorQuest::Complete || sim.FrontierCompleted()<rpg::frontierQuestCount) {
   const auto p=MapPoint(a,sim.ObjectivePosition());
   c.Ring(p.x,p.y,compact?5.f:10.f,mapInk,compact?2.5f:3.5f);
   c.Ring(p.x,p.y,compact?5.f:10.f,{.98f,.85f,.40f,1},compact?1.f:2.f);
@@ -737,7 +741,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  const auto worldTarget=[&](rpg::EntityId id,rpg::Vec2 position,const char* name,bool friendly,const rpg::Enemy* actor=nullptr) {
   if(std::hypot(position.x-s.Player().x,position.z-s.Player().z)>22 || !s.Map().CanTravel(s.Player(),position,.05f)) return;
   Point head,foot;
-  if(!renderer.Project({position.x,rpg::WorldMap::Height(position)+2.35f,position.z},head) || !renderer.Project({position.x,rpg::WorldMap::Height(position),position.z},foot)) return;
+  if(!renderer.Project({position.x,rpg::WorldMap::Height(position)+(actor && actor->Beast()?1.6f:2.35f),position.z},head) || !renderer.Project({position.x,rpg::WorldMap::Height(position),position.z},foot)) return;
   const float x=c.layout.LocalX(head.x*renderer.Width()),y=c.layout.LocalY(head.y*renderer.Height());
   const float bottom=c.layout.LocalY(foot.y*renderer.Height()),height=std::clamp(bottom-y,25.f,220.f);
   if(x<0 || x>1280 || y<0 || y>720) return;
@@ -753,9 +757,16 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    if(selected) c.Line(x-24,y-2,x+24,y-2,1,friendly?Color{.5f,.95f,.5f,1}:gold);
   }
  };
- for(const auto& enemy:s.Enemies()) if(enemy.health>0) worldTarget(enemy.id,enemy.position,enemy.Name(),false,&enemy);
+ for(const auto& enemy:s.Combatants()) if(enemy.health>0) worldTarget(enemy.id,enemy.position,enemy.Name(),false,&enemy);
  for(const auto& dummy:s.Dummies()) if(!(s.Sparring() && dummy.id==210)) worldTarget(dummy.id,dummy.position,dummy.Name(),false,&dummy);
  for(int i=0;i<rpg::Simulation::friendlyCount;++i) worldTarget(rpg::Simulation::friendlyBase+i,rpg::Simulation::FriendlyPosition(i),rpg::Simulation::FriendlyName(i),true);
+ for(int d=0;d<6;++d) {
+  const auto p=rpg::WorldMap::residents[9+d].position;DirectX::XMFLOAT2 projected;
+  if(s.HuntState(d)==2 || std::hypot(p.x-s.Player().x,p.z-s.Player().z)>24 ||
+    !renderer.Project({p.x,rpg::WorldMap::Height(p)+2.9f,p.z},projected))continue;
+  const float x=c.layout.LocalX(projected.x*renderer.Width()),y=c.layout.LocalY(projected.y*renderer.Height());
+  c.Center(x-14,y-14,28,s.HuntReady(d)?"?":s.HuntState(d)==0?"!":"...",25,gold);
+ }
  const auto button=[&](Rect rect,const std::string& label,Action action,int value=0,bool enabled=true) {
   const bool hover=rect.Contains(mouseX_,mouseY_);
   c.Button(rect,enabled,false);
@@ -884,7 +895,8 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Oval(px,py-arc,7,8,fill);c.Ring(px,py-arc,8,gold);c.Oval(px-2,py-3-arc,1.5f,2,ink);
   }
  }
- c.Center(rx+3,uy+51,126,s.EmpoweredAttack()?"EMPOWERED CAST":s.EmpoweredReady()?"HEAVY READY":
+ const bool prepared=s.Level()>=10 && s.Cooldown(11)==0 && s.TargetActor() && s.FinisherSetup(*s.TargetActor());
+ c.Center(rx+3,uy+51,126,s.EmpoweredAttack()?"EMPOWERED CAST":s.EmpoweredReady()?(prepared?"COMBO PRIMED":"HEAVY READY"):
    s.Barrier()>0?"Ward "+Number(s.Barrier()):"Build with basic hits",10,s.EmpoweredReady()?gold:muted);
  const float statusY=combatLayout?uy-35:uy+82;
  int playerStatus=0;
@@ -907,7 +919,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Center(tx+10,ty+31,221,std::to_string(int(std::ceil(target.health)))+" / "+std::to_string(int(target.MaxHealth()))+
     "  ("+std::to_string(int(std::ceil(100*std::clamp(target.health/target.MaxHealth(),0.f,1.f))))+"%)",12);
   const auto distance=std::to_string(int(std::ceil(std::hypot(s.Player().x-target.position.x,s.Player().z-target.position.z))));
-  const std::string condition=target.stunned>0?"Stunned  "+Seconds(target.stunned)+"s":
+  const std::string condition=s.CourtProtected(target)?"Court ward / break seals":target.stunned>0?"Stunned  "+Seconds(target.stunned)+"s":
     target.rooted>0?"Rooted  "+Seconds(target.rooted)+"s":target.snared>0?"Snared  "+Seconds(target.snared)+"s":
     target.exposed>0?"Exposed +25%  "+Seconds(target.exposed)+"s":"";
   c.Center(tx+5,ty+54,228,!condition.empty()?condition:target.kind==rpg::EnemyKind::Dummy?"Immortal / Regenerates 200 HP/s":distance+" m  /  Selected target",11,muted);
@@ -947,13 +959,16 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  if (!inventoryOpen || panel!=Panel::None) {
   regions_.push_back({{1001,193,265,hasWaypoint?183.f:158.f},{},false});
   c.Frame({1001,193,265,hasWaypoint?183.f:158.f},{.025f,.045f,.025f,.82f},border);
-  c.Text(1013,202,"EXPEDITION",14,gold); c.Line(1010,226,1260,226,1,border);
+  c.Text(1013,202,s.ReplayActive()?"VETERAN REHEARSAL":"EXPEDITION",14,gold); c.Line(1010,226,1260,226,1,border);
   c.Wrap(1013,236,244,s.Objective(),15,ink,4);
   if(s.RitualActive() && s.RitualStage()>0 && s.RitualStage()<4) {
     c.Inset({1013,312,241,12});c.RectFill({1015,314,237*s.RitualCharge(),8},{.36f,.65f,.79f,1});
   }
+  if(s.CourtChannelSite()>=0) {
+    c.Inset({1013,312,241,12});c.RectFill({1015,314,237*s.CourtChannelProgress(),8},{.72f,.40f,.15f,1});
+  }
   const auto objective=s.ObjectivePosition();
-  if (s.AnchorState()!=rpg::AnchorQuest::Complete || s.FrontierCompleted()<rpg::frontierQuestCount)
+  if (s.TrackedHunt()>=0 || s.ReplayActive() || s.AnchorState()!=rpg::AnchorQuest::Complete || s.FrontierCompleted()<rpg::frontierQuestCount)
    c.Text(1013,332,std::to_string(int(std::ceil(std::hypot(s.Player().x-objective.x,s.Player().z-objective.z))))+" m to objective",13,gold);
   if (hasWaypoint) c.Text(1013,355,"Waypoint  "+std::to_string(int(std::ceil(std::hypot(s.Player().x-waypoint.x,s.Player().z-waypoint.z))))+" m",13,{.56f,.76f,.88f,1});
  }
@@ -963,6 +978,16 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Text(485,113,s.Sparring()?"SPARRING  /  "+std::to_string(int(std::ceil(s.SparringSeconds())))+" seconds":s.SparringResult(),17,gold);
   c.Text(485,141,"Dealt "+std::to_string(s.SparringDamageDealt())+"  /  Taken "+std::to_string(s.SparringDamageTaken())+"  /  No XP or loot",13);
   c.Text(485,164,s.Sparring()?"E stops. Nonlethal. Potions are consumed normally.":"Health and consumables are not refunded. E at the post starts again.",11,muted);
+ }
+ if((s.ReplayActive() || s.ReplayReportTime()>0) && panel==Panel::None && !characterOpen) {
+  const auto& report=s.ReplayReport();
+  const Rect board{20,24,360,148};regions_.push_back({board,{},false});c.Window(board);
+  c.FitText(34,34,332,s.ReplayActive()?"VETERAN REHEARSAL":report.victory?"REHEARSAL COMPLETE":"REHEARSAL ENDED",16,gold);
+  c.Text(34,61,"Time "+std::to_string(int(report.seconds))+" s / Interrupts "+std::to_string(report.interrupts),13,ink);
+  c.Text(34,83,"Dealt "+std::to_string(int(report.damage))+" / Taken "+std::to_string(int(report.taken)),13,ink);
+  c.Text(34,105,"Absorbed "+std::to_string(int(report.absorbed))+" / No XP or loot",12,muted);
+  if(s.ReplayActive()) button({34,130,330,28},"End rehearsal / keep campaign",Action::EndReplay);
+  else c.FitText(34,140,330,"Health and consumables are not refunded.",12,muted);
  }
  c.Skin({0,704,1280,16},7,{.65f,.64f,.57f,1});
  const float xp=s.Level()==rpg::levelCap?1.f:float(s.Experience()-s.LevelStartExperience())/(s.NextLevelExperience()-s.LevelStartExperience());
@@ -1216,12 +1241,13 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   close({429,121,24,24},Panel::Quest);
   const auto id=s.QuestDialogue(); const auto stage=s.DialogueStage();
   const auto& quest=rpg::DescribeQuest(id);
+  const bool rehearsal=s.ReplayAvailable(id) || (s.ReplayActive() && id==s.CurrentQuest());
   const int textKey=int(id)*4+int(stage);
   if (questTextKey_!=textKey) { questPage=0; questTextKey_=textKey; }
   c.Text(40,130,quest.speaker,14,gold);
   const float titleSize=std::min(21.f,21.f*400/std::max(1.f,c.Width(quest.title,21)));
   c.Text(40,164,quest.title,titleSize,ink);
-  const char* heading=stage==rpg::QuestStage::Offer?"QUEST OFFER":stage==rpg::QuestStage::Progress?"IN PROGRESS":
+  const char* heading=rehearsal?"VETERAN REHEARSAL":stage==rpg::QuestStage::Offer?"QUEST OFFER":stage==rpg::QuestStage::Progress?"IN PROGRESS":
     stage==rpg::QuestStage::TurnIn?"READY TO COMPLETE":"QUEST COMPLETED";
   const Color questAccent=stage==rpg::QuestStage::TurnIn || stage==rpg::QuestStage::Complete?
     Color{.57f,.80f,.38f,1}:gold;
@@ -1229,7 +1255,8 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Parchment({32,195,416,174});
   const Color manuscript{.22f,.145f,.075f,1};
   c.Text(40,202,heading,11,manuscript);
-  const auto lines=c.Lines(400,rpg::QuestStory(id,stage),16);
+  const auto lines=c.Lines(400,rehearsal && !s.ReplayActive()?
+    "Revisit this cleared battlefield with your current build. The enemies and objectives return; your campaign remains completed. This is a live, lethal encounter. No XP, gold or loot are awarded. Potions are consumed normally. You may leave using the rehearsal panel; saving and loading also ends the rehearsal.":rpg::QuestStory(id,stage),16);
   constexpr int rows=7;
   const int pages=std::max(1,(int(lines.size())+rows-1)/rows);
   questPage=std::clamp(questPage,0,pages-1);
@@ -1243,17 +1270,25 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.RectFill({130,398,220,2},{.19f,.15f,.09f,1});
   c.RectFill({130,398,220*(questPage+1)/float(pages),2},gold);
   c.Frame({34,408,414,66},{.045f,.085f,.07f,1});
-  const int required=id==rpg::QuestId::Patrol?1:3;
-  const bool survey=id==rpg::QuestId::Watch9;
-  const int progress=stage==rpg::QuestStage::Offer && id>=rpg::QuestId::Watch1?0:stage==rpg::QuestStage::Complete?required:
-    survey?int(bool(s.SurveyMask()&1))+int(bool(s.SurveyMask()&2))+int(bool(s.SurveyMask()&4)):std::min(required,s.DefeatedCount());
-  c.Text(46,416,std::string("OBJECTIVES  /  ")+(survey?"Bearings ":"Enemies ")+std::to_string(progress)+" / "+std::to_string(required)+
+  const bool hunting=rpg::HuntingQuest(id);const int hunt=rpg::HuntIndex(id);
+  const bool sites=(hunting && rpg::HuntGather(hunt)) || id==rpg::QuestId::Watch9 || id==rpg::QuestId::Watch11 || id==rpg::QuestId::Watch12 || id==rpg::QuestId::Watch14;
+  const bool ritual=id==rpg::QuestId::Watch15,court=id==rpg::QuestId::Watch16;
+  const int required=hunting?rpg::HuntRequired(hunt):id==rpg::QuestId::Patrol?1:ritual?3:sites?3:id>=rpg::QuestId::Watch11?6:3;
+  const bool survey=id==rpg::QuestId::Watch9;const unsigned mask=survey?s.SurveyMask():s.ExpeditionMask();
+  const int progress=hunting?std::min(required,s.HuntProgress(hunt)):(rehearsal && !s.ReplayActive()) || (stage==rpg::QuestStage::Offer && id>=rpg::QuestId::Watch1)?0:stage==rpg::QuestStage::Complete?required:
+    ritual?std::max(0,s.RitualStage()-1):sites?int(bool(mask&1))+int(bool(mask&2))+int(bool(mask&4)):std::min(required,s.DefeatedCount());
+  c.FitText(46,416,390,std::string("OBJECTIVES  /  ")+(ritual?"Waves ":sites?"Sites ":"Enemies ")+std::to_string(progress)+" / "+std::to_string(required)+
+    (court && s.CourtActive()?" / Seals "+std::to_string(3-s.CourtWardCount())+" / 3":"")+
     (id==rpg::QuestId::Anchor && s.AnchorState()>=rpg::AnchorQuest::Return?"  /  Anchor stable":""),12,gold);
-  c.Wrap(46,436,390,quest.objective,14,ink,2);
+  c.Wrap(46,436,390,ritual?"Defeat each wave, then hold the beacon circle for four seconds.":
+    court?"Defeat sentries, break three seals, then defeat the captain.":quest.objective,14,ink,2);
   c.RectFill({46,471,390,2},{.18f,.16f,.10f,1});
   c.RectFill({46,471,390*std::clamp(progress/float(required),0.f,1.f),2},questAccent);
   c.Frame({34,484,414,70},{.07f,.12f,.08f,1},gold);
-  if (quest.item!=rpg::Item::None && rpg::ValidItem(quest.item)) {
+  if(rehearsal) {
+   c.Text(48,499,"NO CAMPAIGN REWARDS",13,gold);
+   c.Wrap(48,516,380,"Compare time, damage, interrupts and protection with different builds.",12,ink,2);
+  } else if (quest.item!=rpg::Item::None && rpg::ValidItem(quest.item)) {
    Icon(c,{46,496,42,45},quest.item,1,s.Class());
    c.FitText(100,492,334,std::string(stage==rpg::QuestStage::Complete?"RECEIVED  /  ":"REWARD  /  ")+
      std::to_string(quest.gold)+" gold  /  "+std::to_string(quest.experience)+" XP",13,gold);
@@ -1263,13 +1298,16 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
      "Base strike "+std::to_string(int(item.strike))+" / Heavy "+std::to_string(int(item.heavy))+"  -  In your bag":
      "Protection "+std::to_string(int(item.armor))+"  -  Equipped on completion";
    c.FitText(100,534,334,stats,11,muted);
+  } else if(quest.gold>0) {
+   c.Text(48,499,stage==rpg::QuestStage::Complete?"RECEIVED":"REWARD",13,gold);
+   c.FitText(48,523,380,std::to_string(quest.gold)+" gold  /  "+std::to_string(quest.experience)+" XP",18,ink);
   } else { c.Text(48,499,"FIELD EXPERIENCE",13,gold); c.Text(48,523,std::to_string(quest.experience)+" XP / class progression",18,ink); }
   const auto action=s.QuestPrimaryAction();
   const std::string status=s.QuestConfirmStatus();
-  c.FitText(40,561,400,status=="READY"?"Read the assignment and rewards before confirming.":status,13,muted);
+  c.FitText(40,561,400,status=="READY"?(rehearsal?"Health and consumables are not refunded.":"Read the assignment and rewards before confirming."):status,13,muted);
   if (action!=rpg::QuestAction::None) {
    button({38,590,160,34},stage==rpg::QuestStage::Offer?"Decline":"Later",Action::Close,int(Panel::Quest));
-   button({242,590,202,34},stage==rpg::QuestStage::Offer?"Accept quest":"Complete quest",
+   button({242,590,202,34},action==rpg::QuestAction::BeginReplay?"Begin rehearsal":action==rpg::QuestAction::FinishReplay?"Finish rehearsal":stage==rpg::QuestStage::Offer?"Accept quest":"Complete quest",
      Action::QuestConfirm,int(action),status=="READY");
   } else button({242,590,202,34},"Close",Action::Close,int(Panel::Quest));
  } else if (panel!=Panel::None) {
@@ -1586,29 +1624,32 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Text(156,619,"Markers guide you; they do not move your character automatically.",13,muted);
   } else {
    const int current=std::clamp(int(s.CurrentQuest())-int(rpg::QuestId::Patrol),0,rpg::frontierQuestCount+1);
-   const int selected=journalSelection>=0 && journalSelection<rpg::frontierQuestCount+2?journalSelection:current;
+   const int selected=journalSelection>=0 && journalSelection<rpg::frontierQuestCount+8?journalSelection:current;
+   const bool commissions=selected>=rpg::frontierQuestCount+2;
    const auto completed=[&](int chapter) {
-    return chapter==0?s.QuestState()==rpg::Quest::Complete:chapter==1?s.AnchorState()==rpg::AnchorQuest::Complete:chapter-2<s.FrontierCompleted();
+    return chapter>=rpg::frontierQuestCount+2?s.HuntState(chapter-rpg::frontierQuestCount-2)==2:chapter==0?s.QuestState()==rpg::Quest::Complete:chapter==1?s.AnchorState()==rpg::AnchorQuest::Complete:chapter-2<s.FrontierCompleted();
    };
-   button({208,117,397,27},"Return to current assignment",Action::SelectJournal,-1);
+   button({208,117,195,27},"Campaign",Action::SelectJournal,-1);
+   button({410,117,195,27},"Local commissions",Action::SelectJournal,rpg::frontierQuestCount+2);
    c.Parchment({208,151,397,384});
-   for(int i=0;i<rpg::frontierQuestCount+2;++i) {
+   for(int i=commissions?rpg::frontierQuestCount+2:0;i<(commissions?rpg::frontierQuestCount+8:rpg::frontierQuestCount+2);++i) {
     const auto id=rpg::QuestId(int(rpg::QuestId::Patrol)+i);const auto& quest=rpg::DescribeQuest(id);
     const bool done=completed(i);
-    const Rect row{218,156+i*21.f,377,21};
+    const Rect row{218,156+(commissions?i-rpg::frontierQuestCount-2:i)*(commissions?60.f:21.f),377,commissions?54.f:21.f};
     if(i==selected) {
      c.RectFill(row,{.28f,.16f,.06f,.24f});
      c.RectFill({218,row.y,3,row.h},{.40f,.20f,.07f,.9f});
     } else if(row.Contains(mouseX_,mouseY_)) c.RectFill(row,{.40f,.25f,.10f,.12f});
     regions_.push_back({row,{Action::SelectJournal,i},true});
     c.FitText(227,row.y+3,270,std::to_string(i+1)+". "+quest.title,12,{.22f,.15f,.09f,1});
-    c.FitText(501,row.y+5,86,done?"Completed":id>s.CurrentQuest()?"Locked":id==s.CurrentQuest()?"Current assignment":"Campaign assignment",9,{.32f,.22f,.13f,1});
+    if(commissions)c.FitText(227,row.y+25,350,"Level "+std::to_string(rpg::population::districts[rpg::HuntIndex(id)].rank)+" / "+quest.speaker,12,{.32f,.22f,.13f,1});
+    c.FitText(501,row.y+5,86,done?"Completed":commissions?(s.HuntState(rpg::HuntIndex(id))==1?"In progress":"Available"):id>s.CurrentQuest()?"Locked":id==s.CurrentQuest()?"Current assignment":"Campaign assignment",9,{.32f,.22f,.13f,1});
    }
    const auto id=rpg::QuestId(int(rpg::QuestId::Patrol)+selected);
    const auto& quest=rpg::DescribeQuest(id);
-   const bool done=completed(selected),locked=selected>current;
+   const bool done=completed(selected),locked=!commissions && selected>current;
    c.Frame({622,158,450,377});
-   c.Text(643,176,done?"COMPLETED CHAPTER":locked?"SEALED CHAPTER":"CURRENT ASSIGNMENT",12,gold);
+   c.Text(643,176,done?"COMPLETED CHAPTER":commissions?"LOCAL COMMISSION":locked?"SEALED CHAPTER":"CURRENT ASSIGNMENT",12,gold);
    c.Wrap(643,207,402,quest.title,23,ink,2);
    c.Line(643,267,1048,267,1,border);
    const std::string story=locked?"Continue your current assignment to unlock this chapter of the expedition.":done?quest.complete:quest.offer;
@@ -1619,7 +1660,8 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.Text(643,475,std::string(done?"REWARD RECEIVED / ":"REWARD / ")+std::to_string(quest.experience)+" XP",15,gold);
     c.FitText(643,501,402,std::to_string(quest.gold)+" gold / "+quest.speaker,13,muted);
    }
-   button({734,545,338,43},"Track current objective on atlas",Action::Map);
+   if(commissions) button({734,545,338,43},"Track this commission",Action::TrackHunt,rpg::HuntIndex(id),s.HuntState(rpg::HuntIndex(id))==1);
+   else button({734,545,338,43},"Track current objective on atlas",Action::Map);
    c.Wrap(209,552,397,s.Objective(),14,muted,2);
    c.Text(209,606,"The world remains active while reading the journal.",14,muted);
   }

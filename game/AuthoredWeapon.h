@@ -11,12 +11,16 @@ namespace animation {
 struct AuthoredWeaponController {
   playerclips::Frame frame{},outgoing{};
   float weight=0,phase=0,last=-1,clock=-1,blendAge=1,cancelAge=1,outgoingWeight=0,rate=1;
+  float ready=0,restAge=4;
   bool heavy=false,staff=false,tail=false,bow=false;
   void Update(float dt,float seconds,bool isHeavy,bool isStaff,bool enabled,float playbackRate=1,bool isBow=false) {
     if(!enabled) {*this={};return;}
     if(!std::isfinite(dt)||dt<=0)return;
     dt=std::min(dt,.05f);
     const bool active=std::isfinite(seconds)&&seconds>=0;
+    restAge=active?0:std::min(4.f,restAge+dt);
+    const float targetReady=1-combat::Smooth((restAge-1.6f)/1.2f);
+    ready+=(targetReady-ready)*(1-std::exp(-dt/.18f));
     const bool begin=active&&(last<0||seconds<last-.001f||isHeavy!=heavy||isStaff!=staff||isBow!=bow);
     if(begin) {outgoing=frame;outgoingWeight=weight;blendAge=0;heavy=isHeavy;staff=isStaff;bow=isBow;}
     if(active) {clock=seconds;tail=false;cancelAge=1;rate=std::clamp(std::isfinite(playbackRate)?playbackRate:1.f,.1f,4.f);}

@@ -21,7 +21,7 @@ float Difference(const playerclips::Frame& a,const playerclips::Frame& b){
 }
 void LibraryChecks(){
   const auto bytes=playerclips::EmbeddedBytes();const auto clips=playerclips::Decode(bytes);
-  Check(clips.size()==33&&bytes.size()<384*1024,"Twenty-seven authored actions and six compatibility tracks must fit the motion budget");
+  Check(clips.size()==54&&bytes.size()<512*1024,"Forty-eight authored actions and six compatibility tracks must fit the motion budget");
   for(unsigned i=4;i<12;++i){
     const auto clip=playerclips::Clip(i);
     Check(Difference(playerclips::Sample(clip,-.000001f),playerclips::Sample(clip,.000001f))<.0001f,"Gait loop seam");
@@ -123,17 +123,20 @@ void WeaponMotionChecks(){
       const float t=float(tick)/hz;
       controller.Update(1.f/hz,t<combat::Duration(heavy)?t:-1,heavy,staff,true);
       animation::Sample sample;sample.authoredGait=true;sample.authoredBlend=1;
+      sample.authoredReady=1; // Exercise the fully engaged two-hand combat grip.
       sample.authoredEquipment=staff?playerclips::Equipment::Staff:playerclips::Equipment::Sword;
       sample.authoredStrike=controller.frame;sample.authoredStrikeWeight=controller.weight;
       sample.authoredStrikePhase=controller.phase;sample.authoredStrikeHeavy=heavy;
       const auto pose=BuildCharacterPose(0,0,false,sample,staff?rpg::WeaponForm::AstralStaff:rpg::WeaponForm::Blade);
       const auto tip=pose.WeaponPoint(.96f);
+      for(unsigned side=0;side<2;++side)
+        Check(Distance(BuildHandPose(pose,side,true,false,pose.handCast).Point({0,-.055f,-.043f}),pose.arms[side].end)<.0001f,"Wrist detached during weapon attack/recovery");
       if(tick==0)first=tip;excursion=std::max(excursion,Distance(first,tip));
       Check(std::isfinite(tip.x)&&std::isfinite(tip.y)&&std::isfinite(tip.z),"Imported weapon pose is not finite");
       Check(tip.y>.025f,"Imported weapon tip pierced floor");
       if(staff) {
-        worstGrip=std::max(worstGrip,Distance(pose.arms[0].end,pose.WeaponPoint(.26f)));
         const auto hand=BuildHandPose(pose,0,true,false,pose.handCast);
+        worstGrip=std::max(worstGrip,Distance(hand.Point({0,0,0}),pose.WeaponPoint(.26f)));
         Check(hand.curl>.99f,"Supporting staff hand did not close on shaft");
       }
       if(havePrevious&&hz==1000) {
@@ -192,11 +195,13 @@ void BowMotionChecks(){
       animation::Sample sample;sample.authoredGait=true;sample.authoredBlend=1;sample.authoredEquipment=playerclips::Equipment::Bow;
       sample.authoredStrike=controller.frame;sample.authoredStrikeWeight=controller.weight;sample.authoredStrikePhase=controller.phase;sample.authoredStrikeHeavy=heavy;
       const auto pose=BuildCharacterPose(0,0,true,sample,rpg::WeaponForm::Handbow);
+      for(unsigned side=0;side<2;++side)
+        Check(Distance(BuildHandPose(pose,side,true,false,0).Point({0,-.055f,-.043f}),pose.arms[side].end)<.0001f,"Archer wrist detached during draw/release");
       if(havePrevious)for(unsigned side=0;side<2;++side){const float step=Distance(previous.arms[side].end,pose.arms[side].end);worstStep=std::max(worstStep,step);
         if(step>.025f)std::cout<<"Bow jump heavy "<<heavy<<" t "<<t<<" side "<<side<<" phase "<<controller.phase<<" draw "<<previous.bowDraw<<" -> "<<pose.bowDraw<<" delta "<<step<<'\n';}
       if(pose.bowDraw>.95f) {
         XMFLOAT3 nock;XMStoreFloat3(&nock,XMVector3TransformCoord(XMVectorSet(0,.035f,-.07f-.40f*pose.bowDraw,1),WeaponFrame(pose)));
-        worstNock=std::max(worstNock,Distance(nock,pose.arms[0].end));drawn=true;
+        worstNock=std::max(worstNock,Distance(nock,BuildHandPose(pose,0,true,false,0).Point({0,0,0})));drawn=true;
         Check(BuildHandPose(pose,0,true,false,0).curl>.75f,"Archer drawing hand stayed open");
       }
       released|=pose.bowArrow<.01f;
@@ -208,6 +213,45 @@ void BowMotionChecks(){
   std::cout<<"Bow nock error "<<worstNock<<" m; hand step per ms "<<worstStep<<" m\n";
   Check(worstNock<.01f,"Drawing hand detached from the string");
   Check(worstStep<.025f,"Archery draw/release snapped the wrist");
+}
+void WeaponCarryChecks(){
+  using E=playerclips::Equipment;
+  for(auto equipment:{E::Sword,E::Staff,E::Bow}) {
+    const auto form=equipment==E::Staff?rpg::WeaponForm::AstralStaff:equipment==E::Bow?rpg::WeaponForm::Handbow:rpg::WeaponForm::Blade;
+    animation::Sample sample;sample.authoredGait=true;sample.authoredEquipment=equipment;
+    const auto relaxed=BuildCharacterPose(0,0,false,sample,form);
+    sample.authoredReady=1;const auto guard=BuildCharacterPose(0,0,false,sample,form);
+    Check(Distance(relaxed.WeaponPoint(.8f),guard.WeaponPoint(.8f))>.16f,"Relaxed carry and combat guard are indistinguishable");
+    if(equipment==E::Staff)Check(relaxed.staffGripWeight==0&&guard.staffGripWeight>.99f,"Staff support hand must release during relaxed carry");
+    if(equipment==E::Sword) {
+      const auto shieldPose=BuildCharacterPose(0,0,true,sample,form);
+      Check(Distance(BuildHandPose(shieldPose,0,true,true,0).Point({0,-.055f,-.043f}),shieldPose.arms[0].end)<.0001f,"Shield grip separated the wrist from the arm");
+    }
+    for(unsigned direction=0;direction<4;++direction)for(float run:{0.f,1.f}) {
+      sample={};sample.authoredGait=true;sample.authoredEquipment=equipment;sample.gaitWeights[direction]=1;
+      CharacterPose previous;float excursion=0;XMFLOAT3 first{};
+      for(int i=0;i<=1000;++i) {
+        sample.authoredMotion=playerclips::Locomotion(sample.gaitWeights,run,i/1000.f,equipment);
+        const auto pose=BuildCharacterPose(0,0,false,sample,form);
+        for(unsigned side=0;side<2;++side) {
+          const auto hand=BuildHandPose(pose,side,true,false,pose.handCast);
+          Check(Distance(hand.Point({0,-.055f,-.043f}),pose.arms[side].end)<.0001f,"Wrist detached from forearm during equipped movement");
+          Check(std::abs(Distance(pose.arms[side].joint,pose.arms[side].end)-CharacterPose::forearm)<.0001f,"Forearm stretched to reach weapon socket");
+        }
+        const auto tip=pose.WeaponPoint(equipment==E::Staff?-.72f:equipment==E::Bow?-.64f:.96f);
+        Check(tip.y>.025f,"Carried weapon intersects the floor");
+        if(i)Check(Distance(previous.WeaponPoint(.96f),pose.WeaponPoint(.96f))<.008f,"Directional weapon carry has a discontinuity");
+        else first=pose.WeaponPoint(.96f);
+        excursion=std::max(excursion,Distance(first,pose.WeaponPoint(.96f)));previous=pose;
+      }
+      Check(excursion>.035f,"Carried weapon is frozen during locomotion");
+    }
+    animation::AuthoredWeaponController controller;
+    for(int i=0;i<400;++i)controller.Update(.01f,i<40?i*.01f:-1,false,equipment==E::Staff,true,1,equipment==E::Bow);
+    Check(controller.ready<.02f,"Weapon did not settle back to relaxed carry after combat");
+    controller.Update(.01f,0,false,equipment==E::Staff,true,1,equipment==E::Bow);
+    Check(controller.ready>0&&controller.ready<.15f,"Combat guard engages with a snap");
+  }
 }
 void Captures(){
   const auto root=std::filesystem::current_path()/"authored-locomotion-check";std::filesystem::create_directories(root);
@@ -255,5 +299,5 @@ void Captures(){
 int main(int argc,char** argv){try{
   if(argc==2&&std::string_view(argv[1])=="--weapons-only") {WeaponMotionChecks();std::cout<<"PASS: v2 weapon motion\n";return 0;}
   if(argc==2&&std::string_view(argv[1])=="--capture-only") {Captures();return 0;}
-  LibraryChecks();ContactsAndTransitions();WeaponMotionChecks();BowMotionChecks();Captures();std::cout<<"PASS: imported gait loops, walk/run distinction, contacts, transition continuity, gameplay isolation and native comparison\n";}
+  LibraryChecks();ContactsAndTransitions();WeaponMotionChecks();BowMotionChecks();WeaponCarryChecks();Captures();std::cout<<"PASS: imported gait loops, directional weapon carry, combat guards, contacts, transition continuity, gameplay isolation and native comparison\n";}
 catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

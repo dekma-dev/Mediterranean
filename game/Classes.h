@@ -161,31 +161,31 @@ inline SpellInfo ClassSpell(ClassId id,int index) {
      if(id==ClassId::Warrior) {
        result.range=index==11?3.8f:2.5f;
        result.name=index==10?"Pommel strike":"Iron cyclone";
-       result.description=index==10?"Level 6. A quick 50% heavy blow stuns for 1.4 seconds, interrupts a vulnerable cast and grants one Rage on contact.":
-         "Level 10. Spend full Rage to strike every enemy within 3.8 metres for 150% heavy damage. Grants a 25-point ward on contact. Requires a living selected target.";
+       result.description=index==10?"Level 6. A quick 50% heavy blow stuns for 1.4 seconds and grants one Rage. Interrupting a vulnerable cast also raises a 40-point guard.":
+         "Level 10. Spend full Rage to strike every enemy within 3.8 metres for 150% heavy damage. Grants a 25-point ward. Consumes exposure for an extra 35% heavy damage and a 40-point ward. Requires a living selected target.";
      } else if(id==ClassId::Mage) {
        result.name=index==10?"Arcane severance":"Firestorm";
-       result.description=index==10?"Level 6. A mobile 60% heavy arcane bolt interrupts a vulnerable cast and grants one Ember on contact. No root or healing.":
-         "Level 10. Spend full Embers on a stationary 2.5-second cast. Deal 175% heavy damage within 4.5 metres of the selected target. Moving before release cancels it without refund.";
+       result.description=index==10?"Level 6. A mobile 60% heavy arcane bolt grants one Ember on contact and a second Ember if it interrupts a vulnerable cast.":
+         "Level 10. Spend full Embers on a stationary 2.5-second cast. Deal 175% heavy damage within 4.5 metres of the selected target. Consumes slow or root on each victim for an extra 50% heavy damage. Moving before release cancels it without refund.";
      } else {
        result.name=index==10?"Disarming arrow":"Horizon shot";
-       result.description=index==10?"Level 6. A mobile 55% heavy arrow interrupts a vulnerable cast and slows for four seconds. Keep distance while controlling the enemy.":
-         "Level 10. Spend full Focus on a stationary two-second shot for 175% heavy damage. Gain 80% additional heavy damage when the target is over six metres away at contact.";
+       result.description=index==10?"Level 6. A mobile 55% heavy arrow interrupts a vulnerable cast and slows for four seconds. A successful interrupt also grants one Focus and exposes the target for six seconds.":
+         "Level 10. Spend full Focus on a stationary two-second shot for 175% heavy damage. Gain 80% additional heavy damage when the target is over six metres away at contact. Consumes exposure for another 50% heavy damage.";
      }
      return result;
    }
    if(id==ClassId::Warrior) {
      result.name=index==8?"Sweeping steel":"Shieldbreaker";
-     result.description=index==8?"Level 5. Strike enemies in a forward 3.2 m arc for 85% heavy damage. Targets beyond the arc or behind obstacles are safe.":
+     result.description=index==8?"Level 5. Strike enemies in a forward 3.2 m arc for 85% heavy damage. Raises a guard of 6 per victim, up to 18. Targets beyond the arc or behind obstacles are safe.":
        "Level 8. A deliberate 125% heavy blow. Exposes for four seconds, stuns for one second and interrupts a vulnerable enemy. Grants a ten-point ward on contact.";
    } else if(id==ClassId::Mage) {
      result.name=index==8?"Frost bloom":"Falling star";
-     result.description=index==8?"Level 5. Freeze enemies within three metres of the selected target for two seconds; deal 65% heavy damage. Stand still until release.":
+     result.description=index==8?"Level 5. Freeze enemies within three metres of the selected target for four seconds; deal 65% heavy damage. Leaves a five-second frost field that slows enemies inside. Stand still until release.":
        "Level 8. A long stationary cast strikes enemies within three metres of the selected target for 140% heavy damage. Movement before release cancels it.";
    } else {
      result.name=index==8?"Fanned arrows":"Piercing shot";
      result.description=index==8?"Level 5. A narrow forward fan deals 70% heavy damage and slows for two seconds. Can be fired while moving; each arrow checks line of sight.":
-       "Level 8. A stationary 130% heavy shot exposes the target for five seconds. Rooted targets take 35% additional heavy damage.";
+       "Level 8. A stationary 130% heavy shot exposes for five seconds. Pierces enemies behind the target in a 1.1-metre-wide line for 65% heavy damage. Rooted victims take 35% additional heavy damage. Walls stop penetration.";
    }
    return result;
  }
@@ -231,7 +231,7 @@ inline SpellInfo ClassSpell(ClassId id,int index) {
    "65% heavy damage; roots for two seconds. Movement before release cancels the shot.",
    "65% heavy damage; heals for half the damage dealt.",
    "65% heavy damage; roots for three seconds.",
-   "65% heavy damage, or 110% against a slowed/rooted enemy; slows for three seconds.",
+   "65% heavy damage, or 110% against a slowed/rooted enemy; slows for six seconds.",
    "65% heavy damage; heals for 60% of damage dealt.",
    "65% heavy damage; stuns for 1.5 seconds and interrupts wind-up.",
    "65% heavy damage; interrupts wind-up and exposes for four seconds.",

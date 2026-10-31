@@ -16,7 +16,8 @@ XMMATRIX WeaponFrame(const CharacterPose& pose) {
   // inverted when the blade passed through the forward-facing pole.
   const auto lateral=XMLoadFloat3(&across);
   const auto right=XMVector3Normalize(lateral-up*XMVector3Dot(lateral,up));
-  return {right,up,XMVector3Cross(right,up),XMVectorSetW(XMLoadFloat3(&pose.arms[1].end),1)};
+  const auto origin=pose.WeaponPoint(0);
+  return {right,up,XMVector3Cross(right,up),XMVectorSetW(XMLoadFloat3(&origin),1)};
 }
 HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool shield,float cast) {
   side=std::min(side,1u);
@@ -59,6 +60,12 @@ HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool 
     frame=XMMatrixRotationQuaternion(XMQuaternionSlerp(XMQuaternionRotationMatrix(frame),XMQuaternionRotationMatrix(held),grip));
     frame.r[3]=position;
   }
+  if(pose.hasGripSocket && !side) {
+    // Reanchor after orientation blending, so the palm cannot pull the wrist
+    // away from the forearm during a change between free and supporting hands.
+    const auto wrist=XMVector3TransformNormal(XMVectorSet(0,-.055f,-.043f,0),frame);
+    frame.r[3]=XMVectorSetW(XMLoadFloat3(&arm.end)-wrist,1);
+  }
   HandPose result;
   XMStoreFloat4x4(&result.frame,frame);
   result.curl=side?weapon?1.f:.32f*(1-animation::SmoothStep(cast)):
@@ -99,7 +106,7 @@ HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool 
 XMFLOAT3 SpellReleasePoint(const CharacterPose& pose,bool shield) {
   if(!shield) return BuildHandPose(pose,0,false,false,pose.handCast).Point({0,.07f,.035f});
   const auto offset=pose.UpperDirection({-.035f,0,.27f});
-  const auto wrist=pose.arms[0].end;
+  const auto wrist=BuildHandPose(pose,0,false,true,pose.handCast).Point({0,0,0});
   return {wrist.x+offset.x,wrist.y+offset.y,wrist.z+offset.z};
 }
 visual::HandPalette BuildHandRig(const HandPose& pose) {

@@ -3,6 +3,7 @@
 #include "engine/Renderer.h"
 #include "game/CharacterView.h"
 #include "game/AuthoredLocomotion.h"
+#include "game/FootPlacement.h"
 #include "platform/Win32Window.h"
 #include <filesystem>
 #include <iostream>
@@ -58,6 +59,32 @@ int main(){try {
    DrawCharacter(renderer,{0,0},0,XM_PI,{.32f,.30f,.25f,1},0,0,kit,sample,1);
    const auto path=folder/("attack-"+std::to_string(cls)+(heavy?"-heavy-":"-basic-")+std::to_string(tick/3)+".png");
    Check(renderer.Capture(path.wstring())&&renderer.EndFrame(false)&&renderer.ValidateDebugMessages(),"Native class attack capture");
+  }
+ }
+ // Real presentation controllers: idle -> carry walk/run -> attack -> settle.
+ // Capture at 20 Hz while updating at 60 Hz, including the supporting hand.
+ for(unsigned cls=0;cls<3;++cls) {
+  auto kit=CharacterOutfit::From(rpg::Inventory{},classes[cls]);kit.armor=true;kit.rewardWeapon=true;
+  kit.shoulders=true;kit.belt=true;kit.gloves=true;kit.shield=false;
+  animation::State state;animation::FootPlacement feet;rpg::Vec2 position{};feet.Reset(position,0);
+  const auto equipment=cls==0?playerclips::Equipment::Sword:cls==1?playerclips::Equipment::Bow:playerclips::Equipment::Staff;
+  for(int tick=0;tick<420;++tick) {
+   const float t=tick/60.f,speed=t<1?0:t<2.4f?2.f:t<3.4f?5.f:0;
+   position.z+=speed/60;
+   state.Update(1.f/60,0,0,speed/60,true,0);
+   state.locomotion.Update(1.f/60,speed/60,1,0,0,true,0,0,true);
+   animation::ApplyAuthoredLocomotion(state,1.f/60,equipment);
+   auto& weapon=state.authoredWeapon;const float attack=t-3.5f;
+   weapon.Update(1.f/60,attack>=0&&attack<combat::Duration(false)?attack:-1,false,cls==2,true,1,cls==1);
+   auto& pose=state.pose;pose.authoredStrike=weapon.frame;pose.authoredStrikeWeight=weapon.weight;
+   pose.authoredStrikePhase=weapon.phase;pose.authoredStrikeHeavy=false;pose.authoredReady=weapon.ready;
+   feet.Update(1.f/60,position,0,true,true,pose);
+   if(tick%3)continue;
+   renderer.BeginFrame();renderer.SetCamera({-2.8f,1.55f,-3.7f},{0,1.02f,0});
+   renderer.DrawMesh(visual::Mesh::Box,{0,-.04f,0},{8,.08f,8},{.27f,.25f,.21f,1},visual::Material::Stone);
+   DrawCharacter(renderer,{0,0},0,XM_PI,{.32f,.30f,.25f,1},0,0,kit,pose,1);
+   const auto path=folder/("carry-"+std::to_string(cls)+"-"+std::to_string(tick/3)+".png");
+   Check(renderer.Capture(path.wstring())&&renderer.EndFrame(false)&&renderer.ValidateDebugMessages(),"Carried weapon state transitions");
   }
  }
  renderer.BeginFrame();renderer.DrawHudRect(0,0,1,1,{.08f,.09f,.10f,1});

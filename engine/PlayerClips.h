@@ -7,7 +7,11 @@ namespace playerclips {
 enum class Clip:unsigned { Slash,Overhead,Jump,Land,WalkForward,WalkBackward,WalkLeft,WalkRight,
  RunForward,RunBackward,RunLeft,RunRight,Start,Stop,StaffSweep,StaffThrust,
  SwordWalk,SwordRun,StaffWalk,StaffRun,SwordGuard,StaffGuard,Idle,Fall,
- LegacySlash,LegacyOverhead,LegacyJump,LegacyLand,BowGuard,BowRelease,BowPowerRelease,BowWalk,BowRun,Count };
+ LegacySlash,LegacyOverhead,LegacyJump,LegacyLand,BowGuard,BowRelease,BowPowerRelease,BowWalk,BowRun,
+ SwordCarry,StaffCarry,BowCarry,
+ SwordWalkBackward,SwordWalkLeft,SwordWalkRight,SwordRunBackward,SwordRunLeft,SwordRunRight,
+ StaffWalkBackward,StaffWalkLeft,StaffWalkRight,StaffRunBackward,StaffRunLeft,StaffRunRight,
+ BowWalkBackward,BowWalkLeft,BowWalkRight,BowRunBackward,BowRunLeft,BowRunRight,Count };
 enum class Equipment { None,Sword,Staff,Bow };
 struct Frame {
  std::array<DirectX::XMFLOAT3,2> hands{},feet{};

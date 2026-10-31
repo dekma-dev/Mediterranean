@@ -1,4 +1,20 @@
+## Latest gameplay checkpoint: populated frontier (2026-10-31)
+
+Six new local commissions and six residents populate the current map, with 36 combat wolves/boars, twelve buildings, 105 trees and 186 authored prop placements. Start southwest at Darya (-27,-30) or southeast at Boris (29,-30), press E and accept the assignment. J > Local commissions lists and tracks this independent work. Existing profiles migrate automatically; a new character is not required. See [districts, rules and validation](docs/populated-frontier.md).
+
+Use the rebuilt `build-local/Debug/RPGNative.exe` when debugging the Visual Studio solution, or `build-ninja-release/RPGNative.exe` for normal Release play. Their matching `MediterraneanLauncher.exe` launches the game beside it. The independently tested Release output is `build-frontier-expansion/native/RPGNative.exe`. Saves now write version 22 and read versions 1-21; older binaries cannot read the new files. Earlier checkpoint paragraphs below retain their original version numbers.
+
+## Latest gameplay checkpoint: veteran encounters (2026-10-31)
+
+Run `build-frontier-expansion/native/RPGNative.exe` for this validated output. After completing their original quests, revisit Radan, Ilar or Vesna with no active campaign assignment; press E and choose Begin rehearsal. Completed characters can now test the gate, vigil and Iron Court again. Use N for the revised Warrior sweep, Mage frost field and Scout piercing shot. No repeat rewards; health/potion/cooldown costs remain. Saving keeps the campaign; loading ends the transient replay. See `docs/veteran-rehearsals.md` for exact rules.
+
 # Starting and Debugging Mediterranean
+
+Current gameplay checkpoint (2026-10-31): the southern province includes the staged Iron Court assault and Warrior/Mage/Scout control/finisher combinations. The independent Release executable is `build-frontier-expansion/native/RPGNative.exe`; Debug output is `build-frontier-expansion/debug`. From the repository root, launch Release with `& .\build-frontier-expansion\native\RPGNative.exe`. Rebuild the normal launcher/game outputs with `./scripts/build-native.ps1 -Backend Ninja -Configuration Release` when using the launcher.
+
+Use N to inspect/bind the level-6 control and level-10 finishing skills (fresh-profile defaults Ctrl+6/Ctrl+7). Vesna's final assignment requires defeating the sentries and breaking three seals with E before attacking the captain. A character that already completed that assignment keeps its completion; use an earlier character/save to play the revised quest. Current saves write version 21 and accept versions 1-20; older executables cannot read the new format. See [Iron Court and class combinations](docs/iron-court-and-class-combos.md) for mechanics, capture paths and verification limits.
+
+Earlier checkpoints follow; their version numbers describe their original builds.
 
 Setup/coat update (2026-10-25): fresh **8** casts the class setup attack; existing layouts can bind it from the seventh card in **N**. Compare moving Scout/Mage/Engineer preparation with planted heavy spells. In character creation, **Try next art** now cycles five attacks. Inspect cloth classes' coat panels while walking, reversing and jumping. Current saves write version 17 and read versions 1–16; use the rebuilt executable after saving. See [class openings](docs/class-openings.md), manual checks 238–239.
 

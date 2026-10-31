@@ -71,6 +71,12 @@ rpg::GroundSurface ReferenceSurface(const rpg::WorldMap& map,rpg::Vec2 p) {
   }
   dirt=std::max(dirt,edge(std::hypot(p.x-rpg::WorldMap::trainingPost.x,p.z-rpg::WorldMap::trainingPost.z)-2.8f));
   dirt=std::max(dirt,edge(std::hypot(p.x-rpg::WorldMap::astralAnchor.x,p.z-rpg::WorldMap::astralAnchor.z)-2.2f));
+  for(unsigned i=6;i<rpg::WorldMap::residents.size();++i) {
+    const auto p0=rpg::WorldMap::residents[i].position;
+    dirt=std::max(dirt,edge(std::hypot(p.x-p0.x,p.z-p0.z)-2.4f)*.8f);
+  }
+  dirt=std::max(dirt,edge(std::hypot(p.x-rpg::WorldMap::ritualSite.x,p.z-rpg::WorldMap::ritualSite.z)-5.2f)*.7f);
+  for(const auto seal:rpg::WorldMap::courtSeals) dirt=std::max(dirt,edge(std::hypot(p.x-seal.x,p.z-seal.z)-1.6f)*.85f);
   return {dirt*(1-paving),paving};
 }
 void SurfaceChecks(const rpg::WorldMap& map,bool benchmark) {

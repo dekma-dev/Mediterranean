@@ -1,7 +1,7 @@
 # Anatomical torso and limb adoption
 
 Current class-art pass: the same preserved anatomical source now exports
-18,000 / 5,000 / 1,400 body triangles. New fitted class clothing and current
+26,028 / 5,000 / 1,400 body triangles. New fitted class clothing and current
 review paths are described in [oldstyle-player-art.md](oldstyle-player-art.md).
 
 The playable torso, pelvis, arms and legs now use the preserved anatomical study
@@ -16,13 +16,13 @@ The source is `assets/authored/player-anatomy.blend`, byte-identical to the loca
 `bbb0590a5dd6a06c0ea20004ac5c6cdda0f3f1754dc18407dde3ed6b53625e79`.
 It derives from the locally available CC0 Blender Studio realistic male; see
 `assets/characters/PLAYER-ANATOMY-NOTICE.md`. No source files were edited or saved,
-and no assets were downloaded. Both copies of collection01 still match
-`533e343d20fc977fa38e42e9ed1abc44940435c7fe0328efadb8a7c37533b4b2`.
+and no assets were downloaded. The independently refined collection sources
+are synchronized; see `assets/authored/collection01.refinement.json`.
 All thirteen collection models retain their world roles and imported guardian
 armor remains equipped through its original slots.
 
 ```powershell
-& 'D:/Steam/steamapps/common/Blender/blender.exe' -b assets/authored/player-anatomy.blend --python-exit-code 1 --python scripts/export-player-body.py
+& 'D:/Steam/steamapps/common/Blender/blender.exe' -b assets/authored/player-anatomy.blend --python-exit-code 1 --python .blender-local/refinement-20261031/export_body.py
 ```
 
 The read-only exporter evaluates one subdivision level, cuts/caps the neck,
@@ -41,12 +41,14 @@ tracked/local source copies before every future export.
 
 | Detail | Vertices | Triangles | Immutable GPU bytes |
 | --- | ---: | ---: | ---: |
-| Near | 3,002 | 6,000 | 288,144 |
-| Medium | 1,302 | 2,600 | 124,944 |
-| Far | 501 | 998 | 48,048 |
+| Near | 13,016 | 26,028 | 1,249,488 |
+| Medium | 2,502 | 5,000 | 240,144 |
+| Far | 702 | 1,400 | 67,344 |
 
-The three meshes share **461,136 GPU bytes** across actors. The native archive is
-403,756 bytes, embedded as resource 304 from `assets/authored/player-body.skin`.
+The three meshes share **1,556,976 GPU bytes** across actors. The native archive is
+1,362,616 bytes, embedded as resource 304 from `assets/authored/player-body.skin`.
+The current local exporter writes candidates under `.blender-local/refinement-20261031`;
+validate them before adopting them. The archive remains bounded to 2 MiB.
 The game does not load Blender or generate body topology at runtime. The decoder
 checks the header, byte/count budgets, matching bind pose, finite fitted bounds,
 normals, bone indices, weights, triangles and trailing data before GPU upload.

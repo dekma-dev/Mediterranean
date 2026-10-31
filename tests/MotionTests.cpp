@@ -14,7 +14,7 @@ float Distance(rpg::Vec2 a,rpg::Vec2 b) { return std::hypot(a.x-b.x,a.z-b.z); }
 void TerrainTraction() {
   rpg::WorldMap map;
   Require(std::abs(map.GroundTraction({0,-10})-1)<.00001f &&
-    std::abs(map.GroundTraction({25,-27})-.8f)<.00001f &&
+    std::abs(map.GroundTraction({25,-20})-.8f)<.00001f &&
     std::abs(map.GroundTraction(rpg::WorldMap::trainingPost)-.9f)<.00001f &&
     std::abs(map.GroundTraction({-11.5f,-1})-.95f)<.00001f,"Material traction assignments");
   for(float x=-28;x<28;x+=.2f) for(float z=-30;z<30;z+=.2f) {
@@ -23,7 +23,7 @@ void TerrainTraction() {
     Require(std::abs(value-map.GroundTraction({x+.001f,z}))<.002f,"Traction seam is discontinuous");
   }
   float stopping[2]{};
-  const rpg::Vec2 starts[]={{0,-10},{25,-27},{12,-2},{-11.5f,-2.8f},{12,-5.1f},{-11.5f,-3.5f}};
+  const rpg::Vec2 starts[]={{0,-10},{25,-20},{12,-2},{-11.5f,-2.8f},{12,-5.1f},{-11.5f,-3.5f}};
   for(int surface=0;surface<6;++surface) {
     const auto start=starts[surface];
     rpg::Vec2 reference{};

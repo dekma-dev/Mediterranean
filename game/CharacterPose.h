@@ -16,6 +16,9 @@ struct CharacterPose {
   std::array<LimbPose,2> arms,legs; // Left, right in character space.
   std::array<float,2> footYaw{};
   DirectX::XMFLOAT3 weaponDirection;
+  // Authored clips target the handle, whereas the arm solver targets the wrist.
+  DirectX::XMFLOAT3 weaponGrip{};
+  bool hasGripSocket=false;
   static constexpr float upperArm=.28f,forearm=.27f,thigh=.40f,shin=.40f;
   DirectX::XMFLOAT3 UpperPoint(DirectX::XMFLOAT3 point) const;
   DirectX::XMFLOAT3 UpperDirection(DirectX::XMFLOAT3 direction) const;

@@ -1,5 +1,153 @@
 # Blender collection in the native renderer
 
+## Gameplay population integration (2026-10-31)
+
+The six new frontier districts place 186 instances of fifteen authored prop
+types, twelve buildings and 105 additional trees. Wells, carts, benches, fences,
+supplies, braziers and cache chests now have gameplay locations and shared solid
+footprints where appropriate. Together with the existing stall, dummy, foliage
+and building substitutions, all twenty-one additions have runtime world roles.
+
+Frostfang and Thornback now represent 36 persistent combat creatures, with
+species attacks, targeting, loot, commission objectives and distant respawn.
+The old two-animal ambient preview remains only in its isolated review/test
+path. Wolf bite/head and boar head-loading/death poses layer over the current
+native rigs; no Blender source, exported clip or skin-weight regeneration was
+performed for this integration. See [populated frontier](populated-frontier.md)
+for exact counts, controls, persistence and remaining animation/art work.
+
+## Current world art expansion (2026-10-31)
+
+The native collection now contains **34 models / 102 LOD records**: the thirteen
+user-created foundations and twenty-one new editable models. The first thirteen
+asset IDs and world roles are preserved. The MDA1 archive is 73,900,472 bytes,
+bounded to 80 MiB. Each model has three strictly decreasing detail levels.
+
+New source: `assets/authored/world-details.blend`, with collection/root names and
+export budgets in `world-details.sources.json`. The additions are a barrel,
+crate, ironbound chest, handcart, masonry well, bench, lantern, brazier, anvil,
+firewood stack, grain sacks, signpost, fence, practice dummy, fern, shrub, hollow
+stump, memorial stone, provision stall, storehouse and training hall. The two
+building variants derive from the accepted cottage and inn. Timber pieces use
+profiled sections; the cart has spoke wheels and iron tires, the well has stone
+courses, overlapping pitched shingles, rafters, a crank and bucket, and the
+anvil has a shaped waist, heel and round horn. Native review exposed incorrectly
+oriented boards; the final source corrects the crate ends, lids, cart bed, bench
+seat, curved chest lid and well roof before export.
+
+The live world uses the new storehouse, training hall, provision stall, lantern,
+practice dummy, waypost, fern/shrub, supply barrels/sacks and expedition brazier
+in existing presentation locations. Other additions are embedded, editable and
+available in the asset reviewer; the later population integration above places
+the remaining prop types on the map.
+Building and stall silhouettes are constrained to the existing camera bounds.
+No new interactions or collision rules are introduced by these substitutions.
+
+The original models also received a geometry/material pass: connected anatomical
+faces and fitted scalps for Moonweaver/Ironjaw, recessed skeleton eye sockets,
+less bulbous armor and joints, cloth tension variation, creature contour edits,
+bark grooves and recessed side windows on the cottage/inn. The wolf retains
+the same vertex counts, skin weights and four animation clips; its source and
+runtime surfaces receive the same contour field. Normals are transformed with
+the surface and checked against triangle winding after float32 export.
+
+| Original near model | Triangles |
+| --- | ---: |
+| Dawnwarden / Oathless | 29,968 / 29,967 |
+| Moonweaver / Ironjaw | 51,372 each |
+| Ash sentry | 28,000 |
+| Frostfang / Thornback | 38,708 / 35,865 |
+| Oak / Pine / Dead tree | 77,184 / 19,040 / 23,978 |
+| Cottage / Inn / Tower | 38,392 / 38,184 / 38,000 |
+
+`world-art-revision.json` records the adopted hashes. Both original collection
+source copies now match SHA-256
+`d1bcfb6f00405bfa4e8989387a042057005e7e6f5157594e8f318bd258961564`.
+Sources were compared before editing and the preceding assets were preserved
+under `.blender-local/world-art-20261031/before`. Authoring, export and review
+helpers stay in that ignored directory. The new prop source remains separate
+from the original thirteen-model collection. Compare both source copies and
+the recorded hashes before further editing; do not run the older thirteen-asset
+exporters over the expanded archive. Existing detail/refinement JSON files
+describe earlier passes; `world-art-revision.json` is the current provenance.
+
+Player equipment also has fitted coat waists and softer folds in the three class
+kits. The body source, 54-track player motion archive and equipment identities
+are preserved. See [oldstyle-player-art.md](oldstyle-player-art.md).
+
+Validation of this expansion: eleven relevant Release suites and five Debug
+suites pass across authored assets, class geometry/equipment, player body,
+hands, attachment LOD, motion, character selection and launcher startup. Two
+startup suites timed out while builds ran concurrently; isolated repeats passed
+in 11.09 and 8.57 seconds. After the final prop corrections, the authored-asset
+suite was rerun in both configurations and the reviewer captured all 34 models.
+Release smoke checks pass with Warrior, Scout and Mage fixtures; Visual Studio
+Debug smoke passes with Mage. Ninja Release, Ninja Debug and Visual Studio Debug
+runtime binaries are rebuilt. No player saves were used for these checks.
+
+The final stationary-spawn 1280x720 benchmark on RTX 4060 records CPU p50/p95
+1.926/2.777 ms over 240 measured frames, 4,402,340 submitted triangles including
+shadow passes, and 150,400,656 immutable mesh bytes. Working set was 532.5 MiB.
+Only twelve GPU observations were available, so this is not a GPU-tail or
+interactive-FPS guarantee. Logs, verification results, native world captures
+and model contact sheets are under `.blender-local/world-art-20261031`.
+
+The following dated sections retain earlier export history; their counts and
+hashes are historical. These are editable game assets using the native material
+approximation, not photogrammetry or final photorealistic art acceptance. No new
+external assets were downloaded.
+
+## Earlier detail and carrying revision (2026-10-31)
+
+All thirteen accepted models retain their world roles. Near LODs preserve more
+of their existing sculpted geometry. The cottage, inn and tower also have
+profiled timber/slate/masonry edges and small individual wear; the boar's
+continuous source surface has a lowered rooting muzzle, shorter ears, reshaped
+withers and compact feet. A bounded subset of its existing groom is retained
+as whole tapered strands (560 / 112 / 24 per LOD). Its lowered jaw receives
+smooth head weights instead of being assigned to a foreleg by height.
+
+| Near model | Triangles |
+| --- | ---: |
+| Dawnwarden / Moonweaver | 23,967 each |
+| Ironjaw / Oathless / Ash sentry | 24,967 / 23,967 / 15,999 |
+| Frostfang / Thornback | 38,708 / 35,865 |
+| Oak / Pine / Dead tree | 77,184 / 19,040 / 21,982 |
+| Cottage / Inn / Tower | 38,392 / 38,183 / 38,000 |
+
+`collection01.masset` is 34,894,696 bytes, within a bounded 40 MiB archive.
+Near records allow 40,000 triangles / 120,000 split vertices; the oak alone
+allows 80,000 triangles to preserve whole leaf outlines. Middle/far limits
+remain 20,000 triangles / 65,536 vertices. The latest export preserves all
+26 distant records byte-for-byte. It keeps 4,200 complete two-sided oak leaves
+with raised midribs and smooth normals, using a separate trunk budget instead
+of collapsing foliage and trunk together. Three buildings preserve more of
+the existing profiled edges. The wolf retains 1,600 weighted guard-hair clumps;
+their shading follows the underlying coat. Its original body vertices,
+distant weights and four action clips are unchanged. `collection01.detail.json`
+records this additional export pass. The anatomical source remains the separate,
+unchanged `frostfang.blend`.
+
+Tracked and local collection sources were compared before editing, backed up
+under `.blender-local/refinement-20261031/before`, then synchronized to SHA-256
+`63b5fb93674707a51efa0547c8ba70eacf4eb8ec5e4679b7929546e72e84f66d`.
+`assets/authored/collection01.refinement.json` records provenance. All new
+authoring/export scripts remain local and ignored. Do not run the older
+collection exporters over these adopted exports; preserve the anatomical wolf
+override and compare source hashes before any regeneration.
+
+The player now uses 26,028 body / 15,997 head triangles near the camera and the
+54-track v4 weapon/action archive. See [oldstyle-player-art.md](oldstyle-player-art.md)
+and [authored-player-locomotion.md](authored-player-locomotion.md). Class rules,
+world collision, progression and saves are unchanged by this presentation work.
+
+Native review is available through `build-ninja-release/MediterraneanAssetReview.exe`.
+This is a detail/anatomy refinement of the accepted sources, not photogrammetry
+or a claim that all models have reached final realistic art quality. Reference
+inspection included the supplied Allods images and this
+[wild-boar profile photograph](https://commons.wikimedia.org/wiki/File:Wildschwein_Sus_scrofa.jpg).
+No new external assets were downloaded.
+
 ## Accepted environment refinement (2026-10-26)
 
 The reviewed v2 candidate is synchronized to the tracked source and local authoring copy: SHA-256 `5338426256f932d6be3db4fb83132adc9cae08cf9038bf7cf1b0713ebbb5f30c`. Original sources/exports remain in `.blender-local/environment-backup-20261026`; both original source hashes were checked before replacement.
@@ -42,15 +190,15 @@ Frostfang and Thornback now have transient ambient behaviour (`game/Wildlife.h`)
 
 Build with `scripts/build-native.ps1 -Backend Ninja -Configuration Release`. Run `build-ninja-release/MediterraneanAssetReview.exe` for the collection in the actual DirectX 11 renderer. Left/right selects a model, A/D rotates it, Space toggles the turntable, L cycles detail levels, and Escape closes the window. This viewer never opens or writes player saves.
 
-`MediterraneanAssetReview --capture <directory>` writes thirteen native-engine PNGs without a visible window. Interactive review animates actors. `AuthoredAssetTests` validates the archive, corrupt input rejection, bind-pose identity, finite normalized influences, visible deformation, animated color/shadow rendering at all three LODs, and camera-dependent LOD on cached scenery.
+`MediterraneanAssetReview --capture <directory>` writes thirty-four native-engine PNGs without a visible window. Interactive review animates actors. `AuthoredAssetTests` validates the archive, corrupt input rejection, bind-pose identity, finite normalized influences, visible deformation, animated color/shadow rendering at all three LODs, and camera-dependent LOD on cached scenery. Current captures and contact sheets are under `.blender-local/world-art-20261031`; they show the actual DirectX renderer.
 
 ## Export contract
 
 - Coordinates are metres, Y up and +Z forward. Gallery roots, platforms, text, lights and cameras are excluded.
-- Geometry is triangulated, with outward unit normals, vertex colors and a native material ID per triangle. Curve/modifier output is evaluated offline. Dense individual fur strands are omitted.
+- Geometry is triangulated, with outward unit normals, vertex colors and a native material ID per triangle. Curve/modifier output is evaluated offline. Bounded whole groom subsets are retained for wolf and boar.
 - Blender procedural shaders are approximated using the engine's existing material layers; this is not a texture bake or identical Blender shading.
 - Buildings omit loose barrels and entry steps; overhangs are compressed beyond their unchanged wall footprints to fit existing camera bounds.
-- Each mesh is bounded to 65,536 vertices and 20,000 triangles; the full archive is bounded to 32 MiB. `collection01.json` records actual counts, bounds and the archive SHA-256.
+- Near meshes are bounded to 180,000 split vertices and 40,000 triangles (60,000 for the first five humanoids, 80,000 for the oak); middle/far meshes retain the 65,536-vertex / 20,000-triangle limits. The full archive is bounded to 80 MiB. `collection01.json` records actual counts, bounds and source/archive SHA-256 values.
 - Native loading validates headers, lengths, counts, coordinates, normals, materials, index ranges, triangle winding, bounds and decreasing LOD sizes before GPU upload. No paths or external textures are opened.
 - GPU geometry is uploaded once. Replayed static scenery resolves its detail level against the current camera before shared color/shadow culling.
 
@@ -88,13 +236,13 @@ The local ignored exporter is `.blender-local/collection-02/export_wolf_game.py`
 
 ## Player Blender motion retargeting
 
-The following v2 notes describe the preserved baseline. The current v3 archive
-contains 33 tracks (275,940 bytes), with five added bow actions and revised
-weight/settle. `assets/authored/oldstyle-classes.blend` and its KIT1 export add
+The following v2 notes describe the preserved baseline. The current v4 archive
+contains 54 tracks (428,772 bytes), including directional equipment carrying,
+bow actions and revised weight/settle. `assets/authored/oldstyle-classes.blend` and its KIT1 export add
 27 fitted parts for Warrior, Scout and Mage. See
 [oldstyle-player-art.md](oldstyle-player-art.md) for current source preservation,
 native formats, class equipment, budgets and review paths. Do not rerun the v2
-exporter over the v3 archive.
+exporter over the v4 archive.
 
 `player.clips` now embeds 22 v2 human actions plus six preserved compatibility tracks. V2 covers idle, sword/staff guards, directional and equipped walks/runs, sword/staff attacks, jump, fall and landing. The editable action rig is `assets/authored/player-motion-v2.blend`; `player-clips.json` records source/track/archive hashes and contact markers. The ignored exporter is `.blender-local/male-study-20261028/motion-v2/runtime/export_runtime.py`. It reads the existing full v2 Blender character without rewriting it. The old Collection 04 exporters must not overwrite this archive.
 

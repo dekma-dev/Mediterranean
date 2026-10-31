@@ -57,6 +57,10 @@ Library Decode(std::string_view bytes){
  for(auto clip:{Clip::WalkForward,Clip::WalkBackward,Clip::WalkLeft,Clip::WalkRight,Clip::RunForward,Clip::RunBackward,Clip::RunLeft,Clip::RunRight,Clip::SwordWalk,Clip::SwordRun,Clip::StaffWalk,Clip::StaffRun,Clip::BowWalk,Clip::BowRun}) {
   const auto& t=result[unsigned(clip)];Check(t.loop&&t.stance>.1f&&t.stance<.9f&&t.speed>0,"Invalid gait contact metadata");
  }
+ for(unsigned i=unsigned(Clip::SwordCarry);i<unsigned(Clip::Count);++i) {
+  const auto& t=result[i];Check(t.loop,"Carrying and directional weapon clips must loop");
+  if(i>=unsigned(Clip::SwordWalkBackward))Check(t.stance>.1f&&t.stance<.9f&&t.speed>0,"Invalid armed gait metadata");
+ }
  Check(r.offset==bytes.size(),"Trailing player clip data");return result;
 }
 std::string_view EmbeddedBytes(){auto module=GetModuleHandleW(nullptr);auto resource=FindResourceW(module,MAKEINTRESOURCEW(303),MAKEINTRESOURCEW(10));Check(resource!=nullptr,"Missing player Blender clips");auto handle=LoadResource(module,resource);auto data=handle?LockResource(handle):nullptr;Check(data!=nullptr,"Cannot load player clips");return {static_cast<const char*>(data),SizeofResource(module,resource)};}
@@ -96,7 +100,9 @@ Frame Locomotion(const std::array<float,4>& weights,float run,float phase,Equipm
    const float w=weight*(pace?run:1-run);if(w<.00001f)continue;
    auto frame=Sample(Clip(unsigned(Clip::WalkForward)+pace*4+d),phase);
    if(equipment!=Equipment::None) {
-    const auto armed=Sample(equipment==Equipment::Staff?(pace?Clip::StaffRun:Clip::StaffWalk):equipment==Equipment::Bow?(pace?Clip::BowRun:Clip::BowWalk):(pace?Clip::SwordRun:Clip::SwordWalk),phase);
+    const auto forward=equipment==Equipment::Staff?(pace?Clip::StaffRun:Clip::StaffWalk):equipment==Equipment::Bow?(pace?Clip::BowRun:Clip::BowWalk):(pace?Clip::SwordRun:Clip::SwordWalk);
+    const auto first=equipment==Equipment::Staff?Clip::StaffWalkBackward:equipment==Equipment::Bow?Clip::BowWalkBackward:Clip::SwordWalkBackward;
+    const auto armed=Sample(d?Clip(unsigned(first)+pace*3+d-1):forward,phase);
     frame.hands=armed.hands;frame.weapon=armed.weapon;
    }
    std::array<float,19> v;std::memcpy(v.data(),&frame,sizeof(Frame));

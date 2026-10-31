@@ -33,7 +33,9 @@ int wmain(int argc,wchar_t** argv) {
     limits.coordinate=.5001f; // Current reusable equipment slots use a unit box.
     limits.triangles=4096; limits.vertices=8192;
     // The anatomical near head has a separate budget from reusable props.
-    if(name==L"PlayerHead")limits.triangles=10000;
+    if(name==L"PlayerHead")limits.triangles=16000;
+    if(name==L"PlayerHair")limits.triangles=5000;
+    if(name==L"PlayerBoot")limits.triangles=8000;
     const auto size=std::filesystem::file_size(source);
     if(size>limits.bytes) throw std::runtime_error("OBJ exceeds the source byte budget");
     std::ifstream file(source,std::ios::binary);

@@ -63,6 +63,10 @@ int main() {
       const auto cost=g.vertices.size()*sizeof(visual::Vertex)+g.indices.size()*sizeof(std::uint32_t);
       if(mesh==unsigned(visual::Mesh::Terrain) || mesh==unsigned(visual::Mesh::Cliff)) {terrainBytes+=cost;terrainTriangles+=g.indices.size()/3;}
       else if(visual::IsHeadMesh(static_cast<visual::Mesh>(mesh)) || mesh==unsigned(visual::Mesh::Hair) || mesh==unsigned(visual::Mesh::HairLow)) {headBytes+=cost;headTriangles+=g.indices.size()/3;}
+      else if(mesh==unsigned(visual::Mesh::PlayerBoot) || mesh==unsigned(visual::Mesh::PlayerBootLow)) {
+        Check(cost<320*1024 && g.indices.size()/3<=8000,"Fitted boot exceeds its dedicated geometry budget");
+        if(mesh==unsigned(visual::Mesh::PlayerBootLow))Check(g.indices.size()/3<=1000,"Distant boot retained unnecessary close detail");
+      }
       else if(visual::IsClassArt(static_cast<visual::Mesh>(mesh))) {Check(cost<4*1024*1024,"Class attachment exceeds per-mesh budget");}
       else if(mesh>=unsigned(visual::Mesh::GuardShoulderLeft)) {authoredGearBytes+=cost;authoredGearTriangles+=g.indices.size()/3;}
       else if(mesh==unsigned(visual::Mesh::Ridge)) {ridgeBytes+=cost;ridgeTriangles+=g.indices.size()/3;}
@@ -94,7 +98,7 @@ int main() {
   Check(terrainBytes<=1280*1024 && terrainTriangles<=35000,"Playable heightfield exceeded its bounded geometry budget");
   std::cout<<"Heightfield: "<<terrainBytes<<" bytes / "<<terrainTriangles<<" triangles\n";
   Check(bytes<=640*1024 && triangles<=16000,"Reusable mesh library exceeded its startup geometry budget.");
-  Check(headBytes<=640*1024 && headTriangles<=17000,"Shared anatomical head exceeded its 640 KiB / 17000 triangle budget");
+  Check(headBytes<=1024*1024 && headTriangles<=26000,"Shared anatomical head exceeded its 1 MiB / 26000 triangle budget");
   std::cout<<"Anatomical head/hair, all LODs: "<<headBytes<<" bytes / "<<headTriangles<<" triangles\n";
   Check(ridgeBytes<=20*1024 && ridgeTriangles<=512,"Shared landscape ridge exceeded its dedicated 20 KiB / 512 triangle budget");
   std::cout<<"Landscape ridge: "<<ridgeBytes<<" bytes / "<<ridgeTriangles<<" triangles\n";

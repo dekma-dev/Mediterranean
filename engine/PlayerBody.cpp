@@ -17,7 +17,7 @@ struct Reader {
 }
 Library Decode(std::string_view bytes) {
  using namespace DirectX;
- Check(bytes.size()<=1024*1024,"Player body archive exceeds its byte budget");Reader r{bytes};
+ Check(bytes.size()<=2*1024*1024,"Player body archive exceeds its byte budget");Reader r{bytes};
  Check(r.Get<std::uint32_t>()==0x314b5350 && r.Get<std::uint32_t>()==1 &&
   r.Get<std::uint32_t>()==visual::bodyBones && r.Get<std::uint32_t>()==visual::bodyLodCount,"Invalid player body header");
  for(const auto& bone:visual::BodyBindPose()) for(const auto expected:{bone.from,bone.to}) {
@@ -29,7 +29,7 @@ Library Decode(std::string_view bytes) {
  Library result;
  for(unsigned lod=0;lod<result.size();++lod) {
   auto& body=result[lod];const auto vertices=r.Get<std::uint32_t>(),indices=r.Get<std::uint32_t>();
-  Check(vertices>=3 && vertices<=16384 && indices>=3 && indices<=65535 && indices%3==0,"Invalid player body counts");
+  Check(vertices>=3 && vertices<=24576 && indices>=3 && indices<=(lod?65535u:98304u) && indices%3==0,"Invalid player body counts");
   Check(std::size_t(vertices)*60+std::size_t(indices)*4<=bytes.size()-r.offset,"Truncated player body mesh");
   if(lod)Check(indices<result[lod-1].mesh.indices.size()*.65,"Player body LOD must reduce topology");
   body.mesh.vertices.reserve(vertices);body.influences.reserve(vertices);body.mesh.indices.reserve(indices);

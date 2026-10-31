@@ -164,6 +164,7 @@ std::vector<std::uint8_t> BuildMapArtwork(const rpg::WorldMap& world) {
  survey.Shape({dockA,{dockB.x,dockA.y},dockB,{dockA.x,dockB.y}}, {.69f,.56f,.35f},.42f);
  for (float y=dockA.y+4;y<dockB.y;y+=5) survey.Line({dockA.x+1,y},{dockB.x-1,y+.4f},.6f,ink,.55f);
  for (const auto& o : world.Obstacles()) {
+  if(o.kind==rpg::PropKind::Dressing)continue;
   const auto p=Map(o.center.x,o.center.z);
   if (o.kind==rpg::PropKind::Tree) survey.Tree(p,1.f,Hash(int(p.x),int(p.y))*6);
   else if (o.kind==rpg::PropKind::Counter) {

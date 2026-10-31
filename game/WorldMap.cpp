@@ -1,4 +1,5 @@
 #include "game/WorldMap.h"
+#include "game/Population.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -7,6 +8,12 @@
 
 namespace rpg {
 WorldMap::WorldMap() {
+  // Immutable content is built and routed once, then cheaply copied for save
+  // validation and independent simulations. No global mutable actor state.
+  static const WorldMap prototype(true);
+  *this=prototype;
+}
+WorldMap::WorldMap(bool) {
   obstacles_ = {{{-8,-8},2.8f,2.5f,4.f},{{8,-8},2.8f,2.5f,4.f,PropKind::Building,BuildingRole::WatchHall},
     {{-10,3},1.3f,1.3f,3.f,PropKind::Building,BuildingRole::Storehouse},
     {{10,1},1.5f,1.5f,3.4f,PropKind::Building,BuildingRole::TrainingHall},{{0,15},2,1,2,PropKind::Ruin},
@@ -63,6 +70,24 @@ WorldMap::WorldMap() {
     obstacles_.push_back({p,2.3f,2.1f,4.f,PropKind::Building,BuildingRole::WatchHall});
   for(const auto p:{Vec2{-94,-104},Vec2{102,-115},Vec2{64,-119}})
     obstacles_.push_back({p,2,1.5f,3.5f,PropKind::Ruin});
+  // Authored outbuildings and gate towers frame the existing southern missions.
+  // Versioned footprints allow an older save on a new foundation to recover.
+  for(const auto p:{Vec2{-47,-77},Vec2{-45,-115},Vec2{-84,-65}})
+    obstacles_.push_back({p,1.8f,1.6f,3.2f,PropKind::Building,BuildingRole::Homestead,21});
+  for(const auto p:{Vec2{-59,-104},Vec2{-96,-80},Vec2{-103,-93},Vec2{81,-106},Vec2{93,-94},Vec2{107,-105}})
+    obstacles_.push_back({p,1.7f,1.5f,5.6f,PropKind::Ruin,BuildingRole::Homestead,21});
+  // These approaches avoid the guard stations and keep each seal reachable.
+  for(const auto t:{Trail{{87,-101},{86,-96},.65f,false},Trail{{63,-112},{63,-116},.65f,false},
+      Trail{{99,-109},{94,-122},.65f,false}}) trails_.push_back(t);
+  for(const auto grove:{Vec2{-62,-85},Vec2{-62,-109},Vec2{-88,-64},Vec2{-109,-85},Vec2{-111,-105},
+      Vec2{76,-119},Vec2{106,-93},Vec2{111,-113}}) for(int i=0;i<5;++i) {
+    const Vec2 p{grove.x+std::cos(i*2.4f)*float(2+i),grove.z+std::sin(i*2.4f)*float(2+i)};
+    bool service=false;
+    for(const auto& npc:residents) service|=std::hypot(p.x-npc.position.x,p.z-npc.position.z)<4;
+    for(const auto seal:courtSeals) service|=std::hypot(p.x-seal.x,p.z-seal.z)<5;
+    if(!service && CanStand(p,2) && SurfaceAt(p).dirt<.01f)
+      obstacles_.push_back({p,.4f,.4f,5.8f,PropKind::Tree,BuildingRole::Homestead,21});
+  }
   // Small groves frame the roads and leave sightlines around encounter camps.
   for(const auto grove:{Vec2{-60,10},Vec2{-61,52},Vec2{61,23},Vec2{59,61},Vec2{-32,65},Vec2{28,70},Vec2{-28,-51},Vec2{48,-48},
       Vec2{-55,-118},Vec2{-96,-70},Vec2{-102,-110},Vec2{95,-80},Vec2{53,-102},Vec2{107,-118},Vec2{-94,95},Vec2{92,96}})
@@ -70,6 +95,42 @@ WorldMap::WorldMap() {
       Vec2 p{grove.x+std::cos(i*2.4f)*float(2+i),grove.z+std::sin(i*2.4f)*float(2+i)};
       if(CanStand(p,1.8f) && SurfaceAt(p).dirt<.01f) obstacles_.push_back({p,.4f,.4f,5.2f,PropKind::Tree});
     }
+  // Six inhabited districts, with versioned footprints for older saves.
+  for(int d=0;d<population::districtCount;++d) {
+    const auto c=population::districts[d].yard;const auto npc=residents[9+d].position;
+    obstacles_.push_back({c,2.3f,2.1f,3.8f,PropKind::Building,BuildingRole::Homestead,22});
+    obstacles_.push_back({{c.x-12,c.z-5},2.3f,2.1f,3.5f,PropKind::Building,BuildingRole::Storehouse,22});
+    const Vec2 approach=d==0?Vec2{-10,-25}:d==1?Vec2{16,-22}:d==2?Vec2{-46,20}:d==3?Vec2{53,40}:d==4?Vec2{-32,65}:Vec2{59,61};
+    trails_.push_back({approach,npc,.95f,false});
+    trails_.push_back({npc,{c.x,c.z+5},.7f,false});
+    trails_.push_back({npc,population::districts[d].habitat,.65f,false});
+  }
+  for(const auto& p:population::Props()) {
+    const auto h=population::HalfSize(p.kind);if(h.x==0)continue;
+    const float cs=std::abs(std::cos(p.yaw)),sn=std::abs(std::sin(p.yaw));
+    obstacles_.push_back({p.position,(cs*h.x+sn*h.z)*p.scale,(sn*h.x+cs*h.z)*p.scale,
+      population::PropHeight(p.kind)*p.scale,PropKind::Dressing,BuildingRole::Homestead,22});
+  }
+  for(const auto& d:population::districts)for(int i=0;i<20;++i) {
+    const float a=i*2.39996f,r=12.f+i%4*2.f;
+    const Vec2 p{d.habitat.x+std::sin(a)*r,d.habitat.z+std::cos(a)*r};
+    bool service=false;for(const auto& n:residents)service|=std::hypot(p.x-n.position.x,p.z-n.position.z)<5;
+    if(!service && CanStand(p,2.1f) && SurfaceAt(p).dirt<.01f)
+      obstacles_.push_back({p,.4f,.4f,5.4f,PropKind::Tree,BuildingRole::Homestead,22});
+  }
+  // Reconnect paths around solid authored set dressing. Rendering and navigation
+  // share the resulting segments, so a drawn road never passes through a cart.
+  std::vector<Trail> routed;
+  for(const auto& trail:trails_) {
+    if(CanTravel(trail.from,trail.to,.6f)){routed.push_back(trail);continue;}
+    const auto path=FindPath(trail.from,trail.to,.6f);Vec2 previous=trail.from;
+    for(const auto next:path) {
+      if(std::hypot(next.x-previous.x,next.z-previous.z)>.01f)
+        routed.push_back({previous,next,std::min(trail.halfWidth,.65f),trail.paved});
+      previous=next;
+    }
+  }
+  trails_=std::move(routed);
   // Stable decoration, generated once. Keep routes, services and the arena clear.
   const auto hash=[](int x,int z) {
     std::uint32_t h=std::uint32_t(x)*374761393u+std::uint32_t(z)*668265263u;
@@ -133,6 +194,11 @@ GroundSurface WorldMap::SurfaceAt(Vec2 p) const {
     if (trail.paved) paving=std::max(paving,weight); else dirt=std::max(dirt,weight);
   }
   dirt=std::max(dirt,edge(std::hypot(p.x-trainingPost.x,p.z-trainingPost.z)-2.8f));
+  // Worn service yards and bare earth around the ritual/court mark habitation.
+  for(unsigned i=6;i<residents.size();++i)
+    dirt=std::max(dirt,edge(std::hypot(p.x-residents[i].position.x,p.z-residents[i].position.z)-2.4f)*.8f);
+  dirt=std::max(dirt,edge(std::hypot(p.x-ritualSite.x,p.z-ritualSite.z)-5.2f)*.7f);
+  for(const auto seal:courtSeals) dirt=std::max(dirt,edge(std::hypot(p.x-seal.x,p.z-seal.z)-1.6f)*.85f);
   dirt=std::max(dirt,edge(std::hypot(p.x-astralAnchor.x,p.z-astralAnchor.z)-2.2f));
   return {dirt*(1-paving),paving};
 }
@@ -314,6 +380,8 @@ std::vector<Vec2> WorldMap::FindPath(Vec2 from,Vec2 to,float radius) const {
 }
 
 const char* WorldMap::AreaName(Vec2 p) const {
+  for(const auto& d:population::districts)if(std::hypot(p.x-d.yard.x,p.z-d.yard.z)<16 ||
+    std::hypot(p.x-d.habitat.x,p.z-d.habitat.z)<21)return d.name;
   if(p.z<-76) return p.x<-60?"THE MISTWARD RIDGE":p.x>40?"THE IRON COURT":"THE BROKEN CARAVAN ROAD";
   if(p.z>50) return "THE ASHEN PASS";
   if(p.x<-33) return "THE SIGNAL HILLS";

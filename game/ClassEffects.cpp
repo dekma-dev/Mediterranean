@@ -545,7 +545,7 @@ void States(Renderer& r,const rpg::Simulation& state,float time) {
       for(int i=0;i<4;++i) Arc(r,p,.48f,i*pi*.5f+.12f,.42f,.016f,c);
     }
   };
-  for(const auto& enemy:state.Enemies()) status(enemy);
+  for(const auto& enemy:state.Combatants()) status(enemy);
   if(state.Sparring()) status(state.SparringOpponent());
 }
 }

@@ -13,6 +13,7 @@ Vec2 Difference(Vec2 a, Vec2 b) { return {a.x-b.x,a.z-b.z}; }
 }
 
 Simulation::Simulation() {
+  PopulateBeasts();
   for(int i=0;i<3;++i) { auto& d=dummies_[i]; d.id=210+i; d.kind=EnemyKind::Dummy;
     d.position=d.home={12,-2.f+i*3}; d.health=200; }
   trainer_.position=trainer_.home=WorldMap::trainingPost; trainer_.id=200; trainer_.kind=EnemyKind::Trainer; trainer_.health=trainer_.MaxHealth();
@@ -53,7 +54,7 @@ float Simulation::CameraDistance(Vec2 origin,float originY,Vec2 direction,float 
     const float worldY=originY+slope*d;
     if(worldY<map_.Height(p)+.30f) return std::max(.25f,d-.2f);
     for (const auto& o : map_.Obstacles()) {
-      const float y=worldY-map_.Height(o.center);
+      const float ground=map_.Height(o.center),y=worldY-ground;
       // Above the counter, test the open frame and bowed cloth separately.
       // A full-height box would pull the ordinary shop camera into the player.
       if (o.kind==PropKind::Counter && y>o.height+.1f) {
@@ -71,7 +72,14 @@ float Simulation::CameraDistance(Vec2 origin,float originY,Vec2 direction,float 
       }
       // The crown begins above the character's shoulders. Extending its wide
       // bounds down to the ground traps the camera beside the training post.
-      const bool belowCrown=o.kind==PropKind::Tree && y<1.65f;
+      // The player may stand underneath foliage. If the shoulder focus already
+      // overlaps a crown, clipping at its entry (t=0) traps the camera inside
+      // the player's torso. In that case retain trunk collision and allow the
+      // boom to leave the foliage volume; solid walls still block normally.
+      const float focusY=originY-ground;
+      const bool focusInCrown=o.kind==PropKind::Tree && focusY>=1.65f && focusY<o.CameraHeight() &&
+        std::abs(origin.x-o.center.x)<o.CameraHalfX()+.15f && std::abs(origin.z-o.center.z)<o.CameraHalfZ()+.15f;
+      const bool belowCrown=o.kind==PropKind::Tree && (y<1.65f || focusInCrown);
       const float halfX=belowCrown?o.halfX:o.CameraHalfX();
       const float halfZ=belowCrown?o.halfZ:o.CameraHalfZ();
       if (y < o.CameraHeight() && y > -.2f && std::abs(p.x-o.center.x)<halfX+.15f &&
@@ -83,12 +91,12 @@ float Simulation::CameraDistance(Vec2 origin,float originY,Vec2 direction,float 
 
 void Simulation::SelectTarget() {
   friendlyTarget_=-1;
-  if (sparring_) { target_=int(enemies_.size()); return; }
-  const int count=static_cast<int>(enemies_.size());
+  if (sparring_) { target_=int(Combatants().size()); return; }
+  const int count=static_cast<int>(Combatants().size());
   for (int step=1;step<=count;++step) {
     const int index=(target_+step)%count;
-    if (enemies_[index].health>0 && enemies_[index].state!=EnemyState::Returning &&
-      Length(Difference(enemies_[index].position,player_))<=22) {
+    if (CombatantsMutable()[index].health>0 && CombatantsMutable()[index].state!=EnemyState::Returning &&
+      Length(Difference(CombatantsMutable()[index].position,player_))<=22) {
       target_=index; message_=std::string("Target selected. 1: ")+Spell(0).name+" | 2: "+Spell(1).name+" | 3: "+Spell(2).name+" | 4: "+Spell(3).name; return;
     }
   }
@@ -96,10 +104,10 @@ void Simulation::SelectTarget() {
 }
 const Enemy* Simulation::TargetActor() const {
   if(friendlyTarget_>=0) return nullptr;
-  const int dummy=target_-int(enemies_.size())-1;
+  const int dummy=target_-int(Combatants().size())-1;
   if(dummy>=0 && dummy<3 && !(dummy==0 && sparring_)) return &dummies_[dummy];
-  if (target_==int(enemies_.size()) && sparring_) return &trainer_;
-  return target_>=0 && target_<int(enemies_.size())?&enemies_[target_]:nullptr;
+  if (target_==int(Combatants().size()) && sparring_) return &trainer_;
+  return target_>=0 && target_<int(Combatants().size())?&Combatants()[target_]:nullptr;
 }
 
 bool Simulation::HasLineOfSight(Vec2 from,Vec2 to) const {
@@ -125,7 +133,7 @@ Simulation::DashCheck Simulation::CheckDashTarget() const {
 const Enemy* Simulation::DashTargetActor() const {
   for(const auto& dummy:dummies_) if(dummy.id==dashTarget_ && !(sparring_ && dummy.id==210)) return &dummy;
   if (sparring_ && trainer_.id==dashTarget_) return &trainer_;
-  for (const auto& enemy : enemies_) if (enemy.id==dashTarget_) return &enemy;
+  for (const auto& enemy : Combatants()) if (enemy.id==dashTarget_) return &enemy;
   return nullptr;
 }
 
@@ -233,7 +241,7 @@ void Simulation::CompleteRecovery() {
 void Simulation::ResolveAttack(float elapsed) {
   Enemy* victim=nullptr;
   for(auto& dummy:dummies_) if(dummy.id==attackTarget_ && !(sparring_ && dummy.id==210)) victim=&dummy;
-  for (auto& enemy : enemies_) if (enemy.id==attackTarget_) victim=&enemy;
+  for (auto& enemy : CombatantsMutable()) if (enemy.id==attackTarget_) victim=&enemy;
   const bool trainingTarget=sparring_ && trainer_.id==attackTarget_;
   if (trainingTarget) victim=&trainer_;
   if (!victim || victim->health<=0 || victim->state==EnemyState::Returning ||
@@ -242,25 +250,68 @@ void Simulation::ResolveAttack(float elapsed) {
     Emit(FeedbackKind::Miss,player_); message_="The committed strike missed."; return;
   }
   const Vec2 centre=victim->position;const EntityId primary=victim->id;
+  const bool acceptedPrimary=!CourtProtected(*victim);
+  int sweepHits=acceptedPrimary?1:0;
   ResolveContact(*victim,elapsed);
-  const bool area=attackAbility_==8 || (attackAbility_==9 && class_==ClassId::Mage) || (attackAbility_==11 && class_!=ClassId::Scout);
+  if(acceptedPrimary && attackAbility_==8 && class_==ClassId::Mage) {
+    frostField_=centre;frostSeconds_=std::max(0.f,5.f-elapsed);
+  }
+  const bool piercing=attackAbility_==9 && class_==ClassId::Scout;
+  const bool area=attackAbility_==8 || (attackAbility_==9 && class_==ClassId::Mage) || (attackAbility_==11 && class_!=ClassId::Scout) || piercing;
   if(!area) return;
+  const auto line=Difference(centre,player_);const float lineLength=Length(line);
   const auto secondary=[&](Enemy& enemy) {
     if(enemy.id==primary || enemy.health<=0 || enemy.state==EnemyState::Returning) return;
     const auto delta=Difference(enemy.position,player_);const float distance=Length(delta);
     if(distance>Spell(attackAbility_).range || !HasLineOfSight(player_,enemy.position)) return;
-    if(class_==ClassId::Mage) {
+    if(piercing) {
+      if(lineLength<.01f) return;
+      const float along=(delta.x*line.x+delta.z*line.z)/lineLength;
+      const float across=std::abs(delta.x*line.z-delta.z*line.x)/lineLength;
+      if(along<lineLength || across>.55f || !HasLineOfSight(centre,enemy.position)) return;
+    } else if(class_==ClassId::Mage) {
       if(Length(Difference(enemy.position,centre))>(attackAbility_==11?4.5f:3.f) || !HasLineOfSight(centre,enemy.position)) return;
     } else if(attackAbility_!=11 && distance>.01f && (delta.x*std::sin(facing_)+delta.z*std::cos(facing_))/distance<
         std::cos(class_==ClassId::Warrior?1.2f:.48f)) return;
+    if(!CourtProtected(enemy)) ++sweepHits;
+    const float committedDamage=attackDamage_;
+    if(piercing) attackDamage_*=.5f;
     ResolveContact(enemy,elapsed);
+    attackDamage_=committedDamage;
   };
-  for(auto& enemy:enemies_) secondary(enemy);
+  for(auto& enemy:CombatantsMutable()) secondary(enemy);
   for(auto& dummy:dummies_) if(!(sparring_ && dummy.id==210)) secondary(dummy);
   if(sparring_) secondary(trainer_);
+  if(attackAbility_==8 && class_==ClassId::Warrior && sweepHits>0) {
+    barrier_=std::max(barrier_,float(std::min(3,sweepHits)*6));
+    EmitVisual(CombatVisualKind::BarrierHit,player_,height_+1.2f,facing_,0,elapsed);
+  }
+}
+
+void Simulation::UpdateFrostField(float dt) {
+  if(health_<=0) {frostSeconds_=0;return;}
+  if(frostSeconds_<=0) return;
+  frostSeconds_=std::max(0.f,frostSeconds_-dt);
+  if(frostSeconds_==0) return;
+  const auto chill=[&](Enemy& enemy) {
+    if(enemy.health<=0 || enemy.state==EnemyState::Returning || CourtProtected(enemy) ||
+       Length(Difference(enemy.position,frostField_))>3 || !HasLineOfSight(frostField_,enemy.position)) return;
+    enemy.snared=std::max(enemy.snared,.3f+dt);
+  };
+  for(auto& enemy:CombatantsMutable()) chill(enemy);
+  for(auto& dummy:dummies_) if(!(sparring_ && dummy.id==210)) chill(dummy);
+  if(sparring_) chill(trainer_);
 }
 
 void Simulation::ResolveContact(Enemy& enemy,float elapsed) {
+  if(ReplayActive() && enemy.Beast())return;
+  // The ward is a world objective: protected hits grant no resource or status.
+  if(CourtProtected(enemy)) {
+    Emit(FeedbackKind::Absorb,enemy.position,int(attackDamage_));
+    EmitVisual(CombatVisualKind::BarrierHit,enemy.position,1.2f,facing_,enemy.id,elapsed);
+    enemy.state=EnemyState::Pursuing;
+    message_="The captain is protected. Break all three court seals.";return;
+  }
   const bool trainingTarget=sparring_ && trainer_.id==enemy.id;
   const int index=attackAbility_;
   const int previousLevel=Level();
@@ -288,7 +339,7 @@ void Simulation::ResolveContact(Enemy& enemy,float elapsed) {
   }
   if(index==9 && class_==ClassId::Scout && enemy.rooted>0) bonus+=HeavyDamage()*.35f;
   if(index==8) {
-    if(class_==ClassId::Mage) enemy.rooted=std::max(enemy.rooted,2.f);
+    if(class_==ClassId::Mage) enemy.rooted=std::max(enemy.rooted,4.f);
     if(class_==ClassId::Scout) enemy.snared=std::max(enemy.snared,2.f);
   }
   if(index==9 && class_==ClassId::Warrior) {
@@ -302,6 +353,16 @@ void Simulation::ResolveContact(Enemy& enemy,float elapsed) {
   }
   if(index==11 && class_==ClassId::Warrior) barrier_=std::max(barrier_,25.f);
   if(index==11 && class_==ClassId::Scout && Length(Difference(enemy.position,player_))>6) bonus+=HeavyDamage()*.8f;
+  // Consume setup only at a valid contact, once per victim, including AoE.
+  if(index==11 && class_==ClassId::Warrior && exposedAtContact) {
+    bonus+=HeavyDamage()*.35f;enemy.exposed=0;barrier_=std::max(barrier_,40.f);
+  }
+  if(index==11 && class_==ClassId::Mage && (enemy.snared>0 || enemy.rooted>0)) {
+    bonus+=HeavyDamage()*.50f;enemy.snared=enemy.rooted=0;
+  }
+  if(index==11 && class_==ClassId::Scout && exposedAtContact) {
+    bonus+=HeavyDamage()*.50f;enemy.exposed=0;
+  }
   const float mastery=(attackEmpowered_ || index==6 || index==11) && HasTalent(Talent::Overwhelming)?1.2f:1.f;
   const float damage=std::min(enemy.health,(attackDamage_*finishing+bonus)*mastery*(exposedAtContact?1.25f:1.f));
   float heal=class_==ClassId::Necromancer?damage*.15f:class_==ClassId::Bard?3.f:class_==ClassId::Priest && index==1?8.f:0.f;
@@ -313,7 +374,7 @@ void Simulation::ResolveContact(Enemy& enemy,float elapsed) {
     case ClassId::Scout: enemy.rooted=std::max(enemy.rooted,2.f);break;
     case ClassId::Priest: heal=damage*.5f;break;
     case ClassId::Druid: enemy.rooted=std::max(enemy.rooted,3.f);break;
-    case ClassId::Mage: enemy.snared=std::max(enemy.snared,3.f);break;
+    case ClassId::Mage: enemy.snared=std::max(enemy.snared,6.f);break;
     case ClassId::Necromancer: heal=damage*.6f;break;
     case ClassId::Psionic: enemy.stunned=std::max(enemy.stunned,1.5f);break;
     case ClassId::Bard: enemy.exposed=std::max(enemy.exposed,4.f);break;
@@ -375,6 +436,7 @@ void Simulation::ResolveContact(Enemy& enemy,float elapsed) {
   heal=std::min(heal,MaxHealth()-health_);health_+=heal;
   if(heal>0) Emit(FeedbackKind::Heal,player_,int(heal));
   enemy.health-=damage;
+  if(ReplayActive() && enemy.id>=100 && enemy.id<106) replayReport_.damage+=damage;
   // A practice target accepts real damage and effects but can never die or award loot.
   if(enemy.kind==EnemyKind::Dummy) enemy.health=std::max(1.f,enemy.health);
   if (trainingTarget) sparringDealt_+=int(damage);
@@ -385,7 +447,13 @@ void Simulation::ResolveContact(Enemy& enemy,float elapsed) {
   enemy.state=enemy.kind==EnemyKind::Dummy?EnemyState::Idle:EnemyState::Pursuing;
   if ((index==1 || index==10 || (index==9 && class_==ClassId::Warrior) || ((index==6 || index==7) && class_==ClassId::Psionic) || (index==5 && (class_==ClassId::Psionic || class_==ClassId::Bard))) && enemy.windup>0 && enemy.Interruptible()) {
     enemy.windup=0; enemy.attackCooldown=class_==ClassId::Psionic?1.5f:.8f;
+    if(index==10) {
+      if(class_==ClassId::Warrior) barrier_=std::max(barrier_,40.f);
+      if(class_==ClassId::Mage) classResource_=std::min(CombatStyleInfo().capacity,classResource_+1);
+      if(class_==ClassId::Scout) {enemy.exposed=std::max(enemy.exposed,6.f);classResource_=std::min(CombatStyleInfo().capacity,classResource_+1);}
+    }
     Emit(FeedbackKind::Interrupt,enemy.position);
+    if(ReplayActive() && enemy.id>=100 && enemy.id<106) ++replayReport_.interrupts;
     EmitVisual(CombatVisualKind::Interrupt,enemy.position,1.4f,facing_,enemy.id,elapsed);
     message_=std::string(Spell(index).name)+" interrupted the enemy attack.";
   }
@@ -393,7 +461,8 @@ void Simulation::ResolveContact(Enemy& enemy,float elapsed) {
     if (TargetActor() && TargetActor()->id==enemy.id) target_=-1;
     enemy.state=EnemyState::Dead; enemy.path.clear(); enemy.windup=0;
     if (trainingTarget) { EndSparring("Victory"); return; }
-    if(frontierActive_) {
+    if(enemy.Beast()) {BeastDefeated(enemy,previousLevel);return;}
+    if(FrontierActive()) {
       enemy.looted=true;
       message_=FrontierReady()?std::string("Squad defeated. Report to ")+DescribeQuest(CurrentQuest()).speaker+".":
         "Frontier enemy defeated. Clear the remaining positions.";
@@ -413,11 +482,11 @@ void Simulation::UpdateCombat(float dt,bool advanceAttack) {
     // just because its actor appeared first in the vector.
     while (remaining>0 && health_>0) {
       float step=remaining;
-      for (const auto& enemy : enemies_)
+      for (const auto& enemy : CombatantsMutable())
         if (enemy.health>0 && enemy.windup>0) step=std::min(step,enemy.windup);
       if (sparring_ && trainer_.windup>0) step=std::min(step,trainer_.windup);
       const float tail=std::max(0.f,remaining-step);
-      for (auto& enemy : enemies_) UpdateEnemy(enemy,step,frameTail+tail);
+      for (auto& enemy : CombatantsMutable()) UpdateEnemy(enemy,step,frameTail+tail);
       if (sparring_) UpdateEnemy(trainer_,step,frameTail+tail);
       for(auto& dummy:dummies_) {
         dummy.health=std::min(200.f,dummy.health+200.f*step);
@@ -520,8 +589,43 @@ void Simulation::UpdateRitual(float dt) {
       Length(Difference(player_,WorldMap::ritualSite))>5 || DefeatedCount()!=int(enemies_.size())) {ritualCharge_=0;return;}
   ritualCharge_+=dt;if(ritualCharge_>=4) AdvanceRitual();
 }
+bool Simulation::CourtGuarded(int site) const {
+  if(!CourtActive() || site<0 || site>=3) return false;
+  // Assigned sentries must be defeated, not merely kited away from the plate.
+  const int first=site*2,last=std::min(first+2,5);
+  for(int i=first;i<last;++i) if(enemies_[i].health>0) return true;
+  return false;
+}
+void Simulation::UpdateCourt(float dt,const Command& command) {
+  if(courtChannelSite_<0) return;
+  if(!CourtActive() || health_<=0 || !Grounded() || Dashing() || Attacking() || CastingRecovery() ||
+    damagedThisUpdate_ || command.haltMovement || Length(command.movement)>.001f || command.jump ||
+    Length(movementVelocity_)>.15f || !CanReadSurvey(WorldMap::courtSeals[courtChannelSite_]) || CourtGuarded(courtChannelSite_)) {
+    courtChannel_=0;courtChannelSite_=-1;message_="Seal breaking interrupted. Press E to try again.";return;
+  }
+  // E starts a fresh channel; no retroactive credit for the input frame.
+  if(command.interact) return;
+  courtChannel_+=dt;
+  if(courtChannel_>=2.5f) {
+    const auto p=WorldMap::courtSeals[courtChannelSite_];
+    courtSeals_|=1u<<courtChannelSite_;courtChannel_=0;courtChannelSite_=-1;
+    EmitVisual(CombatVisualKind::Interrupt,p,.3f,0);
+    message_=courtSeals_==7?"All seals broken. The captain is vulnerable.":"Court seal broken. Follow the atlas to the next one.";
+  }
+}
 void Simulation::Interact() {
+  if(!ReplayActive() && Grounded() && !Attacking() && !Dashing())
+    for(int d:{2,5})if(hunts_[d]==1)for(int i=0;i<3;++i)if(!(huntMarks_[d]&(1u<<i)) && CanReadSurvey(population::Cache(d,i))) {
+      huntMarks_[d]|=1u<<i;message_=HuntReady(d)?"Commission ready. Return to its speaker.":"Recovered a commission cache. The remaining sites are marked on the atlas.";return;
+    }
   if (sparring_) { EndSparring("Stopped"); return; }
+  if(CourtActive()) for(int i=0;i<3;++i) if(CanReadSurvey(WorldMap::courtSeals[i])) {
+    if(courtSeals_&(1u<<i)) {message_="This court seal is already broken.";return;}
+    if(CourtGuarded(i)) {message_="Defeat this seal's sentries before breaking it.";return;}
+    if(!Grounded() || Dashing() || Attacking() || CastingRecovery()) {message_="Stand still beside the seal before breaking it.";return;}
+    if(courtChannelSite_!=i) {StopMovement();courtChannelSite_=i;}
+    message_="Breaking the court seal. Remain still for 2.5 seconds.";return;
+  }
   if(RitualActive() && CanReadSurvey(WorldMap::ritualSite)) {
     if(!Grounded() || Dashing() || Attacking()) {message_="Stand beside the beacon before beginning the vigil.";return;}
     if(ritualStage_==0) AdvanceRitual();
@@ -556,7 +660,8 @@ void Simulation::Interact() {
     return;
   }
   if (!nearbyLoot && Length(Difference(player_,WorldMap::trainingPost))<=2.5f && HasLineOfSight(player_,WorldMap::trainingPost)) {
-    if (anchorQuest_!=AnchorQuest::Complete) message_="Secure Dawnwatch before starting a sparring round.";
+    if (ReplayActive()) message_="End the veteran rehearsal before sparring.";
+    else if (anchorQuest_!=AnchorQuest::Complete) message_="Secure Dawnwatch before starting a sparring round.";
     else if (!Grounded() || Dashing()) message_="Finish moving before starting a sparring round.";
     else StartSparring();
     return;
@@ -578,18 +683,23 @@ void Simulation::Interact() {
     const auto& npc=WorldMap::residents[i];
     if(Length(Difference(player_,npc.position))>3 || !HasLineOfSight(player_,npc.position)) continue;
     const auto id=QuestId(int(QuestId::Watch8)+i);
-    if(id>CurrentQuest()) {message_=npc.greeting;return;}
+    if(!HuntingQuest(id) && id>CurrentQuest()) {message_=npc.greeting;return;}
     speakerQuest=id;break;
   }
   if (speakerQuest==QuestId::None) {
     Enemy* nearest=nullptr; float best=2.5f;
-    for (auto& enemy : enemies_) {
+    for (auto& enemy : CombatantsMutable()) {
       const float distance=Length(Difference(player_,enemy.position));
       if (enemy.health<=0 && !enemy.looted && distance<=best && HasLineOfSight(player_,enemy.position)) {
         nearest=&enemy; best=distance;
       }
     }
     if (nearest) {
+      if(nearest->Beast()) {
+        const auto bit=std::uint64_t(1)<<(nearest->id-population::beastBase);
+        const bool first=!(beastLoot_&bit);nearest->looted=true;beastLoot_|=bit;if(first)gold_+=2;
+        message_=first?"Searched the beast's remains. Found 2 gold.":"These hunting grounds have already yielded their spoils.";return;
+      }
       if (!inventory_.Add(Item::Potion)) { message_="Your bag is full. Make room before looting."; return; }
       nearest->looted=true; gold_+=5;
       message_="Looted 5 gold and one healing potion. Q uses a potion.";
@@ -612,6 +722,7 @@ bool Simulation::CanReadSurvey(Vec2 site) const {
 }
 
 QuestId Simulation::CurrentQuest() const {
+  if(ReplayActive()) return QuestId(int(QuestId::Watch1)+replayChapter_);
   return quest_!=Quest::Complete?QuestId::Patrol:anchorQuest_!=AnchorQuest::Complete?QuestId::Anchor:
     QuestId(int(QuestId::Watch1)+std::min(frontierCompleted_,frontierQuestCount-1));
 }
@@ -622,6 +733,8 @@ bool Simulation::CanTalkToKeeper() const {
 }
 
 QuestStage Simulation::DialogueStage() const {
+  if(HuntingQuest(questDialogue_)) {const int i=HuntIndex(questDialogue_);return hunts_[i]==2?QuestStage::Complete:hunts_[i]==0?QuestStage::Offer:HuntReady(i)?QuestStage::TurnIn:QuestStage::Progress;}
+  if(ReplayActive() && questDialogue_==CurrentQuest()) return FrontierReady()?QuestStage::TurnIn:QuestStage::Progress;
   if(questDialogue_>=QuestId::Watch1) {
     if(int(questDialogue_)-int(QuestId::Watch1)<frontierCompleted_) return QuestStage::Complete;
     return !frontierActive_?QuestStage::Offer:FrontierReady()?QuestStage::TurnIn:QuestStage::Progress;
@@ -636,6 +749,9 @@ QuestStage Simulation::DialogueStage() const {
 }
 
 QuestAction Simulation::QuestPrimaryAction() const {
+  if(HuntingQuest(questDialogue_)) {if(ReplayActive())return QuestAction::None;const int i=HuntIndex(questDialogue_);return hunts_[i]==0?QuestAction::AcceptHunt:hunts_[i]==1 && HuntReady(i)?QuestAction::CompleteHunt:QuestAction::None;}
+  if(ReplayActive()) return questDialogue_==CurrentQuest() && FrontierReady()?QuestAction::FinishReplay:QuestAction::None;
+  if(ReplayAvailable(questDialogue_)) return QuestAction::BeginReplay;
   if(questDialogue_>=QuestId::Watch1 && anchorQuest_==AnchorQuest::Complete) {
     const auto stage=DialogueStage();
     return stage==QuestStage::Offer?QuestAction::AcceptFrontier:stage==QuestStage::TurnIn?QuestAction::CompleteFrontier:QuestAction::None;
@@ -651,6 +767,9 @@ const char* Simulation::QuestConfirmStatus() const {
   if (questDialogue_==QuestId::None || !CanTalkToKeeper()) return "Return to the quest speaker.";
   if (QuestPrimaryAction()==QuestAction::None)
     return DialogueStage()==QuestStage::Complete?"Reward received. Thank you for your service.":"Complete the objectives, then return.";
+  if(QuestPrimaryAction()==QuestAction::BeginReplay || QuestPrimaryAction()==QuestAction::FinishReplay) {
+    const auto blocked=BuildChangeStatus();if(*blocked) return blocked;
+  }
   if(QuestPrimaryAction()==QuestAction::AcceptFrontier && frontierCompleted_==0 &&
       std::any_of(enemies_.begin(),enemies_.end(),[](const Enemy& enemy){return !enemy.looted;}))
     return "Collect the remaining raider spoils before accepting a new patrol.";
@@ -663,13 +782,16 @@ void Simulation::ConfirmQuest(QuestAction action) {
   if (action==QuestAction::Close) { CloseQuestDialogue(); return; }
   if (action==QuestAction::None || action!=QuestPrimaryAction() || !CanTalkToKeeper()) return;
   if (std::string(QuestConfirmStatus())!="READY") { message_=QuestConfirmStatus(); return; }
+  if(action==QuestAction::AcceptHunt || action==QuestAction::CompleteHunt) {ConfirmHunt(action);return;}
+  if(action==QuestAction::BeginReplay) {BeginReplay();return;}
+  if(action==QuestAction::FinishReplay) {EndReplay(true);return;}
   if(action==QuestAction::AcceptFrontier) {
     if(frontierCompleted_==0) legacyLoot_=int(std::count_if(enemies_.begin(),enemies_.end(),[](const Enemy& e){return e.looted;}));
-    expeditionMask_=0;ritualStage_=0;ritualCharge_=0;frontierActive_=true;PrepareFrontierEnemies(frontierCompleted_+1);
+    expeditionMask_=0;ritualStage_=0;ritualCharge_=0;courtSeals_=0;courtChannel_=0;courtChannelSite_=-1;frontierActive_=true;PrepareFrontierEnemies(frontierCompleted_+1);
     message_=DescribeQuest(questDialogue_).objective;return;
   }
   if(action==QuestAction::CompleteFrontier) {
-    const int old=Level();++frontierCompleted_;frontierActive_=false;expeditionMask_=0;ritualStage_=0;ritualCharge_=0;RestoreForLevel(old);
+    const int old=Level();++frontierCompleted_;frontierActive_=false;expeditionMask_=0;ritualStage_=0;ritualCharge_=0;courtSeals_=0;courtChannel_=0;courtChannelSite_=-1;RestoreForLevel(old);
     Emit(FeedbackKind::Experience,player_,250);message_="Dispatch completed. Earned 250 experience.";return;
   }
   if (action==QuestAction::AcceptPatrol) {
@@ -700,11 +822,14 @@ void Simulation::Update(float seconds,const Command& command) {
   groundMovementDistance_=0;
   landingSpeed_=landingElapsed_=0; damagedThisUpdate_=false;
   jumpedThisUpdate_=dashedThisUpdate_=false;
-  for (auto& enemy : enemies_) { enemy.movementDistance=0; enemy.damagedThisUpdate=false; }
+  for (auto& enemy : CombatantsMutable()) { enemy.movementDistance=0; enemy.damagedThisUpdate=false; }
   trainer_.movementDistance=0; trainer_.damagedThisUpdate=false;
   for(auto& dummy:dummies_) dummy.damagedThisUpdate=false;
   if (!std::isfinite(seconds) || seconds<=0) return;
   const float dt=std::min(seconds,.05f);
+  replayReportTime_=std::max(0.f,replayReportTime_-dt);
+  if(command.endReplay && ReplayActive()) {EndReplay(false);return;}
+  if(ReplayActive() && health_>0 && !FrontierReady()) replayReport_.seconds+=dt;
   if(command.uiClick) EmitVisual(CombatVisualKind::UiClick,player_,height_,facing_);
   const bool advanceAttack=Attacking(),advanceRecovery=CastingRecovery(),reserveWasReady=EmpoweredReady();
   if (command.restart) { const auto name=nickname_;const auto look=appearance_;CreateCharacter(class_,name,look);return; }
@@ -712,7 +837,7 @@ void Simulation::Update(float seconds,const Command& command) {
   feedback_.erase(std::remove_if(feedback_.begin(),feedback_.end(),[](const CombatFeedback& f) { return f.age>=1.5f; }),feedback_.end());
   hurtFlash_=std::max(0.f,hurtFlash_-dt);
   // Cosmetic flashes must finish even while combat is suspended after defeat.
-  for (auto& enemy : enemies_) enemy.hitFlash=std::max(0.f,enemy.hitFlash-dt);
+  for (auto& enemy : CombatantsMutable()) enemy.hitFlash=std::max(0.f,enemy.hitFlash-dt);
   trainer_.hitFlash=std::max(0.f,trainer_.hitFlash-dt);
   for(auto& dummy:dummies_) dummy.hitFlash=std::max(0.f,dummy.hitFlash-dt);
   sparringReportTime_=std::max(0.f,sparringReportTime_-dt);
@@ -827,20 +952,20 @@ void Simulation::Update(float seconds,const Command& command) {
     for(int i=0;i<friendlyCount;++i) if(command.selectActor==friendlyBase+i && selectable(FriendlyPosition(i))) {
       CancelAttack(); queuedAttack_=-1; queueRemaining_=0; target_=-1; friendlyTarget_=i; message_=std::string(FriendlyName(i))+" / Friendly";
     }
-    for(int i=0;i<int(enemies_.size());++i) if(enemies_[i].id==command.selectActor && enemies_[i].health>0 && selectable(enemies_[i].position)) {
+    for(int i=0;i<int(Combatants().size());++i) if(CombatantsMutable()[i].id==command.selectActor && CombatantsMutable()[i].health>0 && selectable(CombatantsMutable()[i].position)) {
       target_=i; friendlyTarget_=-1;
     }
     for(int i=0;i<3;++i) if(dummies_[i].id==command.selectActor && !(i==0 && sparring_) && selectable(dummies_[i].position)) {
-      target_=int(enemies_.size())+1+i; friendlyTarget_=-1;
+      target_=int(Combatants().size())+1+i; friendlyTarget_=-1;
     }
   }
   if(command.selectThreat) {
     friendlyTarget_=-1;
     // A UI row can expire between rendering and input. Revalidate identity and
     // visibility; never reinterpret its former row number as another enemy.
-    for(std::size_t i=0;i<enemies_.size();++i)
-      if(enemies_[i].id==command.selectThreat && VisibleEnemyCast(enemies_[i])) target_=int(i);
-    if(sparring_ && trainer_.id==command.selectThreat && VisibleEnemyCast(trainer_)) target_=int(enemies_.size());
+    for(std::size_t i=0;i<Combatants().size();++i)
+      if(CombatantsMutable()[i].id==command.selectThreat && VisibleEnemyCast(CombatantsMutable()[i])) target_=int(i);
+    if(sparring_ && trainer_.id==command.selectThreat && VisibleEnemyCast(trainer_)) target_=int(Combatants().size());
   }
   const bool dashMotion=Dashing() || (command.ability==2 && !Attacking() && cooldowns_[2]==0 &&
     !command.haltMovement && CheckDashTarget()==DashCheck::Ready);
@@ -970,8 +1095,11 @@ void Simulation::Update(float seconds,const Command& command) {
     if (Length(Difference(player_,WorldMap::trainingPost))>7) EndSparring("Left the arena");
     else if (sparringRemaining_==0) EndSparring("Time complete");
   }
+  UpdateBeasts(dt);
+  UpdateFrostField(dt);
   UpdateCombat(dt,advanceAttack);
   UpdateRitual(dt);
+  UpdateCourt(dt,command);
   if(queuedAttack_>=0) {
     queueRemaining_=std::max(0.f,queueRemaining_-dt);
     const auto* target=TargetActor();
@@ -1006,8 +1134,8 @@ void Simulation::Update(float seconds,const Command& command) {
 }
 
 void Simulation::SeparateEnemies(float dt) {
-  for (std::size_t i=0;i<enemies_.size();++i) for (std::size_t j=i+1;j<enemies_.size();++j) {
-    auto& a=enemies_[i]; auto& b=enemies_[j];
+  for (std::size_t i=0;i<Combatants().size();++i) for (std::size_t j=i+1;j<Combatants().size();++j) {
+    auto& a=CombatantsMutable()[i]; auto& b=CombatantsMutable()[j];
     if (a.health<=0 || b.health<=0) continue;
     const bool moveA=a.windup<=0 && a.rooted<=0 && a.stunned<=0;
     const bool moveB=b.windup<=0 && b.rooted<=0 && b.stunned<=0;
@@ -1029,6 +1157,7 @@ void Simulation::SeparateEnemies(float dt) {
 void Simulation::UpdateEnemy(Enemy& enemy,float dt,float frameTail) {
   // Split at effect expiry: a snare or stun gets exactly its advertised time
   // at every refresh rate, including the remainder after player contact.
+  if(ReplayActive() && enemy.Beast())return;
   if(enemy.health<=0) {enemy.snared=enemy.rooted=enemy.stunned=enemy.exposed=0;return;}
   while(dt>0) {
     if(enemy.state==EnemyState::Returning) enemy.snared=enemy.rooted=enemy.stunned=enemy.exposed=0;
@@ -1041,7 +1170,7 @@ void Simulation::UpdateEnemy(Enemy& enemy,float dt,float frameTail) {
     dt=tail;
   }
 }
-void Simulation::MoveEnemy(Enemy& enemy,Vec2 displacement) {
+void Simulation::MoveEnemy(Enemy& enemy,Vec2 displacement,bool steer) {
   const float step=Length(displacement);
   if(step<.000001f) return;
   // Steer only the moving actor. Committed casts, roots and other actors' poses
@@ -1059,10 +1188,19 @@ void Simulation::MoveEnemy(Enemy& enemy,Vec2 displacement) {
       // squeeze farther together. Swept tests also reject crossing an actor.
       return x*x+z*z+1e-7f<std::min(spacing*spacing,initial);
     };
-    for(const auto& other:enemies_) if(blocked(other)) return false;
+    for(const auto& other:CombatantsMutable()) if(blocked(other)) return false;
     return !sparring_ || !blocked(trainer_);
   };
   const float heading=std::atan2(displacement.x,displacement.z);
+  if(!steer) {
+    // A committed rush cannot curve around a wall or another creature. Sweep
+    // along its advertised direction, then stop at the first obstruction.
+    const auto safe=[&](float t) {return clear({displacement.x*t,displacement.z*t}) &&
+      map_.CanTravel(enemy.position,{enemy.position.x+displacement.x*t,enemy.position.z+displacement.z*t},.45f);};
+    float t=1;
+    if(!safe(t)) {float low=0,high=1;for(int i=0;i<12;++i){const float middle=(low+high)*.5f;if(safe(middle))low=middle;else high=middle;}t=low;}
+    enemy.position.x+=displacement.x*t;enemy.position.z+=displacement.z*t;return;
+  }
   const float probe=std::max(step,.40f);
   if(clear({displacement.x/step*probe,displacement.z/step*probe})) {
     Vec2 candidate=enemy.position;Move(candidate,displacement,.45f);
@@ -1095,9 +1233,9 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
   enemy.attackCooldown=std::max(0.f,enemy.attackCooldown-dt);
   const float distance=Length(Difference(player_,enemy.position));
   const EnemyState previous=enemy.state;
-  if (enemy.state==EnemyState::Idle && distance<9 && HasLineOfSight(enemy.position,player_))
+  if (enemy.state==EnemyState::Idle && distance<(enemy.Beast()?6.5f:9.f) && HasLineOfSight(enemy.position,player_))
     enemy.state=EnemyState::Pursuing;
-  if (enemy.state==EnemyState::Pursuing && (Length(Difference(player_,enemy.home))>13 || health_<=0))
+  if (enemy.state==EnemyState::Pursuing && (Length(Difference(player_,enemy.home))>(enemy.Beast()?20.f:13.f) || health_<=0))
     enemy.state=EnemyState::Returning;
   if (enemy.state==EnemyState::Returning) enemy.windup=0;
   if (enemy.state==EnemyState::Returning && Length(Difference(enemy.position,enemy.home))<.015f) {
@@ -1110,18 +1248,30 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
   // move away, or interrupt it with heavy strike before the impact is resolved.
   if (enemy.windup>0) {
     enemy.movementSpeed=0;
+    if(enemy.kind==EnemyKind::Boar && enemy.rooted<=0) {
+      const float rush=std::max(0.f,std::min(.4f,enemy.windup)-std::max(0.f,enemy.windup-dt));
+      const auto before=enemy.position;
+      const auto toPlayer=Difference(player_,enemy.position);
+      const float along=toPlayer.x*std::sin(enemy.facing)+toPlayer.z*std::cos(enemy.facing);
+      const float across=std::abs(toPlayer.x*std::cos(enemy.facing)-toPlayer.z*std::sin(enemy.facing));
+      const float budget=7.f*rush*(enemy.snared>0?.45f:1.f);
+      const float travel=across<.85f?std::min(budget,std::max(0.f,along-1.2f)):budget;
+      MoveEnemy(enemy,{std::sin(enemy.facing)*travel,std::cos(enemy.facing)*travel},false);
+      enemy.movementDistance+=Length(Difference(before,enemy.position));
+    }
     const float afterContact=std::max(0.f,dt-enemy.windup);
     enemy.windup=std::max(0.f,enemy.windup-dt);
     if (enemy.windup==0) {
       const float elapsed=frameTail+afterContact;
       if(enemy.kind!=EnemyKind::Wraith)
-        EmitVisual(CombatVisualKind::EnemySwing,enemy.position,0,enemy.facing,enemy.id,elapsed);
+        EmitVisual(enemy.kind==EnemyKind::Wolf?CombatVisualKind::BeastBite:enemy.kind==EnemyKind::Boar?CombatVisualKind::BeastCharge:CombatVisualKind::EnemySwing,enemy.position,0,enemy.facing,enemy.id,elapsed);
       if(enemy.Boss() || enemy.kind==EnemyKind::Wraith)
         EmitVisual(enemy.Boss()?(enemy.bossAttack==1?CombatVisualKind::EnemyTempest:enemy.bossAttack==2?CombatVisualKind::EnemyExecution:CombatVisualKind::EnemyQuake):CombatVisualKind::EnemyLance,
           enemy.position,0,enemy.facing,enemy.id,elapsed);
       const auto delta=Difference(player_,enemy.position);
-      const float dot=distance<.001f?1.f:(std::sin(enemy.facing)*delta.x+std::cos(enemy.facing)*delta.z)/distance;
-      if (enemy.Hits(distance,dot) && height_<1.5f &&
+      const float contactDistance=Length(delta);
+      const float dot=contactDistance<.001f?1.f:(std::sin(enemy.facing)*delta.x+std::cos(enemy.facing)*delta.z)/contactDistance;
+      if (enemy.Hits(contactDistance,dot) && height_<1.5f &&
         health_>0 && HasLineOfSight(enemy.position,player_)) {
         const bool frost=class_==ClassId::Mage && barrier_>0;
         // Circular and annular attacks can land beside or behind the caster.
@@ -1134,6 +1284,16 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
       enemy.attackCooldown=std::max(0.f,enemy.AttackInterval()*(enemy.Enraged()?.65f:1.f)-afterContact);
     }
     return;
+  }
+  if(enemy.kind==EnemyKind::Wolf && enemy.state==EnemyState::Pursuing && enemy.attackCooldown>0 &&
+    distance<3.2f && enemy.rooted<=0 && HasLineOfSight(enemy.position,player_)) {
+    const float toward=std::atan2(player_.x-enemy.position.x,player_.z-enemy.position.z);
+    enemy.facing=motion::Turn(enemy.facing,toward,8.f,dt);
+    const float side=enemy.id&1?1.f:-1.f;
+    const float angle=toward+side*1.8f;const auto before=enemy.position;
+    const float travel=motion::Travel(enemy.movementSpeed,1.15f*(enemy.snared>0?.45f:1.f),8.f,dt);
+    MoveEnemy(enemy,{std::sin(angle)*travel,std::cos(angle)*travel});
+    enemy.movementDistance+=Length(Difference(before,enemy.position));return;
   }
   // Ranged recovery is an opportunity to regain space, not another attack.
   // Keep facing the player so the shared directional rig can back/side-step.
@@ -1195,7 +1355,7 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
   // Consume reached waypoints in the same update instead of idling for a frame.
   while (enemy.waypoint<enemy.path.size() && Length(Difference(enemy.path[enemy.waypoint],enemy.position))<.001f)
     ++enemy.waypoint;
-  const float standOff=enemy.Boss()?3.8f:enemy.kind==EnemyKind::Wraith?5.5f:1.6f;
+  const float standOff=enemy.kind==EnemyKind::Boar?3.4f:enemy.Boss()?3.8f:enemy.kind==EnemyKind::Wraith?5.5f:1.6f;
   const bool navigating=!(clearSight && distance<=standOff) && remaining>.001f && enemy.waypoint<enemy.path.size();
   const auto heading=navigating?Difference(enemy.path[enemy.waypoint],enemy.position):Difference(player_,enemy.position);
   const float desiredFacing=std::atan2(heading.x,heading.z);
@@ -1205,7 +1365,7 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
   const float arrival=clearSight?std::max(0.f,distance-standOff):remaining;
   if(enemy.rooted>0) enemy.movementSpeed=0;
   float budget=motion::Travel(enemy.movementSpeed,navigating && enemy.rooted<=0?
-    std::min(2.2f,arrival*8.f)*alignment*(enemy.snared>0?.45f:1.f):0.f,16.f,dt);
+    std::min(enemy.kind==EnemyKind::Wolf?3.1f:enemy.kind==EnemyKind::Boar?2.6f:2.2f,arrival*8.f)*alignment*(enemy.snared>0?.45f:1.f):0.f,16.f,dt);
   budget=std::min(budget,arrival);
   while (budget>.00001f && enemy.waypoint<enemy.path.size()) {
     const auto direction=Difference(enemy.path[enemy.waypoint],enemy.position);
@@ -1231,8 +1391,13 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
 }
 
 std::string Simulation::Save() const {
+  if(ReplayActive()) {
+    // Save live health, equipment, potions and cooldowns, but the original
+    // campaign encounter. Loading deliberately leaves the transient rehearsal.
+    Simulation campaign=*this;campaign.RestoreCampaignEncounter();return campaign.Save();
+  }
   std::ostringstream out;
-  out << std::setprecision(9) << "MEDITERRANEAN 20\n" << "PROFILE " << int(class_) << ' ' << std::quoted(nickname_) << ' ' << frontierCompleted_ << ' ' << frontierActive_ << ' ' << legacyLoot_ << '\n' << player_.x << ' ' << player_.z << ' '
+  out << std::setprecision(9) << "MEDITERRANEAN 22\n" << "PROFILE " << int(class_) << ' ' << std::quoted(nickname_) << ' ' << frontierCompleted_ << ' ' << frontierActive_ << ' ' << legacyLoot_ << '\n' << player_.x << ' ' << player_.z << ' '
     << health_ << ' ' << facing_ << ' ' << static_cast<int>(quest_) << ' ' << gold_ << '\n';
   out << Potions() << ' ' << HasRewardWeapon() << ' ' << RewardWeaponEquipped() << ' ' << potionCooldown_ << '\n';
   out << static_cast<int>(anchorQuest_) << '\n';
@@ -1255,15 +1420,17 @@ std::string Simulation::Save() const {
   out<<"ENCOUNTERS";for(const auto& enemy:enemies_) out<<' '<<enemy.bossAttack<<' '<<enemy.nextBossAttack;out<<'\n';
   out<<"EXPEDITION "<<expeditionMask_<<' '<<cooldowns_[8]<<' '<<cooldowns_[9]<<'\n';
   out<<"SOUTHERN "<<ritualStage_<<' '<<ritualCharge_<<' '<<cooldowns_[10]<<' '<<cooldowns_[11]<<'\n';
+  out<<"COURT "<<courtSeals_<<'\n';
+  out<<SaveWilderness();
   return out.str();
 }
 
 bool Simulation::Load(const std::string& data) {
-  if (data.size()>4096) return false;
+  if (data.size()>16384) return false;
   std::istringstream input(data);
   std::string magic; int version=0, quest=0,potions=2,owned=0,equipped=0;
   Simulation candidate;
-  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>20) return false;
+  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>22) return false;
   if(version>=11) {
     std::string tag,name;int id=0,completed=0,active=0,looted=0;
     if(!(input>>tag>>id>>std::quoted(name)>>completed>>active>>looted) || tag!="PROFILE" ||
@@ -1272,12 +1439,16 @@ bool Simulation::Load(const std::string& data) {
     candidate.frontierCompleted_=completed;candidate.frontierActive_=active!=0;candidate.legacyLoot_=looted;
     if(completed || active) candidate.PrepareFrontierEnemies(completed+active);
   }
-  // The shop counter occupies formerly walkable ground. Preserve old saves by
-  // moving only actors overlapping that new prop to its nearest free edge.
-  const auto migrateCounter=[&](Vec2& position,float radius) {
-    if (version>=5 || !std::isfinite(position.x) || !std::isfinite(position.z) || candidate.map_.CanStand(position,radius)) return;
+  if(version>=22) {
+    const auto wilderness=data.find("\nWILDERNESS ");
+    if(wilderness==std::string::npos || !candidate.LoadWilderness(data.substr(wilderness+1)))return false;
+  }
+  // Recover only old saved positions covered by a versioned new footprint.
+  // Current-version positions inside geometry remain invalid.
+  const auto migrateNewProps=[&](Vec2& position,float radius) {
+    if (!std::isfinite(position.x) || !std::isfinite(position.z) || candidate.map_.CanStand(position,radius)) return;
     for (const auto& prop : candidate.map_.Obstacles()) {
-      if (prop.kind!=PropKind::Counter) continue;
+      if (!(version<5 && prop.kind==PropKind::Counter) && !(prop.introducedVersion>version)) continue;
       const Vec2 nearest{std::clamp(position.x,prop.center.x-prop.halfX,prop.center.x+prop.halfX),
         std::clamp(position.z,prop.center.z-prop.halfZ,prop.center.z+prop.halfZ)};
       if (Length(Difference(position,nearest))>=radius) continue;
@@ -1293,7 +1464,7 @@ bool Simulation::Load(const std::string& data) {
     }
   };
   if (!(input >> candidate.player_.x >> candidate.player_.z >> candidate.health_ >> candidate.facing_ >> quest >> candidate.gold_)) return false;
-  migrateCounter(candidate.player_,.4f);
+  migrateNewProps(candidate.player_,.4f);
   auto valid=[](float value,float min,float max) { return std::isfinite(value) && value>=min && value<=max; };
   if (!valid(candidate.player_.x,-WorldMap::halfWidth,WorldMap::halfWidth) || !valid(candidate.player_.z,-WorldMap::halfDepth,WorldMap::halfDepth) ||
     !candidate.CanStand(candidate.player_) || !std::isfinite(candidate.health_) || candidate.health_<0 ||
@@ -1319,7 +1490,7 @@ bool Simulation::Load(const std::string& data) {
       if (!(input >> id) || id!=enemy.id) return false;
     }
     if (!(input >> enemy.position.x >> enemy.position.z >> enemy.health >> enemy.attackCooldown)) return false;
-    migrateCounter(enemy.position,.45f);
+    migrateNewProps(enemy.position,.45f);
     if (!valid(enemy.position.x,-WorldMap::halfWidth,WorldMap::halfWidth) || !valid(enemy.position.z,-WorldMap::halfDepth,WorldMap::halfDepth) || !candidate.CanStand(enemy.position,.45f) ||
       !valid(enemy.health,0,version<3?80.f:enemy.MaxHealth()) ||
       !valid(enemy.attackCooldown,0,version<3?1.4f:version>=11?std::max(1.5f,enemy.AttackInterval()):enemy.AttackInterval())) return false;
@@ -1358,7 +1529,7 @@ bool Simulation::Load(const std::string& data) {
       [](const Enemy& enemy){return enemy.health<=0 && !enemy.looted;})) return false;
   if(frontier) looted=candidate.legacyLoot_;
   if ((quest==int(Quest::Active) && defeated>0) || (quest>=2 && defeated==0 && !frontier) ||
-    candidate.gold_!=(quest==3?25:0)+5*looted+(candidate.HasWardArmor()?50:0)-candidate.GoldSpent()+candidate.BuybackValue() ||
+    candidate.gold_!=candidate.WildernessGold()+(quest==3?25:0)+5*looted+(candidate.HasWardArmor()?50:0)-candidate.GoldSpent()+candidate.BuybackValue() ||
     potions+candidate.BuybackCount(Item::Potion)>2+looted+candidate.purchases_[0] ||
     (candidate.anchorQuest_>=AnchorQuest::Return && defeated!=3 && !frontier)) return false;
   if (version>=4) {
@@ -1430,6 +1601,26 @@ bool Simulation::Load(const std::string& data) {
       for(int i=0;i<6;++i) if((i<(candidate.ritualStage_-1)*2 || i>=candidate.ritualStage_*2) && candidate.enemies_[i].health>0)return false;
       if(candidate.ritualCharge_>0 && (defeated!=6 || candidate.health_<=0 || Length(Difference(candidate.player_,WorldMap::ritualSite))>5))return false;
     }
+  }
+  if(version>=21) {
+    std::string tag;
+    if(!(input>>tag>>candidate.courtSeals_) || tag!="COURT" || candidate.courtSeals_>7 ||
+      (!candidate.CourtActive() && candidate.courtSeals_)) return false;
+    if(candidate.CourtActive()) {
+      // A pre-21 save may have already defeated the captain before his guards.
+      // Preserve that victory on future round trips; living captains stay strict.
+      if(candidate.enemies_.back().health>0)
+        for(int i=0;i<3;++i) if((candidate.courtSeals_&(1u<<i)) && candidate.CourtGuarded(i)) return false;
+      if(candidate.enemies_.back().health<=0 && candidate.courtSeals_!=7) return false;
+    }
+  } else if(candidate.CourtActive()) {
+    // Existing court progress remains valid: cleared patrols unlock their seals.
+    for(int i=0;i<3;++i) if(!candidate.CourtGuarded(i)) candidate.courtSeals_|=1u<<i;
+    if(candidate.enemies_.back().health<=0) candidate.courtSeals_=7;
+  }
+  if(version>=22) {
+    std::string wilderness;std::getline(input>>std::ws,wilderness,'\0');
+    if(!candidate.LoadWilderness(wilderness))return false;
   }
   input >> std::ws;
   if (!input.eof()) return false;

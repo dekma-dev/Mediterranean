@@ -194,5 +194,10 @@
   "VIII": "Roman icon level label",
   "HOTBARS 7\n": "Versioned hotbar file header",
   "SOUTHERN ": "Versioned southern province save record",
-  "SOUTHERN": "Versioned southern province save record"
+  "SOUTHERN": "Versioned southern province save record",
+  "COURT": "Versioned save record",
+  "COURT ": "Versioned save record",
+  "WILDERNESS": "Persistent wilderness save record tag.",
+  "WILDERNESS ": "Persistent wilderness save record tag.",
+  "\nWILDERNESS ": "Persistent wilderness save record tag."
 }

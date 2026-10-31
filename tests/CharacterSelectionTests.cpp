@@ -81,7 +81,7 @@ void StorageTransactions(const std::filesystem::path& root) {
   Check(profile::Write(file,second,&first)==W::Saved && Read(oldTemporary)=="Unrelated existing file","Save reused an unowned temporary path");
   Check(profile::Write(file,third,&first)==W::Conflict && Read(file)==second,"Stale compare-and-write succeeded");
   Check(profile::Write(file,third,&second)==W::Saved && profile::Read(file,content)==R::Ready && content==third,"Valid replacement did not publish a complete snapshot");
-  for(const auto invalid:{std::string{},std::string(4097,'X')}) {
+  for(const auto invalid:{std::string{},std::string(16385,'X')}) {
     Write(file,invalid);content="untouched";
     Check(profile::Read(file,content)==R::Error && content=="untouched","Unbounded/empty read accepted");
     Check(profile::Write(file,first,&third)==W::Error && Read(file)==invalid,"Unreadable disk save replaced");
@@ -154,7 +154,7 @@ void Flow(const std::filesystem::path& root,const std::string& veteran) {
   Check(fresh.Selection().Screen()==Selection::Page::Class,"Escape did not return to class choice");
   n.Click(fresh,Control::Cancel);Check(fresh.Selection().Screen()==Selection::Page::Roster && !std::filesystem::exists(missing),"Cancel wrote a character");
 
-  for(const auto& invalid:{std::string{},std::string("broken save"),std::string(4097,'X')}) {
+  for(const auto& invalid:{std::string{},std::string("broken save"),std::string(16385,'X')}) {
     Write(file,invalid);game.Initialize();game.ChooseCharacter(file);Driver bad;bad.Step(game);
     Check(game.Selection().State()==Selection::Status::Unreadable && !game.Selection().Enabled(Control::Enter),"Bad save offered a playable hero");
     bad.Click(game,Control::Enter);bad.Key(game,VK_RETURN);

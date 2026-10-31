@@ -32,7 +32,7 @@ void Options(const std::filesystem::path& root) {
   Check(tokens && count==int(cases.size())+1,"Quoted command token count");
   for(unsigned i=0;i<cases.size();++i) Check(tokens[i+1]==cases[i],"Windows argument escaping changed a value");
   LocalFree(tokens);
-  std::string snapshot="unchanged";Write(root/L"snapshot.save",std::string(4097,'x'));
+  std::string snapshot="unchanged";Write(root/L"snapshot.save",std::string(16385,'x'));
   Check(!launch::ReadSnapshot(root/L"snapshot.save",snapshot) && snapshot=="unchanged","Oversized save accepted/modified output");
   Write(root/L"snapshot.save","");Check(!launch::ReadSnapshot(root/L"snapshot.save",snapshot),"Empty resume file accepted");
 }

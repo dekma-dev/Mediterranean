@@ -19,7 +19,7 @@ void Frame(Renderer& renderer,unsigned index,float yaw,unsigned lod,float time=0
     renderer.DrawAnimatedAsset(asset,{0,-b.minimum.y,0},yaw+DirectX::XM_PI,time,time*3,0,.65f,lod);
   else renderer.DrawAuthoredAsset(asset,{0,-b.minimum.y,0},{1,1,1},yaw+DirectX::XM_PI,lod);
   renderer.DrawHudRect(0,0,1,.098f,{.025f,.035f,.05f,.94f});
-  renderer.DrawText(.02f,.019f,"BLENDER COLLECTION  /  "+std::to_string(index+1)+" OF 13  /  "+authored::Name(asset),{.9f,.82f,.6f,1},1.8f);
+  renderer.DrawText(.02f,.019f,"BLENDER COLLECTION  /  "+std::to_string(index+1)+" OF "+std::to_string(authored::assetCount)+"  /  "+authored::Name(asset),{.9f,.82f,.6f,1},1.8f);
   renderer.DrawText(.02f,.059f,"Left/Right: model   A/D: rotate   L: detail   Space: turntable   Esc: close",{.73f,.79f,.8f,1},1.1f);
   renderer.DrawHudRect(0,.946f,1,.054f,{.025f,.035f,.05f,.94f});
   renderer.DrawText(.02f,.963f,"Native DirectX 11 materials and shadows | Animated asset review | LOD: "+(lod==3?std::string("automatic"):std::to_string(lod)),{.75f,.8f,.82f,1},1.2f);

@@ -63,7 +63,8 @@ int main() {
   Require(sound::MusicGain(.5f,1,0)==.5f && std::isfinite(sound::MusicGain(NAN,NAN,NAN)),"Invalid audio timing must not poison music gain");
   {
     rpg::WorldMap map;
-    const rpg::Vec2 positions[]={{0,-10},{25,-27},rpg::WorldMap::trainingPost,{-11.5f,-1}};
+    // The timber settlement now has a dirt approach at the old grass fixture.
+    const rpg::Vec2 positions[]={{0,-10},{25,-20},rpg::WorldMap::trainingPost,{-11.5f,-1}};
     const sound::Cue steps[]={sound::Cue::Step,sound::Cue::StepGrass,sound::Cue::StepDirt,sound::Cue::StepWood};
     const sound::Cue lands[]={sound::Cue::Land,sound::Cue::LandGrass,sound::Cue::LandDirt,sound::Cue::LandWood};
     std::vector<std::int16_t> surfacePreview;

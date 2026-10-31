@@ -43,7 +43,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     std::error_code error;
     const auto length=std::filesystem::file_size(snapshotPath,error);
     std::ifstream input{std::filesystem::path(snapshotPath),std::ios::binary};
-    if (error || length==0 || length>4096 || !input) {
+    if (error || length==0 || length>16384 || !input) {
       std::wofstream log(std::filesystem::path(capture+L".log")); log << L"Invalid smoke-test snapshot file."; return 2;
     }
     std::ostringstream data; data << input.rdbuf(); snapshot=data.str();

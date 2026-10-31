@@ -1,0 +1,59 @@
+{
+  "asset_count": 34,
+  "new_models": 21,
+  "mesh_records": 102,
+  "bytes": 73900472,
+  "archive_sha256": "920e222f1e8fa8d53ef7f28661ace6d480d12d96ac14cefcc6ae9c3c31a7f9cf",
+  "collection_source_sha256": "d1bcfb6f00405bfa4e8989387a042057005e7e6f5157594e8f318bd258961564",
+  "previous_collection_sha256": "63b5fb93674707a51efa0547c8ba70eacf4eb8ec5e4679b7929546e72e84f66d",
+  "wolf_source_sha256": "8183461ec6624b53c4cff0dd19ba40f3131fa4d37ac7659653d10550236fd530",
+  "wolf_motion_preserved_sha256": "f0060cc549462e9c393d0dc6bbee3dd418d6345c628766e3c082d55b11072b11",
+  "world_detail_source_sha256": "c6164fdeae8caf9aa90ab3d6e93e780890a4ee692870fe98a7c98b0d9231b1ca",
+  "anatomy_source_preserved_sha256": "bbb0590a5dd6a06c0ea20004ac5c6cdda0f3f1754dc18407dde3ed6b53625e79",
+  "changes": [
+    [
+      0,
+      "REWORK | shaped breastplate 18432 quads softened forged plate contours"
+    ],
+    [
+      0,
+      "REWORK | shaped backplate softened forged plate contours"
+    ],
+    [
+      0,
+      "REWORK | flared neck defense softened forged plate contours"
+    ],
+    [
+      1,
+      "Connected anatomical face, fitted scalp and recessed eyes"
+    ],
+    [
+      2,
+      "Connected anatomical face, fitted scalp and recessed eyes"
+    ],
+    [
+      3,
+      "REWORK | shaped breastplate 18432 quads.001 softened forged plate contours"
+    ],
+    [
+      3,
+      "REWORK | shaped backplate.001 softened forged plate contours"
+    ],
+    [
+      3,
+      "REWORK | flared neck defense.001 softened forged plate contours"
+    ],
+    [
+      4,
+      "Recessed orbital/nasal anatomy and compact joints"
+    ],
+    [
+      10,
+      "Recessed side windows, worn sills and iron mullions"
+    ],
+    [
+      11,
+      "Recessed side windows, worn sills and iron mullions"
+    ]
+  ]
+}

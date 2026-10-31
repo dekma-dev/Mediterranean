@@ -12,10 +12,11 @@
 #include "game/Quests.h"
 #include "game/Motion.h"
 #include "game/AttackMotion.h"
+#include "game/Population.h"
 
 namespace rpg {
 enum class EnemyState { Idle, Pursuing, Returning, Dead };
-enum class EnemyKind { Raider, Captain,Trainer,Reaver,Wraith,Dummy };
+enum class EnemyKind { Raider, Captain,Trainer,Reaver,Wraith,Dummy,Wolf,Boar };
 struct Enemy {
   Vec2 position, home;
   int rank=0;
@@ -34,25 +35,37 @@ struct Enemy {
   float windup = 0, facing = 0;
   unsigned bossAttack=0,nextBossAttack=0; // committed warning and next rotation slot
   float snared=0,rooted=0,stunned=0,exposed=0; // transient combat effects
+  float respawn=0,roamTime=0;
+  bool elite=false;
+  bool Beast() const {return kind==EnemyKind::Wolf || kind==EnemyKind::Boar;}
   bool Boss() const { return kind==EnemyKind::Captain && rank>0; }
   bool Enraged() const { return Boss() && health>0 && health<=MaxHealth()*.4f; }
-  float MaxHealth() const { return kind==EnemyKind::Dummy?200.f:Boss()?240.f+rank*32.f:(kind==EnemyKind::Trainer?180.f:kind==EnemyKind::Captain?120.f:kind==EnemyKind::Reaver?105.f:80.f)+rank*18.f; }
-  float WindupDuration() const { return Boss()?1.5f:kind==EnemyKind::Trainer?.9f:kind==EnemyKind::Captain?1.f:kind==EnemyKind::Reaver?1.15f:kind==EnemyKind::Wraith?1.1f:.7f; }
-  float AttackInterval() const { return kind==EnemyKind::Captain?2.4f:kind==EnemyKind::Reaver?2.7f:kind==EnemyKind::Wraith?1.2f:1.4f; }
-  float Damage() const { return (Boss()?28.f:kind==EnemyKind::Captain?16.f:kind==EnemyKind::Reaver?20.f:kind==EnemyKind::Wraith?15.f:8.f)+rank*2.f+(Enraged()?10.f:0.f); }
+  float MaxHealth() const { return Beast()?(kind==EnemyKind::Boar?95.f:80.f)+rank*16.f+(elite?90.f:0):kind==EnemyKind::Dummy?200.f:Boss()?240.f+rank*32.f:(kind==EnemyKind::Trainer?180.f:kind==EnemyKind::Captain?120.f:kind==EnemyKind::Reaver?105.f:80.f)+rank*18.f; }
+  float WindupDuration() const { return kind==EnemyKind::Boar?1.45f:kind==EnemyKind::Wolf?.8f:Boss()?1.5f:kind==EnemyKind::Trainer?.9f:kind==EnemyKind::Captain?1.f:kind==EnemyKind::Reaver?1.15f:kind==EnemyKind::Wraith?1.1f:.7f; }
+  float AttackInterval() const { return kind==EnemyKind::Boar?3.4f:kind==EnemyKind::Wolf?1.8f:kind==EnemyKind::Captain?2.4f:kind==EnemyKind::Reaver?2.7f:kind==EnemyKind::Wraith?1.2f:1.4f; }
+  float Damage() const { return (kind==EnemyKind::Boar?16.f:kind==EnemyKind::Wolf?9.f:Boss()?28.f:kind==EnemyKind::Captain?16.f:kind==EnemyKind::Reaver?20.f:kind==EnemyKind::Wraith?15.f:8.f)+rank*2.f+(elite?6.f:0)+(Enraged()?10.f:0.f); }
   bool Interruptible() const { return !Boss() || bossAttack!=1; }
-  float CastRange() const { return Boss()?6.5f:kind==EnemyKind::Wraith?6.5f:kind==EnemyKind::Reaver?2.7f:2.f; }
+  float CastRange() const { return kind==EnemyKind::Boar?4.8f:Boss()?6.5f:kind==EnemyKind::Wraith?6.5f:kind==EnemyKind::Reaver?2.7f:2.f; }
   float Reach() const { return Boss() && bossAttack==1?3.8f:Boss() && bossAttack==2?8.f:kind==EnemyKind::Wraith?7.f:kind==EnemyKind::Reaver?3.2f:attackReach; }
-  float HalfAngle() const { return Boss() && bossAttack==1?3.14159265f:Boss() && bossAttack==2?.22f:kind==EnemyKind::Wraith?.16f:kind==EnemyKind::Reaver?1.65f:attackHalfAngle; }
+  float HalfAngle() const { return kind==EnemyKind::Boar?.38f:Boss() && bossAttack==1?3.14159265f:Boss() && bossAttack==2?.22f:kind==EnemyKind::Wraith?.16f:kind==EnemyKind::Reaver?1.65f:attackHalfAngle; }
+  float WarningReach() const { return kind==EnemyKind::Boar?Reach()+7.f*std::min(.4f,windup)*(snared>0?.45f:1.f)*(rooted>0?0.f:1.f):Reach(); }
   static constexpr float shockInner=2.8f,shockOuter=5.8f;
   bool Hits(float distance,float dot) const {
     return (distance<=Reach() && dot>=std::cos(HalfAngle())) ||
       (Boss() && bossAttack==0 && distance>=shockInner && distance<=shockOuter);
   }
-  const char* AttackName() const { return Boss()?(bossAttack==1?"Iron tempest":bossAttack==2?"Execution line":"Doomquake"):kind==EnemyKind::Wraith?"Veil lance":kind==EnemyKind::Reaver?"Reaping cleave":"Incoming strike"; }
+  const char* AttackName() const { return kind==EnemyKind::Boar?"Tusk charge":kind==EnemyKind::Wolf?"Rending bite":Boss()?(bossAttack==1?"Iron tempest":bossAttack==2?"Execution line":"Doomquake"):kind==EnemyKind::Wraith?"Veil lance":kind==EnemyKind::Reaver?"Reaping cleave":"Incoming strike"; }
   const char* Counterplay() const { return Boss()?(bossAttack==1?"UNINTERRUPTIBLE - MOVE OUT":bossAttack==2?"SIDESTEP / INTERRUPT":"INNER FLANK / OR OUTSIDE RING"):kind==EnemyKind::Wraith?"SIDESTEP / INTERRUPT":kind==EnemyKind::Reaver?"GET BEHIND / INTERRUPT":"DODGE / INTERRUPT"; }
-  const char* Name() const { if(kind==EnemyKind::Dummy) return "TRAINING DUMMY"; if(Boss()) return rank>=8?"BOSS: ASHEN OVERLORD":"BOSS: OATHBREAKER";if(kind==EnemyKind::Reaver) return "ASH REAVER";if(kind==EnemyKind::Wraith) return "VEIL HUNTER";return kind==EnemyKind::Trainer?"SPARRING GUARD":kind==EnemyKind::Captain?"RAIDER CAPTAIN":"RAIDER"; }
+  const char* Name() const { if(kind==EnemyKind::Wolf) return elite?"PACK LEADER":"GREY WOLF";if(kind==EnemyKind::Boar) return elite?"BRISTLE MATRIARCH":"WILD BOAR";if(kind==EnemyKind::Dummy) return "TRAINING DUMMY"; if(Boss() && rank==16)return "BOSS: IRON REGENT";if(Boss() && rank==15)return "BOSS: MIST WARDEN";if(Boss()) return rank>=8?"BOSS: ASHEN OVERLORD":"BOSS: OATHBREAKER";if(kind==EnemyKind::Reaver) return "ASH REAVER";if(kind==EnemyKind::Wraith) return "VEIL HUNTER";return kind==EnemyKind::Trainer?"SPARRING GUARD":kind==EnemyKind::Captain?"RAIDER CAPTAIN":"RAIDER"; }
   static constexpr float attackReach = 2.4f, attackHalfAngle = 1.f;
+};
+// Non-owning view: campaign slots remain stable and preserve old save semantics.
+template<class T> struct EnemyRange {
+  T* first;std::size_t count;T* second;std::size_t extra;
+  std::size_t size() const {return count+extra;}
+  T& operator[](std::size_t i) const {return i<count?first[i]:second[i-count];}
+  struct Iterator {const EnemyRange* range;std::size_t i;T& operator*() const{return (*range)[i];}Iterator& operator++(){++i;return *this;}bool operator!=(const Iterator& b)const{return i!=b.i;}};
+  Iterator begin() const{return {this,0};}Iterator end() const{return {this,size()};}
 };
 struct Command {
   Vec2 movement;
@@ -68,6 +81,7 @@ struct Command {
   bool usePotion = false, equipWeapon = false;
   int potionSource=-1;
   bool respawn = false;
+  bool endReplay = false;
   bool uiClick=false;
   bool haltMovement = false; // Explicit UI control capture, not ordinary key release.
   InventoryCommand inventory;
@@ -86,8 +100,15 @@ struct CombatFeedback {
   float age = 0;
 };
 
+// An encounter rehearsal never contributes to campaign rewards or save progress.
+struct ExpeditionReport {
+  float seconds=0,damage=0,taken=0,absorbed=0;
+  int interrupts=0;
+  bool victory=false;
+};
+
 // One-update presentation events. Never serialized or used to resolve combat.
-enum class CombatVisualKind { Strike, HeavyStrike, EnemySwing, Hit, HeavyHit, Hurt, Interrupt, Mend, Potion, DashStart, DashStop, DashImpact,SpellCast,BarrierHit,CastStart,UiClick,ReserveReady,CastCancelled,EnemyLance,EnemyQuake,EnemyTempest,EnemyExecution,EnemyPrepare,BossPrepare };
+enum class CombatVisualKind { Strike, HeavyStrike, EnemySwing, Hit, HeavyHit, Hurt, Interrupt, Mend, Potion, DashStart, DashStop, DashImpact,SpellCast,BarrierHit,CastStart,UiClick,ReserveReady,CastCancelled,EnemyLance,EnemyQuake,EnemyTempest,EnemyExecution,EnemyPrepare,BossPrepare,BeastBite,BeastCharge };
 struct CombatVisualEvent {
   CombatVisualKind kind = CombatVisualKind::Hit;
   Vec2 position;
@@ -125,7 +146,14 @@ public:
   float AttackRate() const { if(attackAbility_>=8) return AdvancedRate(class_,attackAbility_); return ClassAttackRate(class_,HeavyAttack())*(attackAbility_==7?.85f:attackAbility_==6?.7f:attackAbility_==5?.8f:1.f); }
   float BuildBonus(unsigned mask,float TalentInfo::*stat) const;
   int FrontierCompleted() const { return frontierCompleted_; }
-  bool FrontierActive() const { return frontierActive_; }
+  bool FrontierActive() const { return frontierActive_ || ReplayActive(); }
+  int EncounterChapter() const { return ReplayActive()?replayChapter_:frontierCompleted_; }
+  bool ReplayActive() const { return replayChapter_>=0; }
+  bool ReplayAvailable(QuestId id) const;
+  const ExpeditionReport& ReplayReport() const { return replayReport_; }
+  float ReplayReportTime() const { return replayReportTime_; }
+  Vec2 FrostFieldPosition() const { return frostField_; }
+  float FrostFieldSeconds() const { return frostSeconds_; }
   int EarnedPoints() const { return EarnedTalentPoints(Level()); }
   void Update(float seconds, const Command& command);
   bool CanStand(Vec2 position, float radius = .4f) const;
@@ -133,6 +161,16 @@ public:
   const WorldMap& Map() const { return map_; }
   const std::vector<Obstacle>& Obstacles() const { return map_.Obstacles(); }
   const std::vector<Enemy>& Enemies() const { return enemies_; }
+  const std::vector<Enemy>& Beasts() const {return beasts_;}
+  EnemyRange<const Enemy> Combatants() const {return {enemies_.data(),enemies_.size(),beasts_.data(),beasts_.size()};}
+  int HuntState(int i) const {return i>=0 && i<6?hunts_[i]:0;}
+  unsigned HuntMarks(int i) const {return i>=0 && i<6?huntMarks_[i]:0;}
+  int HuntProgress(int i) const;
+  bool HuntReady(int i) const;
+  int TrackedHunt() const {return trackedHunt_;}
+  void TrackHunt(int i) {trackedHunt_=i>=0 && i<6 && hunts_[i]==1?i:-1;}
+  Vec2 HuntObjective(int i) const;
+  std::string HuntSummary(int i) const;
   Vec2 Player() const { return player_; }
   float Height() const { return height_; }
   float WorldHeight() const {return map_.Height(player_)+height_;}
@@ -149,7 +187,7 @@ public:
   float MovementDistance() const { return movementDistance_; } // excludes dash/respawn
   Vec2 MovementVelocity() const { return movementVelocity_; }
   float GroundMovementDistance() const { return groundMovementDistance_; }
-  void StopMovement() { queuedAttack_=-1; queueRemaining_=0; recoveryCast_=0; movementVelocity_={}; movementDistance_=groundMovementDistance_=0; jumpBuffer_=0; dashRemaining_=dashTravelLeft_=0; dashTarget_=0; CancelAttack(); }
+  void StopMovement() { courtChannel_=0;courtChannelSite_=-1;queuedAttack_=-1; queueRemaining_=0; recoveryCast_=0; movementVelocity_={}; movementDistance_=groundMovementDistance_=0; jumpBuffer_=0; dashRemaining_=dashTravelLeft_=0; dashTarget_=0; CancelAttack(); }
   int QueuedAttack() const { return queuedAttack_; }
   bool CanBufferAttack(int index) const {
     if(index<0 || index>1 || health_<=0 || Dashing() || CastingRecovery() || !TargetActor() || TargetActor()->health<=0) return false;
@@ -213,7 +251,7 @@ public:
   const Enemy* TargetActor() const;
   const std::array<Enemy,3>& Dummies() const { return dummies_; }
   static constexpr EntityId friendlyBase=300;
-  static constexpr int friendlyCount=11;
+  static constexpr int friendlyCount=int(WorldMap::residents.size())+2;
   static Vec2 FriendlyPosition(int index) { return index>=5?WorldMap::residents[index-2].position:index<3?WorldMap::residents[index].position:index==3?WorldMap::questGiver:WorldMap::quartermaster; }
   static const char* FriendlyName(int index) { return index>=5?WorldMap::residents[index-2].name:index<3?WorldMap::residents[index].name:index==3?"Beacon keeper":"Quartermaster"; }
   int FriendlyTarget() const { return friendlyTarget_; }
@@ -252,11 +290,20 @@ public:
   bool ExpeditionActive() const { return frontierActive_ && (frontierCompleted_==10 || frontierCompleted_==11 || frontierCompleted_==13); }
   unsigned ExpeditionMask() const { return expeditionMask_; }
   Vec2 ExpeditionSite(int index) const { return WorldMap::expeditionSites[index+(frontierCompleted_==13?6:frontierCompleted_==11?3:0)]; }
-  bool RitualActive() const {return frontierActive_ && frontierCompleted_==14;}
+  bool RitualActive() const {return FrontierActive() && EncounterChapter()==14;}
   bool SuppliesActive() const {return frontierActive_ && frontierCompleted_==13;}
   int RitualStage() const {return ritualStage_;}
   float RitualCharge() const {return ritualCharge_/4.f;}
-  bool FrontierReady() const { return RitualActive()?ritualStage_==4:SurveyActive()?surveyMask_==7:ExpeditionActive()?expeditionMask_==7:DefeatedCount()==int(enemies_.size()); }
+  bool CourtActive() const {return FrontierActive() && EncounterChapter()==15;}
+  unsigned CourtSeals() const {return courtSeals_;}
+  float CourtChannelProgress() const {return courtChannel_/2.5f;}
+  int CourtChannelSite() const {return courtChannelSite_;}
+  int CourtWardCount() const {return CourtActive()?3-int(bool(courtSeals_&1))-int(bool(courtSeals_&2))-int(bool(courtSeals_&4)):0;}
+  bool CourtGuarded(int site) const;
+  bool CourtProtected(const Enemy& enemy) const {return CourtWardCount()>0 && enemy.id==105;}
+  bool FinisherSetup(const Enemy& enemy) const {return AdvancedClass(class_) && enemy.health>0 && !CourtProtected(enemy) &&
+    (class_==ClassId::Mage?(enemy.snared>0 || enemy.rooted>0):enemy.exposed>0);}
+  bool FrontierReady() const { return RitualActive()?ritualStage_==4:SurveyActive()?surveyMask_==7:ExpeditionActive()?expeditionMask_==7:(!CourtActive() || courtSeals_==7) && DefeatedCount()==int(enemies_.size()); }
   QuestStage DialogueStage() const;
   QuestAction QuestPrimaryAction() const;
   const char* QuestConfirmStatus() const;
@@ -277,11 +324,39 @@ public:
   static constexpr std::array<float,4> abilityCooldowns{spells[0].cooldown,spells[1].cooldown,spells[2].cooldown,spells[3].cooldown};
   static constexpr float channelDuration = 3.f;
 private:
+  std::vector<Enemy> beasts_;
+  EnemyRange<Enemy> CombatantsMutable() {return {enemies_.data(),enemies_.size(),beasts_.data(),beasts_.size()};}
+  std::array<int,6> hunts_{};
+  std::array<unsigned,6> huntMarks_{};
+  std::uint64_t beastKills_=0,beastLoot_=0;
+  int trackedHunt_=-1;
+  void PopulateBeasts();
+  void UpdateBeasts(float dt);
+  void BeastDefeated(Enemy& enemy,int oldLevel);
+  void ConfirmHunt(QuestAction action);
+  int WildernessGold() const;
+  int WildernessExperience() const;
+  std::string SaveWilderness() const;
+  bool LoadWilderness(const std::string& data);
+  int replayChapter_=-1;
+  std::vector<Enemy> campaignEnemies_;
+  ExpeditionReport replayReport_;
+  float replayReportTime_=0;
+  void BeginReplay();
+  void EndReplay(bool victory);
+  void RestoreCampaignEncounter();
+  Vec2 frostField_{};
+  float frostSeconds_=0;
+  void UpdateFrostField(float dt);
   int frontierCompleted_=0,legacyLoot_=0;
   bool frontierActive_=false;
   unsigned surveyMask_=0,expeditionMask_=0;
   int ritualStage_=0;
   float ritualCharge_=0;
+  unsigned courtSeals_=0;
+  float courtChannel_=0;
+  int courtChannelSite_=-1;
+  void UpdateCourt(float dt,const Command& command);
   void AdvanceRitual();
   void UpdateRitual(float dt);
   void PrepareFrontierEnemies(int rank);
@@ -308,7 +383,7 @@ private:
   bool HasLineOfSight(Vec2 from, Vec2 to) const;
   void UpdateEnemy(Enemy& enemy, float dt,float frameTail);
   void AdvanceEnemy(Enemy& enemy,float dt,float frameTail);
-  void MoveEnemy(Enemy& enemy,Vec2 displacement);
+  void MoveEnemy(Enemy& enemy,Vec2 displacement,bool steer=true);
   void SeparateEnemies(float dt);
   void Emit(FeedbackKind kind,Vec2 position,int amount = 0);
   void RestoreForLevel(int previousLevel);

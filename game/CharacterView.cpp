@@ -172,9 +172,8 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       }
       const float bootYaw=yaw+pose.footYaw[i];
       const XMFLOAT3 foot{ankle.x+std::sin(bootYaw)*.035f,ankle.y-.035f,ankle.z+std::cos(bootYaw)*.035f};
-      renderer.DrawMesh(M::Boot,foot,{.21f,.23f,.34f},outfit.boots?leather:skin,outfit.boots?S::Leather:S::Skin,bootYaw);
+      renderer.DrawMesh(outfit.boots?M::PlayerBoot:M::Boot,foot,outfit.boots?XMFLOAT3{.145f,.23f,.30f}:XMFLOAT3{.15f,.16f,.28f},outfit.boots?leather:skin,outfit.boots?S::WornLeather:S::Skin,bootYaw);
       if (outfit.boots) {
-        renderer.DrawMesh(M::Boot,{foot.x,foot.y-.105f,foot.z},{.22f,.035f,.35f},{.09f,.075f,.05f,1},S::Cloth,bootYaw);
         if(!oldStyle)renderer.DrawSegment({knee.x,knee.y-.025f,knee.z},{knee.x,knee.y+.025f,knee.z},.245f,.26f,{.39f,.29f,.15f,1},S::Cloth);
       }
       if(outfit.boots) {
@@ -259,7 +258,8 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       if (side<0 && outfit.shield && !bow) {
         const auto shieldPoint=[&](XMFLOAT3 local) {
           const auto offset=pose.UpperDirection(local);
-          return point(arm.end.x+offset.x,arm.end.y+offset.y,arm.end.z+offset.z);
+          const auto grip=fingers.Point({0,0,0});
+          return point(grip.x+offset.x,grip.y+offset.y,grip.z+offset.z);
         };
         if(oldStyle)renderer.DrawMesh(oldstyle::Mesh(outfit.classId,4),shieldPoint({-.035f,-.04f,.14f}),{1,1,1},{1,1,1,1},S::Count,yaw+pose.upperYaw,pose.upperPitch,visual::ShadowMode::Cast,pose.upperRoll);
         else {

@@ -1,0 +1,32 @@
+{
+  "revision": "2026-10-31",
+  "previous_source_sha256": "533e343d20fc977fa38e42e9ed1abc44940435c7fe0328efadb8a7c37533b4b2",
+  "source_sha256": "63b5fb93674707a51efa0547c8ba70eacf4eb8ec5e4679b7929546e72e84f66d",
+  "source_copies_synchronized": true,
+  "backup": ".blender-local/refinement-20261031/before",
+  "local_scripts": ".blender-local/refinement-20261031",
+  "archive_sha256": "cdf4f5e0d110d407a0f5781b631ea560aae32e1fddf025b66bbe73e999389a0a",
+  "near_triangles": {
+    "01 \u2022 Dawnwarden": 23967,
+    "02 \u2022 Moonweaver": 23967,
+    "03 \u2022 Ironjaw": 24967,
+    "04 \u2022 Oathless": 23967,
+    "05 \u2022 Ash sentry": 15999,
+    "06 \u2022 Frostfang": 25908,
+    "07 \u2022 Thornback": 35865,
+    "08 \u2022 Elder oak": 31750,
+    "09 \u2022 Highland pine": 19040,
+    "10 \u2022 Blighted elder": 21982,
+    "11 \u2022 Hearth cottage": 29280,
+    "12 \u2022 Moon inn": 31183,
+    "13 \u2022 Border watch": 29998
+  },
+  "preserved_distant_records": 24,
+  "notes": [
+    "All 13 accepted models retained",
+    "Masonry/timber/slate edge profiles and individual wear",
+    "Boar head/ears/withers/feet continuously reshaped; bounded existing groom retained; all LODs updated",
+    "Anatomical wolf continues using separate unchanged frostfang.blend source; near mesh and weights exported together",
+    "Player anatomy source unchanged; 26028 body and 15997 head triangles at near LOD"
+  ]
+}

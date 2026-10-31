@@ -355,6 +355,7 @@
     }
   ],
   "bytes": 12443748,
-  "sha256": "b7832ea26f1431864a64451d014fed044784d6d1be34c7d1d89bb4d6cae8f02c",
-  "blend_sha256": "afe8ba66268d740799e871a0c1116b6bdac2e4705a3e5f63b7393e358c9d6b5a"
+  "sha256": "5c1b4bb90fa9bf0a698be79a3fa15caf963a165243441c53f0b8145685d1d18f",
+  "blend_sha256": "2d2e8ef173d0720d80dd22cf5d9e8346980e802c643cade0a02ba25e97ab07e8",
+  "cloth_revision": "Fitted waist and moderated gravity folds; mage shoulder width"
 }

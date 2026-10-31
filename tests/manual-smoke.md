@@ -1,5 +1,34 @@
 # Native smoke test
 
+## Populated frontier and combat wildlife (2026-10-31)
+
+1. In the rebuilt game, use an existing or fresh hero. Visit Darya (-27,-30) and Boris (29,-30), then Yana (-68,25), Sevastian (73,41), Lada (-68,74) and Makar (69,82). All six independent offers must be available without finishing the campaign. Inspect their approaches, 12 new buildings, wells, carts, supplies, fences and nearby groves. Walk/jump around substantial props; camera and actors must respect their footprints.
+2. Select wolves and boars by click/Tab. Fight normal-health animals as Warrior, Mage and Scout. Read the bite/rush warning, evade sideways, interrupt and compare roots/slows. A committed boar must not curve around a wall or pass through a well/cart/another beast. Watch head/jaw movement, contact effects, side-lying death and the animal portrait; there must be no humanoid sword crescent. Record normal-health pull difficulty and slope/foot defects.
+3. Accept and finish all six commissions. Earlier kills must not count. Three ordinary animals cannot replace a leader. E beside each record/medicine chest must advance exactly once; avoiding combat is permitted. Inspect offers, progress, hand-ins, receipts and gold/XP previews in both languages. Save/load between objectives and confirm no reward can be duplicated.
+4. Open J and switch Campaign/Local commissions. Track each accepted job, inspect the objective/atlas, return marker and remaining cache markers. Check 960x600, 1280x720 and ultrawide layouts. C/I/M/N/J remain live; NPC offers use ! and ready hand-ins use ?. Verify ordinary campaign progress remains independent.
+5. Kill/search an animal: first kill gives 10 XP (25 elite), first search gives 2 gold. Remain nearby for over two minutes: it must stay dead. Leave both home and corpse by more than 22 m: it may respawn. Repeat kills/searches must not farm rewards. Save/load must retain the timer, quest credit and first-reward records. Test death/recovery and veteran rehearsal entry/exit.
+6. Load a pre-22 profile, including a player position covered by a new footprint. Existing class, campaign, gear, gold and talent choices must survive; blocked old positions should move to a clear edge. Test saving, roster return and launcher resume after the new 16 KiB snapshot allowance. Use matching rebuilt binaries; older versions cannot read version 22. See `docs/populated-frontier.md` for evidence and remaining art/balance limitations.
+
+## Veteran replays and tactical areas (2026-10-31)
+
+1. With a completed gate/vigil/court and no active campaign assignment, revisit Radan/Ilar/Vesna. E must show the repeat rules and no reward preview. Begin the encounter; check the localized objective/report panels and leave-button hit region at small/fullscreen/ultrawide sizes. C/I/M/N must retain ordinary movement; Escape retains its existing capture policy.
+2. Finish each replay on Warrior, Mage and Scout. Read warnings, separate pulls, interrupt vulnerable casts, leave the tempest, and use the class setup/finisher. Compare time, damage, absorption, interrupts, potions and deaths. Record actual balance concerns; scripted lifecycle checks do not replace these runs.
+3. Abandon, die/recover, save/load, change character and restart. Campaign completion, level, inventory and real costs must remain correct. Saving alone keeps the live replay; loading exits it. Confirm neither repeated turn-in nor another replay awards XP/gold/items. An active campaign assignment must prevent starting another encounter.
+4. Sweep one/three targets as Warrior: guard is six/eighteen, never added to a larger ward. As Mage, place Frost bloom on a slope: late arrivals slow, exiting removes the lingering slow shortly, walls/protected captain exclude it, and death/load removes the field. As Scout, line up enemies behind the target: only the narrow visible corridor within normal range is pierced; obstacles stop it.
+5. Inspect the three staging shelters, their standards/charcoal baskets and ember drift. Check frost fissures against enemy ground warnings. Inspect objective text for waves, survey/cache sites, six sentries and court seals in both languages. Use `docs/veteran-rehearsals.md` for details and native capture locations.
+
+## Iron court / class combos / southern composition (2026-10-31)
+
+- Load a character before Vesna's final assignment and accept it. The captain must display his ward and take no damage while any seal remains. Hits into the ward must not build class reserve, apply control or drain health.
+- At each bronze plate, try E while its assigned sentries live, including after pulling them away. It must remain locked. After defeating them, E starts a 2.5-second channel. Check cancellation by movement, jump, attack, damage, Escape and focus loss. Repeated E must not grant an instant completion. Save/load retains broken seals and cancels unfinished work.
+- Break all three seals, defeat the Iron Regent and return to Vesna. Confirm the reward occurs once. Check an older save with an already defeated captain: his victory and remaining guards must survive migration and another save/load.
+- At level ten, test rend into cyclone, winter lance into firestorm, and piercing shot into horizon shot. Earn reserve through real hits; inspect the prepared-combo cue and the consumed target status. Attempt the same finishers against an unprepared, out-of-range and obstructed target.
+- Interrupt a vulnerable attack with Pommel strike, Arcane severance and Disarming arrow. Confirm the Warrior guard, Mage extra Ember and Scout exposure/Focus. Repeat against Iron tempest: it must not grant an interrupt reward.
+- Follow all southern roads at ground level and orbit beside the beacon, new houses, towers and tree crowns. Check reachable plates, level foundations, smooth banks, camera visibility, restrained mist and readable combat warnings. Review both Russian and English at 1280x720 and the normal fullscreen resolution.
+- Run the real encounters with all three kits and record deaths, healing consumption and unclear warnings. The automated six-actor workload does not establish encounter balance or long-session performance.
+
+Historical checklist follows.
+
 Status: interactive checklist NOT RUN. Debug/Release Ninja/MSVC builds, ten CTest suites, and 122 smoke captures per configuration (worlds, panels, outfits, sparring, shop, close-up poses and environment views) pass as of 2026-10-18. Those automated checks do not replace this checklist. Separate integration captures show item dragging and defeat recovery. MotionTests covers 30/60/144-Hz acceleration, pose settling, windup alignment, menu/focus stops and camera response.
 
 Run `./scripts/build-native.ps1 -Backend Ninja -Configuration Debug -Test -Run` from PowerShell. Repeat for Release after the Debug checks succeed. Record actual observations in `progress.md`; source inspection does not count as a pass.

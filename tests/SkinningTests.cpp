@@ -80,7 +80,11 @@ void Topology(unsigned level) {
   }
   const auto bytes=mesh.vertices.size()*(sizeof(visual::Vertex)+sizeof(visual::SkinInfluence))+mesh.indices.size()*4;
   std::cout<<"Body level "<<level<<": "<<mesh.vertices.size()<<" vertices, "<<mesh.indices.size()/3<<" triangles, "<<bytes<<" immutable bytes\n";
-  Check(bytes<1024*1024 && mesh.indices.size()/3<20000,"Shared body exceeds its explicit geometry budget");
+  // Adopted anatomical export: 26,028 / 5,000 / 1,400 triangles. Keep explicit
+  // per-LOD bounds; the archive decoder separately enforces the 2 MiB total.
+  constexpr std::size_t byteBudget[]={1280*1024,256*1024,80*1024};
+  constexpr std::size_t triangleBudget[]={28000,6000,2000};
+  Check(bytes<byteBudget[level] && mesh.indices.size()/3<triangleBudget[level],"Shared body exceeds its explicit geometry budget");
   if(level) Check(mesh.indices.size()<visual::CharacterBody(level-1).mesh.indices.size()*.65,
     "Each reduced body must remove substantial geometry");
 }

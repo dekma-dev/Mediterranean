@@ -49,7 +49,7 @@ void Archive() {
     Corrupt(bytes,indices+4,body.mesh.indices[0]); // Collapsed triangle.
     offset=indices+body.mesh.indices.size()*4;
   }
-  Reject(std::string(bytes)+"unexpected");Reject(std::string(1024*1024+1,'x'));
+  Reject(std::string(bytes)+"unexpected");Reject(std::string(2*1024*1024+1,'x'));
   Check(offset==bytes.size(),"Archive layout drifted");
   Check(&visual::CharacterBody(999)==&visual::CharacterBody(2),"Invalid detail must clamp to final LOD");
 }

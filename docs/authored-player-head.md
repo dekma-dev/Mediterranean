@@ -1,8 +1,8 @@
 # Anatomical head integration
 
-Current class-art pass: the preserved source now exports 10,000 / 3,000 / 480
-head triangles and 2,999 / 400 hair triangles. The ignored exporter is
-`.blender-local/oldstyle-three-classes/export_dense_head.py`. Source anatomy and
+Current class-art pass: the preserved source now exports 15,997 / 3,000 / 480
+head triangles and 4,993 / 399 hair triangles. The ignored exporter is
+`.blender-local/refinement-20261031/export_head.py`. Source anatomy and
 fitting are unchanged; see [oldstyle-player-art.md](oldstyle-player-art.md).
 The smaller budgets and historical review below describe the initial adoption.
 
@@ -19,16 +19,16 @@ adoption is documented in `docs/authored-player-body.md`.
 `assets/authored/player-anatomy.blend` preserves the inspected local study without
 modification. Compare its SHA-256 against the local authoring copy before future
 exports. It is covered by the existing Git LFS rule. The export reads the source,
-evaluates one subdivision level, fits the neck to the presentation rig and emits
+evaluates two subdivision levels, fits the neck to the presentation rig and emits
 three normalized head LODs and two fitted scalp LODs. It never saves the source.
 
 ```powershell
-& 'D:/Steam/steamapps/common/Blender/blender.exe' -b assets/authored/player-anatomy.blend --python-exit-code 1 --python scripts/export-player-head.py
+& 'D:/Steam/steamapps/common/Blender/blender.exe' -b assets/authored/player-anatomy.blend --python-exit-code 1 --python .blender-local/refinement-20261031/export_head.py
 ```
 
 `--python-exit-code 1` is important: Blender otherwise returns success for Python
 exceptions. The exporter validates all five outputs before publishing any of
-them. `player-head-source.json` records source/output hashes and the fitting
+them into the local candidate directory. `player-head-source.json` records source/output hashes and the fitting
 origin/scale. CMake's existing MeshAssetCompiler validates and embeds the OBJ
 files. Building and playing require neither Blender nor the `.blend` source.
 

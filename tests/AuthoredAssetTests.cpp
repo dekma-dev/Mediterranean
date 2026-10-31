@@ -44,6 +44,8 @@ int main() {
   bad=source;Put(bad,48+library[0].geometry.vertices.size()*40,0xffffffffu);Reject(bad);
   bad=source;bad.push_back('x');Reject(bad);
   Check(authored::SelectLod(300)==0&&authored::SelectLod(150)==1&&authored::SelectLod(30)==2,"Distance LOD thresholds");
+  const auto muzzle=authored::Influence(authored::Asset::Boar,{.12f,.66f,1.1f});
+  Check(muzzle.bones[0]==1&&muzzle.weights.x>.99f,"Lowered boar muzzle must follow the head, not a foreleg");
   Win32Window window;Renderer renderer;
   Check(window.Create(GetModuleHandleW(nullptr),960,720,L"Authored asset checks",false),"Hidden window");
   Check(renderer.Initialize(window.GetHandle(),960,720),"Embedded GPU buffers");
@@ -177,7 +179,7 @@ int main() {
     else if(frame==1)Check(geometryTriangles<nearTriangles/2,"Cached scenery failed to reduce LOD after camera movement");
     else Check(geometryTriangles==nearTriangles,"Cached scenery failed to restore near LOD");
   }
-  std::cout<<"PASS: 13 assets, 39 bounded meshes, "<<triangles<<" triangles, "<<bytes<<" bytes; corrupt archive rejection, GPU/shadows and cached-scene LOD\n";
+  std::cout<<"PASS: "<<authored::assetCount<<" assets, "<<authored::meshCount<<" bounded meshes, "<<triangles<<" triangles, "<<bytes<<" bytes; corrupt archive rejection, GPU/shadows and cached-scene LOD\n";
   return 0;
  }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}
 }

@@ -42,6 +42,7 @@ struct Sample {
   playerclips::Equipment authoredEquipment=playerclips::Equipment::None;
   playerclips::Frame authoredStrike{};
   float authoredStrikeWeight=0,authoredStrikePhase=0;
+  float authoredReady=0;
   bool authoredStrikeHeavy=false;
   facial::Pose face;
   ActionChannels action;

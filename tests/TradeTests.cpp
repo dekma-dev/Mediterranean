@@ -17,7 +17,8 @@ void RemoveRecord(std::string& save,const char* tag) {
   const auto at=save.find(tag); Require(at!=std::string::npos,"Expected save record."); save.erase(at,save.find('\n',at)-at+1);
 }
 void LegacyVersion(std::string& save,const char* version) {
-  save.replace(14,save.find('\n')-14,version); RemoveRecord(save,"LOADOUTS "); RemoveRecord(save,"BUILD "); RemoveRecord(save,"PROFILE "); RemoveRecord(save,"APPEARANCE "); RemoveRecord(save,"SURVEY "); RemoveRecord(save,"TECHNIQUE "); RemoveRecord(save,"SIGNATURE "); RemoveRecord(save,"OPENING "); RemoveRecord(save,"ENCOUNTERS"); RemoveRecord(save,"EXPEDITION "); RemoveRecord(save,"SOUTHERN ");
+  save.erase(save.find("WILDERNESS "));
+  save.replace(14,save.find('\n')-14,version); RemoveRecord(save,"LOADOUTS "); RemoveRecord(save,"BUILD "); RemoveRecord(save,"PROFILE "); RemoveRecord(save,"APPEARANCE "); RemoveRecord(save,"SURVEY "); RemoveRecord(save,"TECHNIQUE "); RemoveRecord(save,"SIGNATURE "); RemoveRecord(save,"OPENING "); RemoveRecord(save,"ENCOUNTERS"); RemoveRecord(save,"EXPEDITION "); RemoveRecord(save,"SOUTHERN "); RemoveRecord(save,"COURT ");
 }
 void TrimRecord(std::string& save,const char* tag,int count) {
   const auto at=save.find(tag); Require(at!=std::string::npos,"Expected legacy record.");
@@ -69,8 +70,11 @@ int main() {
   c={}; c.interact=true; game.Update(.01f,c); Require(game.Sparring(),"Equipped veteran must start training.");
   for (int i=0;i<25 && game.SparringDamageTaken()==0;++i) game.Update(.05f,{});
   Require(game.SparringDamageTaken()==3,"Ward, helm and shield must reduce an actual 8-point hit to 3.");
-  c={}; c.interact=true; game.Update(.01f,c); const auto remote=game.Save(); Buy(game,0);
-  Require(game.Save()==remote,"Purchases away from the quartermaster must fail without side effects.");
+  c={}; c.interact=true; game.Update(.01f,c);
+  // An invalid transaction must match the same elapsed simulation with no
+  // purchase: nearby wildlife is allowed to keep roaming during both updates.
+  Simulation passive=game; passive.Update(.01f,{}); Buy(game,0);
+  Require(game.Save()==passive.Save(),"Purchases away from the quartermaster must fail without side effects.");
   Require(game.Load(Veteran()),"Reset supply scenario.");
   for (int i=0;i<6;++i) Buy(game,0);
   Require(game.Potions()==11 && game.Gold()==54 && game.ShopStock(0)==0,"Supplies must obey bounded stock and charge every purchase.");

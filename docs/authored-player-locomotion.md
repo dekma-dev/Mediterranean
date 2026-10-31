@@ -1,6 +1,33 @@
-# Authored player locomotion — v3 class equipment, 2026-10-30
+# Authored player locomotion — v4 weapon carry, 2026-10-31
 
-The current archive is v3: 27 authored actions plus six retained compatibility
+The current archive has 54 tracks (48 authored actions and six retained
+compatibility tracks), 428,772 bytes. `assets/authored/player-motion-v4.blend`
+contains the editable action rig. V2 and v3 sources remain preserved.
+
+Sword, staff and bow each have a relaxed carry, combat guard and eight equipped
+directional walk/run clips. Weapon targets now export the actual grip socket
+instead of the wrist origin. A presentation-only readiness blend raises the
+weapon for accepted attacks, holds the guard briefly and lowers it smoothly
+after combat. Direction interpolation avoids accelerating through a near-opposed
+carry/guard blend. The staff's second hand releases during relaxed carry and
+reattaches to the shaft in combat. Gameplay timing and saves are unaffected.
+
+The native retarget now distinguishes the handle socket from the wrist.
+Two-bone arm IK ends at the actual hand-bind wrist, preserving forearm length.
+Staff reach projection includes the palm offset in both arm reach spheres;
+the bow string constraint follows the drawing palm rather than the wrist.
+The supporting hand is reanchored after its orientation blend, and the shield
+follows its own palm socket. Regression checks cover wrist continuity in carry,
+attack/recovery and archery, staff contact and bow-nock contact.
+
+Authoring/export scripts and full character study are ignored under
+`.blender-local/refinement-20261031`. Native review sequences in
+`build-ninja-release/oldstyle-review/carry-*.png` cover idle, walk, run, attack,
+recovery and return to carry at 20 Hz with the actual 60 Hz controllers.
+
+## Preserved v3 notes
+
+The previous v3 archive had 27 authored actions plus six retained compatibility
 tracks, 275,940 bytes. It adds bow guard, two releases, equipped bow walk/run,
 and a weight/settle pass over sword/staff attacks and directional gaits.
 Editable actions are in `assets/authored/player-motion-v3.blend`; the v2 source

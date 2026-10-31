@@ -1,0 +1,29 @@
+{
+  "objects": [
+    "Boot | shaped last vamp quarters 1",
+    "Boot | layered welt and sole 1"
+  ],
+  "scale": [
+    0.145,
+    0.23,
+    0.3
+  ],
+  "lods": [
+    {
+      "name": "player-boot",
+      "triangles": 8000,
+      "vertices": 4004,
+      "sha256": "2790f025563ebf5739fec5ee1c67326c27f397f1d35a21302db5b55a0ef904ff"
+    },
+    {
+      "name": "player-boot-low",
+      "triangles": 1000,
+      "vertices": 504,
+      "sha256": "ff72f40965584f10fda0ee988e4fb1bf1cbb01d13dceb94e42a56c64bd6af6a0"
+    }
+  ],
+  "original_study": ".blender-local\\refinement-20261031\\Human_Male_Motion_v4.blend",
+  "original_study_sha256": "0a6eb3f589fccaee1973da2ea8439078a64a9fb44d486f977877068ea45e8f67",
+  "source": "assets/authored/player-boots.blend",
+  "source_sha256": "c91e9a422d600e94f6268c1528aa4dc232895e3ae93e5bd8d846f532f602c158"
+}

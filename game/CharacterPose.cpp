@@ -32,7 +32,7 @@ DirectX::XMFLOAT3 CharacterPose::UpperPoint(DirectX::XMFLOAT3 p) const {
   p.y-=.95f; p=UpperDirection(p); p.y+=.95f+bodyLift; p.x+=bodyShift; return p;
 }
 DirectX::XMFLOAT3 CharacterPose::WeaponPoint(float distance) const {
-  const auto hand=arms[1].end;
+  const auto hand=hasGripSocket?weaponGrip:arms[1].end;
   return {hand.x+weaponDirection.x*distance,hand.y+weaponDirection.y*distance,hand.z+weaponDirection.z*distance};
 }
 DirectX::XMMATRIX CharacterPose::HeadTransform() const {
@@ -114,9 +114,33 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   const float authoredWeight=authoredBlend*clipWeight*(1-air)*(1-castLayer);
   float gaitAmount=0;for(float w:dynamics.gaitWeights)gaitAmount+=animation::Unit(w);
   gaitAmount=animation::Unit(gaitAmount);
-  const auto& gaitClip=dynamics.authoredMotion;
-  const auto idleClip=playerclips::Sample(dynamics.authoredEquipment==playerclips::Equipment::Staff?playerclips::Clip::StaffGuard:
+  auto gaitClip=dynamics.authoredMotion;
+  const auto guardClip=playerclips::Sample(dynamics.authoredEquipment==playerclips::Equipment::Staff?playerclips::Clip::StaffGuard:
     dynamics.authoredEquipment==playerclips::Equipment::Sword?playerclips::Clip::SwordGuard:bow?playerclips::Clip::BowGuard:playerclips::Clip::Idle,dynamics.authoredClock/4);
+  const auto carryClip=playerclips::Sample(dynamics.authoredEquipment==playerclips::Equipment::Staff?playerclips::Clip::StaffCarry:
+    dynamics.authoredEquipment==playerclips::Equipment::Sword?playerclips::Clip::SwordCarry:bow?playerclips::Clip::BowCarry:playerclips::Clip::Idle,dynamics.authoredClock/4);
+  const float ready=animation::Unit(dynamics.authoredReady);
+  auto idleClip=playerclips::Blend(carryClip,guardClip,ready);
+  const auto blendDirection=[](XMFLOAT3 from,XMFLOAT3 to,float amount) {
+    const auto a=XMVector3Normalize(XMLoadFloat3(&from)),b=XMVector3Normalize(XMLoadFloat3(&to));
+    const float angle=std::acos(std::clamp(XMVectorGetX(XMVector3Dot(a,b)),-.9999f,1.f));
+    XMFLOAT3 result;XMStoreFloat3(&result,angle>.0001f?
+      (a*std::sin((1-amount)*angle)+b*std::sin(amount*angle))/std::sin(angle):a);
+    return result;
+  };
+  idleClip.weapon=blendDirection(carryClip.weapon,guardClip.weapon,ready);
+  // Retain the authored directional swing while bringing the carry towards
+  // guard. The blend is presentation state, never a second combat timer.
+  const float readyGait=ready*gaitAmount;
+  for(unsigned i=0;i<2;++i) {
+    gaitClip.hands[i].x+=(guardClip.hands[i].x-carryClip.hands[i].x)*readyGait;
+    gaitClip.hands[i].y+=(guardClip.hands[i].y-carryClip.hands[i].y)*readyGait;
+    gaitClip.hands[i].z+=(guardClip.hands[i].z-carryClip.hands[i].z)*readyGait;
+  }
+  if(gaitAmount>.00001f) {
+    const auto direction=blendDirection(gaitClip.weapon,guardClip.weapon,ready);
+    gaitClip.weapon={direction.x*gaitAmount,direction.y*gaitAmount,direction.z*gaitAmount};
+  }
   const float idleWeight=authoredBlend*(1-gaitAmount)*clipWeight*(1-air)*(1-castLayer);
   pose.bodyLift+=gaitClip.hip*authoredWeight+idleClip.hip*idleWeight;
   pose.upperPitch+=gaitClip.torso.x*authoredWeight+idleClip.torso.x*idleWeight;
@@ -314,21 +338,36 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     const float scale=std::sqrt(1-minimumY*minimumY)/std::max(horizontal,.00001f);
     pose.weaponDirection.x*=scale;pose.weaponDirection.z*=scale;pose.weaponDirection.y=minimumY;
   }
+  pose.hasGripSocket=dynamics.authoredGait&&dynamics.authoredEquipment!=playerclips::Equipment::None;
+  // The hand's bind wrist is (0,-.055,-.043) in its gripping frame. Solve
+  // the forearm to that point, keeping the authored handle path as a socket.
+  const auto shaftUp=XMLoadFloat3(&pose.weaponDirection);
+  const auto across=pose.UpperDirection({1,0,0});const auto lateral=XMLoadFloat3(&across);
+  const auto shaftRight=XMVector3Normalize(lateral-shaftUp*XMVector3Dot(lateral,shaftUp));
+  const auto shaftForward=XMVector3Cross(shaftRight,shaftUp);
+  const auto wristOffset=-shaftRight*.055f+shaftForward*.043f;
+  if(pose.hasGripSocket) {
+    XMFLOAT3 wrist;XMStoreFloat3(&wrist,XMLoadFloat3(&pose.arms[1].end)+wristOffset);
+    pose.arms[1]=Solve(pose.arms[1].root,wrist,pose.UpperDirection({.8f,-.2f,-1}),CharacterPose::upperArm,CharacterPose::forearm);
+    XMStoreFloat3(&pose.weaponGrip,XMLoadFloat3(&pose.arms[1].end)-wristOffset);
+  }
   if(rpg::StaffWeapon(form)&&!shield&&dynamics.authoredGait&&dynamics.authoredEquipment==playerclips::Equipment::Staff) {
-    pose.staffGripWeight=authoredBlend*(1-burst)*(1-hit)*(1-cast)*(newStrike?1:1-animation::Unit(action.open));
+    pose.staffGripWeight=authoredBlend*(1-burst)*(1-hit)*(1-cast)*
+      std::max(ready,stroke.weight)*(1-animation::Unit(action.open)*(1-stroke.weight));
     // Retarget the two-handed shaft onto the shorter, wider native skeleton.
     // Project the shared grip into BOTH reach spheres before solving either arm.
-    auto grip=XMLoadFloat3(&pose.arms[1].end),axis=XMLoadFloat3(&pose.weaponDirection);
+    auto grip=XMLoadFloat3(&pose.weaponGrip),axis=shaftUp;
     const auto right=XMLoadFloat3(&pose.arms[1].root),left=XMLoadFloat3(&pose.arms[0].root);
     const float reach=CharacterPose::upperArm+CharacterPose::forearm-.002f;
-    for(int iteration=0;iteration<12;++iteration)for(auto centre:{left-axis*.26f,right}) {
+    for(int iteration=0;iteration<12;++iteration)for(auto centre:{left-wristOffset-axis*.26f,right-wristOffset}) {
       const auto d=grip-centre;const float len=XMVectorGetX(XMVector3Length(d));
       if(len>reach)grip=centre+d*(reach/len);
     }
-    XMFLOAT3 r,l;XMStoreFloat3(&r,XMVectorLerp(XMLoadFloat3(&pose.arms[1].end),grip,pose.staffGripWeight));
-    XMStoreFloat3(&l,XMVectorLerp(XMLoadFloat3(&pose.arms[0].end),grip+axis*.26f,pose.staffGripWeight));
+    XMFLOAT3 r,l;XMStoreFloat3(&r,XMVectorLerp(XMLoadFloat3(&pose.arms[1].end),grip+wristOffset,pose.staffGripWeight));
+    XMStoreFloat3(&l,XMVectorLerp(XMLoadFloat3(&pose.arms[0].end),grip+axis*.26f+wristOffset,pose.staffGripWeight));
     pose.arms[1]=Solve(pose.arms[1].root,r,pose.UpperDirection({.22f,-1,-.55f}),CharacterPose::upperArm,CharacterPose::forearm);
     pose.arms[0]=Solve(pose.arms[0].root,l,pose.UpperDirection({-.22f,-1,-.55f}),CharacterPose::upperArm,CharacterPose::forearm);
+    XMStoreFloat3(&pose.weaponGrip,XMLoadFloat3(&pose.arms[1].end)-wristOffset);
   }
   if(bow && pose.bowDraw>0) {
     // Native arm lengths differ from the Blender actor. Keep the string hand
@@ -337,9 +376,9 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     const auto localRight=pose.UpperDirection({1,0,0});const auto lateral=XMLoadFloat3(&localRight);
     const auto right=XMVector3Normalize(lateral-up*XMVector3Dot(lateral,up));
     const auto forward=XMVector3Cross(right,up);
-    const auto nock=XMLoadFloat3(&pose.arms[1].end)+up*.035f-forward*(.07f+.40f*pose.bowDraw);
+    const auto nock=XMLoadFloat3(&pose.weaponGrip)+up*.035f-forward*(.07f+.40f*pose.bowDraw);
     const float grip=pose.bowDraw*(1.1f-.1f*pose.bowDraw);
-    XMFLOAT3 target;XMStoreFloat3(&target,XMVectorLerp(XMLoadFloat3(&pose.arms[0].end),nock,grip));
+    XMFLOAT3 target;XMStoreFloat3(&target,XMVectorLerp(XMLoadFloat3(&pose.arms[0].end),nock+wristOffset,grip));
     pose.arms[0]=Solve(pose.arms[0].root,target,pose.UpperDirection({-.8f,.15f,-.4f}),CharacterPose::upperArm,CharacterPose::forearm);
   }
   return pose;

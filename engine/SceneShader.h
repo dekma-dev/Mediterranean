@@ -321,9 +321,17 @@ float4 CloudRadiance(float3 ray,float footprint,float sampleOffset) {
  scattered=lerp(scattered,SkyRadiance(ray)*(1-transmission),haze);
  return float4(scattered,transmission);
 }
+float RegionalMist(float3 p) {
+ float2 ridge=(p.xz-float2(-86,-91))/float2(25,29);
+ float2 court=(p.xz-float2(93,-109))/float2(24,22);
+ return (.022*exp(-dot(ridge,ridge)*2)+.009*exp(-dot(court,court)*2))*exp(-max(0,p.y-19)*.12);
+}
 float AirTransmission(float3 from,float3 to) {
  float distance=max(0,length(to-from)-8);
  float density=atmosphere.z*exp(-max(0,(from.y+to.y)*.5)*.035);
+ // Three bounded samples soften the transition when the camera enters a hollow.
+ // World surfaces and additive warnings use the same transmission function.
+ density+=(RegionalMist(from)+4*RegionalMist((from+to)*.5)+RegionalMist(to))/6;
  return exp(-distance*density);
 }
 

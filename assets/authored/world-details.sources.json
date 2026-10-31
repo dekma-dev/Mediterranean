@@ -1,0 +1,233 @@
+[
+  {
+    "name": "Coopered supply barrel",
+    "id": "Barrel",
+    "collection": "Barrel",
+    "root": "Barrel | ROOT",
+    "budgets": [
+      14500,
+      3625,
+      942
+    ]
+  },
+  {
+    "name": "Braced merchant crate",
+    "id": "Crate",
+    "collection": "Crate",
+    "root": "Crate | ROOT",
+    "budgets": [
+      11500,
+      2875,
+      747
+    ]
+  },
+  {
+    "name": "Ironbound travel chest",
+    "id": "Chest",
+    "collection": "Chest",
+    "root": "Chest | ROOT",
+    "budgets": [
+      16000,
+      4000,
+      1040
+    ]
+  },
+  {
+    "name": "Oak handcart",
+    "id": "Handcart",
+    "collection": "Handcart",
+    "root": "Handcart | ROOT",
+    "budgets": [
+      24000,
+      6000,
+      1560
+    ]
+  },
+  {
+    "name": "Masoned village well",
+    "id": "Well",
+    "collection": "Well",
+    "root": "Well | ROOT",
+    "budgets": [
+      22000,
+      5500,
+      1430
+    ]
+  },
+  {
+    "name": "Carpenter bench",
+    "id": "Bench",
+    "collection": "Bench",
+    "root": "Bench | ROOT",
+    "budgets": [
+      9500,
+      2375,
+      617
+    ]
+  },
+  {
+    "name": "Forged amber lantern",
+    "id": "Lantern",
+    "collection": "Lantern",
+    "root": "Lantern | ROOT",
+    "budgets": [
+      8500,
+      2125,
+      552
+    ]
+  },
+  {
+    "name": "Charcoal iron brazier",
+    "id": "Brazier",
+    "collection": "Brazier",
+    "root": "Brazier | ROOT",
+    "budgets": [
+      13500,
+      3375,
+      877
+    ]
+  },
+  {
+    "name": "Smith anvil and stump",
+    "id": "Anvil",
+    "collection": "Anvil",
+    "root": "Anvil | ROOT",
+    "budgets": [
+      14500,
+      3625,
+      942
+    ]
+  },
+  {
+    "name": "Split seasoned firewood",
+    "id": "LogPile",
+    "collection": "LogPile",
+    "root": "LogPile | ROOT",
+    "budgets": [
+      15500,
+      3875,
+      1007
+    ]
+  },
+  {
+    "name": "Tied grain sacks",
+    "id": "SackStack",
+    "collection": "SackStack",
+    "root": "SackStack | ROOT",
+    "budgets": [
+      16000,
+      4000,
+      1040
+    ]
+  },
+  {
+    "name": "Carved waypost",
+    "id": "Signpost",
+    "collection": "Signpost",
+    "root": "Signpost | ROOT",
+    "budgets": [
+      12500,
+      3125,
+      812
+    ]
+  },
+  {
+    "name": "Weathered split-rail fence",
+    "id": "Fence",
+    "collection": "Fence",
+    "root": "Fence | ROOT",
+    "budgets": [
+      12000,
+      3000,
+      780
+    ]
+  },
+  {
+    "name": "Straw and leather practice dummy",
+    "id": "TrainingDummy",
+    "collection": "TrainingDummy",
+    "root": "TrainingDummy | ROOT",
+    "budgets": [
+      18000,
+      4500,
+      1170
+    ]
+  },
+  {
+    "name": "Woodland fern clump",
+    "id": "Fern",
+    "collection": "Fern",
+    "root": "Fern | ROOT",
+    "budgets": [
+      10500,
+      2625,
+      682
+    ]
+  },
+  {
+    "name": "Bramble and hazel undergrowth",
+    "id": "Shrub",
+    "collection": "Shrub",
+    "root": "Shrub | ROOT",
+    "budgets": [
+      13000,
+      3250,
+      845
+    ]
+  },
+  {
+    "name": "Hollow storm-broken stump",
+    "id": "Stump",
+    "collection": "Stump",
+    "root": "Stump | ROOT",
+    "budgets": [
+      16000,
+      4000,
+      1040
+    ]
+  },
+  {
+    "name": "Weathered memorial stone",
+    "id": "Gravestone",
+    "collection": "Gravestone",
+    "root": "Gravestone | ROOT",
+    "budgets": [
+      12500,
+      3125,
+      812
+    ]
+  },
+  {
+    "name": "Cloth-roofed provision stall",
+    "id": "SupplyStall",
+    "collection": "SupplyStall",
+    "root": "SupplyStall | ROOT",
+    "budgets": [
+      25000,
+      6250,
+      1625
+    ]
+  },
+  {
+    "name": "Iron-strapped storehouse",
+    "id": "Storehouse",
+    "collection": "Storehouse",
+    "root": "Storehouse | ROOT",
+    "budgets": [
+      35000,
+      8750,
+      2275
+    ]
+  },
+  {
+    "name": "Veteran training hall",
+    "id": "TrainingHall",
+    "collection": "TrainingHall",
+    "root": "TrainingHall | ROOT",
+    "budgets": [
+      35000,
+      8750,
+      2275
+    ]
+  }
+]

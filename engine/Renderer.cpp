@@ -128,7 +128,7 @@ bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
  if (!Check(device_->CreateInputLayout(elements.data(),static_cast<UINT>(elements.size()),body->GetBufferPointer(),body->GetBufferSize(),bodyLayout_.GetAddressOf()),L"Create skinned layout")) return false;
  static_assert(sizeof(Instance)==160,"Instance layout must match the shader.");
  static_assert(sizeof(visual::SkinInfluence)==32 && sizeof(visual::BodyPalette)==4208,"Keep skinning layouts synchronized with HLSL.");
- static_assert(sizeof(visual::HandPalette)==1024 && sizeof(handPalettes_)==65536,"Hand palettes must match HLSL and the D3D11 constant limit.");
+ static_assert(sizeof(visual::HandPalette)==1024 && sizeof(visual::HandPalette)*visual::maxHands==65536,"Hand palettes must match HLSL and the D3D11 constant limit.");
  std::vector<Vertex> vertices; std::vector<std::uint32_t> indices;
  std::vector<visual::SkinInfluence> influences;
  const authored::Library* authoredMeshes=nullptr;
@@ -175,12 +175,12 @@ bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
  const XMFLOAT4 emptyField{};
  D3D11_SUBRESOURCE_DATA fieldData{}; fieldData.pSysMem=&emptyField;
  if (!Check(device_->CreateBuffer(&b,&fieldData,cloudLightConstants_.GetAddressOf()),L"Create cloud field constants")) return false;
- b={};b.ByteWidth=sizeof(bodyPalettes_);b.Usage=D3D11_USAGE_DEFAULT;b.BindFlags=D3D11_BIND_SHADER_RESOURCE;
+ b={};b.ByteWidth=sizeof(visual::BodyPalette)*visual::maxBodies;b.Usage=D3D11_USAGE_DEFAULT;b.BindFlags=D3D11_BIND_SHADER_RESOURCE;
  b.MiscFlags=D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;b.StructureByteStride=sizeof(XMFLOAT4);
  if (!Check(device_->CreateBuffer(&b,nullptr,skinConstants_.GetAddressOf()),L"Create skin palettes")) return false;
- D3D11_SHADER_RESOURCE_VIEW_DESC skinView{};skinView.Format=DXGI_FORMAT_UNKNOWN;skinView.ViewDimension=D3D11_SRV_DIMENSION_BUFFER;skinView.Buffer.NumElements=sizeof(bodyPalettes_)/sizeof(XMFLOAT4);
+ D3D11_SHADER_RESOURCE_VIEW_DESC skinView{};skinView.Format=DXGI_FORMAT_UNKNOWN;skinView.ViewDimension=D3D11_SRV_DIMENSION_BUFFER;skinView.Buffer.NumElements=sizeof(visual::BodyPalette)*visual::maxBodies/sizeof(XMFLOAT4);
  if(!Check(device_->CreateShaderResourceView(skinConstants_.Get(),&skinView,skinPaletteView_.GetAddressOf()),L"Create skin palette view"))return false;
- b={};b.ByteWidth=sizeof(handPalettes_);b.Usage=D3D11_USAGE_DYNAMIC;b.BindFlags=D3D11_BIND_CONSTANT_BUFFER;b.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
+ b={};b.ByteWidth=sizeof(visual::HandPalette)*visual::maxHands;b.Usage=D3D11_USAGE_DYNAMIC;b.BindFlags=D3D11_BIND_CONSTANT_BUFFER;b.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
  if (!Check(device_->CreateBuffer(&b,nullptr,handConstants_.GetAddressOf()),L"Create hand palettes")) return false;
  b.ByteWidth=16380*sizeof(Vertex); b.Usage=D3D11_USAGE_DYNAMIC; b.BindFlags=D3D11_BIND_VERTEX_BUFFER; b.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
  if (!Check(device_->CreateBuffer(&b,nullptr,hudVertices_.GetAddressOf()),L"Create HUD buffer")) return false;
@@ -451,9 +451,13 @@ void Renderer::DrawCoatPanel(visual::Mesh mesh,XMFLOAT3 hem,XMFLOAT3 waist,XMFLO
  auto& item=world_[unsigned(mesh)].back();knee.y+=elevation_;
  XMFLOAT3 local;XMStoreFloat3(&local,XMVector3TransformCoord(XMLoadFloat3(&knee),XMMatrixInverse(nullptr,XMLoadFloat4x4(&item.instance.world))));
  item.instance.surface.z=std::clamp(local.y+.5f,.15f,.85f);item.instance.surface.w=-6;
- // Row 3 is unused by direction transforms (normal.w=0). It carries the
- // knee's lateral deviation from the waist-to-hem chord, in panel space.
- item.instance.normal._41=local.x;item.instance.normal._42=0;item.instance.normal._43=local.z;
+ // Cloth hangs outside the leg already (the authored panel lies at z=.75).
+ // Add only the knee clearance that exceeds that drape. Adding the complete
+ // knee offset inflated the front into a shelf and pulled the back inward.
+ // Row 3 is unused by normal transforms and carries this bounded deformation.
+ const float clearance=.75f-.09f/std::max(depth,.01f);
+ item.instance.normal._41=local.x;item.instance.normal._42=0;
+ item.instance.normal._43=std::max(0.f,local.z-clearance);
  item.radius+=.4f;
 }
 void Renderer::DrawHead(const XMMATRIX& transform,const XMFLOAT4& color,float blink,float expression) {

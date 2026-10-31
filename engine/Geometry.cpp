@@ -3,6 +3,8 @@
 #include "PlayerHeadFar.generated.h"
 #include "PlayerHair.generated.h"
 #include "PlayerHairLow.generated.h"
+#include "PlayerBoot.generated.h"
+#include "PlayerBootLow.generated.h"
 #include "FauldLow.generated.h"
 #include "Fauld.generated.h"
 #include "ShoulderRightLow.generated.h"
@@ -543,6 +545,8 @@ Geometry BuildMesh(Mesh mesh) {
   if(mesh==Mesh::HeadFar) return compiled_mesh::PlayerHeadFar();
   if(mesh==Mesh::Hair) return compiled_mesh::PlayerHair();
   if(mesh==Mesh::HairLow) return compiled_mesh::PlayerHairLow();
+  if(mesh==Mesh::PlayerBoot) return compiled_mesh::PlayerBoot();
+  if(mesh==Mesh::PlayerBootLow) return compiled_mesh::PlayerBootLow();
   if (mesh==Mesh::Boot || mesh==Mesh::BootLow) {
     auto g=Lathe({{-.5f,.37f,.44f},{-.38f,.44f,.49f},{-.18f,.43f,.47f},{.02f,.36f,.37f},
       {.19f,.28f,.24f},{.5f,.27f,.24f}},mesh==Mesh::Boot?24:12);

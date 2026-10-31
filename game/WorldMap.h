@@ -11,20 +11,21 @@ struct Trail { Vec2 from,to; float halfWidth; bool paved; };
 struct GroundSurface { float dirt=0,paving=0; };
 struct GroundCover { Vec2 position; float scale,yaw; bool shrub; };
 struct Resident { const char* name; const char* greeting; Vec2 position; };
-enum class PropKind { Building, Tree, Ruin,Counter,SurveyStone };
+enum class PropKind { Building, Tree, Ruin,Counter,SurveyStone,Dressing };
 enum class BuildingRole { Homestead,WatchHall,Storehouse,TrainingHall };
 struct Obstacle {
   Vec2 center;
   float halfX, halfZ, height;
   PropKind kind = PropKind::Building;
   BuildingRole role = BuildingRole::Homestead;
+  int introducedVersion = 0;
   float RoofHeight() const { return halfX*.75f; }
   // Camera bounds include the art silhouette; actors still collide with trunks
   // and wall footprints so they can walk underneath foliage and roof overhangs.
   float CameraHalfX() const { return kind==PropKind::Tree?2.f:halfX+(kind==PropKind::SurveyStone?.05f:.35f); }
   float CameraHalfZ() const { return kind==PropKind::Tree?2.f:halfZ+(kind==PropKind::Building?.45f:kind==PropKind::SurveyStone?.05f:.35f); }
   float CameraHeight() const { return kind==PropKind::Counter?3.1f:
-    height+(kind==PropKind::Building?RoofHeight()+1.f:kind==PropKind::Tree?.5f:kind==PropKind::SurveyStone?.15f:1.f); }
+    height+(kind==PropKind::Dressing?0:kind==PropKind::Building?RoofHeight()+1.f:kind==PropKind::Tree?.5f:kind==PropKind::SurveyStone?.15f:1.f); }
 };
 
 // Shared by simulation, navigation, rendering and map UI. No platform dependencies.
@@ -38,7 +39,7 @@ public:
   static constexpr Vec2 astralAnchor{0,12.8f};
   static constexpr Vec2 trainingPost{12,-2};
   static constexpr Vec2 quartermaster{3,-12};
-  static constexpr std::array<Resident,9> residents{{
+  static constexpr std::array<Resident,15> residents{{
     {"Warden Elian","Elian: the western watch needs a veteran. Finish the keeper's seven dispatches, then return.",{-21,2}},
     {"Surveyor Mara","Mara: the eastern coast needs a new survey. Warden Elian will send you to me when the west road is safe.",{21,3}},
     {"Archivist Serevan","Serevan: the old northern bastion still answers the beacon. Bring Mara's survey before we open its sealed road.",{10,18}},
@@ -47,11 +48,19 @@ public:
     {"Marshal Radan","Radan: the northern gate is held by two squads. Draw them apart; their commander punishes a frontal assault.",{-8,56}},
     {"Caravaner Tessa","Tessa: our supply carts never reached the south road. Find the three caches before the raiders burn them.",{-39,-85}},
     {"Warden Ilar","Ilar: the ridge beacon must survive three answers from the mist. Prepare before you kindle it.",{-74,-70}},
-    {"Captain Vesna","Vesna: the iron court commands every road in the southern province. Break its patrols before challenging the captain.",{73,-91}}
+    {"Captain Vesna","Vesna: the iron court commands every road in the southern province. Break its patrols before challenging the captain.",{73,-91}},
+    {"Farmer Darya","Darya: the boars have rooted through our winter grain. The farm road is no longer safe.",{-27,-30}},
+    {"Sawyer Boris","Boris: wolves follow the scent of our pack animals. Keep the timber road open.",{29,-30}},
+    {"Forester Yana","Yana: three chests of planting records lie beyond the old pines. Bring them back intact.",{-68,25}},
+    {"Hunter Sevastian","Sevastian: the grey pack follows a scarred leader. Separate its guards before the hunt.",{73,41}},
+    {"Herbalist Lada","Lada: the great sow has driven everyone from the reed beds. Her brood will defend her.",{-68,74}},
+    {"Quarryman Makar","Makar: our medicine chests were abandoned when the boars reached the cutting ground.",{69,82}}
   }};
   static constexpr std::array<Vec2,3> surveySites{{{22,11},{26,22},{16,25}}};
   static constexpr std::array<Vec2,9> expeditionSites{{{-54,34},{-45,46},{-36,51},{53,42},{46,52},{36,58},{-53,-98},{-37,-109},{-23,-100}}};
   static constexpr Vec2 ritualSite{-86,-91};
+  // Ground-mounted plates do not add new collision to existing saves.
+  static constexpr std::array<Vec2,3> courtSeals{{{86,-96},{63,-116},{94,-122}}};
   static constexpr Vec2 dockMin{-13.35f,-3.2f},dockMax{-9.75f,1.25f};
   const std::vector<Obstacle>& Obstacles() const { return obstacles_; }
   const std::vector<Trail>& Trails() const { return trails_; }
@@ -65,6 +74,7 @@ public:
   std::vector<Vec2> FindPath(Vec2 from, Vec2 to, float radius = .45f) const;
   const char* AreaName(Vec2 position) const;
 private:
+  explicit WorldMap(bool build);
   std::vector<Obstacle> obstacles_;
   std::vector<Trail> trails_;
   std::vector<GroundCover> cover_;
