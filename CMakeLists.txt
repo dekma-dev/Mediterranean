@@ -334,7 +334,9 @@ if (BUILD_TESTING)
   add_executable(AuthoredLocomotionTests tests/AuthoredLocomotionTests.cpp)
   target_link_libraries(AuthoredLocomotionTests PRIVATE MediterraneanClient)
   add_test(NAME AuthoredLocomotionTests COMMAND AuthoredLocomotionTests)
-  set_tests_properties(AuthoredLocomotionTests PROPERTIES TIMEOUT 60)
+  # Thousands of IK/grip samples at up to 1000 Hz are materially slower in
+  # unoptimized Debug builds; keep the Release limit and all assertions intact.
+  set_tests_properties(AuthoredLocomotionTests PROPERTIES TIMEOUT "$<IF:$<CONFIG:Debug>,180,60>")
   target_link_libraries(AnimationTests PRIVATE MediterraneanClient)
   add_test(NAME AnimationTests COMMAND AnimationTests)
   add_executable(ShadowTests tests/ShadowTests.cpp)

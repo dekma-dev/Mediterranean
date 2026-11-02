@@ -15,6 +15,10 @@ replace the former corrugated appearance. Four authored sword/staff attacks
 have compact preparation and longer settling within unchanged contact clocks.
 Faces remain frozen. See [the revision record](class-tailoring-motion-revision.md)
 for exact source preservation, archive budgets, references and limitations.
+All six game/launcher outputs are synchronized and smoke-checked with fixture
+saves. Thirteen distinct Release and ten Debug suites pass; the revision record
+documents the Debug-only timeout correction. Native comparisons and motion are
+in `.blender-local/reference-pass-20261102/review.html`.
 
 ## Previous tailoring pass (2026-10-31)
 
@@ -39,7 +43,8 @@ and 54 player motion tracks are retained. The earlier source is backed up under
   and their distance LODs, embedded as resource 306. The editable source also
   contains corresponding vertex groups and a native ten-bone bind rig.
 - `player-body.skin`: 26,028 / 5,000 / 1,400 body triangles. The anatomical source
-  is unchanged. Covered torso vertices receive a local fit beneath the doublet;
+  is unchanged. Covered torso/upper-hip vertices receive a continuous local fit
+  beneath the layered outfit;
   the bare body, neck and arms keep their original shape.
 - `assets/characters/player-head*.obj`: 15,997 / 3,000 / 480 head triangles;
   hair uses 4,993 / 399 triangles. Source hashes remain in the provenance JSON.
@@ -71,8 +76,8 @@ Blender is not needed to build or run the exported game.
 
 Warrior: arming doublet, shaped breastplate, articulated shoulder plates, sallet,
 wood/iron shield and two forged swords. Archer: textile and leather jerkin, hood,
-quiver, small shield and two yew/reflex bows. Mage: layered wool, hood, split coat
-panels, grimoire, ward shield and two wood/iron/quartz staves. Worn metal, leather
+quiver, small shield and two yew/reflex bows. Mage: layered wool, hood, a split long
+coat, grimoire, ward shield and two wood/iron/quartz staves. Worn metal, leather
 and cloth have separate roughness layers; they use subdued colors and fine weave.
 
 The higher-density meshes share immutable buffers. Equipment remains removable;

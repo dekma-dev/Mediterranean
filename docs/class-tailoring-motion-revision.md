@@ -61,8 +61,8 @@ or negative weights, non-unit sums, truncation and trailing data. Garments reuse
 their owner's palette in color, portraits and both shadow passes; they do not
 consume another actor slot. Dye, removable equipment and distance LOD remain live.
 
-Current exports: KIT1 **16,291,016 bytes**, **460,304 shared triangles across all
-parts and both LODs**; GWT1 **1,551,016 bytes**. These are library totals, not a
+Current exports: KIT1 **16,717,652 bytes**, **456,557 shared triangles across all
+parts and both LODs**; GWT1 **1,914,248 bytes**. These are library totals, not a
 per-character triangle count. Per-part geometry counts and source/export hashes
 are in `assets/authored/oldstyle-classes.json`.
 
@@ -101,8 +101,31 @@ captured through the real renderer. `ClassArtDecoderTests` covers malformed GWT1
 input. Body, face, locomotion, foot contact and actor-presentation checks cover
 the surrounding integration.
 
+Final validation passes thirteen distinct Release suites and ten Debug suites.
+The Debug locomotion suite initially reached its old 60-second timeout; an
+isolated run completed successfully in 84.49 seconds. Its Debug-only limit is
+now 180 seconds, while Release remains 60 and every assertion is unchanged.
+The CTest retry passed in 57.85 seconds. Original and retry logs are retained.
+
+All six advertised game/launcher outputs are synchronized: normal Ninja
+Release/Debug, Visual Studio Release/Debug and frontier native/debug. Each actual
+game EXE passes a fixture-save smoke launch; Scout and Mage receive additional
+normal Release fixture launches. PE-resource inspection verifies that all six
+executables embed the exact current KIT1, GWT1 and PCL2 hashes. Player profiles
+are not used. Open `build-ninja-release/MediterraneanLauncher.exe` for normal play.
+
+The hidden 1920×1080 four-scenario workload on RTX 4060 records CPU frame p95
+5.397 / 7.494 / 7.452 / 5.702 ms (spawn, walk/orbit, combat/orbit, merchant/bag).
+Immutable mesh storage is 172,302,732 bytes. These are bounded fixture measurements,
+not interactive FPS or long-session performance; GPU sample counts are too small
+for strong tail claims. Concurrent HUD work is also present, so this is not an
+isolated performance comparison of the garment change.
+
 Final run records, preservation evidence and native review images are local in
-`.blender-local/reference-pass-20261102`. Review garments through walking, running,
+`.blender-local/reference-pass-20261102`. `review.html` compares the local reference,
+six equipment views, front/profile views and native 20 Hz motion sequences.
+`validation-summary.json`, `embedded-resources.json` and `preservation.json`
+record the checks. Review garments through walking, running,
 turning, attacks and airborne poses, including their distance LOD. The current
 ten-bone deformation and rigid upper clothing still limit shoulder and extreme
 pose fidelity; no full cloth simulation or finished reference-quality claim is made.

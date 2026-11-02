@@ -15,6 +15,10 @@ See [the tailoring and motion record](class-tailoring-motion-revision.md) for
 reference evidence, source preservation, geometry/animation counts and review.
 This is a character art integration; it does not complete reference parity or
 the remaining creature/environment art work.
+All six game/launcher outputs listed below contain this revision. Embedded
+resource hashes match the current exports, and every actual game EXE passes a
+fixture-save smoke launch. Thirteen Release and ten Debug art/motion/integration
+suites pass; the revision record includes the resolved Debug test timeout.
 
 ## Frozen faces, locomotion and surface detail (2026-11-01)
 

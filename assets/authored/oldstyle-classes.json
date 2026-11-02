@@ -19,12 +19,12 @@
       "name": "WarriorVeteranChest",
       "lods": [
         {
-          "vertices": 13843,
-          "triangles": 23047
+          "vertices": 14252,
+          "triangles": 23017
         },
         {
-          "vertices": 6972,
-          "triangles": 9174
+          "vertices": 7002,
+          "triangles": 9155
         }
       ]
     },
@@ -279,12 +279,12 @@
       "name": "WarriorSkirt",
       "lods": [
         {
-          "vertices": 11846,
-          "triangles": 21600
+          "vertices": 14239,
+          "triangles": 20538
         },
         {
-          "vertices": 4352,
-          "triangles": 6904
+          "vertices": 5342,
+          "triangles": 6564
         }
       ]
     },
@@ -292,12 +292,12 @@
       "name": "ScoutSkirt",
       "lods": [
         {
-          "vertices": 11838,
-          "triangles": 21600
+          "vertices": 14292,
+          "triangles": 20580
         },
         {
-          "vertices": 4364,
-          "triangles": 6904
+          "vertices": 5292,
+          "triangles": 6552
         }
       ]
     },
@@ -305,12 +305,12 @@
       "name": "MageSkirt",
       "lods": [
         {
-          "vertices": 11882,
-          "triangles": 21600
+          "vertices": 14752,
+          "triangles": 20796
         },
         {
-          "vertices": 4186,
-          "triangles": 6904
+          "vertices": 5902,
+          "triangles": 6784
         }
       ]
     },
@@ -354,11 +354,11 @@
       ]
     }
   ],
-  "bytes": 16291016,
-  "sha256": "132314cc0b0408f0d889dfdddb4eb072cb60ca89ceb04fc7799bf9a951bfedcd",
-  "blend_sha256": "e1a7270c92bbe8dc53e8f0206f0697df6452c197f801e1efd90fa7ae44986a2e",
+  "bytes": 16717652,
+  "sha256": "1cf6fe8d6a09780df2da5e167f6938a436c211323182a5a568bf7ec350fc0024",
+  "blend_sha256": "84b55218c57df18a4801be52cfb6e2c0b2e45c1887e2a6d5b5c71d091af93a74",
   "cloth_revision": "Reference 3: tailored starter/veteran clothing and waist-bound weighted hems",
-  "garment_weights_sha256": "8b0ee0d55a2d4f92008d429d3dba7233fcf23db3992991bc94d7387fb46d95e4",
+  "garment_weights_sha256": "dfb2bd6486bcf952591cf324f494aa60f313437ce7e1a62e21c5366ba178862b",
   "preserved_parts": [
     "WarriorShoulder",
     "WarriorHelm",
