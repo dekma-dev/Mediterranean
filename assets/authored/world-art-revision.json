@@ -2,8 +2,8 @@
   "asset_count": 34,
   "new_models": 21,
   "mesh_records": 102,
-  "bytes": 73883044,
-  "archive_sha256": "9675ca539a9c1218c51f5e1dba20f15b3ec7bde0b787c1df2e89e4b402ab4b4f",
+  "bytes": 79550256,
+  "archive_sha256": "b56f6729436bc1473ad2341fd9daead7baa20399828d6410fd6e5e7f976671e6",
   "collection_source_sha256": "f9742477b9e3dd2cbfc966edc751e45e33d8a24ce162c26e1f09f507e2caeb0c",
   "previous_collection_sha256": "63b5fb93674707a51efa0547c8ba70eacf4eb8ec5e4679b7929546e72e84f66d",
   "wolf_source_sha256": "8183461ec6624b53c4cff0dd19ba40f3131fa4d37ac7659653d10550236fd530",
@@ -56,5 +56,8 @@
       "Recessed side windows, worn sills and iron mullions"
     ]
   ],
-  "face_revision": "collection-face-revision.json"
+  "face_revision": "collection-face-revision.json",
+  "pre_surface_archive_sha256": "9675ca539a9c1218c51f5e1dba20f15b3ec7bde0b787c1df2e89e4b402ab4b4f",
+  "surface_detail_revision": "surface-detail.json",
+  "wolf_motion_sha256": "9964e5109a1e7d0c2fe39280d4b89b951a62789e1286ad1b6bdb632763af0248"
 }

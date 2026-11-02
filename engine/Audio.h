@@ -1,5 +1,6 @@
 #pragma once
 #include "game/Simulation.h"
+#include "game/CreatureContacts.h"
 #include <xaudio2.h>
 #include <array>
 #include <cstdint>
@@ -9,10 +10,12 @@ namespace sound {
 constexpr unsigned sampleRate=22050;
 constexpr unsigned musicSeconds=48;
 enum class Cue { Strike,Heavy,Enemy,Hit,HeavyHit,Hurt,Interrupt,Mend,Potion,Step,Jump,Land,Dash,Cast,Bow,Pistol,
-  Holy,Fire,Thorn,Soul,Mind,Song,Rend,Ward,SpellHit,StepGrass,StepDirt,StepWood,LandGrass,LandDirt,LandWood,UiClick,ReserveReady,CastCancelled,EnemyPrepare,BossPrepare,Count };
+  Holy,Fire,Thorn,Soul,Mind,Song,Rend,Ward,SpellHit,StepGrass,StepDirt,StepWood,LandGrass,LandDirt,LandWood,UiClick,ReserveReady,CastCancelled,EnemyPrepare,BossPrepare,
+  PawGrass,PawDirt,PawStone,PawWood,HoofGrass,HoofDirt,HoofStone,HoofWood,WolfThreat,BoarThreat,WolfBite,BoarRush,Count };
 bool IsStep(Cue cue);
 bool IsLanding(Cue cue);
 Cue GroundCue(const rpg::WorldMap& map,rpg::Vec2 position,bool landing=false);
+Cue CreatureGroundCue(const rpg::WorldMap& map,rpg::Vec2 position,bool hoof);
 Cue ClassReleaseCue(rpg::ClassId school);
 Cue ClassRecoveryCue(rpg::ClassId school);
 std::vector<std::int16_t> Generate(Cue cue);
@@ -45,7 +48,7 @@ struct Events {
   std::array<bool,24> spatial{};
   float stepDistance=0;
   void Reset() { *this={}; }
-  void Update(const rpg::Simulation& state);
+  void Update(const rpg::Simulation& state,const presentation::CreatureContacts* contacts=nullptr);
 };
 }
 class Audio {
@@ -53,7 +56,7 @@ public:
   ~Audio();
   bool Initialize(bool muteOutput=false);
   void Suspend(bool value);
-  void Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds=1.f/60,float cameraYaw=0);
+  void Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds=1.f/60,float cameraYaw=0,const presentation::CreatureContacts* contacts=nullptr);
 private:
   IXAudio2* engine_=nullptr;
   IXAudio2MasteringVoice* master_=nullptr;

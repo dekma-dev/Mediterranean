@@ -19,7 +19,7 @@ Data Decode(std::string_view bytes) {
  Require(r.Read<unsigned>()==0x31464c57 && r.Read<unsigned>()==1,"Invalid wolf animation header");result.bones=r.Read<unsigned>();
  Require(result.bones==30 && result.bones<=visual::paletteBones && r.Read<unsigned>()==4,"Invalid wolf skeleton/clip count");
  for(auto& lod:result.weights) {
-  unsigned count=r.Read<unsigned>();Require(count>0&&count<=65536,"Invalid wolf weight count");lod.reserve(count);
+  unsigned count=r.Read<unsigned>();Require(count>0&&count<=98304,"Invalid wolf weight count");lod.reserve(count);
   for(unsigned i=0;i<count;++i) {
    auto w=r.Read<visual::SkinInfluence>();const float values[]={w.weights.x,w.weights.y,w.weights.z,w.weights.w};float sum=0;
    for(unsigned k=0;k<4;++k){Require(w.bones[k]<result.bones&&std::isfinite(values[k])&&values[k]>=0,"Invalid wolf skin weight");sum+=values[k];}

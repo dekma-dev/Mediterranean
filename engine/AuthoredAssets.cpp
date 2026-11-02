@@ -1,6 +1,7 @@
 #include "engine/AuthoredAssets.h"
 #include "engine/WolfAnimation.h"
 #include "engine/BeastMotion.h"
+#include "engine/QuadrupedRig.h"
 #include <Windows.h>
 #include <cmath>
 #include <cstring>
@@ -38,7 +39,8 @@ visual::SkinInfluence Influence(Asset asset,DirectX::XMFLOAT3 p) {
 }
 visual::BodyPalette Pose(Asset asset,float time,float gait,float attack,float travel,Gesture gesture) {
  if(asset==Asset::Wolf) {
-  auto result=wolf::Pose(time,gait,travel);ApplyBeastCombat(result,asset,attack,gesture);return result;
+  auto result=wolf::Pose(time,gait,travel);ApplyBeastCombat(result,asset,attack,gesture);
+  quadruped::Apply(result,asset,gesture);ApplyBeastCollapse(result,asset,gesture);return result;
  }
  using namespace DirectX;
  visual::BodyPalette palette{};
@@ -93,10 +95,10 @@ visual::BodyPalette Pose(Asset asset,float time,float gait,float attack,float tr
    XMStoreFloat4x4(&palette.normals[child],XMMatrixRotationX(bend)*XMLoadFloat4x4(&palette.normals[parent]));
   }
  }
- if(asset==Asset::Boar)ApplyBeastCombat(palette,asset,attack,gesture);
+ if(asset==Asset::Boar) {ApplyBeastCombat(palette,asset,attack,gesture);quadruped::Apply(palette,asset,gesture);ApplyBeastCollapse(palette,asset,gesture);}
  return palette;
 }
-static_assert(unsigned(visual::Material::Count)==16,"Update authored shader material sentinel with material layers");
+static_assert(unsigned(visual::Material::Count)==18,"Update authored shader material sentinel with material layers");
 static_assert(sizeof(visual::Vertex)==40,"Authored archive stores ten float32 values per vertex");
 namespace {
 void Require(bool condition,const char* message) {if(!condition) throw std::runtime_error(message);}
@@ -123,7 +125,8 @@ Library Decode(std::string_view bytes) {
     auto& entry=result[i];
     const auto vertices=read.Read<std::uint32_t>(),indices=read.Read<std::uint32_t>();
     const bool highDetail=(i%lodCount)==0;
-    const auto indexBudget=i==unsigned(Asset::Oak)*lodCount?240000u:highDetail?(i<unsigned(Asset::Wolf)*lodCount?180000u:120000u):60000u;
+    const auto indexBudget=i==unsigned(Asset::Oak)*lodCount?300000u:
+      i==unsigned(Asset::Wolf)*lodCount||i==unsigned(Asset::Boar)*lodCount?240000u:highDetail?180000u:60000u;
     Require(vertices>0&&vertices<=(highDetail?180000u:65536u)&&indices>=3&&indices<=indexBudget&&indices%3==0,"Authored mesh exceeds vertex/triangle budget");
     entry.bounds.minimum=read.Read<DirectX::XMFLOAT3>();entry.bounds.maximum=read.Read<DirectX::XMFLOAT3>();
     const auto low=entry.bounds.minimum,high=entry.bounds.maximum;

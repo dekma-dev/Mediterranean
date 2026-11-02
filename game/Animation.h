@@ -13,7 +13,7 @@ namespace animation {
 inline float Unit(float value) { return std::isfinite(value)?std::clamp(value,0.f,1.f):0; }
 inline float Signed(float value) { return std::isfinite(value)?std::clamp(value,-1.f,1.f):0; }
 inline float SmoothStep(float value) { const float t=Unit(value); return t*t*(3-2*t); }
-struct Foot { float x=0,y=.17f,z=0,yaw=0; };
+struct Foot { float x=0,y=.17f,z=0,yaw=0,pitch=0; };
 struct Sample {
   float breath=0,sway=0,air=0,rise=0,landing=0,hit=0,travel=0;
   float hitSide=0;

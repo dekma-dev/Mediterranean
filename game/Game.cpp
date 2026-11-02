@@ -73,6 +73,7 @@ bool Game::RestoreSnapshot(const std::string& snapshot) {
 }
 
 void Game::Update(double seconds,const Input& input,float wheel) {
+  creatureSteps_.Reset();
   const float dt=std::isfinite(seconds)?static_cast<float>(std::clamp(seconds,0.0,.05)):0.f;
   // Require a fresh gesture on either side of the roster/world transition.
   if(inputBarrier_) {
@@ -286,6 +287,7 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   }
 }
 void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
+  creatureSteps_.Reset();
   const float dt=std::isfinite(seconds)?std::clamp(seconds,0.f,.05f):0.f;
   const bool wasDead=simulation_.Health()<=0,wasSparring=simulation_.Sparring(),wasReplay=simulation_.ReplayActive();
   const auto previousVelocity=simulation_.MovementVelocity();
@@ -434,7 +436,10 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
       enemy.health>0?std::clamp(movement.lateralAcceleration/50.f,-1.f,1.f):0.f,18.f,dt);
     applyImpacts(enemyActors_[i].animation,enemy.id,enemy.health>0,enemy.facing);
     if(enemy.Beast()) {
-      actor.beast.Update(dt,enemy,movement,actor.animation.pose,releaseAge,active);
+      const auto p=simulation_.Player();
+      const bool detailed=std::hypot(enemy.position.x-p.x,enemy.position.z-p.z)<40;
+      actor.beast.Update(dt,enemy,movement,actor.animation.pose,releaseAge,active,detailed);
+      for(unsigned step=0;step<actor.beast.feet.count;++step)creatureSteps_.Add(actor.beast.feet.events[step],p);
       actor.motion.phase=actor.beast.phase;
       actor.animation.pose.travel=actor.beast.travel;
       continue;
@@ -457,6 +462,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
     enemyActors_[i].animation.pose.motion=enemyActors_[i].animation.locomotion.pose;
   }
   UpdateFaces(dt);
+  for(unsigned i=0;i<creatureSteps_.count;++i)effects_.EmitFootstep(creatureSteps_.events[i],simulation_.Map());
   const auto track=[&](rpg::EntityId id,rpg::Vec2 position,float height,const motion::Actor& motion,
     const animation::Sample& animation,bool shield,bool armed) {
     if (!armed) { effects_.CancelTrail(id); return; }
@@ -524,6 +530,7 @@ void Game::SetCameraOrbit(float yaw,float pitch,float distance) {
   UpdateCamera(0,true);
 }
 void Game::ResetMotion() {
+  creatureSteps_.Reset();
   interface_.ResetCombatFeedback();
   ++audioGeneration_;
   effects_.Reset();

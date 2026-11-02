@@ -15,11 +15,14 @@ struct CharacterPose {
   float bowDraw=0,bowArrow=1;
   std::array<LimbPose,2> arms,legs; // Left, right in character space.
   std::array<float,2> footYaw{};
+  std::array<float,2> footPitch{};
   DirectX::XMFLOAT3 weaponDirection;
   // Authored clips target the handle, whereas the arm solver targets the wrist.
   DirectX::XMFLOAT3 weaponGrip{};
   bool hasGripSocket=false;
-  static constexpr float upperArm=.28f,forearm=.27f,thigh=.40f,shin=.40f;
+  // Match BodyBindPose: knee (.17,.53,0), ankle (.18,.17,0).
+  // The former .40 m shin stretched the 36 cm bind bone and forced a crouch.
+  static constexpr float upperArm=.28f,forearm=.27f,thigh=.40f,shin=.36013886f;
   DirectX::XMFLOAT3 UpperPoint(DirectX::XMFLOAT3 point) const;
   DirectX::XMFLOAT3 UpperDirection(DirectX::XMFLOAT3 direction) const;
   DirectX::XMMATRIX HeadTransform() const;

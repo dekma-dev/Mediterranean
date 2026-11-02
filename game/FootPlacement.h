@@ -1,6 +1,7 @@
 #pragma once
 #include "game/Animation.h"
 #include "game/WorldMap.h"
+#include "game/GaitTiming.h"
 
 namespace animation {
 // Heightfield presentation controller. Contacts are stored in world space and
@@ -13,7 +14,7 @@ public:
     for (int i=0;i<2;++i) {
       feet_[i]={}; feet_[i].point=Neutral(position,yaw,i); feet_[i].point.yaw=yaw;
     }
-    next_=0;
+    next_=0;firstStep_=true;
     support_=supportVelocity_=0;
   }
   void Update(float dt,rpg::Vec2 position,float yaw,bool grounded,bool alive,Sample& sample) {
@@ -48,6 +49,7 @@ public:
       const auto& p=step.point;visible[i]=p;
       const float dx=p.x-position.x,dz=p.z-position.z;
       sample.feet[i]={c*dx-s*dz,p.y-rpg::WorldMap::Height(position),s*dx+c*dz,motion::AngleDelta(yaw,p.yaw)};
+      sample.feet[i].pitch=p.pitch;
     }
     auto support=support_,supportVelocity=supportVelocity_;
     motion::Spring(support,supportVelocity,std::clamp((visible[0].y-visible[1].y)/.10f,-1.f,1.f),20.f,pending_);
@@ -66,6 +68,7 @@ private:
   float support_=0,supportVelocity_=0;
   int next_=0;
   bool ready_=false;
+  bool firstStep_=true;
   static Foot Neutral(rpg::Vec2 position,float yaw,int side) {
     const float offset=side==0?-.18f:.18f;
     const float x=position.x+std::cos(yaw)*offset,z=position.z-std::sin(yaw)*offset;
@@ -74,13 +77,17 @@ private:
   static void AdvanceSwing(Step& foot,int i,float dt,rpg::Vec2 position,float yaw,rpg::Vec2 velocity,const Sample& sample) {
     foot.age=std::min(foot.duration,foot.age+dt);
     auto desired=Neutral(position,yaw,i);
-    desired.x+=velocity.x*(foot.duration-foot.age+.035f);
-    desired.z+=velocity.z*(foot.duration-foot.age+.035f);
+    const float speed=std::hypot(velocity.x,velocity.z);
+    const float lead=TravelGait(speed).reach/std::max(speed,.7f);
+    desired.x+=velocity.x*lead;
+    desired.z+=velocity.z*lead;
     foot.goal.x=motion::Ease(foot.goal.x,desired.x,24,dt);
     foot.goal.z=motion::Ease(foot.goal.z,desired.z,24,dt);
     foot.goal.y=rpg::WorldMap::Height({foot.goal.x,foot.goal.z})+.17f;
     foot.goal.yaw=motion::FollowAngle(foot.goal.yaw,yaw,24,dt);
-    const float t=foot.age/foot.duration,u=SmoothStep(t);
+    const float t=foot.age/foot.duration;
+    // Quintic recovery has zero velocity and acceleration at both contacts.
+    const float u=t*t*t*(10+t*(-15+6*t));
     float height=foot.lift*16*t*t*(1-t)*(1-t);
     if(sample.authoredGait) {
       float amount=0;for(float w:sample.gaitWeights)amount+=Unit(w);
@@ -89,6 +96,9 @@ private:
     }
     foot.point={foot.from.x+(foot.goal.x-foot.from.x)*u,foot.from.y+(foot.goal.y-foot.from.y)*u+height,
       foot.from.z+(foot.goal.z-foot.from.z)*u,foot.from.yaw+motion::AngleDelta(foot.from.yaw,foot.goal.yaw)*u};
+    // Toe clearance through recovery, followed by a restrained heel approach.
+    // Flat, locked contacts remain unchanged at the two endpoints.
+    foot.point.pitch=.24f*std::sin(t*motion::tau)*std::sin(t*motion::tau*.5f);
     if(foot.age>=foot.duration){foot.point=foot.goal;foot.stepping=false;}
   }
   void Tick(float dt,rpg::Vec2 position,float yaw,rpg::Vec2 velocity,const Sample& sample) {
@@ -102,14 +112,21 @@ private:
       const auto neutral=Neutral(position,yaw,i);
       const float error=std::hypot(foot.point.x-neutral.x,foot.point.z-neutral.z);
       const float angle=std::abs(motion::AngleDelta(foot.point.yaw,yaw));
-      if ((error>(speed>.1f?.16f:.065f) || angle>.48f) &&
-          (!feet_[1-i].stepping || error>.36f || angle>.95f)) {
+      const auto timing=TravelGait(speed);
+      const float behind=speed>.1f?((neutral.x-foot.point.x)*velocity.x+(neutral.z-foot.point.z)*velocity.z)/speed:error;
+      const float release=firstStep_&&i==next_?.065f:timing.reach;
+      if ((behind>(speed>.1f?release:.065f) || (speed<=.1f&&error>.065f) || angle>.48f) &&
+          (!feet_[1-i].stepping || behind>timing.reach+.015f || angle>.95f)) {
         foot.stepping=true; foot.from=foot.point; foot.age=0;
-        foot.duration=std::clamp(.50f/std::max(2.8f,speed),.075f,.18f);
+        foot.duration=speed>.1f?timing.swing:.28f;
+        if(firstStep_&&speed>.1f)
+          foot.duration=std::max(.12f,timing.period*(.5f-timing.stance*.5f)-.065f/speed);
         foot.lift=speed>.1f?.10f:.055f;
         foot.goal=neutral;
-        foot.goal.x+=velocity.x*(foot.duration+.035f); foot.goal.z+=velocity.z*(foot.duration+.035f);
+        const float lead=timing.reach/std::max(speed,.7f);
+        foot.goal.x+=velocity.x*lead; foot.goal.z+=velocity.z*lead;
         next_=1-i;
+        firstStep_=false;
         break;
       }
     }
@@ -122,6 +139,15 @@ private:
     // than an unrelated sine cycle. The spring avoids a snap at foot exchange.
     const float support=std::clamp((feet_[0].point.y-feet_[1].point.y)/.10f,-1.f,1.f);
     motion::Spring(support_,supportVelocity_,support,20.f,dt);
+    if(speed<.05f&&!feet_[0].stepping&&!feet_[1].stepping) {
+      bool settled=true;
+      for(int i=0;i<2;++i) {
+        const auto neutral=Neutral(position,yaw,i);
+        settled&=std::hypot(feet_[i].point.x-neutral.x,feet_[i].point.z-neutral.z)<.065f&&
+          std::abs(motion::AngleDelta(feet_[i].point.yaw,yaw))<.48f;
+      }
+      if(settled)firstStep_=true;
+    }
   }
 };
 }

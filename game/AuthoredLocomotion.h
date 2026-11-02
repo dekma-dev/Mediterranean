@@ -7,7 +7,7 @@ namespace animation {
 inline void ApplyAuthoredLocomotion(State& state,float dt,playerclips::Equipment equipment=playerclips::Equipment::None) {
   auto& sample=state.pose;
   const auto& c=state.locomotion;
-  const float run=SmoothStep((c.previousSpeed-3.f)/3.f);
+  const float run=TravelGait(c.previousSpeed).run;
   motion::Spring(state.runBlend,state.runVelocity,run,18.f,dt);
   sample.runBlend=Unit(state.runBlend);
   sample.authoredGait=true;

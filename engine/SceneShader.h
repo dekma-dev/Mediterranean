@@ -16,6 +16,8 @@ Texture2D<float4> uiFrame : register(t5);
 Texture2D<float4> uiHall : register(t6);
 Texture2D<float4> uiIcons : register(t7);
 Texture2D<float> cloudLightField : register(t8);
+Texture2DArray surfaceColor : register(t10);
+Texture2DArray surfaceNormal : register(t11);
 // x = world half extent, y = last texel-center world coordinate. A zero
 // extent selects the analytic reference path for regression diagnostics.
 cbuffer CloudField : register(b3) { float4 cloudField; };
@@ -119,7 +121,7 @@ VOut VSWorld(InstanceIn i) {
  o.n=normalize(mul(float4(i.n,0),normals).xyz);
  o.receiverPlane=i.surface.w<0?0:1;
  float4 receiver=position;
- bool authoredSkin=i.surface.x==16 && i.tint.w==9;
+ bool authoredSkin=i.surface.x==18 && i.tint.w==9;
  // The detailed cascade covers 20 m: a face is only a few shadow texels wide.
  // A local normal offset prevents curved skin/scalp self-shadow striping while
  // leaving the caster silhouette and every other world receiver unchanged.
@@ -129,7 +131,7 @@ VOut VSWorld(InstanceIn i) {
  o.detailShadow=mul(receiver,shadowVP[1]); o.material=i.surface.x;
  // Authored vertices carry a validated native material ID in alpha.
  // The special instance material leaves ordinary tint/opacity unchanged.
- if (i.surface.x==16) {
+ if (i.surface.x==18) {
   o.material=i.tint.w;o.tint.a=abs(i.paint.a);
   if(i.paint.a<0)o.tint.rgb=i.tint.rgb*(i.tint.w==15?i.paint.rgb:float3(1,1,1));
  }
@@ -165,7 +167,7 @@ void SkinBody(inout InstanceIn i,uint4 joints,float4 weights) {
   n+=mul(float4(i.n,0),BodyMatrix(actor,joints[k],true)).xyz*weights[k];
  }
  i.p=p; i.n=normalize(n);
- if(i.surface.x!=16) {
+ if(i.surface.x!=18) {
   float4 style=bodyRows[actor*263+256+(uint)i.tint.w];
   i.tint=float4(style.rgb,1); i.surface.x=style.w;
  }
@@ -441,6 +443,34 @@ float4 PSMain(VOut i) : SV_TARGET {
  float3 slope=weights.x*float3(0,gx.y,gx.x)+weights.y*float3(gy.x,0,gy.y)+weights.z*float3(gz.x,gz.y,0);
  float2 heightDerivative=float2(dot(slope,ddx(i.tp)),dot(slope,ddy(i.tp)))*scale;
  float3 albedo=i.tint.rgb*detail;
+ // Dedicated high resolution surfaces leave skin, scalp and all facial
+ // expression paths on their frozen original material layers.
+ int surfaceLayer=i.material==2?0:i.material==3?1:i.material==4?2:i.material==5?3:i.material==16?4:i.material==17?5:-1;
+ [branch] if(surfaceLayer>=0) {
+  // Poly Haven measured coverage: bark 1 m, wood/plaster 2 m, stone 1.8 m.
+  float repeat=i.material==16?1:i.material==17?5:i.material==3||i.material==4?.5:i.material==2?1/1.8:1.2;
+  float3 q=i.tp*repeat;
+  float4 cx=surfaceColor.Sample(surfaceSampler,float3(q.zy,surfaceLayer));
+  float4 cy=surfaceColor.Sample(surfaceSampler,float3(q.xz,surfaceLayer));
+  float4 cz=surfaceColor.Sample(surfaceSampler,float3(q.xy,surfaceLayer));
+  float4 tex=cx*weights.x+cy*weights.y+cz*weights.z;
+  float3 nx=surfaceNormal.Sample(surfaceSampler,float3(q.zy,surfaceLayer)).xyz*2-1;
+  float3 ny=surfaceNormal.Sample(surfaceSampler,float3(q.xz,surfaceLayer)).xyz*2-1;
+  float3 nz=surfaceNormal.Sample(surfaceSampler,float3(q.xy,surfaceLayer)).xyz*2-1;
+  float3 gradient=weights.x*float3(0,-nx.y,-nx.x)/max(nx.z,.25)+weights.y*float3(-ny.x,0,-ny.y)/max(ny.z,.25)+weights.z*float3(-nz.x,-nz.y,0)/max(nz.z,.25);
+  // Imported normals already encode metric surface slopes. Only the locally
+  // generated roof/fur fields store height slopes per texture repeat.
+  float normalScale=i.material==5||i.material==17?repeat:1;
+  heightDerivative=float2(dot(gradient,ddx(i.tp)),dot(gradient,ddy(i.tp)))*normalScale;
+  if(i.material==17)albedo=i.tint.rgb*tex.rgb;
+  else if(i.material==5) {
+   float luminance=max(dot(i.tint.rgb,float3(.2126,.7152,.0722)),.10);
+   float3 tint=lerp(1,i.tint.rgb/luminance,.28);
+   albedo=tex.rgb*tint;
+  }
+  else albedo=tex.rgb; // Preserve photographed color instead of the old mesh palette.
+  roughness=max(.66,tex.a);
+ }
  [branch] if(i.bodyStyle==0xffffffff) {
   // Local metric masks follow the head, retaining the selected complexion.
   // Identity-specific skin coloration (including stubble) comes from the mesh.

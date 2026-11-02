@@ -2,9 +2,9 @@
   "version": 1,
   "coordinate_system": "Y up, +Z forward, metres",
   "source": "collection01.blend + world-details.blend + frostfang.blend",
-  "refinement": "2026-11-01: two anatomical actor heads, legacy facial overlays removed, neck/collar fit corrected; other 32 models preserved",
-  "sha256": "9675ca539a9c1218c51f5e1dba20f15b3ec7bde0b787c1df2e89e4b402ab4b4f",
-  "bytes": 73883044,
+  "refinement": "2026-11-01: adaptive curved surface refinement; dedicated bark and body coat materials; faces frozen",
+  "sha256": "b56f6729436bc1473ad2341fd9daead7baa20399828d6410fd6e5e7f976671e6",
+  "bytes": 79550256,
   "meshes": [
     {
       "asset": "01 \u2022 Dawnwarden",
@@ -279,16 +279,16 @@
     {
       "asset": "06 \u2022 Frostfang",
       "lod": 0,
-      "vertices": 42111,
-      "triangles": 38708,
+      "vertices": 72955,
+      "triangles": 67655,
       "bounds": [
         [
-          -0.23714904487133026,
+          -0.24152734875679016,
           0.005270542111247778,
           -1.0379079580307007
         ],
         [
-          0.2320372760295868,
+          0.23929178714752197,
           1.2098170518875122,
           1.1777243614196777
         ]
@@ -297,7 +297,7 @@
     {
       "asset": "06 \u2022 Frostfang",
       "lod": 1,
-      "vertices": 2897,
+      "vertices": 3014,
       "triangles": 5534,
       "bounds": [
         [
@@ -315,7 +315,7 @@
     {
       "asset": "06 \u2022 Frostfang",
       "lod": 2,
-      "vertices": 1071,
+      "vertices": 1136,
       "triangles": 1906,
       "bounds": [
         [
@@ -333,13 +333,13 @@
     {
       "asset": "07 \u2022 Thornback",
       "lod": 0,
-      "vertices": 42937,
-      "triangles": 35865,
+      "vertices": 69912,
+      "triangles": 63600,
       "bounds": [
         [
           -0.42796823382377625,
           0.010302642360329628,
-          -0.9703911542892456
+          -0.992397665977478
         ],
         [
           0.43669307231903076,
@@ -351,7 +351,7 @@
     {
       "asset": "07 \u2022 Thornback",
       "lod": 1,
-      "vertices": 7502,
+      "vertices": 7582,
       "triangles": 4892,
       "bounds": [
         [
@@ -369,7 +369,7 @@
     {
       "asset": "07 \u2022 Thornback",
       "lod": 2,
-      "vertices": 1827,
+      "vertices": 1884,
       "triangles": 1381,
       "bounds": [
         [
@@ -387,12 +387,12 @@
     {
       "asset": "08 \u2022 Elder oak",
       "lod": 0,
-      "vertices": 81323,
-      "triangles": 77184,
+      "vertices": 87823,
+      "triangles": 90090,
       "bounds": [
         [
           -1.7390655279159546,
-          -0.0033146506175398827,
+          -0.003953521605581045,
           -1.5499707460403442
         ],
         [
@@ -441,12 +441,12 @@
     {
       "asset": "09 \u2022 Highland pine",
       "lod": 0,
-      "vertices": 47648,
-      "triangles": 19040,
+      "vertices": 51654,
+      "triangles": 27040,
       "bounds": [
         [
           -1.0484200716018677,
-          1.4901161193847656e-08,
+          -0.005458441097289324,
           -1.0931828022003174
         ],
         [
@@ -495,12 +495,12 @@
     {
       "asset": "10 \u2022 Blighted elder",
       "lod": 0,
-      "vertices": 12741,
-      "triangles": 23978,
+      "vertices": 18241,
+      "triangles": 34954,
       "bounds": [
         [
           -1.184895634651184,
-          -0.0026384859811514616,
+          -0.0028708726167678833,
           -1.004619836807251
         ],
         [
@@ -549,8 +549,8 @@
     {
       "asset": "11 \u2022 Hearth cottage",
       "lod": 0,
-      "vertices": 109760,
-      "triangles": 38392,
+      "vertices": 114760,
+      "triangles": 43706,
       "bounds": [
         [
           -1.1481069326400757,
@@ -603,8 +603,8 @@
     {
       "asset": "12 \u2022 Moon inn",
       "lod": 0,
-      "vertices": 108547,
-      "triangles": 38184,
+      "vertices": 113547,
+      "triangles": 43552,
       "bounds": [
         [
           -1.449725866317749,
@@ -657,8 +657,8 @@
     {
       "asset": "13 \u2022 Border watch",
       "lod": 0,
-      "vertices": 107338,
-      "triangles": 38000,
+      "vertices": 112338,
+      "triangles": 43137,
       "bounds": [
         [
           -1.0878853797912598,
@@ -1624,17 +1624,17 @@
       "asset": "Hollow storm-broken stump",
       "id": "Stump",
       "lod": 0,
-      "vertices": 5878,
-      "triangles": 11692,
+      "vertices": 10878,
+      "triangles": 21692,
       "bounds": [
         [
           -0.6017189025878906,
-          0.0,
+          -0.005139575805515051,
           -0.5321212410926819
         ],
         [
           0.6017189025878906,
-          0.5799999833106995,
+          0.5800330638885498,
           0.5321212410926819
         ]
       ]
@@ -1795,8 +1795,8 @@
       "asset": "Iron-strapped storehouse",
       "id": "Storehouse",
       "lod": 0,
-      "vertices": 98350,
-      "triangles": 35224,
+      "vertices": 103350,
+      "triangles": 40633,
       "bounds": [
         [
           -1.2924193143844604,
@@ -1852,8 +1852,8 @@
       "asset": "Veteran training hall",
       "id": "TrainingHall",
       "lod": 0,
-      "vertices": 97944,
-      "triangles": 35133,
+      "vertices": 102944,
+      "triangles": 40462,
       "bounds": [
         [
           -1.598900556564331,

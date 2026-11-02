@@ -1,5 +1,24 @@
 # Blender collection in the native renderer
 
+## Frozen faces, locomotion and surface detail (2026-11-01)
+
+Faces are frozen by user instruction in `AGENTS.md`. The current revision fixes
+the shin/bind-length mismatch, short rapid foot cycles and airborne sword carry.
+It refines eleven existing environment/creature exports and introduces separate
+bark and body-coat materials. Four surface sets now use approved Poly Haven CC0
+photographic maps at native 2K (stone, wood, plaster, bark); roof and coat retain
+the original local 1K fields. See `assets/materials/SOURCES.md` for provenance.
+The original thirteen-model Blender collection and local authoring copy remain
+unchanged. The editable derived study is `assets/authored/surface-detail.blend`.
+
+See [movement and surface revision](movement-surface-revision.md) for scope,
+preservation checks, budgets and the researched animation/material references.
+`surface-detail.json` and `collection01.json` describe the current runtime archive;
+the face-revision hashes below describe the preceding face-only adoption.
+This revision is synchronized into all six game/launcher outputs listed below;
+each actual executable passes a fixture-save smoke launch. The normal Ninja
+Release/Debug configurations also pass the targeted motion, asset and face suites.
+
 ## Game binary synchronization (2026-11-01)
 
 The face revision below is now embedded in all six advertised game outputs:

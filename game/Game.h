@@ -33,7 +33,7 @@ public:
     selection_.CancelGesture();
     interface_.CancelDrag(); interface_.CancelBuildConfirmation(); interface_.InvalidateHitRegions(); CancelOrbit();
   }
-  void SuspendInput() { CancelUiGesture(); simulation_.StopMovement(); effects_.CancelDash(); playerAnimation_.CancelDash();
+  void SuspendInput() { CancelUiGesture(); creatureSteps_.Reset(); simulation_.StopMovement(); effects_.CancelDash(); playerAnimation_.CancelDash();
     effects_.CancelTrail(0); playerAnimation_.pose.attackSeconds=-1; playerPose_.attack=playerPose_.attackVelocity=0;
     playerAnimation_.authoredWeapon={};playerAnimation_.pose.authoredStrikeWeight=0;
     simulation_.CloseQuestDialogue(); if (interface_.panel==ui::Panel::Quest) interface_.Close(ui::Panel::Quest); }
@@ -48,6 +48,7 @@ public:
   float CameraPitch() const { return cameraPitch_; }
   float CameraHeight() const { return cameraHeight_; }
   const CombatEffects& Effects() const { return effects_; }
+  const presentation::CreatureContacts& CreatureSteps() const { return creatureSteps_; }
   std::size_t StaticSceneInstances() const { return worldView_.StaticInstances(); }
   std::size_t StaticSceneBytes() const { return worldView_.StaticBytes(); }
   unsigned AudioGeneration() const { return audioGeneration_; }
@@ -71,6 +72,7 @@ private:
   facial::State playerFace_,keeperFace_,merchantFace_;
   animation::FootPlacement playerFeet_;
   CombatEffects effects_;
+  presentation::CreatureContacts creatureSteps_;
   motion::CameraBoom cameraBoom_;
   float cameraYaw_=0,cameraPitch_=.45f,cameraHeight_=1.4f;
   bool debugOverlay_ = false;

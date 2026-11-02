@@ -1,0 +1,11 @@
+{
+  "face_files_verified": 33,
+  "humanoid_records_byte_identical": 15,
+  "animal_heads_unchanged": true,
+  "original_sources_unchanged": true,
+  "archive_sha256": "b56f6729436bc1473ad2341fd9daead7baa20399828d6410fd6e5e7f976671e6",
+  "archive_bytes": 79550256,
+  "derived_source_sha256": "71846728b6787921d8933045289e48d31290f51a8a260c8585c0623bcafd9ce3",
+  "wolf_motion_sha256": "9964e5109a1e7d0c2fe39280d4b89b951a62789e1286ad1b6bdb632763af0248",
+  "materials": "../materials/surfaces.json"
+}

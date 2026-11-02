@@ -2,6 +2,7 @@
 #include "engine/PlayerBody.h"
 #include "engine/Renderer.h"
 #include "game/CharacterView.h"
+#include "game/CharacterPose.h"
 #include "game/AuthoredLocomotion.h"
 #include "game/FootPlacement.h"
 #include "platform/Win32Window.h"
@@ -86,6 +87,20 @@ int main(){try {
    const auto path=folder/("carry-"+std::to_string(cls)+"-"+std::to_string(tick/3)+".png");
    Check(renderer.Capture(path.wstring())&&renderer.EndFrame(false)&&renderer.ValidateDebugMessages(),"Carried weapon state transitions");
   }
+ }
+ // Armed flight: the blade remains attached to the wrist and clear of the
+ // torso while the free arm balances ascent/descent. Inspect at 30 Hz.
+ for(int frame=0;frame<36;++frame) {
+  animation::Sample sample;sample.authoredGait=true;sample.authoredEquipment=playerclips::Equipment::Sword;
+  sample.air=1;sample.rise=1-frame/17.5f;sample.authoredClock=frame/30.f;
+  auto kit=CharacterOutfit::From(rpg::Inventory{},rpg::ClassId::Warrior);kit.armor=true;kit.rewardWeapon=true;
+  const auto pose=BuildCharacterPose(0,0,false,sample);
+  Check(pose.hasGripSocket&&pose.weaponDirection.y>.10f,"Airborne sword must stay braced above the ground");
+  Check(pose.WeaponPoint(.70f).x>.20f,"Airborne blade crossed the torso");
+  renderer.BeginFrame();renderer.SetCamera({-2.8f,1.55f,-3.7f},{0,1.02f,0});
+  renderer.DrawMesh(visual::Mesh::Box,{0,-.04f,0},{8,.08f,8},{.27f,.25f,.21f,1},visual::Material::Stone);
+  DrawCharacter(renderer,{0,0},.25f,XM_PI,{.32f,.30f,.25f,1},0,0,kit,sample,1);
+  Check(renderer.Capture((folder/("sword-flight-"+std::to_string(frame)+".png")).wstring())&&renderer.EndFrame(false)&&renderer.ValidateDebugMessages(),"Armed flight capture");
  }
  renderer.BeginFrame();renderer.DrawHudRect(0,0,1,1,{.08f,.09f,.10f,1});
  Check(renderer.BeginPortrait(0,0,1,1,.80f),"Native lit face inspection");

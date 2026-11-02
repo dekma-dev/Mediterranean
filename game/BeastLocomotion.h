@@ -2,6 +2,7 @@
 #include "engine/WolfAnimation.h"
 #include "game/Simulation.h"
 #include "game/AuthoredActorMotion.h"
+#include "game/QuadrupedContacts.h"
 
 namespace presentation {
 // Presentation only: observes successful navigation, never moves the collider.
@@ -9,6 +10,8 @@ struct BeastLocomotion {
  float phase=0,travel=0,speed=0,jaw=0,jawVelocity=0;
  float pitchVelocity=0,rollVelocity=0,liftVelocity=0;
  double clock=0;
+ float idleBlend=0,idleVelocity=0;
+ QuadrupedContacts feet;
  authored::Gesture gesture{};
  void Reset(unsigned id=0) { *this={};clock=double(id%31)*.137; }
 
@@ -27,7 +30,8 @@ struct BeastLocomotion {
    gesture.supportPitch=ground.supportPitch;gesture.supportRoll=ground.supportRoll;gesture.supportLift=ground.supportLift;
  }
  void Update(float dt,const rpg::Enemy& enemy,const motion::MovementSample& movement,
-             const animation::Sample& animation,float releaseAge,bool active) {
+             const animation::Sample& animation,float releaseAge,bool active,bool detailed=true) {
+   feet.count=0;
    if(!std::isfinite(dt)||dt<=0||enemy.health<=0)return;
    dt=std::min(dt,.05f);clock+=dt;
    const bool wolf=enemy.kind==rpg::EnemyKind::Wolf;
@@ -56,6 +60,25 @@ struct BeastLocomotion {
    gesture.roll=std::clamp(animation.bank*.08f+animation.hitSide*.10f,-.16f,.16f);
    gesture.hip=-animation.hit*.022f;
    gesture.jaw=std::clamp(jaw,0.f,1.f);
+   // Deterministic, per-actor idle beats yield immediately to accepted combat.
+   const bool quiet=enemy.state==rpg::EnemyState::Idle && enemy.windup<=0 && speed<.12f && enemy.stunned<=0;
+   motion::Spring(idleBlend,idleVelocity,quiet?1.f:0.f,12.f,dt);
+   // All frequencies are multiples of .05 rad/s, so wrapping this common
+   // period cannot snap the head, ears or tail after a long idle.
+   const float t=float(std::fmod(clock,double(motion::tau)*20)),sniff=std::pow(std::max(0.f,std::sin(t*.65f)),4.f)*idleBlend;
+   gesture.headPitch=(wolf?.10f:.16f)*sniff;
+   gesture.headYaw=std::sin(t*.7f)*(wolf?.16f:.08f)*idleBlend;
+   gesture.ears=std::pow(std::max(0.f,std::sin(t*2.1f)),12.f)*.13f*idleBlend;
+   gesture.tail=std::sin(t*1.7f)*.12f*idleBlend;
+   const float load=active && enemy.windup>0?combat::Smooth(1-enemy.windup/enemy.WindupDuration()):0;
+   gesture.pitch+=load*(wolf?-.035f:.075f);
+   gesture.hip-=load*(wolf?.025f:.040f);
+   if(!detailed) {feet.Reset();gesture.paws={};return;}
+   gesture.paws={};
+   const auto asset=wolf?authored::Asset::Wolf:authored::Asset::Boar;
+   const float strike=active?(enemy.windup>0?load:1-combat::Smooth(releaseAge/.4f)):0;
+   const auto base=authored::Pose(asset,float(clock),phase,strike,travel,gesture);
+   feet.Update(dt,asset,enemy.id,enemy.position,enemy.facing,phase,travel,speed,base,gesture,rpg::WorldMap::Height);
  }
 };
 }

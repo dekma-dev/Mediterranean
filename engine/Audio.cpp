@@ -26,7 +26,7 @@ float Metal(float hz,float t) {
   return Decay(t,.002f,18.f)*(Tone(hz,t)+.45f*Tone(hz*1.47f,t)*std::exp(-12*t)+
     .22f*Tone(hz*2.09f,t)*std::exp(-30*t));
 }
-bool IsStep(Cue cue) {return cue==Cue::Step || (cue>=Cue::StepGrass && cue<=Cue::StepWood);}
+bool IsStep(Cue cue) {return cue==Cue::Step || (cue>=Cue::StepGrass && cue<=Cue::StepWood) || (cue>=Cue::PawGrass && cue<=Cue::HoofWood);}
 bool IsLanding(Cue cue) {return cue==Cue::Land || (cue>=Cue::LandGrass && cue<=Cue::LandWood);}
 Cue GroundCue(const rpg::WorldMap& map,rpg::Vec2 p,bool landing) {
   if(!std::isfinite(p.x) || !std::isfinite(p.z)) return landing?Cue::LandGrass:Cue::StepGrass;
@@ -39,7 +39,12 @@ Cue GroundCue(const rpg::WorldMap& map,rpg::Vec2 p,bool landing) {
   return landing?Cue::LandGrass:Cue::StepGrass;
 }
 float CueLevel(Cue cue) {
-  return cue==Cue::UiClick?.35f:IsStep(cue)?.35f:cue==Cue::Jump?.55f:IsLanding(cue)?.75f:1.f;
+  return cue>=Cue::PawGrass && cue<=Cue::HoofWood?.23f:cue==Cue::UiClick?.35f:IsStep(cue)?.35f:cue==Cue::Jump?.55f:IsLanding(cue)?.75f:1.f;
+}
+Cue CreatureGroundCue(const rpg::WorldMap& map,rpg::Vec2 position,bool hoof) {
+ const auto surface=GroundCue(map,position);
+ const int offset=surface==Cue::StepDirt?1:surface==Cue::Step?2:surface==Cue::StepWood?3:0;
+ return Cue(int(hoof?Cue::HoofGrass:Cue::PawGrass)+offset);
 }
 float CuePitch(Cue cue,unsigned sequence) {
   constexpr float offsets[]={-.65f,.35f,-.2f,.8f,0.f,-.4f,.55f};
@@ -67,7 +72,9 @@ Placement Place(rpg::Vec2 offset,float cameraYaw) {
 std::vector<std::int16_t> Generate(Cue cue) {
   const bool healing=cue==Cue::Mend || cue==Cue::Potion;
   const bool mystical=(cue>=Cue::Holy && cue<=Cue::Ward) || cue==Cue::Cast || cue==Cue::Mend || cue==Cue::Interrupt;
-  const float duration=cue==Cue::EnemyPrepare?.32f:cue==Cue::BossPrepare?.48f:cue==Cue::ReserveReady?.65f:cue==Cue::CastCancelled?.22f:cue==Cue::UiClick?.12f:cue==Cue::Mend?1.65f:healing?.95f:cue==Cue::Interrupt?.85f:
+  const float duration=(cue>=Cue::PawGrass && cue<=Cue::HoofWood)?.12f:
+    (cue==Cue::WolfThreat || cue==Cue::BoarThreat)?.4f:cue==Cue::WolfBite?.24f:cue==Cue::BoarRush?.38f:
+    cue==Cue::EnemyPrepare?.32f:cue==Cue::BossPrepare?.48f:cue==Cue::ReserveReady?.65f:cue==Cue::CastCancelled?.22f:cue==Cue::UiClick?.12f:cue==Cue::Mend?1.65f:healing?.95f:cue==Cue::Interrupt?.85f:
     mystical?1.05f:cue==Cue::HeavyHit?.7f:IsStep(cue)?.18f:IsLanding(cue)?.38f:cue==Cue::Jump?.3f:cue==Cue::SpellHit?.28f:.48f;
   std::vector<std::int16_t> result(size_t(duration*sampleRate));
   std::uint32_t seed=12345+unsigned(cue)*713;
@@ -80,6 +87,31 @@ std::vector<std::int16_t> Generate(Cue cue) {
     const float air=noise-low;
     float value=0;
     switch(cue) {
+    case Cue::PawGrass:case Cue::PawDirt:case Cue::PawStone:case Cue::PawWood:
+    case Cue::HoofGrass:case Cue::HoofDirt:case Cue::HoofStone:case Cue::HoofWood: {
+      const bool hoof=cue>=Cue::HoofGrass;
+      const int material=(int(cue)-int(Cue::PawGrass))%4;
+      const float attack=hoof?.0025f:.009f,rate=hoof?40.f:30.f;
+      value=(hoof?.42f:.27f)*low*Decay(t,attack,rate)+.14f*body*Decay(t,attack,27.f);
+      value+=(material==0?.10f:material==1?.16f:.05f)*air*Decay(t-.012f,.006f,38.f);
+      if(hoof)value+=.13f*Sweep(material==2?210.f:135.f,55.f,duration,t)*Decay(t,.002f,48.f);
+      if(material==3)value+=(.12f*Tone(177,t)+.06f*Tone(306,t))*Decay(t,attack,35.f);
+      if(material==2)value+=(hoof?.16f:.045f)*Metal(780,t);
+      break;
+    }
+    case Cue::WolfThreat:case Cue::BoarThreat: {
+      const bool boar=cue==Cue::BoarThreat;
+      const float pulse=.55f+.45f*Tone(boar?31.f:47.f,t);
+      value=(.45f*body+.17f*low)*pulse*Decay(t,.045f,boar?7.f:5.f);
+      value+=.08f*Tone(boar?73.f:109.f,t)*Decay(t,.065f,6.f);
+      value+=.10f*air*Decay(t-(boar?.12f:.23f),.015f,24.f);break;
+    }
+    case Cue::WolfBite:
+      value=.29f*low*Decay(t,.003f,32.f)+.16f*air*Decay(t,.002f,65.f);
+      value+=.20f*body*Decay(t-.025f,.015f,18.f);break;
+    case Cue::BoarRush:
+      value=.42f*body*Decay(t,.012f,12.f)+.24f*low*Decay(t,.008f,17.f);
+      value+=.11f*air*Decay(t-.035f,.012f,19.f)+.12f*Sweep(110,42,duration,t)*Decay(t,.01f,16.f);break;
     case Cue::EnemyPrepare:
       // Cloth/armor tension before the swing, distinct from its impact.
       value=.20f*body*Decay(t,.035f,12.f)+.09f*Metal(310,t-.025f);
@@ -415,7 +447,7 @@ Cue ClassReleaseCue(rpg::ClassId school) {
     case C::Demonologist:return Cue::Rend;default:return Cue::Cast;
   }
 }
-void Events::Update(const rpg::Simulation& state) {
+void Events::Update(const rpg::Simulation& state,const presentation::CreatureContacts* contacts) {
   count=0;
   rpg::Vec2 origin{};bool placed=false;
   const auto add=[&](Cue cue) { if(count<cues.size()) {origins[count]=origin;spatial[count]=placed;cues[count++]=cue;} };
@@ -433,11 +465,19 @@ void Events::Update(const rpg::Simulation& state) {
     case K::ReserveReady:add(Cue::ReserveReady);break;
     case K::CastCancelled:add(Cue::CastCancelled);break;
     case K::CastStart:add(Cue::Cast);break;
-    case K::EnemyPrepare:add(Cue::EnemyPrepare);break;
+    case K::EnemyPrepare: {
+      auto cue=Cue::EnemyPrepare;
+      for(const auto& actor:state.Combatants())if(actor.id==event.actor) {
+        if(actor.kind==rpg::EnemyKind::Wolf)cue=Cue::WolfThreat;
+        if(actor.kind==rpg::EnemyKind::Boar)cue=Cue::BoarThreat;
+        break;
+      }
+      add(cue);break;
+    }
     case K::BossPrepare:add(Cue::BossPrepare);break;
     case K::SpellCast:add(ClassReleaseCue(event.school));break;
-    case K::BeastBite:add(Cue::Hurt);break;
-    case K::BeastCharge:add(Cue::LandDirt);break;
+    case K::BeastBite:add(Cue::WolfBite);break;
+    case K::BeastCharge:add(Cue::BoarRush);break;
     case K::EnemySwing:add(Cue::Enemy);break;
     case K::EnemyLance:add(Cue::Mind);break;
     case K::EnemyQuake:add(Cue::HeavyHit);break;
@@ -465,6 +505,26 @@ void Events::Update(const rpg::Simulation& state) {
     } else stepDistance=0;
     if(state.GroundMovementDistance()==0) stepDistance=0;
   } else stepDistance=0;
+  if(contacts && state.Health()>0) {
+    // At most three nearby ground sounds per frame; combat/player cues already
+    // occupy their slots. Stable nearest-first selection avoids distant spam.
+    std::array<unsigned,presentation::CreatureContacts::capacity> order{};
+    const auto n=std::min<unsigned>(contacts->count,unsigned(order.size()));
+    for(unsigned i=0;i<n;++i)order[i]=i;
+    const auto distance=[&](unsigned i){const auto& p=contacts->events[i].position;return std::hypot(p.x-state.Player().x,p.z-state.Player().z);};
+    std::sort(order.begin(),order.begin()+n,[&](unsigned a,unsigned b){
+      const auto da=distance(a),db=distance(b);return da==db?a<b:da<db;
+    });
+    unsigned accepted=0;
+    for(unsigned j=0;j<n && accepted<3;++j) {
+      const auto i=order[j];const auto& e=contacts->events[i];
+      // Habitat roaming is only .65 m/s; boar contacts must remain audible
+      // there too, rather than appearing only after pursuit accelerates them.
+      if(distance(i)>12 || e.strength<.15f)continue;
+      origin={e.position.x,e.position.z};placed=true;
+      add(CreatureGroundCue(state.Map(),origin,e.hoof));++accepted;
+    }
+  }
 }
 }
 Audio::~Audio() {
@@ -523,7 +583,7 @@ void Audio::Suspend(bool value) {
   if(value) { engine_->StopEngine(); ClearEffects(); events_.Reset(); intensity_.Reset();musicGain_=0;music_->SetVolume(0);combatMusic_->SetVolume(0);generation_=~0u; }
   else engine_->StartEngine();
 }
-void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds,float cameraYaw) {
+void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds,float cameraYaw,const presentation::CreatureContacts* contacts) {
   if(!music_ || suspended_) return;
   musicGain_=sound::MusicGain(musicGain_,musicVolume,seconds);
   music_->SetVolume(musicGain_*.30f);
@@ -537,7 +597,7 @@ void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicV
   ambientMix_.Update(state.Player(),intensity_.value,seconds);
   for(size_t i=0;i<ambience_.size();++i)
     ambience_[i]->SetVolume(std::clamp(effectsVolume,0.f,1.f)*.35f*ambientMix_.levels[i]);
-  events_.Update(state);
+  events_.Update(state,contacts);
   if(effectsVolume<=0) { ClearEffects(); return; }
   // Apply the voice changes as one XAudio2 operation set so a new effect never
   // starts with the preceding frame's louder sparse-mix gain.

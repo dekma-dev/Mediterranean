@@ -53,6 +53,43 @@ animation::Sample Walk(int hz,float speed,bool curved=false) {
 }
 }
 int main() {
+  {
+    const auto idle=BuildCharacterPose(0,0,false);
+    for(const auto& leg:idle.legs) {
+      const auto a=XMVector3Normalize(XMLoadFloat3(&leg.joint)-XMLoadFloat3(&leg.root));
+      const auto b=XMVector3Normalize(XMLoadFloat3(&leg.end)-XMLoadFloat3(&leg.joint));
+      Require(XMVectorGetX(XMVector3Dot(a,b))>std::cos(.13f),"Idle knees must follow the nearly straight anatomical bind pose");
+    }
+    Require(animation::TravelGait(1.4f).period>1.f&&animation::TravelGait(7.f).period>.45f,"Walking/running cadence must not collapse into rapid short steps");
+    for(float speed:{1.4f,7.f}) {
+      animation::FootPlacement feet;feet.Reset({0,0},0);animation::Sample sample;
+      bool prior[2]={true,true};int steps=0;
+      for(int frame=1;frame<=600;++frame) {
+        feet.Update(1.f/60,{0,frame*speed/60},0,true,true,sample);
+        for(int side=0;side<2;++side) {
+          const bool planted=feet.Planted(side);
+          if(frame>120&&planted&&!prior[side])++steps;
+          prior[side]=planted;
+        }
+      }
+      const float rate=steps/8.f;
+      std::cout<<"Measured contacts / speed "<<speed<<": "<<rate<<" steps per second\n";
+      Require(rate>(speed<2?1.6f:3.6f)&&rate<(speed<2?2.5f:4.8f),"Actual foot cadence exceeds human gait range");
+    }
+    animation::FootPlacement restart;restart.Reset({0,0},0);animation::Sample stopped;
+    for(int frame=1;frame<=120;++frame)restart.Update(1.f/60,{0,frame*1.4f/60},0,true,true,stopped);
+    for(int frame=0;frame<120;++frame)restart.Update(1.f/60,{0,2.8f},0,true,true,stopped);
+    bool prior[2]={true,true};float release[2]={-1,-1};
+    for(int frame=1;frame<=60;++frame) {
+      restart.Update(1.f/60,{0,2.8f+frame*1.4f/60},0,true,true,stopped);
+      for(int side=0;side<2;++side) {
+        const bool planted=restart.Planted(side);
+        if(prior[side]&&!planted&&release[side]<0)release[side]=frame/60.f;
+        prior[side]=planted;
+      }
+    }
+    Require(release[0]>=0&&release[1]>=0&&std::abs(release[0]-release[1])>.12f,"Restarting from idle must stagger the two feet, not hop together");
+  }
   for (float speed : {1.f,4.4f,7.f}) {
     const auto reference=Walk(30,speed);
     for (int hz : {60,144}) {

@@ -45,7 +45,7 @@ inline Mesh AttachmentMesh(Mesh mesh,unsigned level) {
     default: return mesh;
   }
 }
-enum class Material : unsigned { Plain, Ground, Stone, Wood, Plaster, Roof, Cloth, Metal, Leaves, Skin, Glow, Leather, Hair, WornMetal, WornLeather, WornCloth, Count };
+enum class Material : unsigned { Plain, Ground, Stone, Wood, Plaster, Roof, Cloth, Metal, Leaves, Skin, Glow, Leather, Hair, WornMetal, WornLeather, WornCloth, Bark, Fur, Count };
 struct Vertex {
   DirectX::XMFLOAT3 position, normal;
   DirectX::XMFLOAT4 color{1,1,1,1};

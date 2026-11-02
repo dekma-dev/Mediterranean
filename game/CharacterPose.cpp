@@ -5,11 +5,11 @@
 
 namespace {
 using namespace DirectX;
-LimbPose Solve(XMFLOAT3 root,XMFLOAT3 target,XMFLOAT3 bend,float upper,float lower) {
+LimbPose Solve(XMFLOAT3 root,XMFLOAT3 target,XMFLOAT3 bend,float upper,float lower,float margin=.001f) {
   const auto origin=XMLoadFloat3(&root),delta=XMLoadFloat3(&target)-origin;
   const float requested=XMVectorGetX(XMVector3Length(delta));
   const auto axis=requested>.0001f?delta/requested:XMVectorSet(0,-1,0,0);
-  const float distance=std::clamp(requested,std::abs(upper-lower)+.001f,upper+lower-.001f);
+  const float distance=std::clamp(requested,std::abs(upper-lower)+.001f,upper+lower-margin);
   auto plane=XMLoadFloat3(&bend); plane-=axis*XMVector3Dot(plane,axis);
   if (XMVectorGetX(XMVector3LengthSq(plane))<.0001f) plane=XMVector3Cross(axis,XMVectorSet(1,0,0,0));
   plane=XMVector3Normalize(plane);
@@ -198,11 +198,12 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     // Use the same bounded contact for standing and departure, including its
     // heading. Losing the heading at release visibly twists a turning boot.
     float x=std::isfinite(foot.x)?foot.x-hip:0,z=std::isfinite(foot.z)?foot.z:0;
-    const float distance=std::hypot(x,z),scale=distance>.46f?.46f/distance:1.f;
+    const float distance=std::hypot(x,z),scale=distance>.58f?.58f/distance:1.f;
     x*=scale; z*=scale;
       const float y=std::isfinite(foot.y) && foot.y>=-.2f && foot.y<=1.f?std::clamp(foot.y,-.16f,.50f):.17f;
     contacts[i]={hip+x,y,z};
     pose.footYaw[i]=std::isfinite(foot.yaw)?std::remainder(foot.yaw,motion::tau)*contactWeight:0;
+    pose.footPitch[i]=std::isfinite(foot.pitch)?std::clamp(foot.pitch,-.3f,.3f)*contactWeight:0;
   }
   // The push leg sweeps back, then the opposite leg reaches into the catch.
   const float drive=1-2*animation::SmoothStep((animation::Unit(dynamics.dashPhase)-.20f)/.50f);
@@ -224,18 +225,21 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     if (contactWeight>0) {
       target={target.x+(contacts[i].x-target.x)*contactWeight,
         target.y+(contacts[i].y-target.y)*contactWeight,target.z+(contacts[i].z-target.z)*contactWeight};
-      // Compute both blended targets before solving either leg. Keep the
-      // pelvis compensation while releasing a long stride; otherwise the
-      // hips jump upward and IK retracts the still-departing ankle.
-      const float x=target.x-(side*.17f+pose.bodyShift);
-      constexpr float reach=CharacterPose::thigh+CharacterPose::shin-.002f;
-      pose.bodyLift=std::min(pose.bodyLift,
-        target.y+std::sqrt(std::max(0.f,reach*reach-x*x-target.z*target.z))-.93f);
     }
+    // Fit both targets before solving either leg, including fallback/preview
+    // poses without a world contact controller. With anatomical shin length,
+    // even breathing can otherwise lift a standing ankle beyond its reach.
+    // Retaining this fit through departure also prevents a takeoff hip snap.
+    const float x=target.x-(side*.17f+pose.bodyShift);
+    // Keep a small non-singular bend without reintroducing a visible idle
+    // crouch. The solver itself reserves 0.05 mm of extension.
+    constexpr float reach=CharacterPose::thigh+CharacterPose::shin-.0002f;
+    pose.bodyLift=std::min(pose.bodyLift,
+      target.y+std::sqrt(std::max(0.f,reach*reach-x*x-target.z*target.z))-.93f);
   }
   for (int i=0;i<2;++i) {
     const float side=i==0?-1.f:1.f;
-    pose.legs[i]=Solve({side*.17f+pose.bodyShift,.93f+pose.bodyLift,0},targets[i],{0,0,1},CharacterPose::thigh,CharacterPose::shin);
+    pose.legs[i]=Solve({side*.17f+pose.bodyShift,.93f+pose.bodyLift,0},targets[i],{0,0,1},CharacterPose::thigh,CharacterPose::shin,.00005f);
     const float armStride=strides[i]+(std::clamp(contacts[i].z/.30f,-1.f,1.f)-strides[i])*contactWeight;
     const float attack=i==1&&!newStrike?swing:0;
     XMFLOAT3 hand{side*(.40f+air*.035f),1.02f+attack*.52f+air*.12f+landing*.08f+hit*.08f+dash*.12f+brake*.07f,
@@ -250,6 +254,14 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
       const auto delta=jumpClip.hands[i];const XMFLOAT3 authored{side*.40f+delta.x,1.02f+delta.y,.10f+delta.z};
       const float w=authoredAir*(1-swing)*(1-cast);
       hand={hand.x+(authored.x-hand.x)*w,hand.y+(authored.y-hand.y)*w,hand.z+(authored.z-hand.z)*w};
+      if(i==1&&dynamics.authoredEquipment==playerclips::Equipment::Sword) {
+        // A loaded hand does not follow the unarmed jump's balancing arm.
+        // Keep the elbow close and the blade outside the torso on ascent,
+        // opening forward to absorb the descending body's momentum.
+        const float down=animation::SmoothStep(-rise);
+        const XMFLOAT3 armed{.43f,1.20f+.055f*std::max(0.f,rise)-.045f*down,.16f+.09f*down};
+        hand={hand.x+(armed.x-hand.x)*w,hand.y+(armed.y-hand.y)*w,hand.z+(armed.z-hand.z)*w};
+      }
     }
     if(authoredLanding) {hand.y+=landClip.hands[i].y*landing;hand.z+=landClip.hands[i].z*landing;}
     if (i==0 && shield) hand={-.39f,1.13f+air*.08f+landing*.08f,.23f-armStride*.04f+dash*.09f};
@@ -298,6 +310,11 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
       idleClip.weapon.y*(1-gaitAmount)+gaitClip.weapon.y,idleClip.weapon.z*(1-gaitAmount)+gaitClip.weapon.z};
     const float w=(1-air)*(1-burst)*(1-hit)*(1-animation::Unit(dynamics.action.open))*authoredBlend;
     XMStoreFloat3(&weapon,XMVectorLerp(XMLoadFloat3(&weapon),XMLoadFloat3(&carry),w));
+  }
+  if(dynamics.authoredEquipment==playerclips::Equipment::Sword&&authoredAir>0) {
+    const float down=animation::SmoothStep(-rise);
+    const XMFLOAT3 airborne{.24f,.78f-.30f*down,.58f+.20f*down};
+    weapon=blendDirection(weapon,airborne,authoredAir*(1-burst)*(1-hit));
   }
   if (timed) {
     const float weight=stroke.weight*(1-burst);

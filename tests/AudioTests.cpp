@@ -240,7 +240,16 @@ int main() {
   int peak=0; double energy=0;
   for(auto s:music) { peak=std::max(peak,std::abs(int(s))); energy+=double(s)*s; }
   Require(peak>1000 && peak<16000 && energy/music.size()>10000,"Music mix needs headroom and non-silent content");
-  Require(bytes<4*1024*1024,"Resident PCM must stay below 4 MiB");
+  // Twelve short creature cues add at most 112 KiB; preserve the existing score.
+  size_t creatureBytes=0;
+  for(unsigned i=unsigned(sound::Cue::PawGrass);i<unsigned(sound::Cue::Count);++i) {
+    const auto pcm=sound::Generate(sound::Cue(i));creatureBytes+=pcm.size()*2;
+    for(unsigned j=i+1;j<unsigned(sound::Cue::Count);++j)
+      Require(pcm!=sound::Generate(sound::Cue(j)),"Creature species/surface cues must differ");
+  }
+  Require(creatureBytes<=112*1024,"Creature cues exceeded their incremental PCM budget");
+  Require(bytes-creatureBytes<4*1024*1024 && bytes<4*1024*1024+112*1024,
+    "Resident PCM exceeded base plus creature budget");
   WriteWave("dawnwatch-music.wav",music); WriteWave("effects-preview.wav",preview);
   const auto impact=sound::Generate(sound::Cue::HeavyHit);
   std::vector<std::int16_t> stereo(sound::sampleRate*7*2);

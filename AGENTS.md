@@ -22,6 +22,7 @@ About project:
 
 ## User-created Blender assets
 
+- Face freeze (user instruction, 2026-11-01): do not change existing faces until the user explicitly lifts this restriction. Preserve facial anatomy, head/scalp meshes, eyes, hair, facial materials and expression shading for the player and NPCs. Body locomotion and whole-head attachment motion may be corrected without reshaping or restyling faces. Preserve facial source/export data when updating other collection assets.
 - Use all thirteen user-created Blender models as the foundation for future character, creature and environment art. Consult `docs/blender-assets.md` before making equivalent replacement assets.
 - Tracked editable source: `assets/authored/collection01.blend`. Local authoring copy: `.blender-local/collection-01/Mediterranean_Collection_01.blend`; `.blend1` is a backup, not another collection. Compare copies before editing and preserve newer user changes.
 - Runtime exports: `assets/authored/collection01.masset` and `collection01.json`. Preserve the native DirectX 11 pipeline. Do not regenerate the source from scripts without checking for user edits.

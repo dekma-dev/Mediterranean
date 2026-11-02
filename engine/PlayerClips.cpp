@@ -103,7 +103,10 @@ Frame Locomotion(const std::array<float,4>& weights,float run,float phase,Equipm
     const auto forward=equipment==Equipment::Staff?(pace?Clip::StaffRun:Clip::StaffWalk):equipment==Equipment::Bow?(pace?Clip::BowRun:Clip::BowWalk):(pace?Clip::SwordRun:Clip::SwordWalk);
     const auto first=equipment==Equipment::Staff?Clip::StaffWalkBackward:equipment==Equipment::Bow?Clip::BowWalkBackward:Clip::SwordWalkBackward;
     const auto armed=Sample(d?Clip(unsigned(first)+pace*3+d-1):forward,phase);
-    frame.hands=armed.hands;frame.weapon=armed.weapon;
+    frame.hands=armed.hands;
+    // The loaded weapon trails the carrying hand slightly rather than moving
+    // as a perfectly rigid metronome. This is phase lag, not a second timer.
+    frame.weapon=Sample(d?Clip(unsigned(first)+pace*3+d-1):forward,phase-.035f).weapon;
    }
    std::array<float,19> v;std::memcpy(v.data(),&frame,sizeof(Frame));
    for(unsigned k=0;k<v.size();++k)sum[k]+=v[k]*w;

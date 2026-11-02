@@ -186,7 +186,7 @@ bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
  if (!Check(device_->CreateBuffer(&b,nullptr,hudVertices_.GetAddressOf()),L"Create HUD buffer")) return false;
  b.ByteWidth=maxInstances*sizeof(Instance);
  if (!Check(device_->CreateBuffer(&b,nullptr,instances_.GetAddressOf()),L"Create bounded instance buffer")) return false;
- instanceScratch_.reserve(maxInstances); hud_.reserve(16380); effects_.reserve(maxEffectVertices);
+ instanceScratch_.reserve(maxInstances); hud_.reserve(16380); effects_.reserve(maxEffectVertices); groundMarks_.reserve(1536);
  D3D11_RASTERIZER_DESC r{}; r.FillMode=D3D11_FILL_SOLID; r.CullMode=D3D11_CULL_BACK; r.DepthClipEnable=TRUE;
  if (!Check(device_->CreateRasterizerState(&r,rasterizer_.GetAddressOf()),L"Create rasterizer")) return false;
  r.CullMode=D3D11_CULL_NONE;
@@ -219,7 +219,60 @@ bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
  return CreateMaterials();
 }
 
+bool Renderer::CreateSurfaceMaterials() {
+ const HRESULT apartment=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
+ if(FAILED(apartment)&&apartment!=RPC_E_CHANGED_MODE)return Check(apartment,L"Initialize surface decoder");
+ struct Apartment {bool owned;~Apartment(){if(owned)CoUninitialize();}} scope{SUCCEEDED(apartment)};
+ ComPtr<IWICImagingFactory> factory;
+ if(!Check(CoCreateInstance(CLSID_WICImagingFactory,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(factory.GetAddressOf())),L"Create surface decoder"))return false;
+ constexpr UINT size=2048,layers=6;
+ for(unsigned map=0;map<2;++map) {
+  D3D11_TEXTURE2D_DESC desc{};desc.Width=desc.Height=size;desc.ArraySize=layers;
+  desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;desc.SampleDesc.Count=1;
+  desc.BindFlags=D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_RENDER_TARGET;desc.MiscFlags=D3D11_RESOURCE_MISC_GENERATE_MIPS;
+  ComPtr<ID3D11Texture2D> texture;
+  if(!Check(device_->CreateTexture2D(&desc,nullptr,texture.GetAddressOf()),L"Create detailed surface array"))return false;
+  texture->GetDesc(&desc);
+  for(unsigned layer=0;layer<layers;++layer) {
+   const auto module=GetModuleHandleW(nullptr);
+   const auto resource=FindResourceW(module,MAKEINTRESOURCEW(320+layer*2+map),RT_RCDATA);
+   const auto loaded=resource?LoadResource(module,resource):nullptr;
+   auto* bytes=loaded?static_cast<BYTE*>(LockResource(loaded)):nullptr;
+   if(!bytes){error_=L"Embedded surface material missing; rebuild the complete executable.";return false;}
+   const auto count=SizeofResource(module,resource);
+   if(count>16*1024*1024){error_=L"Surface image exceeds resource budget.";return false;}
+   ComPtr<IWICStream> stream;ComPtr<IWICBitmapDecoder> decoder;ComPtr<IWICBitmapFrameDecode> frame;ComPtr<IWICFormatConverter> converter;
+   if(!Check(factory->CreateStream(stream.GetAddressOf()),L"Create surface stream") ||
+      !Check(stream->InitializeFromMemory(bytes,count),L"Read surface image") ||
+      !Check(factory->CreateDecoderFromStream(stream.Get(),nullptr,WICDecodeMetadataCacheOnLoad,decoder.GetAddressOf()),L"Decode surface image") ||
+      !Check(decoder->GetFrame(0,frame.GetAddressOf()),L"Read surface frame"))return false;
+   UINT width=0,height=0;
+   if(!Check(frame->GetSize(&width,&height),L"Read surface dimensions"))return false;
+   const UINT sourceSize=(layer==3||layer==5)?1024:2048;
+   if(width!=sourceSize||height!=sourceSize){error_=L"Surface dimensions do not match the material manifest.";return false;}
+   // The retained roof/coat fields are 1K. Expand only those layers for the
+   // uniform DX11 array; imported photographic materials retain native 2K.
+   ComPtr<IWICBitmapScaler> scaler;
+   IWICBitmapSource* source=frame.Get();
+   if(sourceSize!=size) {
+    if(!Check(factory->CreateBitmapScaler(scaler.GetAddressOf()),L"Create surface scaler") ||
+       !Check(scaler->Initialize(frame.Get(),size,size,WICBitmapInterpolationModeLinear),L"Scale retained surface field"))return false;
+    source=scaler.Get();
+   }
+   if(!Check(factory->CreateFormatConverter(converter.GetAddressOf()),L"Create surface converter") ||
+      !Check(converter->Initialize(source,GUID_WICPixelFormat32bppRGBA,WICBitmapDitherTypeNone,nullptr,0,WICBitmapPaletteTypeCustom),L"Convert surface map"))return false;
+   std::vector<BYTE> pixels(std::size_t(size)*size*4);
+   if(!Check(converter->CopyPixels(nullptr,size*4,UINT(pixels.size()),pixels.data()),L"Read surface pixels"))return false;
+   context_->UpdateSubresource(texture.Get(),D3D11CalcSubresource(0,layer,desc.MipLevels),nullptr,pixels.data(),size*4,0);
+  }
+  if(!Check(device_->CreateShaderResourceView(texture.Get(),nullptr,surfaceViews_[map].ReleaseAndGetAddressOf()),L"Create detailed surface view"))return false;
+  context_->GenerateMips(surfaceViews_[map].Get());
+  for(UINT dimension=size;dimension;dimension/=2)materialBytes_+=std::size_t(dimension)*dimension*4*layers;
+ }
+ return true;
+}
 bool Renderer::CreateMaterials() {
+ if(!CreateSurfaceMaterials()) return false;
  constexpr UINT size=visual::materialSize,layers=static_cast<UINT>(visual::Material::Count);
  D3D11_TEXTURE2D_DESC texture{}; texture.Width=texture.Height=size; texture.MipLevels=0; texture.ArraySize=layers;
  texture.Format=DXGI_FORMAT_R8G8B8A8_UNORM; texture.SampleDesc.Count=1; texture.Usage=D3D11_USAGE_DEFAULT;
@@ -276,7 +329,7 @@ void Renderer::BeginFrame() {
  triangles_=0;
  gpuTimer_.Begin(context_.Get());
  hud_.clear();
- effects_.clear(); effectVertices_=0;
+ effects_.clear(); groundMarks_.clear(); effectVertices_=0;
  for (auto& batch : world_) batch.clear();
  bodyCount_=handCount_=0;
  bodyLodCounts_={}; bodyLodHistory_.BeginFrame();
@@ -698,6 +751,8 @@ bool Renderer::FlushWorld() {
    ID3D11SamplerState* samplers[]={surfaceSampler_.Get(),shadowSampler_.Get()};
    context_->PSSetShaderResources(0,2,views); context_->PSSetSamplers(0,2,samplers);
    context_->PSSetShaderResources(4,1,terrainView_.GetAddressOf());
+   ID3D11ShaderResourceView* surfaces[]={surfaceViews_[0].Get(),surfaceViews_[1].Get()};
+   context_->PSSetShaderResources(10,2,surfaces);
    context_->PSSetSamplers(2,1,fontSampler_.GetAddressOf());
   }
   unsigned skinActive=0;
@@ -724,7 +779,7 @@ bool Renderer::FlushWorld() {
 }
 void Renderer::EffectQuad(XMFLOAT3 a,XMFLOAT3 b,XMFLOAT3 c,XMFLOAT3 d,XMFLOAT4 color,float startAlpha,float endAlpha,float radial) {
  // Cosmetic saturation drops the newest quad, never grows an unbounded queue.
- if (portrait_ || color.w<=0 || effects_.size()+6+effectVertices_>maxEffectVertices) return;
+ if (portrait_ || color.w<=0 || effects_.size()+groundMarks_.size()+6+effectVertices_>maxEffectVertices) return;
  const XMFLOAT4 first{color.x,color.y,color.z,color.w*std::clamp(startAlpha,0.f,1.f)};
  const XMFLOAT4 last{color.x,color.y,color.z,color.w*std::clamp(endAlpha,0.f,1.f)};
  const Vertex va{a,{0,0,radial},first},vb{b,{0,1,radial},first},vc{c,{1,1,radial},last},vd{d,{1,0,radial},last};
@@ -735,6 +790,11 @@ void Renderer::DrawEffectRibbon(XMFLOAT3 a,XMFLOAT3 b,XMFLOAT3 c,XMFLOAT3 d,XMFL
 }
 void Renderer::DrawEffectGlow(XMFLOAT3 center,float radius,XMFLOAT4 color) {
  EffectBillboard(center,radius,color,1);
+}
+void Renderer::DrawGroundMark(XMFLOAT3 a,XMFLOAT3 b,XMFLOAT3 c,XMFLOAT3 d,XMFLOAT4 color) {
+ if(portrait_ || color.w<=0 || groundMarks_.size()+6>1536 || groundMarks_.size()+effects_.size()+6+effectVertices_>maxEffectVertices)return;
+ const Vertex va{a,{0,0,1},color},vb{b,{0,1,1},color},vc{c,{1,1,1},color},vd{d,{1,0,1},color};
+ groundMarks_.insert(groundMarks_.end(),{va,vb,vc,va,vc,vd});
 }
 void Renderer::DrawEffectRing(XMFLOAT3 center,float radius,XMFLOAT4 color) {
  EffectBillboard(center,radius,color,2);
@@ -765,21 +825,25 @@ void Renderer::DrawEffectStreak(XMFLOAT3 from,XMFLOAT3 to,float width,XMFLOAT4 c
  EffectQuad(a,b,c,d,color,1,1,3);
 }
 bool Renderer::FlushEffects() {
- if (effects_.empty()) return true;
- const UINT stride=sizeof(Vertex),offset=0,count=static_cast<UINT>(effects_.size());
- D3D11_MAPPED_SUBRESOURCE mapped{};
- if (!Check(context_->Map(hudVertices_.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&mapped),L"Upload combat effects")) return false;
- std::memcpy(mapped.pData,effects_.data(),count*sizeof(Vertex)); context_->Unmap(hudVertices_.Get(),0);
- Constants data{}; data.atmosphere.x=atmospherePhase_; XMStoreFloat4x4(&data.wvp,XMMatrixTranspose(XMLoadFloat4x4(&viewProjection_)));
- data.eyeAndHud={eye_.x,eye_.y,eye_.z,0}; context_->UpdateSubresource(constants_.Get(),0,nullptr,&data,0,0);
- context_->IASetVertexBuffers(0,1,hudVertices_.GetAddressOf(),&stride,&offset);
- context_->IASetInputLayout(layout_.Get()); context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
- context_->VSSetShader(effectVertexShader_.Get(),nullptr,0); context_->PSSetShader(effectPixelShader_.Get(),nullptr,0);
- context_->RSSetState(effectRasterizer_.Get()); context_->OMSetDepthStencilState(effectDepth_.Get(),0);
- context_->OMSetBlendState(effectBlend_.Get(),nullptr,0xffffffff);
- context_->Draw(count,0); ++drawCalls_; triangles_+=count/3; effectVertices_+=count;
- context_->RSSetState(rasterizer_.Get()); context_->OMSetBlendState(nullptr,nullptr,0xffffffff);
- effects_.clear(); return true;
+ const auto flush=[&](std::vector<Vertex>& vertices,ID3D11BlendState* blend) {
+  if(vertices.empty())return true;
+  const UINT stride=sizeof(Vertex),offset=0,count=static_cast<UINT>(vertices.size());
+  D3D11_MAPPED_SUBRESOURCE mapped{};
+  if(!Check(context_->Map(hudVertices_.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&mapped),L"Upload combat effects"))return false;
+  std::memcpy(mapped.pData,vertices.data(),count*sizeof(Vertex));context_->Unmap(hudVertices_.Get(),0);
+  Constants data{};data.atmosphere.x=atmospherePhase_;XMStoreFloat4x4(&data.wvp,XMMatrixTranspose(XMLoadFloat4x4(&viewProjection_)));
+  data.eyeAndHud={eye_.x,eye_.y,eye_.z,0};context_->UpdateSubresource(constants_.Get(),0,nullptr,&data,0,0);
+  context_->IASetVertexBuffers(0,1,hudVertices_.GetAddressOf(),&stride,&offset);
+  context_->IASetInputLayout(layout_.Get());context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+  context_->VSSetShader(effectVertexShader_.Get(),nullptr,0);context_->PSSetShader(effectPixelShader_.Get(),nullptr,0);
+  context_->RSSetState(effectRasterizer_.Get());context_->OMSetDepthStencilState(effectDepth_.Get(),0);
+  context_->OMSetBlendState(blend,nullptr,0xffffffff);
+  context_->Draw(count,0);++drawCalls_;triangles_+=count/3;effectVertices_+=count;
+  context_->RSSetState(rasterizer_.Get());context_->OMSetBlendState(nullptr,nullptr,0xffffffff);
+  vertices.clear();return true;
+ };
+ // Dark terrain marks precede luminous particles; both retain depth testing.
+ return flush(groundMarks_,hudBlend_.Get()) && flush(effects_,effectBlend_.Get());
 }
 void Renderer::DrawHudTriangle(XMFLOAT2 a,XMFLOAT2 b,XMFLOAT2 c,const XMFLOAT4& color) {
  // A consistent screen-space winding keeps all authored UI polygons visible.

@@ -103,9 +103,10 @@ public:
   void DrawEffectRibbon(DirectX::XMFLOAT3 a,DirectX::XMFLOAT3 b,DirectX::XMFLOAT3 c,DirectX::XMFLOAT3 d,
     DirectX::XMFLOAT4 color,float startAlpha=1,float endAlpha=1);
   void DrawEffectGlow(DirectX::XMFLOAT3 center,float radius,DirectX::XMFLOAT4 color);
+  void DrawGroundMark(DirectX::XMFLOAT3 a,DirectX::XMFLOAT3 b,DirectX::XMFLOAT3 c,DirectX::XMFLOAT3 d,DirectX::XMFLOAT4 color);
   void DrawEffectRing(DirectX::XMFLOAT3 center,float radius,DirectX::XMFLOAT4 color);
   void DrawEffectStreak(DirectX::XMFLOAT3 from,DirectX::XMFLOAT3 to,float width,DirectX::XMFLOAT4 color);
-  unsigned EffectVertices() const { return effectVertices_+static_cast<unsigned>(effects_.size()); }
+  unsigned EffectVertices() const { return effectVertices_+static_cast<unsigned>(effects_.size()+groundMarks_.size()); }
   UINT LastDrawCalls() const { return lastDrawCalls_; }
   bool Capture(const std::wstring& path);
   bool ValidateDebugMessages();
@@ -137,6 +138,7 @@ private:
   bool CreatePipeline(const visual::BodyGeometry* previewBody);
   bool FlushHud();
   bool CreateMaterials();
+  bool CreateSurfaceMaterials();
   bool CreateUiArtwork();
   void DrawSky();
   void PrepareCloudLight();
@@ -177,6 +179,7 @@ private:
   Microsoft::WRL::ComPtr<ID3D11InputLayout> bodyLayout_;
   std::vector<visual::Vertex> hud_;
   std::vector<visual::Vertex> effects_;
+  std::vector<visual::Vertex> groundMarks_;
   unsigned effectVertices_=0;
   FontAtlas font_;
   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> mapView_;
@@ -218,6 +221,7 @@ private:
   unsigned cloudLightUpdates_=0;
   Microsoft::WRL::ComPtr<ID3D11InputLayout> worldLayout_;
   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> materialView_,shadowView_;
+  std::array<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>,2> surfaceViews_;
   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> terrainView_;
   std::array<Microsoft::WRL::ComPtr<ID3D11DepthStencilView>,visual::shadowLayers> shadowDepth_;
   Microsoft::WRL::ComPtr<ID3D11SamplerState> surfaceSampler_,shadowSampler_;

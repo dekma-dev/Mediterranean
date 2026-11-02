@@ -1,5 +1,10 @@
 # Model and gameplay animation binding
 
+Follow-up: `creature-ground-contact.md` adds independent paw/hoof contacts,
+bounded wolf leg IK, boar reach correction and contact-driven sound/prints to
+the root-support checkpoint documented below. The accepted models remain the
+input; the runtime follow-up does not regenerate them.
+
 ## Code-only integration, 2026-11-01
 
 This pass changes runtime controllers and palette composition. It does not

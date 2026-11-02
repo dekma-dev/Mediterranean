@@ -1,0 +1,217 @@
+{
+  "resolution": 2048,
+  "source": "Four Poly Haven CC0 materials at native 2K; roof/fur retain local 1K fields",
+  "layout": [
+    "stone",
+    "wood",
+    "plaster",
+    "roof",
+    "bark",
+    "fur"
+  ],
+  "maps": [
+    {
+      "file": "stone-color.png",
+      "resolution": 2048,
+      "sha256": "a19979692b60e56d8d0fe5b3a84d8f8493fa8ddcc7090b7a2230dcb45be447fd",
+      "bytes": 9715889,
+      "source": "rock_boulder_dry"
+    },
+    {
+      "file": "stone-normal.png",
+      "resolution": 2048,
+      "sha256": "1894e07664a9c58c204ada16da37ad0813b759d86a17b434882a0e73d02c2968",
+      "bytes": 7540269,
+      "source": "rock_boulder_dry"
+    },
+    {
+      "file": "wood-color.png",
+      "resolution": 2048,
+      "sha256": "0e00439621020d5a032f7c72abb58bcb5dc69932eb2225f9d632798c4eb9197d",
+      "bytes": 8858464,
+      "source": "wood_planks_dirt"
+    },
+    {
+      "file": "wood-normal.png",
+      "resolution": 2048,
+      "sha256": "2776ec8c105d8e3df854176f80d22f13be90bf081738026be78d03ab947cbcb1",
+      "bytes": 4846334,
+      "source": "wood_planks_dirt"
+    },
+    {
+      "file": "plaster-color.png",
+      "resolution": 2048,
+      "sha256": "56f475d64ac7d9898834c8459dd1ea5ad3a3f5abb8dd717969132a247b622c92",
+      "bytes": 7842774,
+      "source": "painted_plaster_wall"
+    },
+    {
+      "file": "plaster-normal.png",
+      "resolution": 2048,
+      "sha256": "897d5499e706fc1090665e71c968fce871790df93187cd6c13c66da327f0081e",
+      "bytes": 8839233,
+      "source": "painted_plaster_wall"
+    },
+    {
+      "file": "roof-color.png",
+      "resolution": 1024,
+      "sha256": "35bc7d49c377107054803c758ccc95500241f395a5adcfab93b2be5a377d4ce3",
+      "bytes": 649581,
+      "source": "local authored field"
+    },
+    {
+      "file": "roof-normal.png",
+      "resolution": 1024,
+      "sha256": "a371f17c53036a0782622fc974d82cbc0c4821c77bdd2131f602a9cbaeffce8b",
+      "bytes": 720007,
+      "source": "local authored field"
+    },
+    {
+      "file": "bark-color.png",
+      "resolution": 2048,
+      "sha256": "d50156b8b39287fa2b2c11d0fdf7e3230325ee9383df5c81cd29bbc77a5c64fa",
+      "bytes": 10335266,
+      "source": "bark_brown_01"
+    },
+    {
+      "file": "bark-normal.png",
+      "resolution": 2048,
+      "sha256": "40fbb2723222e45f211f608c6a63d748c3f4bf8eb5ba960f647db120e0e041c2",
+      "bytes": 10949569,
+      "source": "bark_brown_01"
+    },
+    {
+      "file": "fur-color.png",
+      "resolution": 1024,
+      "sha256": "03902a0ba84293a1e3a61aa88b528749bef0f6ce51690a68872db03d68928104",
+      "bytes": 835842,
+      "source": "local authored field"
+    },
+    {
+      "file": "fur-normal.png",
+      "resolution": 1024,
+      "sha256": "381782bebf88e7473680486bf53f50cb9571a2a54274091aca772a53df6d4381",
+      "bytes": 942567,
+      "source": "local authored field"
+    }
+  ],
+  "source_license": "CC0-1.0",
+  "license_url": "https://polyhaven.com/license",
+  "source_files": [
+    {
+      "asset": "bark_brown_01",
+      "kind": "Diffuse",
+      "file": "bark_brown_01_diff_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/bark_brown_01/bark_brown_01_diff_2k.jpg",
+      "bytes": 2667267,
+      "md5": "844daf37120a327bb77ac907102d69c0",
+      "sha256": "0cdd066f34d357fdbf7eb99159e668a6dc346bb7fd093a9e27058eb827d09b9a"
+    },
+    {
+      "asset": "bark_brown_01",
+      "kind": "nor_gl",
+      "file": "bark_brown_01_nor_gl_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/bark_brown_01/bark_brown_01_nor_gl_2k.jpg",
+      "bytes": 4621865,
+      "md5": "60e17a42cf4682ef77891ed92cada3cf",
+      "sha256": "971289c90963ef6a3eaf988662f2bce71dbb1024f5382a7dfe9e51e3cd127030"
+    },
+    {
+      "asset": "bark_brown_01",
+      "kind": "Rough",
+      "file": "bark_brown_01_rough_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/bark_brown_01/bark_brown_01_rough_2k.jpg",
+      "bytes": 812553,
+      "md5": "e62a2a90bd2f78f72a7f7b427b048c37",
+      "sha256": "8ce13f1be85940fcb9a3dc78afd1529755c6aec6b52e683656bffa92820887d8"
+    },
+    {
+      "asset": "wood_planks_dirt",
+      "kind": "Diffuse",
+      "file": "wood_planks_dirt_diff_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wood_planks_dirt/wood_planks_dirt_diff_2k.jpg",
+      "bytes": 3744786,
+      "md5": "d462a7bb2ad387b9632203137dc172d7",
+      "sha256": "8ec1517a3f7089486d75baf624a293bcbad69626a1e6e29615fe304897c390ec"
+    },
+    {
+      "asset": "wood_planks_dirt",
+      "kind": "nor_gl",
+      "file": "wood_planks_dirt_nor_gl_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wood_planks_dirt/wood_planks_dirt_nor_gl_2k.jpg",
+      "bytes": 2210797,
+      "md5": "f89b1f0b3e24b3864f1e892fcdf5968e",
+      "sha256": "08ac9e2dfe774b1f18934116eacab1b3ab6b09fc0be0f8cbcff2ef9bc68acf22"
+    },
+    {
+      "asset": "wood_planks_dirt",
+      "kind": "Rough",
+      "file": "wood_planks_dirt_rough_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wood_planks_dirt/wood_planks_dirt_rough_2k.jpg",
+      "bytes": 2180731,
+      "md5": "5ba21ed80a87a482516f590901f9308d",
+      "sha256": "d35e8d9b20eab4da8036d98ca38f4fb4dee47ce2b4b0b1e7ab6cd006b0e351ac"
+    },
+    {
+      "asset": "rock_boulder_dry",
+      "kind": "Diffuse",
+      "file": "rock_boulder_dry_diff_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rock_boulder_dry/rock_boulder_dry_diff_2k.jpg",
+      "bytes": 3437626,
+      "md5": "fbc9cf377db427f54381f463c0639e1f",
+      "sha256": "c66de7f7b48ef1ba542c17af780787ca6d43da2160a46ff3544dd9fcdf65ca30"
+    },
+    {
+      "asset": "rock_boulder_dry",
+      "kind": "nor_gl",
+      "file": "rock_boulder_dry_nor_gl_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rock_boulder_dry/rock_boulder_dry_nor_gl_2k.jpg",
+      "bytes": 3307320,
+      "md5": "513ef3fdaadd106c38a9c40919918cc0",
+      "sha256": "72a3c96d563fc17ac36c568802e106222e6480512d98e07318e1f431cea33dd6"
+    },
+    {
+      "asset": "rock_boulder_dry",
+      "kind": "Rough",
+      "file": "rock_boulder_dry_rough_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rock_boulder_dry/rock_boulder_dry_rough_2k.jpg",
+      "bytes": 2706723,
+      "md5": "f69a2caafb58d427cb17cab31c202e0e",
+      "sha256": "63bb4105e6f60b5968da785afc292b94026a5afa6f18388e98b00232e9e2c433"
+    },
+    {
+      "asset": "painted_plaster_wall",
+      "kind": "Diffuse",
+      "file": "painted_plaster_wall_diff_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/painted_plaster_wall/painted_plaster_wall_diff_2k.jpg",
+      "bytes": 3132937,
+      "md5": "32f4f4e5ded7d20e55e337004d0d9691",
+      "sha256": "6fd812ed8dd5be1873c29aeef38ce9bf1fb30a22c6d4b3a12db725e98c26a1be"
+    },
+    {
+      "asset": "painted_plaster_wall",
+      "kind": "nor_gl",
+      "file": "painted_plaster_wall_nor_gl_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/painted_plaster_wall/painted_plaster_wall_nor_gl_2k.jpg",
+      "bytes": 4048392,
+      "md5": "18faf9f7949aefdb3ae7cef7195cba04",
+      "sha256": "2d601a46ed5ce2af866741c53cafa3cba472620c272e633b6484d4de16a80eb1"
+    },
+    {
+      "asset": "painted_plaster_wall",
+      "kind": "Rough",
+      "file": "painted_plaster_wall_rough_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/painted_plaster_wall/painted_plaster_wall_rough_2k.jpg",
+      "bytes": 1595466,
+      "md5": "7cdd5fbbe56f7becb757fc5b52d11d28",
+      "sha256": "35aad595469533cc3b7cc209cc6c7e065d660211f02c867f4492d3b371b1fee1"
+    }
+  ],
+  "packing": "Color RGB = source sRGB diffuse, alpha = linear roughness. Normal RGB = normalized tangent normal, OpenGL green inverted for top-left V; alpha = 255. No resizing of imported maps.",
+  "source_pages": {
+    "stone": "https://polyhaven.com/a/rock_boulder_dry",
+    "wood": "https://polyhaven.com/a/wood_planks_dirt",
+    "plaster": "https://polyhaven.com/a/painted_plaster_wall",
+    "bark": "https://polyhaven.com/a/bark_brown_01"
+  }
+}

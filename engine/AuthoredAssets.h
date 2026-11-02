@@ -28,6 +28,9 @@ struct Gesture {
  float collapse=0;
  float jaw=0; // Wolf bite opening; overlays its existing authored head/jaw rig.
  float supportPitch=0,supportRoll=0,supportLift=0; // Terrain support, root space.
+ float headPitch=0,headYaw=0,ears=0,tail=0; // Species idle/attention overlays.
+ struct Paw { DirectX::XMFLOAT3 target{}; float weight=0; };
+ std::array<Paw,4> paws{}; // Model space after root support; FL, FR, HL, HR.
 };
 // gait is a cycle phase in radians, not a precomputed sine displacement.
 visual::BodyPalette Pose(Asset asset,float time,float gait=0,float attack=0,float travel=0,Gesture gesture={});

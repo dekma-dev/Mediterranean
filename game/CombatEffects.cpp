@@ -150,10 +150,20 @@ void Crescent(Renderer& renderer,XMFLOAT3 origin,float facing,float age,bool hea
   }
 }
 }
-void CombatEffects::Reset() { bursts_={}; trails_={}; wake_={}; serial_=0; }
+void CombatEffects::Reset() { bursts_={}; trails_={}; wake_={}; serial_=0; footprints_={};footprintCursor_=0; }
+void CombatEffects::EmitFootstep(const presentation::CreatureContact& contact,const rpg::WorldMap& map) {
+ if(!std::isfinite(contact.position.x+contact.position.y+contact.position.z+contact.strength+contact.facing) || contact.strength<=0)return;
+ const auto p=rpg::Vec2{contact.position.x,contact.position.z};const auto surface=map.SurfaceAt(p);
+ if(surface.paving>.5f || (p.x>=rpg::WorldMap::dockMin.x && p.x<=rpg::WorldMap::dockMax.x && p.z>=rpg::WorldMap::dockMin.z && p.z<=rpg::WorldMap::dockMax.z))return;
+ footprints_[footprintCursor_++%footprints_.size()]={contact,0,surface.dirt};
+}
+std::size_t CombatEffects::FootprintCount() const {
+ return std::count_if(footprints_.begin(),footprints_.end(),[](const auto& p){return p.age<2.8f;});
+}
 void CombatEffects::Advance(float dt) {
   if (!std::isfinite(dt) || dt<=0) return;
   dt=std::min(dt,.05f);
+  for(auto& print:footprints_)print.age=std::min(10.f,print.age+dt);
   for (std::size_t i=0;i<wake_.count;++i) wake_.samples[i].age+=dt;
   const auto wakeEnd=std::remove_if(wake_.samples.begin(),wake_.samples.begin()+wake_.count,
     [](const WakeSample& sample) { return sample.age>=.20f; });
@@ -270,6 +280,25 @@ std::size_t CombatEffects::TrailCount() const {
   return std::count_if(trails_.begin(),trails_.end(),[](const Trail& trail) { return trail.age<sweepLife || trail.count>1; });
 }
 void CombatEffects::Render(Renderer& renderer) const {
+  for(const auto& print:footprints_) {
+    if(print.age>=2.8f)continue;
+    const auto& e=print.contact;const float c=std::cos(e.facing),s=std::sin(e.facing);
+    const float fade=Unit(1-print.age/2.8f),alpha=fade*(.18f+print.dirt*.22f);
+    const auto point=[&](float x,float z) {return GroundPoint(e.position.x+c*x+s*z,e.position.z-s*x+c*z,.012f);};
+    const auto mark=[&](float x,float z,float w,float h) {
+      renderer.DrawGroundMark(point(x-w,z-h),point(x-w,z+h),point(x+w,z+h),point(x+w,z-h),{.12f,.10f,.07f,alpha});
+    };
+    if(e.hoof) {mark(-.023f,0,.020f,.055f);mark(.023f,0,.020f,.055f);}
+    else {mark(0,-.012f,.041f,.035f);for(int i=0;i<3;++i)mark((i-1)*.028f,.044f,.016f,.018f);}
+    // Brief soil flecks at a fast contact; no particles on paving or timber.
+    if(print.age<.24f && e.strength>.4f && print.dirt>.25f) {
+      for(int i=0;i<2;++i) {
+        const float a=e.facing+i*2.4f,x=e.position.x+std::sin(a)*print.age*.35f,z=e.position.z+std::cos(a)*print.age*.35f;
+        const float y=rpg::WorldMap::Height({x,z})+.018f+print.age*.65f-2.3f*print.age*print.age;
+        renderer.DrawMesh(visual::Mesh::Rock,{x,y,z},{.018f,.012f,.020f},{.23f,.18f,.12f,1},visual::Material::Stone,0,0,visual::ShadowMode::None);
+      }
+    }
+  }
   const float sx=std::sin(wake_.facing),cx=std::cos(wake_.facing);
   const auto& wakeTint=rpg::DescribeClass(wake_.school).color;
   const auto wakeColor=[&](XMFLOAT4 original) {
