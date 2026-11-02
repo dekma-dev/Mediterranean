@@ -1,5 +1,14 @@
 # Recorded reference: materials and combat interface
 
+## Combat readability follow-up — 2026-11-02
+
+The 00:20 combat composition has a new native comparison in
+`docs/combat-readability.md`: compact unit bars with integrated reserve, statuses
+underneath, an open central combat view, a lighter functional objective tracker,
+world health/cast plates and preparation effects connected to rendered facing.
+The reference career density, portrait/icon artwork and authored movement/art
+acceptance remain open. Do not count this HUD pass as replacing those milestones.
+
 ## Reference correction and Russian interface review — 2026-10-27
 
 Revisited the user's requirements and full-size training frames at 00:20 (combat

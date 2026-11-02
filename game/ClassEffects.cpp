@@ -439,18 +439,63 @@ void Recovery(Renderer& r,const rpg::CombatVisualEvent& e,float age) {
   }
   color.w=fade*.1f;r.DrawEffectGlow(p,.4f,color);
 }
-void Prepare(Renderer& r,const rpg::Simulation& state,XMFLOAT3 p) {
+void Prepare(Renderer& r,const rpg::Simulation& state,XMFLOAT3 p,float renderedFacing) {
   if(state.Health()<=0 || (!state.CastingRecovery() && (!state.Attacking() || state.ClassInfo().range<=3))) return;
   const float progress=state.CastingRecovery()?state.RecoveryProgress():state.AttackSeconds()/combat::StrokeStart(state.HeavyAttack());
   if(progress<=0 || progress>=1) return;
   const float alpha=std::sin(progress*pi*.5f)*.55f;
   const auto id=state.Class();const auto c=id==C::Mage && state.AttackAbility()==10?XMFLOAT4{.68f,.55f,1,alpha}:
     (state.TechniqueAttack() || state.SignatureAttack() || state.AttackAbility()==8) && id==C::Mage?XMFLOAT4{.35f,.78f,1.f,alpha}:Color(id,alpha);
+  // Preparation follows the actual hand/weapon socket and the caster's facing.
+  // World-XY brackets used to turn edge-on or float across the bow when aiming
+  // east/west. This local plane remains attached through turns and strafing.
+  const float sn=std::sin(renderedFacing),cs=std::cos(renderedFacing);
+  const auto focus=[&](float right,float up,float forward=0.f) {
+    return Add(p,{cs*right+sn*forward,up,-sn*right+cs*forward});
+  };
   if((id==C::Scout || id==C::Engineer) && !state.CastingRecovery()) {
     if(!state.HeavyAttack()) return;
     // Compact sight brackets at the weapon; no premature muzzle flash.
-    for(float side:{-1.f,1.f}) r.DrawEffectStreak(Add(p,{side*(.10f-.04f*progress),-.05f,0}),
-      Add(p,{side*(.10f-.04f*progress),.05f,0}),.008f,c);
+    const float span=.12f-.065f*combat::Smooth(progress);
+    for(float side:{-1.f,1.f}) {
+      r.DrawEffectStreak(focus(side*span,-.065f),focus(side*span,.065f),.007f,c);
+      r.DrawEffectStreak(focus(side*span,.065f),focus(side*(span-.025f),.065f),.007f,c);
+      r.DrawEffectStreak(focus(side*span,-.065f),focus(side*(span-.025f),-.065f),.007f,c);
+    }
+    return;
+  }
+  if(id==C::Mage && !state.CastingRecovery()) {
+    const bool frost=state.TechniqueAttack() || state.SignatureAttack() || state.AttackAbility()==8;
+    const bool arcane=state.AttackAbility()==10;
+    const float power=combat::Smooth(progress),radius=(.075f+.16f*power)*(state.AttackAbility()>=8?1.3f:1.f);
+    const float phase=progress*(arcane?-5.f:frost?2.f:7.f);
+    // Separate silhouettes: two flowing fire bands, six crystalline frost
+    // spokes, or a broken arcane seal. Motes converge before the true release.
+    if(frost) {
+      for(int i=0;i<6;++i) {
+        const float a=phase+i*tau/6,dx=std::cos(a),dy=std::sin(a);
+        r.DrawEffectStreak(focus(dx*radius*.42f,dy*radius*.42f),focus(dx*radius,dy*radius),.009f,c);
+        for(float side:{-1.f,1.f})
+          r.DrawEffectStreak(focus(dx*radius*.72f,dy*radius*.72f),
+            focus((dx*.53f-dy*.18f*side)*radius,(dy*.53f+dx*.18f*side)*radius),.007f,c);
+      }
+    } else for(int band=0;band<2;++band) for(int i=0;i<22;++i) {
+      const float a=phase*(band?-1.f:1.f)+i*tau/28+band*pi,b=a+tau/28;
+      const float stretch=band?.62f:1.f;
+      const float z=band?.05f:-.025f;
+      r.DrawEffectStreak(focus(std::cos(a)*radius,std::sin(a)*radius*stretch,z),
+        focus(std::cos(b)*radius,std::sin(b)*radius*stretch,z),arcane?.008f:.012f,c);
+    }
+    for(int i=0;i<6;++i) {
+      const float t=std::fmod(progress*1.6f+i/6.f,1.f),a=phase+i*tau/6;
+      const float orbit=radius*(1.8f-t),up=(t-.5f)*radius;
+      const auto mote=focus(std::cos(a)*orbit,std::sin(a)*orbit+up,-.05f);
+      auto tint=c;tint.w*=std::sin(t*pi);
+      r.DrawEffectStreak(mote,Lerp(mote,p,.22f+power*.18f),.009f,tint);
+    }
+    auto core=c;core.w*=.40f;
+    r.DrawEffectGlow(p,radius*.5f,core);
+    r.DrawEffectGlow(p,.025f+power*.025f,{1,.92f,.75f,alpha*.7f});
     return;
   }
   if(state.CastingRecovery()) {

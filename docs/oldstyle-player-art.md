@@ -5,7 +5,18 @@ DX11 player and inventory renderer. Scout is the archer; class IDs, item IDs,
 equipment slots, combat rules and saves retain their existing meaning. Starter
 and Watchguard select two different weapon meshes per class.
 
-## Current tailoring pass (2026-10-31)
+## Current tailoring and attack pass (2026-11-02)
+
+Six chest variants, three whole split hems and three belt/pouch assemblies are
+reworked against the user's `3.jpg` reference. The hems now carry native skin
+weights and reuse the body's palette; waist anchors stay fixed and the lower
+cloth follows the legs. Fine cloth surface detail and local shadow reception
+replace the former corrugated appearance. Four authored sword/staff attacks
+have compact preparation and longer settling within unchanged contact clocks.
+Faces remain frozen. See [the revision record](class-tailoring-motion-revision.md)
+for exact source preservation, archive budgets, references and limitations.
+
+## Previous tailoring pass (2026-10-31)
 
 The world art expansion also updates the editable class source and both runtime
 LODs of each coat panel: waists are narrower, depth folds are softer, and mage
@@ -24,6 +35,9 @@ and 54 player motion tracks are retained. The earlier source is backed up under
 - `oldstyle-classes.kit`: bounded KIT1 archive, 27 items with two mesh LODs each,
   vertex colors and native material IDs. Resource 305 embeds it in client hosts.
 - `oldstyle-classes.json`: per-item vertex/triangle counts and archive hash.
+- `class-garments.weights`: bounded GWT1 skin weights for the three whole hems
+  and their distance LODs, embedded as resource 306. The editable source also
+  contains corresponding vertex groups and a native ten-bone bind rig.
 - `player-body.skin`: 26,028 / 5,000 / 1,400 body triangles. The anatomical source
   is unchanged. Covered torso vertices receive a local fit beneath the doublet;
   the bare body, neck and arms keep their original shape.
@@ -35,9 +49,10 @@ and 54 player motion tracks are retained. The earlier source is backed up under
   Worn boots use this geometry at 0.145 × 0.23 × 0.30 metres instead of the
   rounded reusable boot and duplicate flattened sole. Bare feet retain their
   separate fallback. Provenance is in `player-boot-source.json`.
-- `player-motion-v4.blend`: editable 57-bone action library; `player.clips`
-  contains 48 authored actions plus six compatibility tracks, totaling 428,772
+- `player-motion-v5.blend`: editable 57-bone action library; `player.clips`
+  contains 48 authored actions plus six compatibility tracks, totaling 399,132
   bytes. It retains the PCL2 contract and the earlier track indices.
+  The v4 source is retained; fifty native records are unchanged in v5.
 
 The anatomical source remains unchanged at SHA-256
 `bbb0590a5dd6a06c0ea20004ac5c6cdda0f3f1754dc18407dde3ed6b53625e79`.
@@ -81,15 +96,14 @@ windups still limit how slowly anticipation can play without changing gameplay.
 
 This is target retargeting to the existing ten-bone body and finger rig, with
 foot IK; it is not playback of every source bone. Materials approximate the
-Blender source. Coats use articulated panels, not cloth simulation. Knee
-deformation now consumes the panel's existing clearance before moving fabric;
-the front no longer receives the full knee offset twice, and the rear panel
-does not fold inward toward the knee. These are
+Blender source. The three focused classes use weighted whole hems with bounded
+secondary motion, not cloth simulation; other class fallbacks retain articulated
+panels. These are
 game assets and do not establish photorealism or final art acceptance.
 
 ## Review
 
-Current world/tailoring pass: eleven relevant Release suites and five Debug
+Previous world/tailoring pass: eleven relevant Release suites and five Debug
 suites pass. The final game launches and renders the three class fixtures;
 Visual Studio Debug smoke passes with Mage. Current world captures and the
 34-model gallery are under `.blender-local/world-art-20261031`; the class

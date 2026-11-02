@@ -1,5 +1,21 @@
 # Blender collection in the native renderer
 
+## Class tailoring and authored strike revision (2026-11-02)
+
+The three focused classes now use revised chest clothing, continuous weighted
+hems and fitted pouches. The retained `oldstyle-classes.blend` includes the
+pre-edit parts and an editable garment bind rig; the native KIT1 export gains
+the separate bounded `class-garments.weights` resource. Four weapon actions are
+revised in `player-motion-v5.blend` and exported into the existing PCL2 contract.
+Fifty other animation records and fifteen other equipment parts remain
+byte-identical. Frozen faces, both original collection copies, body anatomy,
+wolf motion and environment exports are unchanged by this pass.
+
+See [the tailoring and motion record](class-tailoring-motion-revision.md) for
+reference evidence, source preservation, geometry/animation counts and review.
+This is a character art integration; it does not complete reference parity or
+the remaining creature/environment art work.
+
 ## Frozen faces, locomotion and surface detail (2026-11-01)
 
 Faces are frozen by user instruction in `AGENTS.md`. The current revision fixes

@@ -66,4 +66,34 @@ const Library& Collection(){static const auto library=[] {
  Check(data!=nullptr,"Cannot read Blender class art");return Decode({static_cast<const char*>(data),SizeofResource(module,resource)});
 }();return library;}
 visual::Mesh Mesh(Part part,unsigned lod){return visual::Mesh(unsigned(visual::Mesh::OldWarriorChest)+unsigned(part)*2+std::min(lod,1u));}
+GarmentWeights DecodeGarmentWeights(std::string_view bytes,const Library& meshes) {
+ Check(bytes.size()<=4*1024*1024,"Garment weight budget exceeded");Reader r{bytes};
+ Check(r.Get<unsigned>()==0x31545747 && r.Get<unsigned>()==1 && r.Get<unsigned>()==3 && r.Get<unsigned>()==2,"Invalid garment weight header");
+ GarmentWeights result;
+ for(unsigned part=0;part<3;++part)for(unsigned lod=0;lod<2;++lod) {
+  const auto count=r.Get<unsigned>();
+  Check(count==meshes[unsigned(Part::WarriorSkirt)+part][lod].vertices.size(),"Garment weight/mesh count mismatch");
+  Check(std::size_t(count)*sizeof(visual::SkinInfluence)<=bytes.size()-r.offset,"Truncated garment weights");
+  auto& weights=result[part][lod];weights.reserve(count);
+  for(unsigned v=0;v<count;++v) {
+   const auto influence=r.Get<visual::SkinInfluence>();const float values[]={influence.weights.x,influence.weights.y,influence.weights.z,influence.weights.w};float sum=0;
+   for(unsigned k=0;k<4;++k) {
+    Check(influence.bones[k]==0 || (influence.bones[k]>=2 && influence.bones[k]<=5),"Invalid garment bone");
+    Check(std::isfinite(values[k]) && values[k]>=0 && values[k]<=1,"Invalid garment influence");sum+=values[k];
+   }
+   Check(std::abs(sum-1)<.0001f,"Unnormalized garment weights");weights.push_back(influence);
+  }
+ }
+ Check(r.offset==bytes.size(),"Trailing garment weights");return result;
+}
+std::string_view GarmentWeightBytes() {
+ const auto module=GetModuleHandleW(nullptr);const auto resource=FindResourceW(module,MAKEINTRESOURCEW(306),MAKEINTRESOURCEW(10));
+ Check(resource!=nullptr,"Missing Blender garment weights");const auto handle=LoadResource(module,resource);const auto data=handle?LockResource(handle):nullptr;
+ Check(data!=nullptr,"Cannot read garment weights");return {static_cast<const char*>(data),SizeofResource(module,resource)};
+}
+const std::vector<visual::SkinInfluence>& GarmentInfluences(visual::Mesh mesh) {
+ Check(visual::IsGarmentMesh(mesh),"Not a skinned garment mesh");
+ static const auto weights=DecodeGarmentWeights(GarmentWeightBytes(),Collection());
+ const unsigned index=unsigned(mesh)-unsigned(visual::Mesh::OldWarriorSkirt);return weights[index/2][index%2];
+}
 }

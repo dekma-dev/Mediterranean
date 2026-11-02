@@ -127,6 +127,11 @@ VOut VSWorld(InstanceIn i) {
  // leaving the caster silhouette and every other world receiver unchanged.
  if (i.surface.w<0) receiver.xyz+=o.n*((i.surface.w<=-3 && i.surface.w>=-5) || i.surface.w==-7?.0200:i.surface.w<-1?.0007:.0025);
  else if(authoredSkin) {receiver.xyz+=o.n*.0200;o.receiverPlane=0;}
+ // Millimetre cloth folds are smaller than the cascade filter footprint.
+ // Keep their caster geometry, but receive shadows on the smooth outer shell
+ // instead of extrapolating tiny fold triangles across neighbouring folds.
+ bool tailoredCloth=i.surface.x==15 || (i.surface.x==18 && (i.tint.w==15 || i.tint.w==14));
+ if(tailoredCloth) {receiver.xyz+=o.n*.012;o.receiverPlane=0;}
  o.tint=i.tint*i.paint; o.shadow=mul(receiver,shadowVP[0]);
  o.detailShadow=mul(receiver,shadowVP[1]); o.material=i.surface.x;
  // Authored vertices carry a validated native material ID in alpha.
@@ -154,12 +159,32 @@ matrix BodyMatrix(uint actor,uint joint,bool normal) {
  return transpose(matrix(bodyRows[base],bodyRows[base+1],bodyRows[base+2],bodyRows[base+3]));
 }
 struct SkinIn { InstanceIn object; uint4 bones : BLENDINDICES; float4 weights : BLENDWEIGHT; };
+void GarmentLag(inout InstanceIn i) {
+ [branch] if(i.surface.w==-8) {
+  float length=max(.2,1-i.n3.z),t=saturate((1-i.p.y)/length);
+  float2 drag=i.n3.xy;
+  i.p.x+=drag.x*t*t;i.p.z-=drag.y*t*t;
+  i.n.y+=2*t/length*(drag.x*i.n.x-drag.y*i.n.z);
+ }
+}
+float3 CoveredBodyPoint(float3 p) {
+ // A continuous under-layer fit avoids seams between material-region IDs.
+ // It is enabled only beneath the three layered class outfits. Neck, exposed
+ // arms and lower legs retain the authored anatomy, as does the unequipped body.
+ float torso=smoothstep(1.00,1.08,p.y)*(1-smoothstep(1.42,1.50,p.y))*(1-smoothstep(.24,.32,abs(p.x)));
+ float hips=smoothstep(.64,.73,p.y)*(1-smoothstep(.97,1.06,p.y))*(1-smoothstep(.26,.32,abs(p.x)));
+ float fit=max(torso,hips);
+ p.x*=1-.17*fit;p.z*=1-.24*fit;return p;
+}
 void SkinBody(inout InstanceIn i,uint4 joints,float4 weights) {
+ GarmentLag(i);
  uint actor=(uint)i.surface.z;
- // Compress only the covered torso beneath the fitted rigid doublet/jerkin.
- // Keep the bare anatomical body, arms and neck at their authored dimensions.
- if(i.surface.x==14 && i.tint.w==0 && bodyRows[actor*263+256].w==15) {
-  i.p.z*=.82; i.n.z/=.82;
+ if(i.surface.x==14 && bodyRows[actor*263+256].w==15) {
+  float3 p=CoveredBodyPoint(i.p);float e=.0005;
+  float3 dx=(CoveredBodyPoint(i.p+float3(e,0,0))-CoveredBodyPoint(i.p-float3(e,0,0)))/(2*e);
+  float3 dy=(CoveredBodyPoint(i.p+float3(0,e,0))-CoveredBodyPoint(i.p-float3(0,e,0)))/(2*e);
+  float3 dz=(CoveredBodyPoint(i.p+float3(0,0,e))-CoveredBodyPoint(i.p-float3(0,0,e)))/(2*e);
+  i.n=i.n.x*cross(dy,dz)+i.n.y*cross(dz,dx)+i.n.z*cross(dx,dy);i.p=p;
  }
  float3 p=0,n=0;
  [unroll] for(uint k=0;k<4;++k) {

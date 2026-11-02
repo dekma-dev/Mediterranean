@@ -4,6 +4,7 @@
 303 RCDATA "player.clips"
 304 RCDATA "player-body.skin"
 305 RCDATA "oldstyle-classes.kit"
+306 RCDATA "class-garments.weights"
 320 RCDATA "../materials/stone-color.png"
 321 RCDATA "../materials/stone-normal.png"
 322 RCDATA "../materials/wood-color.png"

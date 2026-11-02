@@ -1,6 +1,7 @@
 #include "game/Localization.h"
 #include "engine/Utf8.h"
 #include "engine/Renderer.h"
+#include "engine/ClassArt.h"
 #include "game/WorldMap.h"
 #include "SceneBytecode.generated.h"
 #include "engine/Shadow.h"
@@ -145,6 +146,10 @@ bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
   vertices.insert(vertices.end(),mesh.vertices.begin(),mesh.vertices.end());
   if(visual::IsBodyMesh(static_cast<visual::Mesh>(i))) {
     const auto& weights=previewBody?previewBody->influences:visual::CharacterBody(i-unsigned(visual::Mesh::Body)).influences;
+    influences.insert(influences.end(),weights.begin(),weights.end());
+  }
+  else if(visual::IsGarmentMesh(static_cast<visual::Mesh>(i))) {
+    const auto& weights=classart::GarmentInfluences(static_cast<visual::Mesh>(i));
     influences.insert(influences.end(),weights.begin(),weights.end());
   }
   else if(visual::IsHandMesh(static_cast<visual::Mesh>(i))) {
@@ -412,12 +417,13 @@ void Renderer::SetShadowFocus(const XMFLOAT3& focus) {
  if (portrait_ || !std::isfinite(focus.x) || !std::isfinite(focus.y) || !std::isfinite(focus.z)) return;
  shadowProjection_=visual::ShadowProjections(focus);
 }
-bool Renderer::Project(const XMFLOAT3& world,XMFLOAT2& screen) const {
+bool Renderer::Project(const XMFLOAT3& world,XMFLOAT2& screen,float* depth) const {
  XMFLOAT4 clip;
  XMStoreFloat4(&clip,XMVector4Transform(XMVectorSet(world.x,world.y,world.z,1),XMLoadFloat4x4(&viewProjection_)));
  if (clip.w<=0 || clip.z<0 || clip.z>clip.w || clip.x<-clip.w || clip.x>clip.w || clip.y<-clip.w || clip.y>clip.w)
   return false;
  screen={(clip.x/clip.w+1)*.5f,(1-clip.y/clip.w)*.5f};
+ if(depth) *depth=clip.w;
  return true;
 }
 void Renderer::Draw(const XMMATRIX& world,const XMMATRIX& vp,const XMFLOAT4& color,bool hud,UINT count,UINT start) {
@@ -550,6 +556,15 @@ unsigned Renderer::DrawBody(XMFLOAT3 position,float yaw,const visual::BodyPalett
  }
  item.body=255;
  return bodyCount_-1;
+}
+void Renderer::DrawGarment(visual::Mesh mesh,unsigned body,const XMMATRIX& transform,const XMFLOAT4& paint,float side,float back,float hem) {
+ if(body>=bodyCount_ || !visual::IsGarmentMesh(mesh)) {error_=L"Invalid skinned garment owner.";frameFailed_=true;return;}
+ Queue(mesh,transform,paint,visual::Material::Count,visual::ShadowMode::Cast,2);
+ auto& item=world_[unsigned(mesh)].back();item.body=std::uint8_t(body);
+ item.instance.surface.z=float(body);item.instance.surface.w=-8;
+ item.instance.normal._41=std::isfinite(side)?std::clamp(side,-.07f,.07f):0;
+ item.instance.normal._42=std::isfinite(back)?std::clamp(back,0.f,.08f):0;
+ item.instance.normal._43=std::clamp(hem,.25f,.8f);item.radius=3.f;
 }
 void Renderer::DrawHand(const XMMATRIX& transform,const visual::HandPalette& palette,bool mirrored,const XMFLOAT4& color,visual::Material material) {
  if(handCount_>=visual::maxHands) { error_=L"Scene exceeded the 64 skinned-hand budget."; frameFailed_=true; return; }
@@ -759,7 +774,7 @@ bool Renderer::FlushWorld() {
   for (unsigned b=0;b<batchCounts[pass];++b) {
    const auto& batch=passes[pass][b];
    const auto& mesh=meshes_[batch.mesh];
-   const unsigned skin=(visual::IsBodyMesh(static_cast<visual::Mesh>(batch.mesh))||authored::Animated(batch.mesh))?1:visual::IsHandMesh(static_cast<visual::Mesh>(batch.mesh))?2:0;
+   const unsigned skin=(visual::IsBodyMesh(static_cast<visual::Mesh>(batch.mesh))||visual::IsGarmentMesh(static_cast<visual::Mesh>(batch.mesh))||authored::Animated(batch.mesh))?1:visual::IsHandMesh(static_cast<visual::Mesh>(batch.mesh))?2:0;
    if(skin!=skinActive) {
     context_->IASetInputLayout(skin?bodyLayout_.Get():worldLayout_.Get());
     context_->VSSetShader(skin==2?(shadowPass?handShadowShader_.Get():handShader_.Get()):

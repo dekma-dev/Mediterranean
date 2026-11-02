@@ -705,7 +705,7 @@ void Game::Render(Renderer& renderer,bool showInterface) {
     const auto pose=BuildCharacterPose(0,playerPose_.gait,shield,playerAnimation_.pose,form);
     const auto local=rpg::PhysicalLauncher(form)?WeaponReleasePoint(pose,form):SpellReleasePoint(pose,shield);
     const float sx=std::sin(playerPose_.facing),cx=std::cos(playerPose_.facing);
-    classfx::Prepare(renderer,simulation_,{player.x+cx*local.x+sx*local.z,y+local.y,player.z-sx*local.x+cx*local.z});
+    classfx::Prepare(renderer,simulation_,{player.x+cx*local.x+sx*local.z,y+local.y,player.z-sx*local.x+cx*local.z},playerPose_.facing);
   }
   classfx::States(renderer,simulation_,time_);
   effects_.Render(renderer);

@@ -726,6 +726,12 @@ std::vector<std::uint8_t> BuildMaterialLayer(Material material,unsigned size) {
       const float fold=std::sin(2*pi*(u*3+.18f*noise(u,v,4)));
       value=.86f+.035f*weave+.018f*twill+.035f*fold+.065f*broad+.015f*fine;
       height=.0006f*weave+.0003f*twill+.0015f*fold;
+      if(material==Material::WornCloth) {
+        // Garment folds belong to the tailored mesh. At twelve repeats per
+        // metre the old height field made millimetre thread look corrugated.
+        value=.89f+.012f*weave+.007f*twill+.035f*broad+.009f*fine;
+        height=.00006f*weave+.00003f*twill;
+      }
       roughness=.86f+.08f*broad+.035f*(.5f+.5f*weave); break;
     }
     case Material::Roof: {

@@ -7,6 +7,7 @@
 #include "game/MapArtwork.h"
 #include "game/UiSkin.h"
 #include "game/EncounterView.h"
+#include "game/CombatHud.h"
 #include "engine/Renderer.h"
 #include <algorithm>
 #include <array>
@@ -740,29 +741,80 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  hoverX_=mouseX_;hoverY_=mouseY_;
  renderedState_=StateKey(); renderedWidth_=float(renderer.Width()); renderedHeight_=float(renderer.Height());
  if (!renderer.HasMapArtwork() && !renderer.SetMapArtwork(BuildMapArtwork(s.Map()),512)) return;
- // World targets are registered first: later HUD/panel regions take precedence.
+ // Collect projected bodies first. Near bodies win overlapping picks; visible
+ // nameplates are then packed separately and retain the actor's stable identity.
+ struct WorldTarget { rpg::EntityId id; Rect body; const char* name; const rpg::Enemy* actor; float depth; bool friendly,selected; };
+ std::array<WorldTarget,128> worldTargets{};std::size_t worldCount=0;WorldPlates plates;bool nearbyCombat=false;
  const auto worldTarget=[&](rpg::EntityId id,rpg::Vec2 position,const char* name,bool friendly,const rpg::Enemy* actor=nullptr) {
-  if(std::hypot(position.x-s.Player().x,position.z-s.Player().z)>22 || !s.Map().CanTravel(s.Player(),position,.05f)) return;
-  Point head,foot;
-  if(!renderer.Project({position.x,rpg::WorldMap::Height(position)+(actor && actor->Beast()?1.6f:2.35f),position.z},head) || !renderer.Project({position.x,rpg::WorldMap::Height(position),position.z},foot)) return;
+  const float distance=std::hypot(position.x-s.Player().x,position.z-s.Player().z);
+  if(worldCount==worldTargets.size() || distance>22 || !s.Map().CanTravel(s.Player(),position,.05f)) return;
+  Point head,foot;float depth=0;
+  if(!renderer.Project({position.x,rpg::WorldMap::Height(position)+(actor && actor->Beast()?1.6f:2.35f),position.z},head,&depth) || !renderer.Project({position.x,rpg::WorldMap::Height(position),position.z},foot)) return;
   const float x=c.layout.LocalX(head.x*renderer.Width()),y=c.layout.LocalY(head.y*renderer.Height());
   const float bottom=c.layout.LocalY(foot.y*renderer.Height()),height=std::clamp(bottom-y,25.f,220.f);
   if(x<0 || x>1280 || y<0 || y>720) return;
   const bool selected=friendly?s.FriendlyTarget()==int(id-rpg::Simulation::friendlyBase):s.TargetActor() && s.TargetActor()->id==id;
   const Rect hit{x-std::max(20.f,height*.24f),y,std::max(40.f,height*.48f),height};
-  regions_.push_back({hit,{Action::SelectActor,int(id)},true});
-  const Rect label{x-64,y-15,128,15};
-  regions_.push_back({label,{Action::SelectActor,int(id)},true});
-  if(friendly || selected || hit.Contains(mouseX_,mouseY_) || (actor && actor->kind==rpg::EnemyKind::Dummy)) {
-   c.Center(label.x,label.y,label.w,name,10,friendly?Color{.62f,.94f,.57f,1}:gold);
-   if(actor) {c.RectFill({x-34,y+1,68,4},{.06f,.035f,.02f,1});
-    c.RectFill({x-33,y+2,66*std::clamp(actor->health/actor->MaxHealth(),0.f,1.f),2},{.85f,.48f,.20f,1});}
-   if(selected) c.Line(x-24,y-2,x+24,y-2,1,friendly?Color{.5f,.95f,.5f,1}:gold);
-  }
+  worldTargets[worldCount++]={id,hit,name,actor,depth,friendly,selected};
+  const bool casting=actor && s.VisibleEnemyCast(*actor);
+  const bool engaged=actor && (actor->state==rpg::EnemyState::Pursuing || actor->state==rpg::EnemyState::Returning || actor->health<actor->MaxHealth());
+  nearbyCombat=nearbyCombat || (actor && actor->state==rpg::EnemyState::Pursuing && distance<12);
+  if(friendly || actor)
+   plates.Add({id,x,y-3,144,actor?(casting?53.f:32.f):17.f,distance,selected?4:casting?3:engaged?2:friendly?1:0});
  };
  for(const auto& enemy:s.Combatants()) if(enemy.health>0) worldTarget(enemy.id,enemy.position,enemy.Name(),false,&enemy);
  for(const auto& dummy:s.Dummies()) if(!(s.Sparring() && dummy.id==210)) worldTarget(dummy.id,dummy.position,dummy.Name(),false,&dummy);
  for(int i=0;i<rpg::Simulation::friendlyCount;++i) worldTarget(rpg::Simulation::friendlyBase+i,rpg::Simulation::FriendlyPosition(i),rpg::Simulation::FriendlyName(i),true);
+ if(s.Sparring()) {const auto& actor=s.SparringOpponent();if(actor.health>0) worldTarget(actor.id,actor.position,actor.Name(),false,&actor);}
+ std::sort(worldTargets.begin(),worldTargets.begin()+worldCount,[](const auto& a,const auto& b) {
+   return a.depth!=b.depth?a.depth>b.depth:a.id>b.id;
+ });
+ for(std::size_t i=0;i<worldCount;++i) regions_.push_back({worldTargets[i].body,{Action::SelectActor,int(worldTargets[i].id)},true});
+ const bool combatLayout=!HasPanels();
+ const auto incoming=ReadIncomingAttacks(s);
+ const auto anchors=CombatHudAnchors(!combatLayout);
+ plates.Reserve(anchors.player.x-3,anchors.player.y,246,70);
+ if(s.TargetActor() || s.FriendlyTarget()>=0) plates.Reserve(anchors.target.x,anchors.target.y,257,70);
+ plates.Reserve(1090,3,176,178);plates.Reserve(1016,194,250,183);
+ if(combatLayout && incoming.count)
+  plates.Reserve(438,s.Sparring() || s.SparringReportTime()>0?205.f:24.f,340,24+incoming.count*36.f);
+ plates.Arrange();
+ for(std::size_t i=0;i<plates.count;++i) {
+  const auto& plate=plates.rows[i];if(!plate.visible) continue;
+  const auto found=std::find_if(worldTargets.begin(),worldTargets.begin()+worldCount,[&](const auto& t){return t.id==plate.id;});
+  if(found==worldTargets.begin()+worldCount) continue;
+  const auto& target=*found;const auto* actor=target.actor;
+  const float x=plate.x,y=plate.y;
+  const Color accent=target.friendly?Color{.65f,.88f,.53f,1}:target.selected?gold:Color{.88f,.73f,.58f,1};
+  if(std::abs(y+plate.height-plate.anchorY)>5)
+   c.Line(x+72,y+plate.height,plate.anchorX,plate.anchorY,.7f,{accent.x,accent.y,accent.z,.55f});
+  c.Center(x+3,y,138,target.name,11,accent);
+  if(target.selected) {
+   c.Line(x+1,y+4,x+5,y+9,1.5f,gold);c.Line(x+5,y+9,x+1,y+14,1.5f,gold);
+   c.Line(x+143,y+4,x+139,y+9,1.5f,gold);c.Line(x+139,y+9,x+143,y+14,1.5f,gold);
+  }
+  if(actor) {
+   const float fraction=std::clamp(actor->health/actor->MaxHealth(),0.f,1.f);
+   const bool returning=actor->state==rpg::EnemyState::Returning;
+   c.RectFill({x+19,y+16,106,11},{.025f,.021f,.018f,.93f});
+   c.Gradient({x+21,y+18,102*fraction,7},returning?Color{.4f,.43f,.46f,1}:Color{.72f,.32f,.20f,1},{.23f,.065f,.035f,1});
+   c.Line(x+20,y+16,x+124,y+16,1,target.selected?gold:border);
+   c.Center(x+22,y+16,100,std::to_string(int(std::ceil(fraction*100)))+"%",10,ink);
+   if(actor->elite || actor->Boss()) c.Diamond(x+12,y+21,4,5,gold);
+   if(actor->stunned>0 || actor->rooted>0 || actor->snared>0 || actor->exposed>0) {
+    const int icon=actor->stunned>0 || actor->exposed>0?24:22;
+    PaintedIcon(c,{x+128,y+16,12,12},icon);
+   }
+   if(s.VisibleEnemyCast(*actor)) {
+    const Color castColor=actor->Interruptible()?Color{.93f,.62f,.24f,1}:Color{.65f,.52f,.83f,1};
+    c.RectFill({x+19,y+30,106,5},{.035f,.025f,.02f,.94f});
+    c.RectFill({x+20,y+31,104*std::clamp(1-actor->windup/actor->WindupDuration(),0.f,1.f),3},castColor);
+    c.Center(x,y+36,144,std::string(actor->AttackName())+" "+Seconds(actor->windup)+"s",10,castColor);
+    if(!actor->Interruptible()) {c.RectFill({x+9,y+30,6,5},castColor);c.Ring(x+12,y+29,2,castColor);}
+   }
+  }
+  regions_.push_back({{x,y,plate.width,plate.height},{Action::SelectActor,int(plate.id)},true});
+ }
  for(int d=0;d<6;++d) {
   const auto p=rpg::WorldMap::residents[9+d].position;DirectX::XMFLOAT2 projected;
   if(s.HuntState(d)==2 || std::hypot(p.x-s.Player().x,p.z-s.Player().z)>24 ||
@@ -818,7 +870,6 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  const auto close=[&](Rect rect,Panel which) { button(rect,"X",Action::Close,int(which)); };
 
  // Combat frames sit beside the action; side windows move them to the top.
- const bool combatLayout=!HasPanels();
  if(combatLayout) {
   // Restrained crimson crescents leave the character and hotbars unobstructed.
   // Bearings stay in world space so orbiting the camera rotates feedback too.
@@ -838,70 +889,59 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Line(x,y,640+std::sin(angle-.055f)*174,340-std::cos(angle-.055f)*112,2,{1,.65f,.35f,alpha});
    c.Line(x,y,640+std::sin(angle+.055f)*174,340-std::cos(angle+.055f)*112,2,{1,.65f,.35f,alpha});
   }
-  const auto incoming=ReadIncomingAttacks(s);
   if(incoming.count) {
-     const Rect board{438,s.Sparring() || s.SparringReportTime()>0?205.f:24.f,400,27+incoming.count*48.f};
-   c.Frame(board,{.045f,.035f,.03f,.91f},border);
-   c.Banner({board.x+55,board.y-5,290,26},"INCOMING ATTACKS / SELECT",13);
+   const Rect board{438,s.Sparring() || s.SparringReportTime()>0?205.f:24.f,340,24+incoming.count*36.f};
+   c.Gradient(board,{.025f,.022f,.019f,.83f},{.025f,.022f,.019f,.25f});
+   c.FitText(board.x+8,board.y+3,324,"INCOMING ATTACKS / SELECT",11,gold);
    regions_.push_back({board,{},false});
    for(unsigned i=0;i<incoming.count;++i) {
     const auto& row=incoming.rows[i];const auto& enemy=*row.enemy;
-    const float y=board.y+27+i*48;
-    const Rect hit{board.x+5,y-2,390,45};
+    const float y=board.y+24+i*36;
+    const Rect hit{board.x+5,y-2,330,34};
     const bool selected=s.TargetActor() && s.TargetActor()->id==enemy.id;
     if(hit.Contains(mouseX_,mouseY_) || selected)
       c.RectFill(hit,selected?Color{.42f,.28f,.10f,.30f}:Color{.45f,.38f,.23f,.18f});
-    if(selected) c.Line(hit.x,y,hit.x,y+36,2,gold);
+    if(selected) c.Line(hit.x,y,hit.x,y+29,2,gold);
     regions_.push_back({hit,{Action::SelectThreat,int(enemy.id)},true});
     const Color accent=enemy.Interruptible()?Color{.95f,.52f,.18f,1}:Color{.76f,.51f,.95f,1};
-    c.Text(board.x+9,y,enemy.AttackName(),14,ink);
-    c.Text(board.x+170,y,enemy.Boss()?(enemy.Enraged()?"BOSS / ENRAGED":"BOSS"):enemy.Name(),10,muted);
+    c.FitText(board.x+9,y,171,enemy.AttackName(),12,ink);
+    c.FitText(board.x+184,y,103,enemy.Boss()?(enemy.Enraged()?"BOSS / ENRAGED":"BOSS"):enemy.Name(),10,muted);
     std::ostringstream countdown;countdown<<std::fixed<<std::setprecision(1)<<std::ceil(enemy.windup*10)/10<<"s";
-    c.Center(board.x+346,y,45,countdown.str(),14,accent);
-    c.RectFill({board.x+9,y+17,382,3},{.1f,.08f,.06f,1});
-    c.RectFill({board.x+9,y+17,382*std::clamp(1-enemy.windup/enemy.WindupDuration(),0.f,1.f),3},accent);
-    c.Text(board.x+9,y+23,row.threatens?enemy.Counterplay():"CLEAR NOW - WATCH THE WARNING",10,row.threatens?accent:muted);
+    c.Center(board.x+290,y,40,countdown.str(),12,accent);
+    c.RectFill({board.x+9,y+15,320,2},{.1f,.08f,.06f,1});
+    c.RectFill({board.x+9,y+15,320*std::clamp(1-enemy.windup/enemy.WindupDuration(),0.f,1.f),2},accent);
+    c.FitText(board.x+9,y+20,320,row.threatens?enemy.Counterplay():"CLEAR NOW - WATCH THE WARNING",10,row.threatens?accent:muted);
    }
   }
  }
- const float ux=combatLayout?330.f:18.f,uy=combatLayout?458.f:23.f;
- regions_.push_back({{ux-5,uy,285,78},{},false});
- c.Frame({ux+27,uy+8,229,66},{.035f,.075f,.065f,.94f},{.39f,.46f,.28f,1});
- c.Banner({ux+49,uy,208,26},s.Nickname(),15);
- c.Portrait(ux+29,uy+36,s);
- c.Frame({ux+58,uy+30,189,20},{.035f,.075f,.035f,1});
- c.Gradient({ux+61,uy+33,183*playerHealth_.trail,14},{.82f,.59f,.24f,1},{.43f,.23f,.08f,1});
- c.Gradient({ux+61,uy+33,183*std::clamp(s.Health()/s.MaxHealth(),0.f,1.f),14},
+ const float ux=anchors.player.x,uy=anchors.player.y;
+ regions_.push_back({{ux-3,uy,246,70},{},false});
+ c.Banner({ux+48,uy,190,21},s.Nickname(),13);
+ c.Portrait(ux+27,uy+33,s);
+ c.Skin({ux+51,uy+24,189,21},8);
+ c.Gradient({ux+56,uy+28,179*playerHealth_.trail,13},{.82f,.59f,.24f,1},{.43f,.23f,.08f,1});
+ c.Gradient({ux+56,uy+28,179*std::clamp(s.Health()/s.MaxHealth(),0.f,1.f),13},
    {.49f,.76f,.22f,1},{.12f,.31f,.075f,1});
- c.Center(ux+60,uy+31,185,std::to_string(int(s.Health()))+" / "+std::to_string(int(s.MaxHealth()))+
-   (s.Barrier()>0?"  [+"+Number(s.Barrier())+"]":""),12);
- c.Text(ux+62,uy+55,"Lv. "+std::to_string(s.Level())+"  /  "+s.ClassName(),11,muted);
- // Each discipline has its own crest, resource name and instrument: melee
- // seals, physical ammunition chambers, or arcane gems in a curved register.
+ c.Center(ux+55,uy+28,181,std::to_string(int(s.Health()))+" / "+std::to_string(int(s.MaxHealth()))+
+   (s.Barrier()>0?"  [+"+Number(s.Barrier())+"]":""),11);
+ // Reserve belongs to the unit frame. Keep the middle of the battlefield open.
  const auto& style=s.CombatStyleInfo();const auto& tint=s.ClassInfo().color;
  const Color classAccent{tint[0],tint[1],tint[2],1};
- const float rx=combatLayout?610.f:328.f;
- regions_.push_back({{rx,uy+4,132,64},{},false});
- c.Frame({rx,uy+4,132,64},{.045f,.045f,.04f,.97f},classAccent);
- c.Skin({rx+3,uy+7,126,58},7,{.32f,.31f,.29f,1});
- ClassSigil(c,{rx+5,uy+8,22,22},s.Class());
- c.Center(rx+28,uy+8,99,style.resource,13,ink);
- for(int i=0;i<style.capacity;++i) {
-  const float px=rx+66+(i-(style.capacity-1)*.5f)*23,py=uy+37;
-  const Color fill=i<s.ClassResource()?classAccent:Color{.12f,.13f,.12f,1};
-  if(!s.RetreatMobility()) {
-   c.Diamond(px,py,9,10,gold);c.Diamond(px,py,6,7,fill);
-  } else if(rpg::PhysicalLauncher(rpg::WeaponFor(s.Class()).form)) {
-   c.Frame({px-7,py-9,14,18},fill,gold);c.Line(px-3,py-6,px-3,py+5,1,ink);
-  } else {
-   const float arc=(i-(style.capacity-1)*.5f)*(i-(style.capacity-1)*.5f)*2;
-   c.Oval(px,py-arc,7,8,fill);c.Ring(px,py-arc,8,gold);c.Oval(px-2,py-3-arc,1.5f,2,ink);
-  }
- }
+ const Rect reserve{ux+52,uy+44,187,12};
+ c.Skin(reserve,5);c.RectFill({reserve.x+4,reserve.y+3,179,6},{.055f,.04f,.025f,1});
+ const float reserveUnit=179.f/std::max(1,style.capacity);
+ for(int i=0;i<style.capacity;++i)
+  c.Gradient({reserve.x+4+i*reserveUnit,reserve.y+3,reserveUnit-2,6},i<s.ClassResource()?classAccent:Color{.16f,.13f,.09f,1},
+    i<s.ClassResource()?Color{classAccent.x*.4f,classAccent.y*.4f,classAccent.z*.4f,1}:Color{.065f,.045f,.025f,1});
+ c.Center(reserve.x+3,reserve.y,181,std::string(style.resource)+"  "+std::to_string(s.ClassResource())+" / "+std::to_string(style.capacity),9,ink);
  const bool prepared=s.Level()>=10 && s.Cooldown(11)==0 && s.TargetActor() && s.FinisherSetup(*s.TargetActor());
- c.Center(rx+3,uy+51,126,s.EmpoweredAttack()?"EMPOWERED CAST":s.EmpoweredReady()?(prepared?"COMBO PRIMED":"HEAVY READY"):
-   s.Barrier()>0?"Ward "+Number(s.Barrier()):"Build with basic hits",10,s.EmpoweredReady()?gold:muted);
- const float statusY=combatLayout?uy-35:uy+82;
+ ClassSigil(c,{ux+54,uy+57,12,12},s.Class());
+ c.FitText(ux+70,uy+58,166,s.EmpoweredAttack()?"EMPOWERED CAST":s.EmpoweredReady()?(prepared?"COMBO PRIMED":"HEAVY READY"):
+   "Lv. "+std::to_string(s.Level())+" / "+s.ClassName(),10,s.EmpoweredReady()?gold:muted);
+ regions_.push_back({reserve,{Action::InspectStatus,int(statusTips.size())},false});
+ statusTips.push_back({style.resource,s.EmpoweredReady()?"Your class reserve is full. Spend it with a heavy attack or signature.":"Build with basic hits",
+   std::to_string(s.ClassResource())+" / "+std::to_string(style.capacity)});
+ const float statusY=uy+CombatHudLayout::statusOffset;
  int playerStatus=0;
  if(s.Barrier()>0) statusBadge(ux+58+playerStatus++*39,statusY,17,"Protective ward",
    "Absorbs incoming damage. The number is remaining protection, not seconds.",Number(s.Barrier()),false);
@@ -911,42 +951,40 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    "Your class reserve is full. Spend it with a heavy attack or signature.","Ready",false);
  if (s.TargetActor()) {
   const auto& target=*s.TargetActor();
-  const float tx=combatLayout?750.f:475.f,ty=combatLayout?458.f:26.f;
-  regions_.push_back({{tx,ty,286,78},{},false});
-  c.Frame({tx,ty+8,244,66},{.085f,.045f,.035f,.94f},{.46f,.36f,.20f,1});
-  c.Banner({tx+2,ty,226,26},target.Name(),14); c.Portrait(tx+253,ty+36,s,&target);
-  c.Frame({tx+9,ty+30,223,20},{.10f,.025f,.015f,1});
-  c.Gradient({tx+12,ty+33,217*targetHealth_.trail,14},{.90f,.69f,.32f,1},{.49f,.29f,.10f,1});
-  c.Gradient({tx+12,ty+33,217*std::clamp(target.health/target.MaxHealth(),0.f,1.f),14},
-    {.76f,.35f,.16f,1},{.35f,.075f,.04f,1});
-  c.Center(tx+10,ty+31,221,std::to_string(int(std::ceil(target.health)))+" / "+std::to_string(int(target.MaxHealth()))+
-    "  ("+std::to_string(int(std::ceil(100*std::clamp(target.health/target.MaxHealth(),0.f,1.f))))+"%)",12);
+  const float tx=anchors.target.x,ty=anchors.target.y;
+  regions_.push_back({{tx,ty,257,70},{},false});
+  c.Banner({tx+1,ty,202,21},target.Name(),13); c.Portrait(tx+227,ty+33,s,&target);
+  c.Skin({tx+2,ty+24,203,21},8);
+  c.Gradient({tx+7,ty+28,193*targetHealth_.trail,13},{.90f,.69f,.32f,1},{.49f,.29f,.10f,1});
+  c.Gradient({tx+7,ty+28,193*std::clamp(target.health/target.MaxHealth(),0.f,1.f),13},
+    {.47f,.69f,.24f,1},{.13f,.29f,.075f,1});
+  c.Center(tx+7,ty+28,193,std::to_string(int(std::ceil(target.health)))+" / "+std::to_string(int(target.MaxHealth()))+
+    "  ("+std::to_string(int(std::ceil(100*std::clamp(target.health/target.MaxHealth(),0.f,1.f))))+"%)",11);
   const auto distance=std::to_string(int(std::ceil(std::hypot(s.Player().x-target.position.x,s.Player().z-target.position.z))));
   const std::string condition=s.CourtProtected(target)?"Court ward / break seals":target.stunned>0?"Stunned  "+Seconds(target.stunned)+"s":
     target.rooted>0?"Rooted  "+Seconds(target.rooted)+"s":target.snared>0?"Snared  "+Seconds(target.snared)+"s":
     target.exposed>0?"Exposed +25%  "+Seconds(target.exposed)+"s":"";
-  c.Center(tx+5,ty+54,228,!condition.empty()?condition:target.kind==rpg::EnemyKind::Dummy?"Immortal / Regenerates 200 HP/s":distance+" m  /  Selected target",11,muted);
-  if (target.windup>0) {
-   const Rect cast{tx+10,combatLayout?ty-59:ty+117,220,19};
+  c.FitText(tx+8,ty+51,191,!condition.empty()?condition:target.kind==rpg::EnemyKind::Dummy?"Immortal / Regenerates 200 HP/s":distance+" m  /  Selected target",10,muted);
+  if (s.VisibleEnemyCast(target)) {
+   const Rect cast{tx+8,ty+CombatHudLayout::castOffset,195,19};
    c.Frame(cast,{.12f,.035f,.02f,1},{.67f,.34f,.12f,1});
-   c.Gradient({cast.x+3,cast.y+3,214*std::clamp(1-target.windup/target.WindupDuration(),0.f,1.f),13},
-     {.76f,.30f,.11f,1},{.32f,.055f,.02f,1});
+   c.Gradient({cast.x+3,cast.y+3,189*std::clamp(1-target.windup/target.WindupDuration(),0.f,1.f),13},
+     target.Interruptible()?Color{.76f,.42f,.11f,1}:Color{.53f,.35f,.72f,1},{.22f,.12f,.08f,1});
    c.Center(cast.x,cast.y+3,cast.w,std::string(target.AttackName())+" / "+Seconds(target.windup)+"s",11,ink);
    c.Center(cast.x-30,cast.y-14,cast.w+60,std::string(target.Enraged()?"ENRAGED - ":"")+target.Counterplay(),10,ink);
    regions_.push_back({cast,{},false});
   }
   int badge=0;
   for(const auto& effect:TargetStatusEffects(target)) statusBadge(tx+10+badge++*39,
-    combatLayout?ty-35:ty+82,effect.icon,effect.name,effect.description,Seconds(effect.seconds)+"s",true);
+    ty+CombatHudLayout::statusOffset,effect.icon,effect.name,effect.description,Seconds(effect.seconds)+"s",true);
  }
  if(s.FriendlyTarget()>=0) {
-  const int npc=s.FriendlyTarget();const float tx=combatLayout?750.f:475.f,ty=combatLayout?458.f:26.f;
-  regions_.push_back({{tx,ty,286,78},{},false});
-  c.Frame({tx,ty+8,244,66},{.035f,.085f,.055f,.94f},{.38f,.55f,.29f,1});
-  c.Banner({tx+2,ty,226,26},rpg::Simulation::FriendlyName(npc),14);
-  c.Portrait(tx+253,ty+36,s,nullptr,npc);
-  c.Center(tx+10,ty+34,220,"FRIENDLY / NON-COMBAT",12,{.60f,.90f,.53f,1});
-  c.Center(tx+10,ty+54,220,"Approach and press E to interact",11,muted);
+  const int npc=s.FriendlyTarget();const float tx=anchors.target.x,ty=anchors.target.y;
+  regions_.push_back({{tx,ty,257,70},{},false});
+  c.Banner({tx+1,ty,202,21},rpg::Simulation::FriendlyName(npc),13);
+  c.Portrait(tx+227,ty+33,s,nullptr,npc);
+  c.Center(tx+7,ty+29,192,"FRIENDLY / NON-COMBAT",11,{.60f,.90f,.53f,1});
+  c.Center(tx+7,ty+51,192,"Approach and press E to interact",10,muted);
  }
  c.Oval(1170,94,81,81,{.025f,.04f,.02f,1});
  Atlas(c,s,{1096,20,148,148},true,hasWaypoint,waypoint);
@@ -960,20 +998,29 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  c.Banner({1118,158,104,23},"Atlas  [M]",12);
  regions_.push_back({{1090,13,160,168},{Action::Map},true});
  if (!inventoryOpen || panel!=Panel::None) {
-  regions_.push_back({{1001,193,265,hasWaypoint?183.f:158.f},{},false});
-  c.Frame({1001,193,265,hasWaypoint?183.f:158.f},{.025f,.045f,.025f,.82f},border);
-  c.Text(1013,202,s.ReplayActive()?"VETERAN REHEARSAL":"EXPEDITION",14,gold); c.Line(1010,226,1260,226,1,border);
-  c.Wrap(1013,236,244,s.Objective(),15,ink,4);
+  const auto lines=c.Lines(231,s.Objective(),13);
+  const float textHeight=std::min(120.f,float(lines.size())*17);
+  const Rect tracker{1016,194,250,52+textHeight+(hasWaypoint?21.f:0.f)};
+  // Text and a quiet backing preserve the view of the world. The actual entry
+  // opens the journal, rather than behaving as a dead decorative rectangle.
+  c.Gradient(tracker,{.025f,.021f,.016f,.60f},{.025f,.021f,.016f,.12f});
+  c.Line(1020,217,1262,217,1,{.58f,.45f,.25f,.75f});
+  c.FitText(1028,198,195,s.ReplayActive()?"VETERAN REHEARSAL":"EXPEDITION",12,gold);
+  c.Center(1234,198,25,"J",12,gold);
+  c.Paragraph({1028,225,231,textHeight},s.Objective(),13,ink,4);
+  regions_.push_back({tracker,{Action::Journal},true});
+  if(tracker.Contains(mouseX_,mouseY_)) c.Line(1020,222,1020,tracker.y+tracker.h-5,2,gold);
+  const float footer=225+textHeight+3;
   if(s.RitualActive() && s.RitualStage()>0 && s.RitualStage()<4) {
-    c.Inset({1013,312,241,12});c.RectFill({1015,314,237*s.RitualCharge(),8},{.36f,.65f,.79f,1});
+    c.RectFill({1028,footer-5,230,3},border);c.RectFill({1028,footer-5,230*s.RitualCharge(),3},{.36f,.65f,.79f,1});
   }
   if(s.CourtChannelSite()>=0) {
-    c.Inset({1013,312,241,12});c.RectFill({1015,314,237*s.CourtChannelProgress(),8},{.72f,.40f,.15f,1});
+    c.RectFill({1028,footer-5,230,3},border);c.RectFill({1028,footer-5,230*s.CourtChannelProgress(),3},{.72f,.40f,.15f,1});
   }
   const auto objective=s.ObjectivePosition();
   if (s.TrackedHunt()>=0 || s.ReplayActive() || s.AnchorState()!=rpg::AnchorQuest::Complete || s.FrontierCompleted()<rpg::frontierQuestCount)
-   c.Text(1013,332,std::to_string(int(std::ceil(std::hypot(s.Player().x-objective.x,s.Player().z-objective.z))))+" m to objective",13,gold);
-  if (hasWaypoint) c.Text(1013,355,"Waypoint  "+std::to_string(int(std::ceil(std::hypot(s.Player().x-waypoint.x,s.Player().z-waypoint.z))))+" m",13,{.56f,.76f,.88f,1});
+   c.Text(1028,footer,std::to_string(int(std::ceil(std::hypot(s.Player().x-objective.x,s.Player().z-objective.z))))+" m to objective",11,gold);
+  if (hasWaypoint) c.Text(1028,footer+20,"Waypoint  "+std::to_string(int(std::ceil(std::hypot(s.Player().x-waypoint.x,s.Player().z-waypoint.z))))+" m",11,{.56f,.76f,.88f,1});
  }
  if (s.Sparring() || s.SparringReportTime()>0) {
   regions_.push_back({{470,105,506,81},{},false});
@@ -1031,11 +1078,15 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  };
  drawHotbars();
  if(s.EvasionSeconds()>0) c.Center(505,505,270,"EVASION / "+Seconds(s.EvasionSeconds())+"s",12,classAccent);
- if(s.CastingRecovery()) {
-   c.Frame({440,534,400,20},dark,gold);
-   c.Gradient({443,537,394*s.RecoveryProgress(),14},{.55f,.64f,.35f,1},{.2f,.32f,.18f,1});
-   c.FitText(450,537,232,s.Spell(3).name,12,ink);
-   c.FitText(688,537,144,"Casting / "+Seconds(s.RecoveryCastDuration()*(1-s.RecoveryProgress()))+"s",11,ink);
+ const auto cast=ReadPlayerCast(s);
+ if(cast.ability>=0) {
+   c.Skin({475,534,330,21},8);
+   const Color castColor=cast.ability==3?Color{.55f,.64f,.35f,1}:classAccent;
+   c.Gradient({480,538,320*cast.progress,13},castColor,{castColor.x*.35f,castColor.y*.35f,castColor.z*.35f,1});
+   c.Line(480+320*cast.progress,537,480+320*cast.progress,552,1.5f,{1,.89f,.62f,.9f});
+   c.FitText(486,538,238,s.Spell(cast.ability).name,11,ink);
+   c.Center(740,538,57,Seconds(cast.remaining)+"s",11,ink);
+   regions_.push_back({{475,534,330,21},{},false});
  }
  // Navigation sits above the two spell rows, separate from cast feedback.
  if (panel==Panel::None) {
@@ -1046,20 +1097,6 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    button(nav,labels[i],actions[i]);
    if((i==0 && characterOpen) || (i==1 && inventoryOpen))
     c.Line(nav.x+7,nav.y+nav.h-3,nav.x+nav.w-7,nav.y+nav.h-3,2,gold);
-  }
-  if (s.Attacking()) {
-   const float contact=combat::Contact(s.HeavyAttack());
-   const char* phase=s.AttackSeconds()<combat::StrokeStart(s.HeavyAttack())?"Wind-up":
-     s.AttackSeconds()<contact?(s.ClassInfo().range>3?"Release":"Swing"):"Recovery";
-   const float duration=combat::Duration(s.HeavyAttack());
-   const float remaining=std::max(0.f,(duration-s.AttackSeconds())/s.AttackRate());
-   c.Frame({440,534,400,20},{.035f,.065f,.065f,.97f});
-   c.Gradient({443,537,394*std::clamp(s.AttackProgress(),0.f,1.f),14},
-     s.AttackSeconds()<contact?Color{.27f,.48f,.49f,1}:Color{.40f,.34f,.20f,1},{.10f,.17f,.16f,1});
-   c.FitText(450,537,232,s.Spell(s.AttackAbility()).name,12,ink);
-   c.FitText(688,537,144,std::string(phase)+" / "+Seconds(remaining)+"s",11,ink);
-   const float releaseX=443+394*contact/duration;
-   c.Line(releaseX,534,releaseX,537,1.5f,gold);
   }
  }
  if (s.TalentPoints()>0) {
@@ -1072,7 +1109,9 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  if (!characterOpen && panel!=Panel::Quest) c.Wrap(22,614,385,s.Message(),14,ink,3);
  if (panel==Panel::None && s.Health()>0) {
   const auto prompt=s.InteractionPrompt();
-  if (!prompt.empty()) { const float w=std::min(510.f,c.Width(prompt,14)+30); c.Frame({640-w/2,360,w,27}); c.Center(640-w/2,365,w,prompt,14,gold); }
+  if (!prompt.empty() && !nearbyCombat && !s.Attacking() && !s.CastingRecovery()) {
+   const float w=std::min(510.f,c.Width(prompt,14)+30);c.Frame({640-w/2,360,w,27});c.Center(640-w/2,365,w,prompt,14,gold);
+  }
   if (s.Channeling()) { c.RectFill({470,586,340,3},border); c.RectFill({470,586,340*s.ChannelProgress(),3},blue); }
  }
 

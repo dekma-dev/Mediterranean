@@ -163,12 +163,12 @@ void LiveStates(Renderer& r,const std::filesystem::path& root) {
   for(auto id:{ClassId::Mage,ClassId::Scout,ClassId::Engineer,ClassId::Priest,ClassId::Necromancer,ClassId::Psionic,ClassId::Bard,ClassId::Druid}) {
     auto s=Training(id);Command heavy;heavy.ability=1;s.Update(.01f,heavy);Tick(s,.06f);
     const auto p=s.Player();const XMFLOAT3 palm{p.x,s.Height()+1.4f,p.z};
-    begin(s);classfx::Prepare(r,s,palm);
+    begin(s);classfx::Prepare(r,s,palm,s.Facing());
     Check(r.EffectVertices()>0 && r.EndFrame(false),"Accepted preparation has no hand/weapon cue");
-    s.StopMovement();begin(s);classfx::Prepare(r,s,palm);
+    s.StopMovement();begin(s);classfx::Prepare(r,s,palm,s.Facing());
     Check(r.EffectVertices()==0 && r.EndFrame(false),"Cancelled preparation left a false charge");
     Tick(s,3);s.Update(.001f,heavy);Tick(s,combat::StrokeStart(true)/s.AttackRate()+.002f);
-    begin(s);classfx::Prepare(r,s,palm);
+    begin(s);classfx::Prepare(r,s,palm,s.Facing());
     Check(r.EffectVertices()==0 && r.EndFrame(false),"Released projectile retained a preparation orb");
   }
 }

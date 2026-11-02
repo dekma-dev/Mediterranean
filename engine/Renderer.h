@@ -37,7 +37,7 @@ public:
   // Compare the shared field with the original per-vertex integration.
   void SetCloudLightFieldEnabled(bool enabled) { cloudLightFieldEnabled_=enabled; }
   unsigned CloudLightUpdates() const { return cloudLightUpdates_; }
-  bool Project(const DirectX::XMFLOAT3& world, DirectX::XMFLOAT2& screen) const;
+  bool Project(const DirectX::XMFLOAT3& world, DirectX::XMFLOAT2& screen,float* depth=nullptr) const;
   void DrawMarkerBox(const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& scale,
     const DirectX::XMFLOAT4& color, float yaw = 0);
   void DrawMesh(visual::Mesh mesh,const DirectX::XMFLOAT3& position,const DirectX::XMFLOAT3& scale,
@@ -55,6 +55,8 @@ public:
     Queue(mesh,transform,color,material,shadow,maxDetail);
   }
   unsigned DrawBody(DirectX::XMFLOAT3 position,float yaw,const visual::BodyPalette& palette,std::uint64_t actor=0);
+  void DrawGarment(visual::Mesh mesh,unsigned body,const DirectX::XMMATRIX& transform,
+    const DirectX::XMFLOAT4& paint,float side,float back,float hem);
   void DrawHand(const DirectX::XMMATRIX& transform,const visual::HandPalette& palette,bool mirrored,
     const DirectX::XMFLOAT4& color,visual::Material material);
   // Only mesh draws belong inside this scope; flushes/portraits begin outside.

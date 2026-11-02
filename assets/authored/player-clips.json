@@ -1,34 +1,34 @@
 {
   "format": "PCL2",
-  "source": "Human_Male_Motion_v4.blend / 48 actions",
-  "source_sha256": "0a6eb3f589fccaee1973da2ea8439078a64a9fb44d486f977877068ea45e8f67",
-  "editable_source": "player-motion-v4.blend",
+  "source": "Accepted v4 library with four v5 compact strike actions",
+  "source_sha256": "ba5ff3de1741456cd241027c60804a55c99845791a79b9924fa3f7c4f527c2f4",
+  "editable_source": "player-motion-v5.blend",
   "clips": [
     {
       "clip": "Sword_Attack_Diagonal",
-      "frames": 157,
-      "duration": 2.6,
+      "frames": 73,
+      "duration": 1.2,
       "loop": false,
-      "load": 0.2948717948717949,
-      "contact": 0.47435897435897434,
+      "load": 0.06,
+      "contact": 0.15,
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v4 Blender action",
-      "sha256": "6a047c0478cfe85e9d3bf9823dd1c3335bc13f3793b83755cef47a74c0a685ec"
+      "source": "v5 Blender action / native contact clock",
+      "sha256": "a2e3c90a65efbde667c7c7a9150e92f0ef5b2503ab3182009c7ea855dbfff66f"
     },
     {
       "clip": "Sword_Attack_Overhead",
-      "frames": 178,
-      "duration": 2.95,
+      "frames": 85,
+      "duration": 1.4,
       "loop": false,
-      "load": 0.2937853107344633,
-      "contact": 0.4632768361581921,
+      "load": 0.08571428571428572,
+      "contact": 0.2142857142857143,
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v4 Blender action",
-      "sha256": "151ee1c389ffd36a0fbbaeb5e281776669362c51eae67fd0ae517963876bea4f"
+      "source": "v5 Blender action / native contact clock",
+      "sha256": "66f8a48d86bee984072060729cd7f0092747a9f13ff2a52b1fbbb35a4ac98bcb"
     },
     {
       "clip": "Jump_Full",
@@ -188,29 +188,29 @@
     },
     {
       "clip": "Staff_Attack_Sweep",
-      "frames": 175,
-      "duration": 2.9,
+      "frames": 73,
+      "duration": 1.2,
       "loop": false,
-      "load": 0.2873563218390805,
-      "contact": 0.48275862068965514,
+      "load": 0.07,
+      "contact": 0.175,
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v4 Blender action",
-      "sha256": "4c5fe2ea19eb3b1e176d01c0c00960f76d3d26ffd7aaf46d9b82786ac9ef7c1b"
+      "source": "v5 Blender action / native contact clock",
+      "sha256": "4d265b935b1d56346f2ee8f9df437bd9295bf2ac0592f11f27e49d28476391f6"
     },
     {
       "clip": "Staff_Attack_Thrust",
-      "frames": 163,
-      "duration": 2.7,
+      "frames": 52,
+      "duration": 0.85,
       "loop": false,
-      "load": 0.32098765432098764,
-      "contact": 0.43209876543209874,
+      "load": 0.042352941176470586,
+      "contact": 0.10588235294117647,
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v4 Blender action",
-      "sha256": "d3794939fe6dc3bc30055fc1bc57de38026b40dee397585e227ff2e8815cd19e"
+      "source": "v5 Blender action / native contact clock",
+      "sha256": "96593599c6c723118fd1e98e67f3c16e9c03083fe27b476acd237b1ce2195f4e"
     },
     {
       "clip": "Sword_Walk",
@@ -707,6 +707,7 @@
       "sha256": "5b5124856a7d2ceaa0d953d32140489c9b9c49324b982ec072f6c5ea2055667c"
     }
   ],
-  "sha256": "2f88b8e53471e7a2a3184a859e4f9595316a9b15b3ef4e8fad369cf4844ba80b",
-  "retarget": "Blender +X-left/-Y-forward/Z-up to native +X-right/+Z-forward/Y-up; shoulders/arm lengths fitted to native IK; world jump displacement removed; native contacts retained."
+  "sha256": "91b337acbcad829bddcd1f6fc5e30be76cc22717b30970ac36c253f7b265888b",
+  "retarget": "Blender +X-left/-Y-forward/Z-up to native +X-right/+Z-forward/Y-up; shoulders/arm lengths fitted to native IK; world jump displacement removed; native contacts retained.",
+  "preserved_track_count": 50
 }

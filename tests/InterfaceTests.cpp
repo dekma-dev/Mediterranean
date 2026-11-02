@@ -814,8 +814,8 @@ int main() {
     Require(screen.LoadHotbars(beforeBindings),"Restore per-resolution hotbar bindings");
     screen.SetOnly(ui::Panel::None);
     renderer.BeginFrame();screen.Render(renderer,simulation,0,false);Require(renderer.EndFrame(false),"Tracker layout render");
-    Require(click(1120,245).action==ui::Action::None && screen.PointerOverUi(),
-      "Visible expedition tracker must block camera gestures behind its text");
+    Require(click(1120,245).action==ui::Action::Journal && screen.PointerOverUi(),
+      "Visible expedition tracker must open the journal and block camera gestures behind its text");
     {
       ui::Interface overlay;rpg::Simulation idle;
       const auto draw=[&]() {renderer.BeginFrame();overlay.Render(renderer,idle,0,false);Require(renderer.EndFrame(false),"Overlay hit layout");};
@@ -826,8 +826,10 @@ int main() {
       overlay.Show(ui::Panel::Inventory);draw();
       Require(hover(1003,244),"Bag replacing the tracker must retain pointer protection");
       overlay.Close(ui::Panel::Inventory);overlay.hasWaypoint=true;draw();
-      Require(hover(1120,365),"Tracker waypoint extension must block camera input");
-      overlay.hasWaypoint=false;draw();Require(!hover(1120,365),"Removed waypoint must release its old tracker region");
+      float waypointRow=-1;
+      for(float y=230;y<400;++y) if(hover(1120,y)) waypointRow=y;
+      Require(waypointRow>0,"Tracker waypoint extension must block camera input");
+      overlay.hasWaypoint=false;draw();Require(!hover(1120,waypointRow),"Removed waypoint must release its old tracker region");
     }
     screen.panel=ui::Panel::Menu;
     renderer.BeginFrame(); screen.Render(renderer,simulation,0,false); Require(renderer.EndFrame(false),"Menu render failed.");
@@ -1369,18 +1371,18 @@ int main() {
     ui::Interface hud;const auto before=state.Save();
     renderer.BeginFrame();hud.Render(renderer,state,0,false);Require(renderer.EndFrame(false),"Status HUD layout");
     const ui::Layout layout(float(size.first),float(size.second));
-    const auto event=hud.Pointer(layout.x+775*layout.scale,layout.y+438*layout.scale,
+    const auto event=hud.Pointer(layout.x+800*layout.scale,layout.y+488*layout.scale,
       float(size.first),float(size.second),true,false);
     Require(event.action==ui::Action::None,"Status inspection must be read-only");
     renderer.BeginFrame();hud.Render(renderer,state,0,false);
     Require(renderer.Capture(L"status-hud-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),"Status tooltip capture");
     Require(state.Save()==before,"Status rendering must not change gameplay");
-    hud.Pointer(layout.x+800*layout.scale,layout.y+408*layout.scale,float(size.first),float(size.second),false,false);
+    hud.Pointer(layout.x+800*layout.scale,layout.y+520*layout.scale,float(size.first),float(size.second),false,false);
     Require(hud.PointerOverUi(),"Visible enemy windup must block camera gestures through its cast bar");
     target.windup=0;
     renderer.BeginFrame();hud.Render(renderer,state,0,false);Require(renderer.EndFrame(false),"Enemy cast expiry redraw");
     Require(!hud.PointerOverUi(),"Expired enemy windup must remove its cast hit region");
-    hud.Pointer(layout.x+775*layout.scale,layout.y+438*layout.scale,float(size.first),float(size.second),false,false);
+    hud.Pointer(layout.x+800*layout.scale,layout.y+488*layout.scale,float(size.first),float(size.second),false,false);
     target.stunned=target.rooted=target.snared=target.exposed=0;
     renderer.BeginFrame();hud.Render(renderer,state,0,false);Require(renderer.EndFrame(false),"Status expiry redraw");
     Require(!hud.PointerOverUi(),"Expired badges must release their pointer regions");

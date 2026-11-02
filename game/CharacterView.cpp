@@ -53,6 +53,13 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
     };
     const auto body=renderer.DrawBody({p.x,base,p.z},yaw,BuildCharacterRig(pose,outfit,color),actor);
     const auto attachments=renderer.AttachToBody(body);
+    if(oldStyle && outfit.tunic) {
+      const auto index=oldstyle::Index(outfit.classId);
+      const float lengths[]={.32f,.35f,.69f};
+      const float flexibility=index==2?.8f:index==1?.55f:.35f;
+      renderer.DrawGarment(classart::Mesh(classart::Part(unsigned(classart::Part::WarriorSkirt)+index)),body,
+        actorTransform,classPaint,dynamics.clothSide*flexibility,dynamics.clothBack*flexibility,1-lengths[index]);
+    }
     const auto fittings=clothing::Build(outfit);
     for(unsigned n=0;n<fittings.count;++n) {
       const auto& fitting=fittings.parts[n];
@@ -151,27 +158,20 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       const float side=i==0?-1.f:1.f;
       const auto& leg=pose.legs[i]; const auto& arm=pose.arms[i];
       const auto knee=world(leg.joint),ankle=world(leg.end);
-      if(outfit.classId==rpg::ClassId::Scout && outfit.tunic) {
-        auto hem=knee;hem.y+=.10f;
-        for(float facing:{-1.f,1.f})renderer.DrawMeshBetween(M::OldScoutSkirt,hem,world(leg.root),.26f,.21f,classPaint,S::Count,
-          {facing*std::sin(yaw),0,facing*std::cos(yaw)});
-      }
       const bool coat=outfit.classId==rpg::ClassId::Priest || outfit.classId==rpg::ClassId::Druid ||
         outfit.classId==rpg::ClassId::Mage || outfit.classId==rpg::ClassId::Necromancer ||
         outfit.classId==rpg::ClassId::Psionic || outfit.classId==rpg::ClassId::Bard;
-      if(outfit.tunic && coat) {
+      if(outfit.tunic && coat && !oldStyle) {
         auto cloth=color;
         if(outfit.appearance.dye) {const auto& dye=rpg::tunicDyes[outfit.appearance.dye];cloth={dye.r,dye.g,dye.b,1};}
         else {cloth.x*=.65f;cloth.y*=.65f;cloth.z*=.65f;}
-        auto hem=oldStyle?ankle:knee;hem.y+=oldStyle?.12f:-.04f;
+        auto hem=knee;hem.y-=.04f;
         const auto waist=world(leg.root);
         // Split panels follow the solved thighs: walking/jumping retains a
         // leg opening instead of stretching one rigid skirt across both legs.
         for(float side:{-1.f,1.f}) {
           const XMFLOAT3 facing{side*std::sin(yaw),0,side*std::cos(yaw)};
-          if(oldStyle) {
-            renderer.DrawCoatPanel(M::OldMageSkirt,hem,waist,knee,.36f,.24f,facing,classPaint);
-          } else renderer.DrawMeshBetween(M::CoatPanel,hem,waist,.33f,.23f,cloth,S::Cloth,facing);
+          renderer.DrawMeshBetween(M::CoatPanel,hem,waist,.33f,.23f,cloth,S::Cloth,facing);
         }
       }
       const float bootYaw=yaw+pose.footYaw[i];
@@ -202,8 +202,8 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
           // Each half follows its thigh, retaining the opening during a stride.
           auto cloth=XMFLOAT4{.31f,.105f,.065f,1};
           if(outfit.appearance.dye) {const auto& dye=rpg::tunicDyes[outfit.appearance.dye];cloth={dye.r,dye.g,dye.b,1};}
-          renderer.DrawMeshBetween(oldStyle?M::OldWarriorSkirt:M::CoatPanel,offset(along(hip,knee,.95f),-.01f),offset(hip,-.01f),
-            .22f,.17f,oldStyle?classPaint:cloth,oldStyle?S::Count:S::Cloth,forward);
+          if(!oldStyle)renderer.DrawMeshBetween(M::CoatPanel,offset(along(hip,knee,.95f),-.01f),offset(hip,-.01f),
+            .22f,.17f,cloth,S::Cloth,forward);
           renderer.DrawMeshBetween(M::GuardPlate,offset(along(hip,knee,.54f),.13f),offset(along(hip,knee,.04f),.14f),
             .235f,.18f,{.43f,.435f,.405f,1},S::WornMetal,forward);
         }

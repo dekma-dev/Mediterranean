@@ -14,6 +14,7 @@ inline bool IsFaceVariant(Mesh mesh) {return mesh>=Mesh::FaceBroadHead && mesh<=
 static_assert(unsigned(Mesh::FaceElderHairLow)-unsigned(Mesh::FaceBroadHead)+1==faceVariantCount*5);
 inline bool IsClassArt(Mesh mesh) {return mesh>=Mesh::OldWarriorChest && mesh<=Mesh::OldMageBeltLow;}
 inline bool IsBodyMesh(Mesh mesh) { return mesh>=Mesh::Body && mesh<=Mesh::BodyFar; }
+inline bool IsGarmentMesh(Mesh mesh) { return mesh>=Mesh::OldWarriorSkirt && mesh<=Mesh::OldMageSkirtLow; }
 inline bool IsHandMesh(Mesh mesh) { return mesh>=Mesh::Hand && mesh<=Mesh::HandMirroredFar; }
 inline bool IsHeadMesh(Mesh mesh) { return mesh==Mesh::Head || mesh==Mesh::HeadMedium || mesh==Mesh::HeadFar ||
   (IsFaceVariant(mesh) && (unsigned(mesh)-unsigned(Mesh::FaceBroadHead))%5<3); }
