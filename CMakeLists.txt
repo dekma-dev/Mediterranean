@@ -131,6 +131,8 @@ add_library(MediterraneanClient STATIC
   engine/Engine.cpp
   engine/Audio.cpp
   engine/Renderer.cpp
+  game/SpellVfx.cpp
+  game/SustainedEffects.cpp
   engine/AuthoredAssets.cpp
   engine/WolfAnimation.cpp
   engine/PlayerClips.cpp
@@ -165,6 +167,7 @@ endif()
 # Embed artwork in every native client host (including offscreen test hosts).
 # Resource include paths make RC independent of the build working directory.
 target_sources(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/UiArtwork.rc")
+set_source_files_properties(assets/ui/UiArtwork.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/antique-frame.png;${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/chapter-hall.png;${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/equipment-icons.png;${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/combat-spells.png;${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/class-spells.png")
 target_sources(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/Collection.rc")
 file(GLOB SURFACE_MATERIAL_MAPS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/materials/*-color.png" "${CMAKE_CURRENT_SOURCE_DIR}/assets/materials/*-normal.png")
 set_source_files_properties(assets/authored/Collection.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/collection01.masset;${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/frostfang.motion;${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/player.clips;${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/player-body.skin;${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/oldstyle-classes.kit")
@@ -172,6 +175,8 @@ set_property(SOURCE assets/authored/Collection.rc APPEND PROPERTY OBJECT_DEPENDS
 set_property(SOURCE assets/authored/Collection.rc APPEND PROPERTY OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/class-garments.weights")
 target_include_directories(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored")
 target_include_directories(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui")
+target_include_directories(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/effects")
+set_property(SOURCE assets/ui/UiArtwork.rc APPEND PROPERTY OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/effects/combat-vfx.png")
 add_library(LaunchSupport STATIC launcher/LaunchSupport.cpp)
 target_include_directories(LaunchSupport PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(LaunchSupport PUBLIC UNICODE _UNICODE NOMINMAX)
@@ -325,6 +330,18 @@ if (BUILD_TESTING)
   add_executable(ClassEffectsTests tests/ClassEffectsTests.cpp)
   target_link_libraries(ClassEffectsTests PRIVATE MediterraneanClient)
   add_test(NAME ClassEffectsTests COMMAND ClassEffectsTests)
+  add_executable(SpellChainsTests tests/SpellChainsTests.cpp)
+  target_link_libraries(SpellChainsTests PRIVATE MediterraneanClient)
+  add_test(NAME SpellChainsTests COMMAND SpellChainsTests)
+  set_tests_properties(SpellChainsTests PROPERTIES TIMEOUT 90)
+  add_executable(VfxMaterialsTests tests/VfxMaterialsTests.cpp)
+  target_link_libraries(VfxMaterialsTests PRIVATE MediterraneanClient)
+  add_test(NAME VfxMaterialsTests COMMAND VfxMaterialsTests)
+  set_tests_properties(VfxMaterialsTests PROPERTIES TIMEOUT 120)
+  add_executable(SustainedEffectsTests tests/SustainedEffectsTests.cpp)
+  target_link_libraries(SustainedEffectsTests PRIVATE MediterraneanClient)
+  add_test(NAME SustainedEffectsTests COMMAND SustainedEffectsTests)
+  set_tests_properties(SustainedEffectsTests PROPERTIES TIMEOUT 120)
   add_executable(FrontierExpansionTests tests/FrontierExpansionTests.cpp)
   target_link_libraries(FrontierExpansionTests PRIVATE MediterraneanClient)
   target_compile_definitions(FrontierExpansionTests PRIVATE RPG_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")

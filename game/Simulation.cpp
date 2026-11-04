@@ -148,7 +148,7 @@ void Simulation::UseAbility(int index,float visualElapsed) {
   if ((index<2 || index>=5) && PhysicalLauncher(WeaponFor(class_).form) && inventory_.Worn(GearSlot::Weapon)==Item::None) {
     message_="Equip your class weapon before firing."; return;
   }
-  if ((index==1 || index==5 || index==6 || index==9 || index==11 || (index==8 && class_==ClassId::Mage)) && CombatStyleInfo().steadyHeavy && (!Grounded() || Length(movementVelocity_)>.15f)) {
+  if (SteadyAttack(index) && (!Grounded() || Length(movementVelocity_)>.15f)) {
     message_="Stand still to prepare this heavy attack.";return;
   }
   if (index==3) {
@@ -200,6 +200,9 @@ void Simulation::UseAbility(int index,float visualElapsed) {
     attackEmpowered_=index==1 && EmpoweredReady();
     if(attackEmpowered_) classResource_=0;
     attackDamage_=index==0?StrikeDamage():HeavyDamage();
+    if(index==12) attackDamage_=StrikeDamage()*.85f;
+    if(index==13) attackDamage_*=.55f;
+    if(index==14) attackDamage_*=1.15f;
     if(index==8) attackDamage_*=class_==ClassId::Warrior?.85f:class_==ClassId::Scout?.70f:.65f;
     if(index==9) attackDamage_*=class_==ClassId::Warrior?1.25f:class_==ClassId::Scout?1.30f:1.40f;
     if(index==10) attackDamage_*=class_==ClassId::Warrior?.50f:class_==ClassId::Scout?.55f:.60f;
@@ -295,7 +298,7 @@ void Simulation::UpdateFrostField(float dt) {
   if(frostSeconds_==0) return;
   const auto chill=[&](Enemy& enemy) {
     if(enemy.health<=0 || enemy.state==EnemyState::Returning || CourtProtected(enemy) ||
-       Length(Difference(enemy.position,frostField_))>3 || !HasLineOfSight(frostField_,enemy.position)) return;
+       Length(Difference(enemy.position,frostField_))>frostFieldRadius || !HasLineOfSight(frostField_,enemy.position)) return;
     enemy.snared=std::max(enemy.snared,.3f+dt);
   };
   for(auto& enemy:CombatantsMutable()) chill(enemy);
@@ -320,10 +323,32 @@ void Simulation::ResolveContact(Enemy& enemy,float elapsed) {
   // actions, while preserving the weapon damage captured when the cast began.
   const float finishing=index==1?HeavyMultiplier(enemy.health,enemy.MaxHealth()):1.f;
   float bonus=0;
-  if(index==1 && class_==ClassId::Scout && Length(Difference(enemy.position,player_))>4) bonus=8;
-  if(index==1 && class_==ClassId::Mage && enemy.health>enemy.MaxHealth()*.75f) bonus=10;
-  if(index==1 && class_==ClassId::Engineer && enemy.kind==EnemyKind::Captain) bonus=12;
-  if(index==1 && class_==ClassId::Demonologist) {health_-=std::min(5.f,std::max(0.f,health_-1));bonus=10;}
+  // Only the committed primary contact advances/spends the chain. Secondary
+  // victims cannot duplicate the reward or steal a chain bound to another foe.
+  int chainSpent=0;
+  if(AdvancedClass(class_) && enemy.id==attackTarget_) {
+    chainSpent=chain_.Contact(enemy.id,index,elapsed);
+    if(chainSpent>=2) {
+      bonus+=HeavyDamage()*(index==14?.20f:.12f)*chainSpent;
+      if(class_==ClassId::Warrior) barrier_=std::max(barrier_,float(chainSpent*(index==14?12:6)));
+      if(class_==ClassId::Scout && index==14) cooldowns_[2]=0;
+    }
+    if((index==0 || index==12) && chain_.steps>=2 && class_==ClassId::Warrior)
+      barrier_=std::max(barrier_,6.f);
+  }
+  if(index==12 && class_==ClassId::Mage) enemy.snared=std::max(enemy.snared,2.5f);
+  if(index==13) {
+    if(class_==ClassId::Warrior) {barrier_=std::max(barrier_,18.f);enemy.exposed=std::max(enemy.exposed,3.f);}
+    if(class_==ClassId::Scout) {enemy.rooted=std::max(enemy.rooted,2.f);enemy.exposed=std::max(enemy.exposed,4.f);}
+    if(class_==ClassId::Mage) classResource_=std::min(CombatStyleInfo().capacity,classResource_+1);
+  }
+  if(index==14 && class_==ClassId::Mage && (enemy.snared>0 || enemy.rooted>0)) {
+    bonus+=HeavyDamage()*.35f;enemy.snared=enemy.rooted=0;
+  }
+  if(index==1 && class_==ClassId::Scout && Length(Difference(enemy.position,player_))>4) bonus+=8;
+  if(index==1 && class_==ClassId::Mage && enemy.health>enemy.MaxHealth()*.75f) bonus+=10;
+  if(index==1 && class_==ClassId::Engineer && enemy.kind==EnemyKind::Captain) bonus+=12;
+  if(index==1 && class_==ClassId::Demonologist) {health_-=std::min(5.f,std::max(0.f,health_-1));bonus+=10;}
   if(attackEmpowered_) {
     if(class_==ClassId::Warrior) bonus+=24;
     if(class_==ClassId::Scout) bonus+=14;
@@ -410,7 +435,7 @@ void Simulation::ResolveContact(Enemy& enemy,float elapsed) {
     default:break;
     }
   }
-  if(index==0) classResource_=std::min(CombatStyleInfo().capacity,classResource_+1);
+  if(index==0 || index==12) classResource_=std::min(CombatStyleInfo().capacity,classResource_+1);
   if(index==1) {
     if(class_==ClassId::Scout) enemy.snared=std::max(enemy.snared,1.5f);
     if(class_==ClassId::Druid) enemy.rooted=std::max(enemy.rooted,.8f);
@@ -441,7 +466,9 @@ void Simulation::ResolveContact(Enemy& enemy,float elapsed) {
   if(enemy.kind==EnemyKind::Dummy) enemy.health=std::max(1.f,enemy.health);
   if (trainingTarget) sparringDealt_+=int(damage);
   Emit(FeedbackKind::Damage,enemy.position,static_cast<int>(damage));
-  EmitVisual((index==0 || index==7)?CombatVisualKind::Hit:CombatVisualKind::HeavyHit,enemy.position,1.25f,facing_,enemy.id,elapsed);
+  const auto eventBefore=visualEventCount_;
+  EmitVisual((index==0 || index==7 || index==12)?CombatVisualKind::Hit:CombatVisualKind::HeavyHit,enemy.position,1.25f,facing_,enemy.id,elapsed);
+  if(visualEventCount_>eventBefore) visualEvents_[visualEventCount_-1].chain=chainSpent;
   enemy.hitFlash=std::max(0.f,.2f-elapsed); enemy.damagedThisUpdate=true; attackFlash_=.2f;
   message_=attackEmpowered_?CombatStyleInfo().payoff:"Hit.";
   enemy.state=enemy.kind==EnemyKind::Dummy?EnemyState::Idle:EnemyState::Pursuing;
@@ -520,14 +547,14 @@ void Simulation::UpdateCombat(float dt,bool advanceAttack) {
 
 const char* Simulation::AbilityStatus(int index) const {
   if (!ValidSpell(index) || health_<=0 || (index>=8 && !AdvancedClass(class_))) return "DISABLED";
-  if(Level()<SpellLevel(index)) return index==8?"REQUIRES LEVEL 5":index==9?"REQUIRES LEVEL 8":index==10?"REQUIRES LEVEL 6":"REQUIRES LEVEL 10";
+  if(Level()<SpellLevel(index)) return index==13?"REQUIRES LEVEL 3":index==14?"REQUIRES LEVEL 4":index==8?"REQUIRES LEVEL 5":index==9?"REQUIRES LEVEL 8":index==10?"REQUIRES LEVEL 6":"REQUIRES LEVEL 10";
   if (cooldowns_[index]>0) return "COOLDOWN";
   if ((index==6 || index==11) && !EmpoweredReady()) return "LOW RESERVE";
   if (Dashing()) return "DASHING";
   if (CastingRecovery()) return "CASTING";
   if (Attacking()) return "RECOVERING";
   if ((index<2 || index>=5) && PhysicalLauncher(WeaponFor(class_).form) && inventory_.Worn(GearSlot::Weapon)==Item::None) return "NO WEAPON";
-  if((index==1 || index==5 || index==6 || index==9 || index==11 || (index==8 && class_==ClassId::Mage)) && CombatStyleInfo().steadyHeavy && (!Grounded() || Length(movementVelocity_)>.15f)) return "STAND STILL";
+  if(SteadyAttack(index) && (!Grounded() || Length(movementVelocity_)>.15f)) return "STAND STILL";
   if (index==3) {
     if(ClassHealer(class_) && health_>=MaxHealth()) return "FULL HEALTH";
     if(health_<=ClassRecoveryCost(class_)) return "LOW HEALTH";
@@ -553,6 +580,7 @@ const char* Simulation::AbilityStatus(int index) const {
 }
 
 void Simulation::PrepareFrontierEnemies(int rank) {
+  chain_.Clear(); // Encounter actors reuse IDs; old contacts must not follow them.
   constexpr Vec2 west[]={{-23,15},{-19,19},{-24,23}};
   constexpr Vec2 north[]={{-6,25},{0,27},{6,25}};
   constexpr Vec2 highlands[6][6]={
@@ -842,11 +870,13 @@ void Simulation::Update(float seconds,const Command& command) {
   for(auto& dummy:dummies_) dummy.hitFlash=std::max(0.f,dummy.hitFlash-dt);
   sparringReportTime_=std::max(0.f,sparringReportTime_-dt);
   if (health_<=0) {
+    chain_.Clear();
     CloseQuestDialogue(); jumpBuffer_=0;
     if (command.respawn) Respawn();
     else message_="You have fallen. Enter returns to Dawnwatch with progress retained. R resets all.";
     return;
   }
+  chain_.Advance(dt);
   for (auto& cooldown : cooldowns_) cooldown=std::max(0.f,cooldown-dt);
   potionCooldown_=std::max(0.f,potionCooldown_-dt);
   evasion_=std::max(0.f,evasion_-dt);
@@ -866,7 +896,7 @@ void Simulation::Update(float seconds,const Command& command) {
     EmitVisual(CombatVisualKind::CastCancelled,player_,height_,facing_);
     recoveryCast_=0;message_="Cast interrupted by movement.";
   }
-  if(HeavyAttack() && attackAbility_!=10 && !(attackAbility_==8 && class_==ClassId::Scout) && CombatStyleInfo().steadyHeavy && attackAge_<combat::StrokeStart(true) &&
+  if(HeavyAttack() && SteadyAttack(attackAbility_) && attackAge_<combat::StrokeStart(true) &&
       (moving || command.jump || !Grounded())) {
     if(!PhysicalLauncher(WeaponFor(class_).form)) EmitVisual(CombatVisualKind::CastCancelled,player_,height_,facing_);
     CancelAttack();message_="Preparation interrupted by movement.";
@@ -1397,7 +1427,7 @@ std::string Simulation::Save() const {
     Simulation campaign=*this;campaign.RestoreCampaignEncounter();return campaign.Save();
   }
   std::ostringstream out;
-  out << std::setprecision(9) << "MEDITERRANEAN 22\n" << "PROFILE " << int(class_) << ' ' << std::quoted(nickname_) << ' ' << frontierCompleted_ << ' ' << frontierActive_ << ' ' << legacyLoot_ << '\n' << player_.x << ' ' << player_.z << ' '
+  out << std::setprecision(9) << "MEDITERRANEAN 23\n" << "PROFILE " << int(class_) << ' ' << std::quoted(nickname_) << ' ' << frontierCompleted_ << ' ' << frontierActive_ << ' ' << legacyLoot_ << '\n' << player_.x << ' ' << player_.z << ' '
     << health_ << ' ' << facing_ << ' ' << static_cast<int>(quest_) << ' ' << gold_ << '\n';
   out << Potions() << ' ' << HasRewardWeapon() << ' ' << RewardWeaponEquipped() << ' ' << potionCooldown_ << '\n';
   out << static_cast<int>(anchorQuest_) << '\n';
@@ -1421,6 +1451,7 @@ std::string Simulation::Save() const {
   out<<"EXPEDITION "<<expeditionMask_<<' '<<cooldowns_[8]<<' '<<cooldowns_[9]<<'\n';
   out<<"SOUTHERN "<<ritualStage_<<' '<<ritualCharge_<<' '<<cooldowns_[10]<<' '<<cooldowns_[11]<<'\n';
   out<<"COURT "<<courtSeals_<<'\n';
+  out<<"CHAINS "<<cooldowns_[12]<<' '<<cooldowns_[13]<<' '<<cooldowns_[14]<<'\n';
   out<<SaveWilderness();
   return out.str();
 }
@@ -1430,7 +1461,7 @@ bool Simulation::Load(const std::string& data) {
   std::istringstream input(data);
   std::string magic; int version=0, quest=0,potions=2,owned=0,equipped=0;
   Simulation candidate;
-  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>22) return false;
+  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>23) return false;
   if(version>=11) {
     std::string tag,name;int id=0,completed=0,active=0,looted=0;
     if(!(input>>tag>>id>>std::quoted(name)>>completed>>active>>looted) || tag!="PROFILE" ||
@@ -1617,6 +1648,10 @@ bool Simulation::Load(const std::string& data) {
     // Existing court progress remains valid: cleared patrols unlock their seals.
     for(int i=0;i<3;++i) if(!candidate.CourtGuarded(i)) candidate.courtSeals_|=1u<<i;
     if(candidate.enemies_.back().health<=0) candidate.courtSeals_=7;
+  }
+  if(version>=23) {
+    std::string tag;if(!(input>>tag) || tag!="CHAINS") return false;
+    for(int i=12;i<15;++i) if(!(input>>candidate.cooldowns_[i]) || !valid(candidate.cooldowns_[i],0,spells[i].cooldown)) return false;
   }
   if(version>=22) {
     std::string wilderness;std::getline(input>>std::ws,wilderness,'\0');

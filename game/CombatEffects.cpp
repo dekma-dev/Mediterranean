@@ -1,5 +1,6 @@
 #include "game/CombatEffects.h"
 #include "game/ClassEffects.h"
+#include "game/SpellVfx.h"
 #include "engine/Renderer.h"
 #include <algorithm>
 #include <cmath>
@@ -10,7 +11,10 @@ using namespace DirectX;
 constexpr float trailLife=.16f,burstLife=.48f,sweepLife=.32f;
 bool Healing(K kind) { return kind==K::Mend || kind==K::Potion; }
 bool Dashing(K kind) { return kind==K::DashStart || kind==K::DashStop || kind==K::DashImpact; }
-float BurstLife(K kind) { return Healing(kind)?.8f:Dashing(kind)?.42f:burstLife; }
+float BurstLife(const rpg::CombatVisualEvent& e) {
+  if(e.kind==K::SpellCast)return std::clamp((std::isfinite(e.flight)?e.flight:0.f)+.10f,.10f,.95f);
+  return e.kind==K::Hit || e.kind==K::HeavyHit?spellvfx::ContactLifetime(e):Healing(e.kind)?.8f:Dashing(e.kind)?.42f:burstLife;
+}
 float Unit(float x) { return std::clamp(x,0.f,1.f); }
 XMFLOAT3 GroundPoint(float x,float z,float lift) {return {x,rpg::WorldMap::Height({x,z})+lift,z};}
 void GroundRing(Renderer& renderer,rpg::Vec2 center,float radius,XMFLOAT4 color) {
@@ -204,7 +208,7 @@ void CombatEffects::Emit(const rpg::CombatVisualEvent& event,const XMFLOAT3* spe
     return;
   }
   auto slot=std::max_element(bursts_.begin(),bursts_.end(),[](const Burst& a,const Burst& b) {
-    return a.age/BurstLife(a.event.kind)<b.age/BurstLife(b.event.kind);
+    return a.age/BurstLife(a.event)<b.age/BurstLife(b.event);
   });
   *slot={event,elapsed,++serial_};
   slot->spellOrigin=spellOrigin && std::isfinite(spellOrigin->x) && std::isfinite(spellOrigin->y) && std::isfinite(spellOrigin->z)?
@@ -274,7 +278,7 @@ void CombatEffects::CancelTrail(rpg::EntityId actor) {
 }
 void CombatEffects::CancelTrails() { trails_={}; }
 std::size_t CombatEffects::BurstCount() const {
-  return std::count_if(bursts_.begin(),bursts_.end(),[](const Burst& burst) { return burst.age<BurstLife(burst.event.kind); });
+  return std::count_if(bursts_.begin(),bursts_.end(),[](const Burst& burst) { return burst.age<BurstLife(burst.event); });
 }
 std::size_t CombatEffects::TrailCount() const {
   return std::count_if(trails_.begin(),trails_.end(),[](const Trail& trail) { return trail.age<sweepLife || trail.count>1; });
@@ -356,8 +360,9 @@ void CombatEffects::Render(Renderer& renderer) const {
     }
   }
   for (const auto& burst : bursts_) {
-    if (burst.age>=BurstLife(burst.event.kind)) continue;
+    if (burst.age>=BurstLife(burst.event)) continue;
     const auto& e=burst.event;
+    spellvfx::EnemyContact(renderer,e,burst.age);
     if(e.kind==K::BeastBite || e.kind==K::BeastCharge) {
       const bool charge=e.kind==K::BeastCharge;const float fade=Unit(1-burst.age/.45f);
       for(int i=0;i<(charge?12:5);++i) {

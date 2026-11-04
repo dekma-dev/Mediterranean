@@ -13,20 +13,20 @@ std::vector<StatusEffect> TargetStatusEffects(const rpg::Enemy& enemy) {
   return result;
 }
 std::string Interface::SaveHotbars() const {
-  std::ostringstream out;out<<"HOTBARS 7\n";
+  std::ostringstream out;out<<"HOTBARS 8\n";
   for(const auto& bar:hotbars_) {for(int spell:bar) out<<spell<<' ';out<<'\n';}
   return out.str();
 }
 bool Interface::LoadHotbars(const std::string& data) {
   if(data.size()>4096) return false;
   std::istringstream in(data);std::string tag;int version=0;
-  if(!(in>>tag>>version) || tag!="HOTBARS" || (version<1 || version>7)) return false;
+  if(!(in>>tag>>version) || tag!="HOTBARS" || (version<1 || version>8)) return false;
   auto candidate=hotbars_;
   for(auto& bar:candidate) {
     // Old layouts retain every existing binding; new modifier slots start empty.
     bar.fill(-1);
     for(int slot=0;slot<(version<5?10:hotbarSlots);++slot)
-      if(!(in>>bar[slot]) || bar[slot] < -1 || bar[slot]>(version==1?4:version==2?5:version==3?6:version<6?7:version==6?9:11)) return false;
+      if(!(in>>bar[slot]) || bar[slot] < -1 || bar[slot]>(version==1?4:version==2?5:version==3?6:version<6?7:version==6?9:version==7?11:14)) return false;
   }
   in>>std::ws;if(!in.eof()) return false;
   hotbars_=candidate;CancelDrag();InvalidateHitRegions();return true;
@@ -120,6 +120,12 @@ Event Interface::Pointer(float x,float y,float width,float height,bool clicked,b
     if (hit && hit->event.action==Action::PlaceWaypoint) hasWaypoint=false;
     CancelDrag(); return {};
   }
+  // A secondary click cancels an in-flight gesture before interpreting the
+  // slot beneath it as a new remove/use action.
+  if(rightClicked && (dragSpell_>=0 || dragItem_!=Item::None)) {CancelDrag();return {};}
+  if(rightClicked && hit && hit->event.action==Action::Hotbar) {
+    CancelDrag();ClearHotbar(hit->event.value,renderedClass_);return {};
+  }
   if(dragSpell_>=0 && (held || released) && std::hypot(mouseX_-pressX_,mouseY_-pressY_)>6) dragging_=true;
   if(released && dragSpell_>=0) {
     Event result;
@@ -131,6 +137,8 @@ Event Interface::Pointer(float x,float y,float width,float height,bool clicked,b
         result=dragSpell_==4?Event{Action::UseItem,int(Item::Potion)}:Event{Action::Ability,dragSpell_};
       }
     }
+    if(dragging_ && dragHotbar_>=0 && !PointerOverUi() && x>=0 && y>=0 && x<width && y<height)
+      ClearHotbar(dragHotbar_,renderedClass_);
     CancelDrag();return result;
   }
   if(clicked && hit && (hit->event.action==Action::Hotbar || hit->event.action==Action::SelectSpell)) {

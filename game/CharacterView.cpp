@@ -63,6 +63,13 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
     const auto fittings=clothing::Build(outfit);
     for(unsigned n=0;n<fittings.count;++n) {
       const auto& fitting=fittings.parts[n];
+      if(oldStyle && visual::IsGarmentMesh(fitting.mesh)) {
+        // Upper fabric and waist fittings use their authored skin weights.
+        // Passing no drag keeps breastplates, closures and pouches rigid where
+        // their source weights demand it, without twisting the waist with the chest.
+        renderer.DrawGarment(fitting.mesh,body,actorTransform,fitting.color,0,0,.8f);
+        continue;
+      }
       if(oldStyle && fitting.mesh==oldstyle::Mesh(outfit.classId,2)) {
         const unsigned arm=fitting.position.x>0?1u:0u;
         const auto torso=XMMatrixRotationX(pose.upperPitch)*XMMatrixRotationZ(pose.upperRoll)*XMMatrixRotationY(pose.upperYaw);
@@ -204,15 +211,17 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
           if(outfit.appearance.dye) {const auto& dye=rpg::tunicDyes[outfit.appearance.dye];cloth={dye.r,dye.g,dye.b,1};}
           if(!oldStyle)renderer.DrawMeshBetween(M::CoatPanel,offset(along(hip,knee,.95f),-.01f),offset(hip,-.01f),
             .22f,.17f,cloth,S::Cloth,forward);
-          renderer.DrawMeshBetween(M::GuardPlate,offset(along(hip,knee,.54f),.13f),offset(along(hip,knee,.04f),.14f),
-            .235f,.18f,{.43f,.435f,.405f,1},S::WornMetal,forward);
+          renderer.DrawMeshBetween(oldStyle?M::OldWarriorThigh:M::GuardPlate,offset(along(hip,knee,.54f),oldStyle?.025f:.13f),offset(along(hip,knee,.04f),oldStyle?.025f:.14f),
+            .235f,oldStyle?.27f:.18f,oldStyle?XMFLOAT4{1,1,1,1}:XMFLOAT4{.43f,.435f,.405f,1},oldStyle?S::Count:S::WornMetal,forward);
         }
         if(outfit.boots) {
-          renderer.DrawMeshBetween(M::GuardPlate,offset(along(ankle,knee,.12f),.07f),offset(along(ankle,knee,.87f),.08f),
-            .19f,.19f,{.43f,.435f,.405f,1},S::WornMetal,forward);
-          renderer.DrawMesh(M::GuardPlate,offset(knee,.10f),{.22f,.19f,.22f},{.43f,.435f,.405f,1},S::WornMetal,yaw);
+          renderer.DrawMeshBetween(oldStyle?M::OldWarriorGreave:M::GuardPlate,offset(along(ankle,knee,.12f),oldStyle?.025f:.07f),offset(along(ankle,knee,.87f),oldStyle?.025f:.08f),
+            .19f,.19f,oldStyle?XMFLOAT4{1,1,1,1}:XMFLOAT4{.43f,.435f,.405f,1},oldStyle?S::Count:S::WornMetal,forward);
+          if(oldStyle)renderer.DrawMeshBetween(M::OldWarriorKnee,offset(along(ankle,knee,.70f),.045f),offset(along(ankle,knee,1.22f),.045f),
+            .19f,.16f,{1,1,1,1},S::Count,forward);
+          else renderer.DrawMesh(M::GuardPlate,offset(knee,.10f),{.22f,.19f,.22f},{.43f,.435f,.405f,1},S::WornMetal,yaw);
         }
-        if(outfit.gloves)
+        if(outfit.gloves && !oldStyle)
           renderer.DrawMeshBetween(M::GuardPlate,offset(along(hand,elbow,.12f),.055f),offset(along(hand,elbow,.80f),.055f),
             .17f,.17f,{.43f,.435f,.405f,1},S::WornMetal,forward);
       }
@@ -223,7 +232,12 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       const auto handPoint=[&](XMFLOAT3 local) { return world(fingers.Point(local)); };
       if (outfit.gloves) {
         const XMFLOAT3 cuff{hand.x+(elbow.x-hand.x)*.32f,hand.y+(elbow.y-hand.y)*.32f,hand.z+(elbow.z-hand.z)*.32f};
-        renderer.DrawSegment(cuff,hand,oldStyle?.115f:.205f,oldStyle?.125f:.22f,leather,oldStyle?S::WornLeather:S::Leather);
+        if(oldStyle) {
+          const bool scout=outfit.classId==rpg::ClassId::Scout;
+          const auto along=[&](float t){return XMFLOAT3{hand.x+(elbow.x-hand.x)*t,hand.y+(elbow.y-hand.y)*t,hand.z+(elbow.z-hand.z)*t};};
+          renderer.DrawMeshBetween(guard?M::OldWarriorBracer:scout?M::OldScoutBracer:M::OldMageCuff,
+            along(.06f),along(guard?.83f:scout?.76f:.52f),.17f,.17f,{1,1,1,1},S::Count,{std::sin(yaw),0,std::cos(yaw)});
+        } else renderer.DrawSegment(cuff,hand,.205f,.22f,leather,S::Leather);
       }
       // Wrist bridge overlaps both the solved forearm and shaped palm.
       const XMFLOAT3 wristStart{hand.x+(elbow.x-hand.x)*.12f,hand.y+(elbow.y-hand.y)*.12f,hand.z+(elbow.z-hand.z)*.12f};
@@ -260,18 +274,15 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
           outfit.rewardWeapon?XMFLOAT4{1,.92f,.70f,1}:XMFLOAT4{.88f,.91f,.94f,1},S::Metal);
       }
       if (side<0 && outfit.shield && !bow) {
-        const auto shieldPoint=[&](XMFLOAT3 local) {
-          const auto offset=pose.UpperDirection(local);
-          const auto grip=fingers.Point({0,0,0});
-          return point(grip.x+offset.x,grip.y+offset.y,grip.z+offset.z);
+        auto shieldFrame=ShieldFrame(pose);const auto grip=fingers.Point({0,0,0});shieldFrame.r[3]=XMVectorSetW(XMLoadFloat3(&grip),1);
+        const auto shieldPart=[&](M mesh,XMFLOAT3 offset,XMFLOAT3 scale,XMFLOAT4 tint,S material) {
+          renderer.DrawMeshTransformed(mesh,XMMatrixScaling(scale.x,scale.y,scale.z)*XMMatrixTranslation(offset.x,offset.y,offset.z)*shieldFrame*actorTransform,tint,material);
         };
-        if(oldStyle)renderer.DrawMesh(oldstyle::Mesh(outfit.classId,4),shieldPoint({-.035f,-.04f,.14f}),{1,1,1},{1,1,1,1},S::Count,yaw+pose.upperYaw,pose.upperPitch,visual::ShadowMode::Cast,pose.upperRoll);
+        if(oldStyle)shieldPart(oldstyle::Mesh(outfit.classId,4),{-.035f,-.04f,.14f},{1,1,1},{1,1,1,1},S::Count);
         else {
-        renderer.DrawMesh(M::Torso,shieldPoint({-.035f,-.04f,.12f}),{.54f,.75f,.15f},{.66f,.49f,.22f,1},S::Metal,yaw+pose.upperYaw,pose.upperPitch,visual::ShadowMode::Cast,pose.upperRoll);
-        renderer.DrawMesh(M::Torso,shieldPoint({-.035f,-.04f,.205f}),
-          {.45f,.64f,.045f},{.18f,.31f,.43f,1},S::Cloth,yaw+pose.upperYaw,pose.upperPitch,visual::ShadowMode::Cast,pose.upperRoll);
-        renderer.DrawMesh(M::Sphere,shieldPoint({-.035f,0,.25f}),
-          {.16f,.16f,.09f},steel,S::Metal,yaw+pose.upperYaw,pose.upperPitch,visual::ShadowMode::Cast,pose.upperRoll);
+          shieldPart(M::Torso,{-.035f,-.04f,.12f},{.54f,.75f,.15f},{.66f,.49f,.22f,1},S::Metal);
+          shieldPart(M::Torso,{-.035f,-.04f,.205f},{.45f,.64f,.045f},{.18f,.31f,.43f,1},S::Cloth);
+          shieldPart(M::Sphere,{-.035f,0,.25f},{.16f,.16f,.09f},steel,S::Metal);
         }
       }
     }

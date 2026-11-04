@@ -1,6 +1,7 @@
 #include "game/Localization.h"
 #include "engine/Utf8.h"
 #include "game/Interface.h"
+#include "game/SpellArtwork.h"
 #include "game/BuildLayout.h"
 #include "game/CharacterView.h"
 #include "game/CharacterSelection.h"
@@ -43,6 +44,7 @@ std::string Number(float value) {
  std::ostringstream text; text<<std::setprecision(4)<<value; return text.str();
 }
 std::string SpellEffect(const rpg::Simulation& s,int ability) {
+ if(ability>=12) return Number(ability==12?s.StrikeDamage()*.85f:s.HeavyDamage()*(ability==13?.55f:1.15f))+" base damage / level "+std::to_string(rpg::SpellLevel(ability));
  if(ability>=8) {
    const float scale=ability==8?(s.Class()==rpg::ClassId::Warrior?.85f:s.Class()==rpg::ClassId::Scout?.70f:.65f):
      ability==9?(s.Class()==rpg::ClassId::Warrior?1.25f:s.Class()==rpg::ClassId::Scout?1.30f:1.40f):
@@ -341,6 +343,10 @@ void ClassSigil(Canvas& c,Rect rect,rpg::ClassId id,float alpha=1) {
  PaintedIcon(c,rect,int(rpg::WeaponFor(id).form),alpha);
 }
 void AbilityArtwork(Canvas& c,Rect rect,int ability,rpg::ClassId id=rpg::ClassId::Warrior) {
+ const auto art=SpellArtwork(id,ability);
+ if(art.tile>=0) {
+   c.Art(rect,art.combat?Renderer::UiArt::CombatSpells:Renderer::UiArt::ClassSpells,art.Uv(),{1,1,1,1});return;
+ }
  if(ability==2) PaintedIcon(c,rect,22);
  else if(ability==3) {
   if(rpg::ClassHealer(id)) PaintedIcon(c,rect,23);
@@ -1072,11 +1078,23 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.Line(x+4,y+47,x+50,y+47,3,classAccent);
     c.Center(x,y+33,54,"NEXT",10,ink);
   }
+  if(i>=0 && s.ChainReady(i) && (ready || s.CanBufferAttack(i))) {
+    const float pulse=.55f+.20f*std::sin(time*5);
+    const Color glow{.85f,.73f,.38f,pulse};
+    c.Line(x+2,y+2,x+52,y+2,2,glow);c.Line(x+2,y+49,x+52,y+49,2,glow);
+    c.Line(x+2,y+2,x+2,y+49,2,glow);c.Line(x+52,y+2,x+52,y+49,2,glow);
+    c.Center(x+34,y+33,18,std::to_string(s.ChainSteps()),11,gold);
+  }
   regions_.push_back({rect,{Action::Hotbar,slotIndex},ready || (!CapturesMovement() && s.CanBufferAttack(i))});
 
  }
  };
  drawHotbars();
+ if(s.ChainSteps()>0 && !HasPanels()) {
+   c.Gradient({480,518,290,16},{.06f,.04f,.025f,.82f},{.06f,.04f,.025f,.24f});
+   c.FitText(486,520,278,(s.ChainSteps()>=2?"CHAIN READY":"CHAIN STARTED")+std::string(" / ")+std::to_string(s.ChainSteps())+" / "+Seconds(s.ChainSeconds())+"s",10,gold);
+   c.RectFill({485,532,280*s.ChainSeconds()/5,1},classAccent);
+ }
  if(s.EvasionSeconds()>0) c.Center(505,505,270,"EVASION / "+Seconds(s.EvasionSeconds())+"s",12,classAccent);
  const auto cast=ReadPlayerCast(s);
  if(cast.ability>=0) {
@@ -1486,13 +1504,13 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    }
    c.Frame(buildlayout::Spells,{.15f,.075f,.045f,1});
    c.Center(132,160,176,"SPELLS",14,gold);
-   const int spellCount=rpg::AdvancedClass(s.Class())?11:7;
+   const int spellCount=rpg::AdvancedClass(s.Class())?14:7;
    for(int card=0;card<spellCount;++card) {
     const int i=card>=4?card+1:card;
     const Rect spellSlot=buildlayout::Spell(card,spellCount);
     const bool hovered=spellSlot.Contains(mouseX_,mouseY_);
     c.Inset(spellSlot,hovered?1.f:0.f,selectedSpell==i);
-    const float icon=spellCount>9?23.f:29.f;
+    const float icon=spellCount>11?18.f:spellCount>9?23.f:29.f;
     const Rect art{spellSlot.x+4,spellSlot.y+4,icon,icon};
     c.Frame({art.x-2,art.y-2,art.w+4,art.h+4});
     AbilityArtwork(c,art,i,s.Class());
@@ -1501,7 +1519,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.Paragraph({spellSlot.x+36,spellSlot.y+1,136,spellCount>9?16.f:21.f},s.Spell(i).name,spellCount>9?11.f:13.f,ink,1);
     std::string bindings;
     for(int binding=0;binding<hotbarSlots;++binding) if(HotbarSpell(binding,s.Class())==i) {if(!bindings.empty()) bindings+="/";bindings+=BindingLabel(binding);}
-    c.FitText(spellSlot.x+36,spellSlot.y+(spellCount>9?18:23),136,(bindings.empty()?"Unbound":"Key "+bindings)+
+    c.FitText(spellSlot.x+36,spellSlot.y+(spellCount>11?13:spellCount>9?18:23),136,(bindings.empty()?"Unbound":"Key "+bindings)+
       (s.Level()<rpg::SpellLevel(i)?" / Lv "+std::to_string(rpg::SpellLevel(i)):remaining>0?" / "+Seconds(remaining)+"s remaining":""),10,remaining>0?gold:muted);
     if(hovered)
       c.Line(spellSlot.x+4,spellSlot.y+spellSlot.h-2,spellSlot.x+spellSlot.w-4,spellSlot.y+spellSlot.h-2,1,gold);
@@ -1566,7 +1584,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.FitText(874,231,258,spell.name,22,ink);
     c.Paragraph({874,264,258,35},SpellEffect(s,selectedSpell),14,gold,2);
     c.Paragraph({874,305,258,98},selectedSpell==1?std::string(style.resource)+": "+std::to_string(style.capacity)+
-      " basic hits fill the reserve. "+style.payoff:spell.description,13,muted,2);
+      " basic hits fill the reserve. "+style.payoff:spell.description,selectedSpell>=12?11.f:13.f,muted,2);
     c.FitText(874,413,258,"Cooldown "+Number(s.AbilityCooldown(selectedSpell))+"s / "+
       (spell.range>0?Number(spell.range)+" m":"self"),13,ink);
     c.FitText(874,435,258,(selectedSpell<2 || selectedSpell>=5)?"Contact "+Number(spell.contact)+"s / recovery "+Number(spell.recovery)+"s":
@@ -1798,12 +1816,18 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    const Color readiness=status=="READY"?Color{.57f,.84f,.40f,1}:Color{1,.64f,.40f,1};
    c.Gradient({x+12,571+lift,306,28},{readiness.x,readiness.y,readiness.z,.16f},{.02f,.025f,.02f,.4f});
    c.FitText(x+20,578+lift,290,status+(remaining>0?" / "+Seconds(remaining)+"s remaining":""),12,readiness);
+   c.FitText(x+14,602+lift,302,"Right-click: unbind / drag outside: remove",10,muted);
   }
   break;
  }
  if(dragging_ && dragSpell_>=0) {
    c.Frame({mouseX_-23,mouseY_-23,46,46},dark,gold);
    AbilityArtwork(c,{mouseX_-20,mouseY_-20,40,40},dragSpell_,s.Class());
+   if(dragHotbar_>=0 && !PointerOverUi()) {
+     const float x=std::clamp(mouseX_-115,8.f,1042.f),y=std::clamp(mouseY_+27,8.f,688.f);
+     c.Frame({x,y,230,24},{.12f,.035f,.02f,.95f},gold);
+     c.Center(x,y+5,230,"Release to remove / restore from N",10,ink);
+   }
  }
  if (dragging_ && dragItem_!=Item::None) {
   for (auto it=regions_.rbegin();it!=regions_.rend();++it) if (it->rect.Contains(mouseX_,mouseY_)) {

@@ -21,7 +21,7 @@ float Difference(const playerclips::Frame& a,const playerclips::Frame& b){
 }
 void LibraryChecks(){
   const auto bytes=playerclips::EmbeddedBytes();const auto clips=playerclips::Decode(bytes);
-  Check(clips.size()==54&&bytes.size()<512*1024,"Forty-eight authored actions and six compatibility tracks must fit the motion budget");
+  Check(clips.size()==57&&bytes.size()<512*1024,"Fifty-one authored actions and six compatibility tracks must fit the motion budget");
   for(unsigned i=4;i<12;++i){
     const auto clip=playerclips::Clip(i);
     Check(Difference(playerclips::Sample(clip,-.000001f),playerclips::Sample(clip,.000001f))<.0001f,"Gait loop seam");
@@ -244,7 +244,8 @@ void WeaponCarryChecks(){
         else first=pose.WeaponPoint(.96f);
         excursion=std::max(excursion,Distance(first,pose.WeaponPoint(.96f)));previous=pose;
       }
-      Check(excursion>.035f,"Carried weapon is frozen during locomotion");
+        if(excursion<=.035f)std::cerr<<"Carry excursion "<<excursion<<" m, equipment "<<unsigned(equipment)<<", direction "<<direction<<", run "<<run<<'\n';
+        Check(excursion>.035f,"Carried weapon is frozen during locomotion");
     }
     animation::AuthoredWeaponController controller;
     for(int i=0;i<400;++i)controller.Update(.01f,i<40?i*.01f:-1,false,equipment==E::Staff,true,1,equipment==E::Bow);
@@ -252,6 +253,55 @@ void WeaponCarryChecks(){
     controller.Update(.01f,0,false,equipment==E::Staff,true,1,equipment==E::Bow);
     Check(controller.ready>0&&controller.ready<.15f,"Combat guard engages with a snap");
   }
+}
+void EquippedFlightChecks(){
+  using E=playerclips::Equipment;
+  float worstHand=0,worstTip=0,worstShield=0;
+  for(auto equipment:{E::Sword,E::Staff,E::Bow})for(bool shield:{false,true}) {
+    if(shield&&equipment!=E::Sword)continue;
+    const auto form=equipment==E::Staff?rpg::WeaponForm::AstralStaff:equipment==E::Bow?rpg::WeaponForm::Handbow:rpg::WeaponForm::Blade;
+    animation::State state;CharacterPose previous;XMFLOAT3 previousShield{};bool initialized=false;
+    for(int tick=0;tick<2200;++tick) {
+      const float flight=tick*.001f-.4f;const bool flying=flight>0&&flight<.6f;
+      const float height=flying?5*flight*(.6f-flight):0,velocity=flying?3-10*flight:0;
+      state.Update(.001f,height,velocity,0,true,0,tick==1000?3.f:0);
+      animation::ApplyAuthoredLocomotion(state,.001f,equipment);
+      const auto pose=BuildCharacterPose(0,0,shield,state.pose,form);
+      for(unsigned side=0;side<2;++side) {
+        Check(Distance(BuildHandPose(pose,side,true,shield,0).Point({0,-.055f,-.043f}),pose.arms[side].end)<.0001f,"Equipped flight detached the wrist");
+        Check(std::abs(Distance(pose.arms[side].joint,pose.arms[side].end)-CharacterPose::forearm)<.0001f,"Equipped flight stretched the forearm");
+        if(initialized)worstHand=std::max(worstHand,Distance(previous.arms[side].end,pose.arms[side].end));
+      }
+      const float tip=equipment==E::Sword?.96f:equipment==E::Staff?-.72f:-.64f;
+      Check(pose.WeaponPoint(tip).y+height>.04f,"Equipped flight or landing pierced floor");
+      if(initialized) {
+        const float step=Distance(previous.WeaponPoint(tip),pose.WeaponPoint(tip));
+        if(step>.018f)std::cout<<"Flight tip step "<<step<<", equipment "<<unsigned(equipment)<<", tick "<<tick<<", air "<<state.pose.air<<", landing "<<state.pose.landing<<'\n';
+        worstTip=std::max(worstTip,step);
+      }
+      if(shield) {
+        const auto plate=ShieldFrame(pose);
+        Check(std::abs(XMVectorGetX(XMMatrixDeterminant(plate))-1)<.0001f,"Shield frame sheared or reflected");
+        XMFLOAT3 corner;XMStoreFloat3(&corner,XMVector3TransformCoord(XMVectorSet(.27f,.38f,.14f,1),plate));
+        if(initialized)worstShield=std::max(worstShield,Distance(previousShield,corner));
+        previousShield=corner;
+      }
+      previous=pose;initialized=true;
+    }
+  }
+  std::cout<<"Equipped jump/landing per-ms hand "<<worstHand<<", tip "<<worstTip<<", shield "<<worstShield<<" m\n";
+  Check(worstHand<.012f&&worstTip<.018f&&worstShield<.012f,"Equipped jump/landing snapped an attachment");
+  // Rotate a solved forearm while keeping the torso fixed. The shield must
+  // follow that exact rotation instead of retaining the old chest orientation.
+  auto pose=BuildCharacterPose(0,0,true,{});const auto before=ShieldFrame(pose);
+  const auto turn=XMMatrixRotationAxis(XMVector3Normalize(XMVectorSet(1,.3f,.2f,0)),.35f);
+  XMStoreFloat3(&pose.arms[0].joint,XMLoadFloat3(&pose.arms[0].end)+XMVector3TransformNormal(XMLoadFloat3(&pose.arms[0].joint)-XMLoadFloat3(&pose.arms[0].end),turn));
+  const auto after=ShieldFrame(pose);
+  const auto neutral=BuildCharacterPose(0,0,true,{});
+  const auto from=XMVector3Normalize(XMLoadFloat3(&neutral.arms[0].end)-XMLoadFloat3(&neutral.arms[0].joint));
+  const auto target=XMVector3Normalize(XMLoadFloat3(&pose.arms[0].end)-XMLoadFloat3(&pose.arms[0].joint));
+  Check(XMVectorGetX(XMVector3Length(XMVector3TransformNormal(from,after)-target))<.0001f,"Shield ignored the solved forearm rotation");
+  Check(XMVectorGetX(XMVector3Length(before.r[2]-after.r[2]))>.05f,"Shield stayed rigid on the chest");
 }
 void Captures(){
   const auto root=std::filesystem::current_path()/"authored-locomotion-check";std::filesystem::create_directories(root);
@@ -299,5 +349,6 @@ void Captures(){
 int main(int argc,char** argv){try{
   if(argc==2&&std::string_view(argv[1])=="--weapons-only") {WeaponMotionChecks();std::cout<<"PASS: v2 weapon motion\n";return 0;}
   if(argc==2&&std::string_view(argv[1])=="--capture-only") {Captures();return 0;}
-  LibraryChecks();ContactsAndTransitions();WeaponMotionChecks();BowMotionChecks();WeaponCarryChecks();Captures();std::cout<<"PASS: imported gait loops, directional weapon carry, combat guards, contacts, transition continuity, gameplay isolation and native comparison\n";}
+  if(argc==2&&std::string_view(argv[1])=="--flight-only") {LibraryChecks();EquippedFlightChecks();return 0;}
+  LibraryChecks();ContactsAndTransitions();WeaponMotionChecks();BowMotionChecks();WeaponCarryChecks();EquippedFlightChecks();Captures();std::cout<<"PASS: imported gait loops, directional weapon carry, equipped jumps, combat guards, contacts, transition continuity, gameplay isolation and native comparison\n";}
 catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

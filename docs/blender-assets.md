@@ -1,5 +1,29 @@
 # Blender collection in the native renderer
 
+## Fitted limb armor and equipped jumps (2026-11-05)
+
+The class library now has 33 parts: six new fitted limb/cuff assemblies append
+to the accepted 27 parts. Three equipped jump actions append to the 48 accepted
+Blender actions, with `player-motion-v7.blend` as the current motion source.
+Shield and palm orientation now follow the solved forearm. Native records,
+existing source mesh objects, earlier actions, garment weights and all frozen
+face/body/collection assets pass preservation checks. See
+[class art](oldstyle-player-art.md#fitted-limb-equipment-and-armed-flight-2026-11-05)
+for scope and `.blender-local/limbs-flight-20261105` for local evidence/review.
+
+## Upper garments and carried weapons (2026-11-05)
+
+Six chest variants now include anatomical sleeves and connected armholes, with
+chest/pelvis/arm weights in GWT2. Three shoulder fittings and six weapon meshes
+are refined. The v6 source revises 27 carrying actions while preserving every
+native foot, hip and torso sample and all attack/release tracks. Faces and the
+original thirteen-model collection remain frozen. See
+[equipment articulation](equipment-articulation-revision.md) for exact scope,
+budgets, preservation and validation.
+All six game/launcher outputs are synchronized. Final validation passes thirteen
+Release suites, eight Debug suites, Debug garment checks and every actual game
+smoke launch; embedded resource hashes match the published assets.
+
 ## Class tailoring and authored strike revision (2026-11-02)
 
 The three focused classes now use revised chest clothing, continuous weighted

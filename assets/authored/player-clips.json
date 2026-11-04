@@ -1,8 +1,8 @@
 {
   "format": "PCL2",
-  "source": "Accepted v4 library with four v5 compact strike actions",
-  "source_sha256": "ba5ff3de1741456cd241027c60804a55c99845791a79b9924fa3f7c4f527c2f4",
-  "editable_source": "player-motion-v5.blend",
+  "source": "51 Blender actions plus six compatibility records; 54 accepted native records preserved",
+  "source_sha256": "a015a58145613d001ed20635270fb51894a2d32b1c80def573e00080582eb500",
+  "editable_source": "player-motion-v7.blend",
   "clips": [
     {
       "clip": "Sword_Attack_Diagonal",
@@ -222,8 +222,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.66,
-      "source": "v4 Blender action",
-      "sha256": "e3dd2809c711be69af8d0a0c727c73badb92713ff7b20a263e056985742d6c23"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "29050762056057529cc657fba33cbaf2b33b87b366334ee1803a5fcbff656f1e"
     },
     {
       "clip": "Sword_Run",
@@ -235,8 +235,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.39,
-      "source": "v4 Blender action",
-      "sha256": "d474b12f12fc50ca64e1ad4bf2f69c948ad5c104594c06eb0829db5f76e353e0"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "9803d6258ac1947065319ac02a58fa5600b3269bf78a89c983c95a33535a2d01"
     },
     {
       "clip": "Staff_Walk",
@@ -248,8 +248,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.66,
-      "source": "v4 Blender action",
-      "sha256": "924e4d7639341b3f0f27b629a83c028cdb18a6d4e411266ebb648446a7d27fdb"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "836d08dad854d540f7959495a5110d551e4453c844444d04be52d0973597f8a0"
     },
     {
       "clip": "Staff_Run",
@@ -261,8 +261,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.39,
-      "source": "v4 Blender action",
-      "sha256": "9596595bbac869eb4d1eb6eaab9e015875aa858308f4f0efefabb302de05b42a"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "c4eafb381e02b70c37a32e9c3595d379b8e75b30ac9342324c69880fea0b91fc"
     },
     {
       "clip": "Sword_Guard",
@@ -417,8 +417,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.66,
-      "source": "v4 Blender action",
-      "sha256": "eedd73e14adb0aae890586f85ba9e7b2a640df22856248601b5133f200a86518"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "277f4600a82ed77f770f22c91b23a7d9767ce1807b3cf18f663e7087c932c859"
     },
     {
       "clip": "Bow_Run",
@@ -430,8 +430,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.39,
-      "source": "v4 Blender action",
-      "sha256": "dfb778fdc37de4668efe56637c02010b1f92323ae107a0e7b33f880a1c9d2cc3"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "55d28b7ed32627ed570f23218d02a847d0c2497307b788030fa9640d51d6a0d5"
     },
     {
       "clip": "Sword_Carry",
@@ -443,8 +443,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v4 Blender action",
-      "sha256": "c318430f9768b43d452a627c06c13ab79632ecdcd9bc9eb78b313dd1c860e45b"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "b4c01a24c0948594ba5e18e1754959066ae0d24e94f78d375e3a99178aad0184"
     },
     {
       "clip": "Staff_Carry",
@@ -456,8 +456,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v4 Blender action",
-      "sha256": "b3704f8ad8ac46463ba0163e17b76ef4ee69fd2e992d37ad373c476e345c7641"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "7cf0546b1138705f8d304012115b5f511c4be96901e8c435f85070b54d482838"
     },
     {
       "clip": "Bow_Carry",
@@ -469,8 +469,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v4 Blender action",
-      "sha256": "ed37aa4e874569dee04e402691b3ee7128d77bd20cb831a9d9fcc15168a5d356"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "56de231b9557dcfe3cfaad07e0ae557f1abdbc11414c3c2606d9deacdf1ac414"
     },
     {
       "clip": "Sword_Walk_Backward",
@@ -482,8 +482,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.66,
-      "source": "v4 Blender action",
-      "sha256": "3cd5041d596aade023840322c82e8b6cffa0d5d3058b9b82e1eff6c43fbf1b0c"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "651597a010b707ca54a63f8055490f0b9d4c3c13ed65e2d9d9ef1fffe4536057"
     },
     {
       "clip": "Sword_Walk_Left",
@@ -495,8 +495,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.66,
-      "source": "v4 Blender action",
-      "sha256": "a26769d828ab6cc74a156043491aa4495b42f85f48101350066a473c7b7f82d7"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "12ad08bcee3ee53ae1f654b02081ef512715d325e960920884332f7a34ba30d0"
     },
     {
       "clip": "Sword_Walk_Right",
@@ -508,8 +508,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.66,
-      "source": "v4 Blender action",
-      "sha256": "aa9933f40b86c6af039960a50af9ef4754d765dc18c41d5942323b6b9f90c274"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "e94dfc057bbed3c700952b2346db78447dafb1fa67fe935bf928be29f7e4a705"
     },
     {
       "clip": "Sword_Run_Backward",
@@ -521,8 +521,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.39,
-      "source": "v4 Blender action",
-      "sha256": "b9de9e8ca7908e6c68263584b5b9033c228e5fa2a50a463b05c0031866cbda9b"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "f6bcf8d9df56b647f0c65c32fa80449ebd8bb28cade4d2f44035b62f5c9d5a4a"
     },
     {
       "clip": "Sword_Run_Left",
@@ -534,8 +534,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.39,
-      "source": "v4 Blender action",
-      "sha256": "ee9f1e48a4ffbc9f89d5bf10e46a36567fd74549f5cc1d078a663bdb43643060"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "5809a25ed88c314466e034a92f7f6939c51948701b40219838cefcedfd55f296"
     },
     {
       "clip": "Sword_Run_Right",
@@ -547,8 +547,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.39,
-      "source": "v4 Blender action",
-      "sha256": "0c39c957542470beeec80428ede8d105cecd9c45e63133544e666c8aa7f0c532"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "1ca5c963be48c56d07d006dc3ef05ed270b289b50b9a53d4fb97b7d2b0b981a8"
     },
     {
       "clip": "Staff_Walk_Backward",
@@ -560,8 +560,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.66,
-      "source": "v4 Blender action",
-      "sha256": "309602038d57a5f8a2fe7c29a4c68cb22b3d2170c14212067ff6c644fcf2ed6e"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "f6bf2f984fbfaa50f60040edca60571dfcac5096a326e263333aa7a9f89d06dd"
     },
     {
       "clip": "Staff_Walk_Left",
@@ -573,8 +573,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.66,
-      "source": "v4 Blender action",
-      "sha256": "bb4a36180d537887ae48bd1c3383171b423dbbce637decfbff7bcd688cfb14a5"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "cd0616b04d378839702c4538f9610943843cdf05d0f0633c493a77306396c9c2"
     },
     {
       "clip": "Staff_Walk_Right",
@@ -586,8 +586,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.66,
-      "source": "v4 Blender action",
-      "sha256": "9d4c75c9edefa2162b438cafc6d7c84f3d50ecf41a601e359aa4df528f7af313"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "201e57bed05231b10d2eaa1c4055bd94e486eb667e2107645c0169f296e8826e"
     },
     {
       "clip": "Staff_Run_Backward",
@@ -599,8 +599,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.39,
-      "source": "v4 Blender action",
-      "sha256": "abf6900c497217155db68a3e41ed8bfdc3fb8628bd5a3b494e737641e5432c53"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "160a625f5527c853f3b4b23ead6df4114c34bb11abb4381bf4a8031f3ef64656"
     },
     {
       "clip": "Staff_Run_Left",
@@ -612,8 +612,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.39,
-      "source": "v4 Blender action",
-      "sha256": "d19b55abbb096fc2f26dfb547453909bb8cc9182ffd2d079577241b77bd8de1b"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "fad76442c0c4ebb5ba566b9e24e9f1676c1b2007665ec603aa0de28dfb553bec"
     },
     {
       "clip": "Staff_Run_Right",
@@ -625,8 +625,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.39,
-      "source": "v4 Blender action",
-      "sha256": "bfe1a8ac293d5973e487cb9f65e8461b2a0615d76cc77198c4d59c16afcda7b4"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "c824596a2ff0bff9679881fb2d507a21c8efd64228c48d2cccba2ba4f442cffe"
     },
     {
       "clip": "Bow_Walk_Backward",
@@ -638,8 +638,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.66,
-      "source": "v4 Blender action",
-      "sha256": "e75a34e12438fb6e628e9ba1eff3318c646950af52c2af779cd6f3f5958b8945"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "0df09033bcecdd2df5ffbbba53389ffec46e8da0d0ceb545b55326b85299a1e2"
     },
     {
       "clip": "Bow_Walk_Left",
@@ -651,8 +651,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.66,
-      "source": "v4 Blender action",
-      "sha256": "4cf984626ca960904c1afa65ff8781a1103e26637a2fd5c72cde20a3d0921dba"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "36e25d85cf576210ea82dada97aeee18b6efbb7bf49db52fb3b4150b43234d13"
     },
     {
       "clip": "Bow_Walk_Right",
@@ -664,8 +664,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.66,
-      "source": "v4 Blender action",
-      "sha256": "d8ec43a4e2a6cfeff608423e68185b7125dcfe6841e1aced93ca93b769375df5"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "1c251d506d6945561d6c56144e24dc608fa06ee15fb0ecd28d4d1241f08addc7"
     },
     {
       "clip": "Bow_Run_Backward",
@@ -677,8 +677,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.39,
-      "source": "v4 Blender action",
-      "sha256": "d1eed2475b6af36f29e711404cf9a4138aba52e0a4680ee6afcede1413b00f7d"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "ab92afff61e9dca1a6a533c5be276c81e02221a80ef39d95b181835308cdcf2c"
     },
     {
       "clip": "Bow_Run_Left",
@@ -690,8 +690,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.39,
-      "source": "v4 Blender action",
-      "sha256": "c110e1f73b43acbc90701528c57845a308a71a5416817fd72ae4ed19787c5005"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "a0a4ab446a6f52649954b8fedb8948512ef57817876e385d71e47eb5e88b09b8"
     },
     {
       "clip": "Bow_Run_Right",
@@ -703,11 +703,56 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.39,
-      "source": "v4 Blender action",
-      "sha256": "5b5124856a7d2ceaa0d953d32140489c9b9c49324b982ec072f6c5ea2055667c"
+      "source": "v6 Blender upper-body carry; preserved native lower-body record channels",
+      "sha256": "5b9a24b3ceb6dd57f6288b919a32383dbaf07fc5018c595038e6438b4e11cefc"
+    },
+    {
+      "clip": "Sword_Jump",
+      "frames": 175,
+      "duration": 2.9,
+      "loop": false,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.3103448275862069,
+      "landing": 0.5057471264367815,
+      "stance": 0.0,
+      "source": "v7 Blender equipped arms; accepted Jump_Full lower-body native channels",
+      "sha256": "c5b79d822c52b5c945b662aa6395b770c1145c8b6d82a7ab028f0c132071f4c3"
+    },
+    {
+      "clip": "Staff_Jump",
+      "frames": 175,
+      "duration": 2.9,
+      "loop": false,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.3103448275862069,
+      "landing": 0.5057471264367815,
+      "stance": 0.0,
+      "source": "v7 Blender equipped arms; accepted Jump_Full lower-body native channels",
+      "sha256": "4078ec05c1f8ca9f1040b4e63ab87420a45d980aca475e9714fbaa3dee2cdc6d"
+    },
+    {
+      "clip": "Bow_Jump",
+      "frames": 175,
+      "duration": 2.9,
+      "loop": false,
+      "load": 0.0,
+      "contact": 0.0,
+      "takeoff": 0.3103448275862069,
+      "landing": 0.5057471264367815,
+      "stance": 0.0,
+      "source": "v7 Blender equipped arms; accepted Jump_Full lower-body native channels",
+      "sha256": "36e2c10bd094b9281f0842aa549ea87a7380f01ac89da61d40eb65573fa517d6"
     }
   ],
-  "sha256": "91b337acbcad829bddcd1f6fc5e30be76cc22717b30970ac36c253f7b265888b",
+  "sha256": "0e377ba73563851a6e5e07f564661aff32cba528737bbc57e1e43b767771537d",
   "retarget": "Blender +X-left/-Y-forward/Z-up to native +X-right/+Z-forward/Y-up; shoulders/arm lengths fitted to native IK; world jump displacement removed; native contacts retained.",
-  "preserved_track_count": 50
+  "preserved_track_count": 54,
+  "revised_track_indices": [],
+  "added_track_indices": [
+    54,
+    55,
+    56
+  ]
 }

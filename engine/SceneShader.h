@@ -16,6 +16,11 @@ Texture2D<float4> uiFrame : register(t5);
 Texture2D<float4> uiHall : register(t6);
 Texture2D<float4> uiIcons : register(t7);
 Texture2D<float> cloudLightField : register(t8);
+// t9 is the body palette, including pixel-stage clothing-region lookup.
+Texture2D<float4> combatSpells : register(t13);
+Texture2D<float4> classSpells : register(t12);
+Texture2D<float4> effectArtwork : register(t14);
+Texture2D<float> effectSceneDepth : register(t15);
 Texture2DArray surfaceColor : register(t10);
 Texture2DArray surfaceNormal : register(t11);
 // x = world half extent, y = last texel-center world coordinate. A zero
@@ -177,6 +182,9 @@ float3 CoveredBodyPoint(float3 p) {
  p.x*=1-.17*fit;p.z*=1-.24*fit;return p;
 }
 void SkinBody(inout InstanceIn i,uint4 joints,float4 weights) {
+ // The same mesh is inspectable without an actor in the equipment gallery.
+ // Do not fetch an absent/unrelated body palette for a bind-pose preview.
+ if(i.surface.w==-9)return;
  GarmentLag(i);
  uint actor=(uint)i.surface.z;
  if(i.surface.x==14 && bodyRows[actor*263+256].w==15) {
@@ -445,7 +453,9 @@ float Shadow(float4 widePosition,float4 detailPosition,float sunFacing,float rec
 float4 PSMain(VOut i) : SV_TARGET {
  if (eyeAndHud.w>.5) {
   float4 result=color*i.tint;
-  if (i.wp.z>4.5) result*=uiIcons.Sample(fontSampler,i.wp.xy);
+  if (i.wp.z>6.5) result*=classSpells.Sample(fontSampler,i.wp.xy);
+  else if (i.wp.z>5.5) result*=combatSpells.Sample(fontSampler,i.wp.xy);
+  else if (i.wp.z>4.5) result*=uiIcons.Sample(fontSampler,i.wp.xy);
   else if (i.wp.z>3.5) result*=uiHall.Sample(fontSampler,i.wp.xy);
   else if (i.wp.z>2.5) result*=uiFrame.Sample(fontSampler,i.wp.xy);
   else if (i.wp.z>1.5) result*=mapArtwork.Sample(fontSampler,i.wp.xy);
@@ -668,12 +678,25 @@ float4 PSMain(VOut i) : SV_TARGET {
  return float4(DisplayDaylight(result),1);
 }
 )" R"(
-struct EffectOut { float4 p : SV_POSITION; float3 uv : TEXCOORD0; float4 tint : COLOR; float fog : TEXCOORD1; };
+struct EffectOut { float4 p : SV_POSITION; float3 uv : TEXCOORD0; float4 tint : COLOR; float fog : TEXCOORD1; float viewDepth : TEXCOORD2; };
 EffectOut VSEffect(VIn i) {
  EffectOut o; o.p=mul(float4(i.p,1),wvp); o.uv=i.n; o.tint=i.tint;
- o.fog=AirTransmission(eyeAndHud.xyz,i.p); return o;
+ o.fog=AirTransmission(eyeAndHud.xyz,i.p);o.viewDepth=o.p.w; return o;
 }
 float4 PSEffect(EffectOut i) : SV_TARGET {
+ if(i.uv.z>=7.5) {
+  uint tile=(uint)round(i.uv.z)-8u;
+  float2 local=saturate(i.uv.xy),cell=float2(tile&3u,tile>>2);
+  float2 uv=(cell+lerp(float2(.008,.008),float2(.992,.992),local))/float2(4,2);
+  float4 texel=effectArtwork.Sample(fontSampler,uv);
+  float border=smoothstep(0,.055,min(min(local.x,1-local.x),min(local.y,1-local.y)));
+  float z=effectSceneDepth.Load(int3((int2)i.p.xy,0));
+  // Matches the world projection's 0.1 / 280 m clip planes. Portraits never
+  // submit particles and retain their separate projection/depth lifecycle.
+  float sceneDistance=28.0/max(.0001,280.0-z*279.9);
+  float soft=saturate((sceneDistance-i.viewDepth)/(tile==1 || tile==2?.24:.065));
+  return float4(texel.rgb*i.tint.rgb,saturate(texel.a*i.tint.a)*border*soft*i.fog);
+ }
  float2 p=i.uv.xy*2-1;
  float radius=length(p),edge=saturate(1-abs(p.y)),mask=0,core=0;
  if (i.uv.z<.5) {

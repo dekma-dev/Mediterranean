@@ -19,6 +19,22 @@ XMMATRIX WeaponFrame(const CharacterPose& pose) {
   const auto origin=pose.WeaponPoint(0);
   return {right,up,XMVector3Cross(right,up),XMVectorSetW(XMLoadFloat3(&origin),1)};
 }
+XMMATRIX ShieldFrame(const CharacterPose& pose) {
+  static const XMFLOAT3 reference=[] {
+    const auto neutral=BuildCharacterPose(0,0,true,{});
+    XMFLOAT3 value;XMStoreFloat3(&value,XMVector3Normalize(XMLoadFloat3(&neutral.arms[0].end)-XMLoadFloat3(&neutral.arms[0].joint)));
+    return value;
+  }();
+  const auto torso=XMMatrixRotationX(pose.upperPitch)*XMMatrixRotationZ(pose.upperRoll)*XMMatrixRotationY(pose.upperYaw);
+  const auto forearm=XMVector3Normalize(XMVector3TransformNormal(XMLoadFloat3(&pose.arms[0].end)-XMLoadFloat3(&pose.arms[0].joint),XMMatrixTranspose(torso)));
+  const auto from=XMLoadFloat3(&reference);const float dot=XMVectorGetX(XMVector3Dot(from,forearm));
+  auto q=XMVectorSetW(XMVector3Cross(from,forearm),1+dot);
+  if(dot<-.9999f)q=XMQuaternionRotationAxis(XMVector3Normalize(XMVector3Cross(from,XMVectorSet(0,1,0,0))),XM_PI);
+  else q=XMQuaternionNormalize(q);
+  auto result=XMMatrixRotationQuaternion(q)*torso;
+  result.r[3]=XMVectorSetW(XMLoadFloat3(&pose.arms[0].end),1);
+  return result;
+}
 HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool shield,float cast) {
   side=std::min(side,1u);
   const float staffGrip=side||shield||!weapon?0:animation::Unit(pose.staffGripWeight);
@@ -31,8 +47,8 @@ HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool 
     const auto blade=WeaponFrame(pose);
     frame={blade.r[1],blade.r[0],-blade.r[2],blade.r[3]};
   } else if(!side && shield) {
-    const auto x=pose.UpperDirection({0,1,0}),y=pose.UpperDirection({-1,0,0}),z=pose.UpperDirection({0,0,1});
-    frame={XMLoadFloat3(&x),XMLoadFloat3(&y),XMLoadFloat3(&z),XMVectorSetW(XMLoadFloat3(&arm.end),1)};
+    const auto plate=ShieldFrame(pose);
+    frame={plate.r[1],-plate.r[0],plate.r[2],plate.r[3]};
   } else {
     const auto rightLocal=pose.UpperDirection({1,0,0}),upLocal=pose.UpperDirection({0,1,0}),forwardLocal=pose.UpperDirection({0,0,1});
     const auto right=XMLoadFloat3(&rightLocal),up=XMLoadFloat3(&upLocal),forward=XMLoadFloat3(&forwardLocal);
@@ -105,7 +121,7 @@ HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool 
 }
 XMFLOAT3 SpellReleasePoint(const CharacterPose& pose,bool shield) {
   if(!shield) return BuildHandPose(pose,0,false,false,pose.handCast).Point({0,.07f,.035f});
-  const auto offset=pose.UpperDirection({-.035f,0,.27f});
+  XMFLOAT3 offset;XMStoreFloat3(&offset,XMVector3TransformNormal(XMVectorSet(-.035f,0,.27f,0),ShieldFrame(pose)));
   const auto wrist=BuildHandPose(pose,0,false,true,pose.handCast).Point({0,0,0});
   return {wrist.x+offset.x,wrist.y+offset.y,wrist.z+offset.z};
 }

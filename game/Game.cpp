@@ -307,6 +307,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   if (command.restart || (wasDead && simulation_.Health()>0) || wasReplay!=simulation_.ReplayActive()) { worldView_.ResetWildlife(); ResetMotion(); return; }
   interface_.UpdateCombatFeedback(dt,simulation_);
   effects_.Advance(dt);
+  sustained_.Update(simulation_,dt);
   for (std::size_t i=0;i<simulation_.VisualEventCount();++i) {
     const auto& event=simulation_.VisualEvents()[i];
     if(event.kind==rpg::CombatVisualKind::SpellCast) {
@@ -534,6 +535,7 @@ void Game::ResetMotion() {
   interface_.ResetCombatFeedback();
   ++audioGeneration_;
   effects_.Reset();
+  sustained_.Reset();
   playerPose_.Reset(simulation_.Facing());
   playerAnimation_.Reset();
   playerFace_.Reset(1); keeperFace_.Reset(3); merchantFace_.Reset(2);
@@ -575,6 +577,7 @@ void Game::Render(Renderer& renderer,bool showInterface) {
   const float cameraDistance=cameraBoom_.distance;
   renderer.SetCamera({player.x+direction.x*cameraDistance,cameraHeight_+std::sin(cameraPitch_)*cameraDistance,
     player.z+direction.z*cameraDistance},{player.x,cameraHeight_,player.z});
+  SustainedEffects::Warnings(renderer,simulation_);
   worldView_.Draw(renderer,simulation_.Map(),time_,simulation_.Sparring(),merchantFace_.pose,keeperFace_.pose,simulation_.Player());
   populationview::Embers(renderer,simulation_.Player(),time_);
   courtview::Draw(renderer,simulation_,time_);
@@ -653,38 +656,6 @@ void Game::Render(Renderer& renderer,bool showInterface) {
     } else DrawCharacter(renderer,enemy.position,ground,pose.facing,
       enemy.hitFlash>0?XMFLOAT4{1,.7f,.55f,1}:enemy.kind==rpg::EnemyKind::Trainer?XMFLOAT4{.55f,.46f,.22f,1}:enemy.kind==rpg::EnemyKind::Wraith?XMFLOAT4{.35f,.30f,.61f,1}:enemy.kind==rpg::EnemyKind::Reaver?XMFLOAT4{.53f,.34f,.19f,1}:captain?XMFLOAT4{.36f,.19f,.48f,1}:XMFLOAT4{.65f,.2f,.25f,1},
       enemy.kind==rpg::EnemyKind::Wraith?0.f:pose.attack,pose.gait,enemyOutfit,enemyActors_[i].animation.pose,std::uint64_t(enemy.id)+16);
-    if (enemy.windup>0 && simulation_.Health()>0) {
-      const float progress=1-enemy.windup/enemy.WindupDuration();
-      const XMFLOAT4 warning=enemy.Interruptible()?XMFLOAT4{1,.55f*(1-progress),.12f,.68f}:XMFLOAT4{.85f,.4f,.95f,.75f};
-      const auto point=[&](float angle,float radius) -> XMFLOAT3 {
-        const rpg::Vec2 p{enemy.position.x+std::sin(angle)*radius,enemy.position.z+std::cos(angle)*radius};
-        return {p.x,rpg::WorldMap::Height(p)+.045f,p.z};
-      };
-      for (int segment=0;segment<32;++segment) {
-        const float a=enemy.facing-enemy.HalfAngle()+segment*enemy.HalfAngle()/16;
-        const float b=a+enemy.HalfAngle()/16,r=enemy.WarningReach();
-        renderer.DrawEffectRibbon(point(a,r-.025f),point(a,r+.025f),point(b,r+.025f),point(b,r-.025f),warning);
-        if(enemy.Boss() && enemy.bossAttack!=0)
-          renderer.DrawEffectRibbon(point(a,.05f),point(a,r),point(b,r),point(b,.05f),
-            {warning.x,warning.y,warning.z,.10f+.12f*progress});
-      }
-      if(!(enemy.Boss() && enemy.bossAttack==1)) for (float side : {-1.f,1.f}) {
-        const float angle=enemy.facing+side*enemy.HalfAngle();
-        const auto a=point(angle,.24f),b=point(angle,enemy.WarningReach());
-        const float x=std::cos(angle)*.018f,z=-std::sin(angle)*.018f;
-        renderer.DrawEffectRibbon({a.x-x,a.y,a.z-z},{a.x+x,a.y,a.z+z},
-          {b.x+x,b.y,b.z+z},{b.x-x,b.y,b.z-z},warning);
-      }
-      if (enemy.Boss() && enemy.bossAttack==0) for(int segment=0;segment<64;++segment) {
-        const float a=segment*motion::tau/64,b=(segment+1)*motion::tau/64;
-        for(float radius : {rpg::Enemy::shockInner,rpg::Enemy::shockOuter})
-          renderer.DrawEffectRibbon(point(a,radius-.035f),point(a,radius+.035f),
-            point(b,radius+.035f),point(b,radius-.035f),warning);
-        // A faint annulus makes the dangerous band distinct from its safe centre.
-        renderer.DrawEffectRibbon(point(a,rpg::Enemy::shockInner),point(a,rpg::Enemy::shockOuter),
-          point(b,rpg::Enemy::shockOuter),point(b,rpg::Enemy::shockInner),{1,.12f,.06f,.10f+.12f*progress});
-      }
-    }
     if (i==simulation_.Target()) {
       // An open ground outline leaves feet and shadows visible. Health belongs
       // to the target HUD instead of a floating opaque block above the head.
@@ -707,7 +678,7 @@ void Game::Render(Renderer& renderer,bool showInterface) {
     const float sx=std::sin(playerPose_.facing),cx=std::cos(playerPose_.facing);
     classfx::Prepare(renderer,simulation_,{player.x+cx*local.x+sx*local.z,y+local.y,player.z-sx*local.x+cx*local.z},playerPose_.facing);
   }
-  classfx::States(renderer,simulation_,time_);
+  sustained_.Render(renderer,simulation_,time_,playerPose_.facing);
   effects_.Render(renderer);
   const bool drawInterface=showInterface && (hudVisible_ || interface_.HasPanels() || simulation_.Health()<=0);
   for (std::size_t i=0;drawInterface && i<simulation_.Feedback().size();++i) {

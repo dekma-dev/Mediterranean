@@ -7,9 +7,11 @@ namespace classart {
 enum class Part:unsigned { WarriorChest,WarriorVeteranChest,WarriorShoulder,WarriorHelm,WarriorShield,WarriorSword,WarriorVeteranSword,
  ScoutChest,ScoutVeteranChest,ScoutShoulder,ScoutHood,ScoutShield,ScoutBow,ScoutVeteranBow,
  MageChest,MageVeteranChest,MageShoulder,MageHood,MageShield,MageStaff,MageVeteranStaff,
- WarriorSkirt,ScoutSkirt,MageSkirt,WarriorBelt,ScoutBelt,MageBelt,Count };
+ WarriorSkirt,ScoutSkirt,MageSkirt,WarriorBelt,ScoutBelt,MageBelt,
+ WarriorBracer,WarriorGreave,WarriorKnee,WarriorThigh,ScoutBracer,MageCuff,Count };
 using Library=std::array<std::array<visual::Geometry,2>,unsigned(Part::Count)>;
-using GarmentWeights=std::array<std::array<std::vector<visual::SkinInfluence>,2>,3>;
+inline constexpr std::size_t geometryByteBudget=24*1024*1024,weightByteBudget=10*1024*1024;
+using GarmentWeights=std::array<std::array<std::vector<visual::SkinInfluence>,2>,unsigned(Part::Count)>;
 Library Decode(std::string_view bytes);
 const Library& Collection();
 GarmentWeights DecodeGarmentWeights(std::string_view bytes,const Library& meshes);

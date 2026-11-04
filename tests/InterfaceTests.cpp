@@ -400,7 +400,7 @@ int main() {
   const bool initialized=renderer.Initialize(window.GetHandle(),1280,720);
   if (!initialized) std::wcerr<<renderer.Error()<<L'\n';
   Require(initialized,"screen renderer initialization failed.");
-  Require(renderer.InterfaceBytes()<20*1024*1024,"Interface artwork exceeds its 20 MiB texture budget.");
+  Require(renderer.InterfaceBytes()<30*1024*1024,"Interface artwork exceeds its 30 MiB texture budget with unique spell atlases.");
   InterruptedInputRegressions(window,renderer);
   // Quest conversations keep rewards/objectives visible and paginate all prose.
   for (const auto size : {std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
@@ -806,7 +806,7 @@ int main() {
     screen.MoveHotbar(19,0,simulation.Class());
     screen.SetOnly(ui::Panel::Build);
     renderer.BeginFrame();screen.Render(renderer,simulation,0,false);Require(renderer.EndFrame(false),"Spellbook drop source");
-    rowPointer(165,205,true,true,false);rowPointer(898,620,false,true,false);
+    rowPointer(165,192,true,true,false);rowPointer(898,620,false,true,false);
     renderer.BeginFrame();screen.Render(renderer,simulation,0,false);
     Require(renderer.Capture(L"spellbook-drop-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),"Raised spellbook drop targets");
     Require(rowPointer(898,620,false,false,true).action==ui::Action::None && screen.HotbarSpell(19,simulation.Class())==0,
@@ -1485,7 +1485,7 @@ int main() {
     }
   }
   Require(renderer.InterfaceBytes()==textureBytes,"Loading UI allocated extra art textures");
-  Require(renderer.InterfaceBytes()<20*1024*1024,"Map and repeated UI draws exceed the combined texture budget.");
+  Require(renderer.InterfaceBytes()<30*1024*1024,"Map and repeated UI draws exceed the combined texture budget.");
   Require(renderer.ValidateDebugMessages(),"Combat HUD emitted a DirectX warning/error");
   std::cout<<"PASS: live menus, item actions, persistence, scaled pointer routing and UI rendering.\n";
 }

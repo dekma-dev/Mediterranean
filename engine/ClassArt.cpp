@@ -13,7 +13,7 @@ struct Reader {
 };
 }
 Library Decode(std::string_view bytes){
- Check(bytes.size()<=16*1024*1024,"Class art byte budget exceeded");Reader r{bytes};
+ Check(bytes.size()<=geometryByteBudget,"Class art byte budget exceeded");Reader r{bytes};
  Check(r.Get<unsigned>()==0x3154494b && r.Get<unsigned>()==1 && r.Get<unsigned>()==unsigned(Part::Count) && r.Get<unsigned>()==2,"Invalid class art header");
  Library result;std::size_t decodedBytes=0;
  for(auto& item:result)for(unsigned lod=0;lod<2;++lod){
@@ -55,7 +55,7 @@ Library Decode(std::string_view bytes){
   }
   Check(std::find(missingNormal.begin(),missingNormal.end(),1)==missingNormal.end(),"Unused class art vertex has no normal");
   decodedBytes+=g.vertices.size()*sizeof(visual::Vertex)+g.indices.size()*4;
-  Check(decodedBytes<=16*1024*1024,"Repaired class art exceeded byte budget");
+  Check(decodedBytes<=geometryByteBudget,"Repaired class art exceeded byte budget");
   if(lod)Check(indices<item[0].indices.size()*.65f,"Class art LOD did not reduce geometry");
  }
  Check(r.offset==bytes.size(),"Trailing class art data");return result;
@@ -67,21 +67,29 @@ const Library& Collection(){static const auto library=[] {
 }();return library;}
 visual::Mesh Mesh(Part part,unsigned lod){return visual::Mesh(unsigned(visual::Mesh::OldWarriorChest)+unsigned(part)*2+std::min(lod,1u));}
 GarmentWeights DecodeGarmentWeights(std::string_view bytes,const Library& meshes) {
- Check(bytes.size()<=4*1024*1024,"Garment weight budget exceeded");Reader r{bytes};
- Check(r.Get<unsigned>()==0x31545747 && r.Get<unsigned>()==1 && r.Get<unsigned>()==3 && r.Get<unsigned>()==2,"Invalid garment weight header");
+ Check(bytes.size()<=weightByteBudget,"Garment weight budget exceeded");Reader r{bytes};
+ Check(r.Get<unsigned>()==0x32545747 && r.Get<unsigned>()==2 && r.Get<unsigned>()==12 && r.Get<unsigned>()==2,"Invalid garment weight header");
  GarmentWeights result;
- for(unsigned part=0;part<3;++part)for(unsigned lod=0;lod<2;++lod) {
+ std::array<bool,unsigned(Part::Count)> seen{};
+ for(unsigned record=0;record<12;++record) {
+  const unsigned part=r.Get<unsigned>();
+  Check(part<unsigned(Part::Count) && visual::IsGarmentMesh(Mesh(Part(part))) && !seen[part],"Invalid or duplicate garment part");
+  seen[part]=true;
+  for(unsigned lod=0;lod<2;++lod) {
   const auto count=r.Get<unsigned>();
-  Check(count==meshes[unsigned(Part::WarriorSkirt)+part][lod].vertices.size(),"Garment weight/mesh count mismatch");
+  Check(count==meshes[part][lod].vertices.size(),"Garment weight/mesh count mismatch");
   Check(std::size_t(count)*sizeof(visual::SkinInfluence)<=bytes.size()-r.offset,"Truncated garment weights");
   auto& weights=result[part][lod];weights.reserve(count);
   for(unsigned v=0;v<count;++v) {
    const auto influence=r.Get<visual::SkinInfluence>();const float values[]={influence.weights.x,influence.weights.y,influence.weights.z,influence.weights.w};float sum=0;
    for(unsigned k=0;k<4;++k) {
-    Check(influence.bones[k]==0 || (influence.bones[k]>=2 && influence.bones[k]<=5),"Invalid garment bone");
+    Check(influence.bones[k]<visual::bodyBones,"Invalid garment bone");
+    if(part>=unsigned(Part::WarriorSkirt) && part<=unsigned(Part::MageSkirt))
+     Check(influence.bones[k]==0 || (influence.bones[k]>=2 && influence.bones[k]<=5),"Invalid hem bone");
     Check(std::isfinite(values[k]) && values[k]>=0 && values[k]<=1,"Invalid garment influence");sum+=values[k];
    }
    Check(std::abs(sum-1)<.0001f,"Unnormalized garment weights");weights.push_back(influence);
+  }
   }
  }
  Check(r.offset==bytes.size(),"Trailing garment weights");return result;
@@ -94,6 +102,6 @@ std::string_view GarmentWeightBytes() {
 const std::vector<visual::SkinInfluence>& GarmentInfluences(visual::Mesh mesh) {
  Check(visual::IsGarmentMesh(mesh),"Not a skinned garment mesh");
  static const auto weights=DecodeGarmentWeights(GarmentWeightBytes(),Collection());
- const unsigned index=unsigned(mesh)-unsigned(visual::Mesh::OldWarriorSkirt);return weights[index/2][index%2];
+ const unsigned index=unsigned(mesh)-unsigned(visual::Mesh::OldWarriorChest);return weights[index/2][index%2];
 }
 }

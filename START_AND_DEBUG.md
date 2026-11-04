@@ -1,3 +1,45 @@
+## Current sustained states and hostile charges (2026-11-05)
+
+Launch `build-ninja-release/MediterraneanLauncher.exe` for play or use
+`build-local/Debug/RPGNative.exe` in Visual Studio. The sustained-effects
+revision is included in these rebuilt outputs.
+
+Check Mage frost defence and Frost bloom, Scout snares/evasion, Warrior guard,
+and all three boss warnings. Control effects now appear on practice dummies.
+The live combat timers and current hotbar assignments are unchanged. See
+`docs/sustained-spell-effects.md` and the matching section at the top of
+`tests/manual-smoke.md` for reference comparisons and stress checks.
+
+## Current textured combat effects (2026-11-05)
+
+For this revision launch `build-ninja-release/MediterraneanLauncher.exe`;
+Visual Studio debugging uses `build-local/Debug/RPGNative.exe`.
+Both use the embedded effect atlas; no external image install is required.
+
+Try Mage fire, frost, arcane and Thermal rupture, Warrior heavy/crossed cuts,
+and Scout piercing/crossfire attacks. Inspect preparation at the hand,
+projectile arrival, contact flash and the slower smoke/dust decay. Effects
+fade at walls and terrain. Existing hotkeys, saved layouts and cooldowns are
+unchanged by this material pass. See `docs/textured-combat-effects.md` and
+the 2026-11-05 manual checks in `tests/manual-smoke.md`.
+
+## Current spell and action-row revision (2026-11-04)
+
+Use `build-ninja-release/MediterraneanLauncher.exe` for play or
+`build-local/Debug` targets for Visual Studio debugging. Other build folders
+are not certified to contain this revision; historical checkpoints below
+refer to their own builds and save versions.
+
+Right-click a hotbar icon to unbind it, or drag it into the world and release.
+Drag from N to restore it. F5 saves customized rows. Existing layouts are
+preserved: drag new skills from N to chosen keys. Fresh Warrior/Scout/Mage
+layouts bind the new basic, link and finisher to Ctrl+1/2/3; their level gates
+are 1/3/4. Alternate basics on one target within five seconds, optionally add
+a link, then use a highlighted finisher. Missed/cancelled casts grant no chain.
+
+Save version 23 reads versions 1-22; HOTBARS 8 reads versions 1-7.
+See [spell revision and controls](docs/spell-chains-and-art.md).
+
 ## Current model integration and launch (2026-11-01)
 
 Open `build-ninja-release/MediterraneanLauncher.exe` for normal play. The updated

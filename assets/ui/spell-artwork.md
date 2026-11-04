@@ -1,0 +1,32 @@
+# Original spell artwork
+
+Generated with the built-in imagegen tool for Mediterranean. No reference-game image files were copied into the runtime.
+
+- `combat-spells.png`: 8 columns × 6 rows; first 45 cells are Warrior, Scout, Mage in groups of fifteen, following durable ability IDs 0–14 (ID 4 is the shared potion item). Last three cells are unused.
+- `class-spells.png`: 8 columns × 8 rows; Paladin, Priest, Druid, Necromancer, Psionic, Bard, Engineer, Demonologist, each row following IDs 0–7. Potions intentionally depict the same common consumable.
+- `game/SpellArtwork.h` is the authoritative UV/identity mapping. Every available ability has its own cell, shared across book, action rows, drag preview, hover inspection and creation previews.
+- Both source PNGs are retained without resampling. WIC decodes once to 1024×768 and 1024×1024 with mipmaps; CPU decode storage is released. No per-frame uploads. Total UI storage (including existing art, map and font) is capped at 30 MiB by native tests.
+- Inspect actual 960×600 / 1920×1080 / 2560×1080 native captures. Do not treat a large source atlas as proof of small-slot readability.
+
+## Combat atlas generation prompt
+
+Create an ORIGINAL production fantasy RPG spell icon ATLAS: exactly EIGHT columns and SIX rows (48 separate square icons), rectangular 4:3 canvas, preferably 2048x1536. Strict uniform edge-to-edge grid, NO gutters, NO frames, NO text, NO symbols resembling letters, no labels, no watermark. Dark vignetted individual backgrounds, richly painted realistic worn steel, leather, ice, embers, subtle gold highlights, luminous focused magical energy; classical detailed PC RPG art, never flat vector or cartoon. Every tile has a clear large single subject, readable at 48px. Distinct silhouettes, NOT the same weapon repeated. Nothing crosses cell boundaries. EXACT row-major order, left to right:
+ROW 1: (1) single swift silver sword cut; (2) downward heavy cleaver impact; (3) armored warrior lunging forward through dust; (4) iron tower shield blocking sparks; (5) red healing potion; (6) sword slashing boot at ankle; (7) massive executioner's axe with crimson arc; (8) jagged sword tearing a breastplate.
+ROW 2: (1) horizontal sweeping crescent of steel; (2) iron shield splintering under sword; (3) gauntlet driving sword pommel forward; (4) warrior surrounded by spinning steel whirlwind; (5) short reverse-grip sword thrust in a mailed hand; (6) raised crossguard catching two crossed blades; (7) two swords intersecting over a cracked shield; (8) a single bright feathered arrow flying diagonally.
+ROW 3: (1) arrowhead aimed through a circular sight; (2) ranger leaping backwards with wind trail; (3) hooded ranger dodging three arrows; (4) red healing potion on moss; (5) iron arrow pinning leather boot to ground; (6) black arrow through glowing bullseye; (7) feathered arrow laying a green trail; (8) five arrows spreading as a fan.
+ROW 4: (1) heavy arrow piercing two metal plates; (2) arrow knocking dagger out of a hand; (3) luminous long arrow splitting distant horizon; (4) two parallel short arrows with silver tips; (5) barbed arrow tangled in golden thread; (6) three crossed arrows and a broken target; (7) a small glowing ember held in fingers; (8) a large rising flame erupting from a clenched hand.
+ROW 5: (1) robed silhouette dissolving in blue wind; (2) faceted ice shield; (3) red potion in a brass cage; (4) long crystalline ice lance; (5) huge ice crystal bursting into shards; (6) hand igniting a spiral of small flames; (7) frost lotus with razor ice petals; (8) blazing meteor falling from a star field.
+ROW 6: (1) violet arcane blade severing a glowing chain; (2) towering ring of fire with a white hot center; (3) three slender ice needles and cold mist; (4) violet runic prism storing a flame and ice crystal, no letters; (5) fire and frost colliding into a radiant split nova; (6) aged bronze empty spell seal; (7) old blue spellbook; (8) golden chain of three luminous knots.
+
+## Other class atlas generation prompt
+
+Create ORIGINAL detailed painted fantasy RPG SPELL ICON ATLAS, exactly EIGHT columns by EIGHT rows, 64 equal square cells on a square canvas 2048x2048. No text, lettering, numbers, logos, frames, gutters or margins. Strict uniform grid edge-to-edge. Each individual dark vignetted cell contains one large clearly recognizable UNIQUE subject, aged materials, dramatic light, realistic steel/wood/fabric and luminous magic, classical ornate PC fantasy RPG art; no flat vectors, emojis or cartoon. Nothing crosses cells. Exactly this row-major subject order left to right:
+Row1 PALADIN: gold mace smiting; radiant hammer judgement; armored golden knight charging; praying hands in holy light; red potion; golden seal on shield without letters; descending sun sword; shield bearing dawn rays.
+Row2 PRIEST: hand emitting white ray; golden bell shattering darkness; priest stepping between columns of light; two healing hands holding a heart of light; red potion; broken black chains in golden light; luminous sanctuary dome; guiding white star over open palm.
+Row3 DRUID: twisted thorn spike; branching lightning; deer silhouette leaping through leaves; sprout growing in hand; red potion; grasping roots around ankle; enormous storm oak; thorn dart with green leaves.
+Row4 NECROMANCER: withered skeletal finger; torn spectral soul; boot stepping through grave smoke; bone shield and red pact gem; red potion; scythe harvesting green spirits; black sun surrounded by ghosts; skeletal hand touching a pale orb.
+Row5 PSIONIC: violet needle emerging from eye; cracked crystal mirror; silhouette moving through a purple portal; calm meditating mind; red potion; fractured violet skull; cage of luminous purple bars; sharp glowing thought crystal.
+Row6 BARD: ivory baton swinging; swelling golden sound wave; dancing boot and blue ribbons; harp healing with green light; red potion; cracked bell and discordant waves; grand spiral of blue-gold musical energy without notes or letters; baton tapping a brass drum.
+Row7 ENGINEER: antique pistol muzzle flash; shrapnel shell bursting; boots jumping with smoke; brass mechanical shield; red potion; drill-tipped bullet piercing steel; overloaded glowing brass cartridge; orange tracer bullet leaving a spark trail.
+Row8 DEMONOLOGIST: hooked infernal blade slash; burning cleaver smash; armored demon lunging; red rune-free obsidian ward; red potion; blood-red claw tearing fabric; demonic gauntlet gripping a burning pact orb; three predator claws.
+

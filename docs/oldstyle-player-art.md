@@ -5,6 +5,41 @@ DX11 player and inventory renderer. Scout is the archer; class IDs, item IDs,
 equipment slots, combat rules and saves retain their existing meaning. Starter
 and Watchguard select two different weapon meshes per class.
 
+## Fitted limb equipment and armed flight (2026-11-05)
+
+Six appended Blender parts replace repeated guard plates and generic cuffs:
+warrior bracers, greaves, poleyns and thigh plates, scout bracers and mage cuffs.
+Each has a separate shaped shell, edge treatment and fastening geometry, plus
+a reduced distance LOD. Metal retaining straps sit behind their plates. The
+runtime fits the parts to the final solved limbs; the knee fitting follows the
+shin instead of staying upright while the leg bends.
+
+Three new equipped jump actions retain the accepted jump's body/foot channels
+and author separate arm and weapon trajectories for sword, staff and bow. The
+runtime samples their flight and recovery portions while retaining existing
+landing/contact clocks. The sword stays forward and beside the body; it no
+longer makes the unnecessary overhead lift found during review. Bow activation
+starts from an upright bow direction instead of a lowered sword direction.
+Shield, gripping palm and occupied-offhand release socket share the forearm
+frame, including legacy shield geometry.
+
+All previous 27 native geometry parts, 54 motion records, 48 Blender actions,
+existing source mesh objects and garment weights are preserved. Original
+collection copies, anatomical body, faces and hair remain unchanged. New local
+scripts, before copies, preservation evidence and native review are under
+`.blender-local/limbs-flight-20261105`.
+
+## Upper garment articulation pass (2026-11-05)
+
+The accepted upper garments now have anatomically fitted, weighted sleeves and
+connected armholes. Fabric bends from pelvis to chest; waist fittings keep their
+own attachment. Shoulder caps, sword details, bow grips and staff fittings are
+refined. `player-motion-v6.blend` supplies revised carrying arms for the three
+classes in all walk/run directions. Native lower-body and attack channels remain
+unchanged. See [the revision record](equipment-articulation-revision.md).
+All six game/launcher builds contain the revision and pass fixture-save smoke
+launches. Final native review is `.blender-local/equipment-20261104/review.html`.
+
 ## Current tailoring and attack pass (2026-11-02)
 
 Six chest variants, three whole split hems and three belt/pouch assemblies are
@@ -32,15 +67,16 @@ and 54 player motion tracks are retained. The earlier source is backed up under
 
 ## Sources and exports
 
-- `assets/authored/oldstyle-classes.blend`: 27 editable equipment parts. The
+- `assets/authored/oldstyle-classes.blend`: 33 editable equipment parts. The
   warrior uses the accepted Dawnwarden cuirass and shoulder meshes; Moonweaver
   garments are retained as tailoring references. Other equipment uses connected
   profiled surfaces, panels and fitted paths with seams, bindings and fasteners.
-- `oldstyle-classes.kit`: bounded KIT1 archive, 27 items with two mesh LODs each,
+- `oldstyle-classes.kit`: bounded KIT1 archive, 33 items with two mesh LODs each,
   vertex colors and native material IDs. Resource 305 embeds it in client hosts.
 - `oldstyle-classes.json`: per-item vertex/triangle counts and archive hash.
-- `class-garments.weights`: bounded GWT1 skin weights for the three whole hems
-  and their distance LODs, embedded as resource 306. The editable source also
+- `class-garments.weights`: bounded GWT2 skin weights for six upper garments,
+  three whole hems and three waist assemblies with distance LODs, embedded as
+  resource 306. The editable source also
   contains corresponding vertex groups and a native ten-bone bind rig.
 - `player-body.skin`: 26,028 / 5,000 / 1,400 body triangles. The anatomical source
   is unchanged. Covered torso/upper-hip vertices receive a continuous local fit
@@ -54,10 +90,12 @@ and 54 player motion tracks are retained. The earlier source is backed up under
   Worn boots use this geometry at 0.145 × 0.23 × 0.30 metres instead of the
   rounded reusable boot and duplicate flattened sole. Bare feet retain their
   separate fallback. Provenance is in `player-boot-source.json`.
-- `player-motion-v5.blend`: editable 57-bone action library; `player.clips`
-  contains 48 authored actions plus six compatibility tracks, totaling 399,132
+- `player-motion-v7.blend`: editable 57-bone action library; `player.clips`
+  contains 51 authored actions plus six compatibility tracks, totaling 439,140
   bytes. It retains the PCL2 contract and the earlier track indices.
-  The v4 source is retained; fifty native records are unchanged in v5.
+  Earlier v4/v5/v6 sources are retained. V7 appends three equipped jumps and
+  preserves all 54 accepted native records. Their foot, hip and torso channels
+  are copied exactly from the accepted unarmed jump.
 
 The anatomical source remains unchanged at SHA-256
 `bbb0590a5dd6a06c0ea20004ac5c6cdda0f3f1754dc18407dde3ed6b53625e79`.

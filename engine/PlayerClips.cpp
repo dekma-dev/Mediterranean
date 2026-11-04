@@ -57,9 +57,14 @@ Library Decode(std::string_view bytes){
  for(auto clip:{Clip::WalkForward,Clip::WalkBackward,Clip::WalkLeft,Clip::WalkRight,Clip::RunForward,Clip::RunBackward,Clip::RunLeft,Clip::RunRight,Clip::SwordWalk,Clip::SwordRun,Clip::StaffWalk,Clip::StaffRun,Clip::BowWalk,Clip::BowRun}) {
   const auto& t=result[unsigned(clip)];Check(t.loop&&t.stance>.1f&&t.stance<.9f&&t.speed>0,"Invalid gait contact metadata");
  }
- for(unsigned i=unsigned(Clip::SwordCarry);i<unsigned(Clip::Count);++i) {
+ for(unsigned i=unsigned(Clip::SwordCarry);i<unsigned(Clip::SwordJump);++i) {
   const auto& t=result[i];Check(t.loop,"Carrying and directional weapon clips must loop");
   if(i>=unsigned(Clip::SwordWalkBackward))Check(t.stance>.1f&&t.stance<.9f&&t.speed>0,"Invalid armed gait metadata");
+ }
+ for(auto clip:{Clip::SwordJump,Clip::StaffJump,Clip::BowJump}) {
+  const auto& t=result[unsigned(clip)];
+  Check(!t.loop&&t.takeoff>0&&t.landing>t.takeoff&&t.landing<1,"Invalid equipped jump markers");
+  Check(t.takeoff==jump.takeoff&&t.landing==jump.landing&&t.duration==jump.duration,"Equipped jump lost shared foot timing");
  }
  Check(r.offset==bytes.size(),"Trailing player clip data");return result;
 }

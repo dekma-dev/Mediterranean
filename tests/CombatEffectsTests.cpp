@@ -144,7 +144,8 @@ int main() {
   heavy.nextTarget=false;
   Require(sawSwing && Has(game.State(),K::HeavyHit) && Has(game.State(),K::Interrupt),"Heavy strike must distinguish swing, impact and interrupt");
   Require(!Has(game.State(),K::EnemySwing),"An interrupted windup must not emit an enemy swing");
-  for (int i=0;i<10;++i) game.ExecuteCommand({},.05f);
+  // Textured heavy contacts retain a short dust afterglow beyond the old 0.48 s.
+  for (int i=0;i<18;++i) game.ExecuteCommand({},.05f);
   Require(game.Effects().BurstCount()==0 && game.Effects().TrailCount()==0,"Expired effects must disappear completely");
   Require(game.RestoreSnapshot(duel),"Reload duel");
   game.ExecuteCommand(strike,.01f); const auto snapshot=game.State().Save();
@@ -178,14 +179,14 @@ int main() {
   for (float rate : {30.f,60.f,144.f}) {
     CombatEffects effects; effects.Emit({K::Hit,{0,0},1,0}); effects.Emit({K::Strike,{0,0},0,0});
     effects.TrackWeapon(0,{0,0,0},{0,1,0});
-    for (int i=0;i<int(rate*.5f)+1;++i) effects.Advance(1/rate);
+    for (int i=0;i<int(rate*.9f)+1;++i) effects.Advance(1/rate);
     Require(effects.BurstCount()==0 && effects.TrailCount()==0,"Effect lifetime must be bounded at different update rates");
   }
   CombatEffects pool;
   pool.Emit({K::Mend,{0,0},0,0});
-  pool.Advance(.05f); pool.Advance(.05f);
+  pool.Advance(.05f);
   for (unsigned i=1;i<CombatEffects::maxBursts;++i) pool.Emit({K::Hit,{0,0},1,0});
-  for (int i=0;i<10;++i) pool.Advance(.05f);
+  for (int i=0;i<14;++i) pool.Advance(.05f);
   pool.Emit({K::Hit,{0,0},1,0});
   Require(pool.BurstCount()==2,"Expired short impacts must be reused before a still-active longer recovery pulse");
   pool.Reset();

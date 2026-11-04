@@ -60,7 +60,7 @@ void Layout() {
   Roundtrip(s);
   const auto before=s.Save();auto invalid=before;invalid.replace(invalid.find("WILDERNESS "),10,"WILDERNESS 1099511627776");
   Check(!s.Load(invalid) && s.Save()==before,"Invalid wilderness load must be atomic");
-  auto old=before;old.erase(old.find("WILDERNESS "));old.replace(14,2,"21");
+  auto old=before;old.erase(old.find("CHAINS "));old.replace(14,2,"21");
   Check(s.Load(old) && s.Beasts().size()==36 && s.HuntState(0)==0,"v21 population migration");
   const auto at=old.find('\n',old.find("PROFILE "))+1;
   old.replace(at,old.find('\n',at)-at,"-32 -35 100 0 0 0");

@@ -108,7 +108,15 @@ public:
   void DrawGroundMark(DirectX::XMFLOAT3 a,DirectX::XMFLOAT3 b,DirectX::XMFLOAT3 c,DirectX::XMFLOAT3 d,DirectX::XMFLOAT4 color);
   void DrawEffectRing(DirectX::XMFLOAT3 center,float radius,DirectX::XMFLOAT4 color);
   void DrawEffectStreak(DirectX::XMFLOAT3 from,DirectX::XMFLOAT3 to,float width,DirectX::XMFLOAT4 color);
-  unsigned EffectVertices() const { return effectVertices_+static_cast<unsigned>(effects_.size()+groundMarks_.size()); }
+  enum class EffectArt { Flame, Smoke, Dust, Ice, Arcane, Slash, Sparks, Seal };
+  // Half extents in metres. Cloud sprites use sorted alpha; luminous sprites
+  // share the additive batch. All share the existing per-frame vertex ceiling.
+  void DrawEffectSprite(EffectArt art,DirectX::XMFLOAT3 center,float width,float height,float rotation,
+    DirectX::XMFLOAT4 color,bool cloud=false);
+  void DrawEffectSurface(EffectArt art,DirectX::XMFLOAT3 a,DirectX::XMFLOAT3 b,DirectX::XMFLOAT3 c,
+    DirectX::XMFLOAT3 d,DirectX::XMFLOAT4 color);
+  std::size_t EffectTextureBytes() const {return effectTextureBytes_;}
+  unsigned EffectVertices() const { return effectVertices_+static_cast<unsigned>(effects_.size()+groundMarks_.size()+cloudSprites_.size()*6); }
   UINT LastDrawCalls() const { return lastDrawCalls_; }
   bool Capture(const std::wstring& path);
   bool ValidateDebugMessages();
@@ -116,11 +124,11 @@ public:
   int Height() const { return height_; }
   bool BeginPortrait(float x,float y,float width,float height,float closeup=0);
   bool EndPortrait();
-  UINT DrawCalls() const { return drawCalls_ + static_cast<UINT>((hud_.size()+16379)/16380) + UINT(!effects_.empty()); }
+  UINT DrawCalls() const { return drawCalls_ + static_cast<UINT>((hud_.size()+16379)/16380) + UINT(!effects_.empty())+UINT(!cloudSprites_.empty())+UINT(!groundMarks_.empty()); }
   void DrawHudRect(float x, float y, float width, float height, const DirectX::XMFLOAT4& color);
   void DrawHudGradient(float x,float y,float width,float height,DirectX::XMFLOAT4 top,DirectX::XMFLOAT4 bottom);
   void DrawHudTriangle(DirectX::XMFLOAT2 a,DirectX::XMFLOAT2 b,DirectX::XMFLOAT2 c,const DirectX::XMFLOAT4& color);
-  enum class UiArt { Frame, Hall, Icons };
+  enum class UiArt { Frame, Hall, Icons, CombatSpells, ClassSpells };
   // Artwork joins the existing HUD batch; no texture swaps or per-panel upload.
   void DrawUiArt(UiArt art,float x,float y,float width,float height,
     DirectX::XMFLOAT4 uv={0,0,1,1},DirectX::XMFLOAT4 tint={1,1,1,1});
@@ -182,10 +190,15 @@ private:
   std::vector<visual::Vertex> hud_;
   std::vector<visual::Vertex> effects_;
   std::vector<visual::Vertex> groundMarks_;
+  struct CloudSprite {std::array<visual::Vertex,6> vertices;float depth;};
+  std::vector<CloudSprite> cloudSprites_;
+  std::vector<visual::Vertex> cloudVertices_;
+  Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> effectAtlas_;
+  std::size_t effectTextureBytes_=0;
   unsigned effectVertices_=0;
   FontAtlas font_;
   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> mapView_;
-  std::array<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>,3> uiViews_;
+  std::array<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>,5> uiViews_;
   std::size_t uiBytes_=0;
   std::size_t mapBytes_ = 0;
   Microsoft::WRL::ComPtr<ID3D11SamplerState> fontSampler_;
@@ -206,6 +219,8 @@ private:
   Microsoft::WRL::ComPtr<IDXGISwapChain> swapChain_;
   Microsoft::WRL::ComPtr<ID3D11RenderTargetView> target_;
   Microsoft::WRL::ComPtr<ID3D11DepthStencilView> depth_;
+  Microsoft::WRL::ComPtr<ID3D11DepthStencilView> effectDepthView_;
+  Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> effectDepthResource_;
   Microsoft::WRL::ComPtr<ID3D11VertexShader> vertexShader_;
   Microsoft::WRL::ComPtr<ID3D11PixelShader> pixelShader_;
   Microsoft::WRL::ComPtr<ID3D11InputLayout> layout_;

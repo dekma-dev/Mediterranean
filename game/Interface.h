@@ -45,7 +45,7 @@ public:
   bool IsOpen(Panel next) const;
   bool HasPanels() const { return panel!=Panel::None || characterOpen || inventoryOpen; }
   std::uint64_t StateKey() const {
-    const std::uint64_t view=(unsigned(panel)*4+unsigned(characterOpen)*2+unsigned(inventoryOpen))*16+
+    const std::uint64_t view=(unsigned(panel)*4+unsigned(characterOpen)*2+unsigned(inventoryOpen))*32+
       unsigned(selectedSpell+1)*2+unsigned(confirmTalentReset);
     return (((((view*2+unsigned(loadoutsPage))*3+unsigned(pendingBuild.action))*262145+
       unsigned(previewBuild+1))*4+unsigned(selectedLoadout+1))*2+unsigned(talentPage))*2+unsigned(planningBuild);
@@ -86,6 +86,9 @@ public:
     if(spell<0 || spell>=int(rpg::spells.size()) || to<0 || to>=hotbarSlots || !rpg::ValidClass(id)) return;
     hotbars_[int(id)][to]=spell;
   }
+  void ClearHotbar(int slot,rpg::ClassId id) {
+    if(slot>=0 && slot<hotbarSlots && rpg::ValidClass(id)) hotbars_[int(id)][slot]=-1;
+  }
   // Central panels share one window; only the Esc menu captures movement.
   Panel panel=Panel::None;
   bool characterOpen=false,inventoryOpen=false;
@@ -115,8 +118,10 @@ private:
   DamageDirection damageDirection_;
   std::array<std::array<int,hotbarSlots>,int(rpg::ClassId::Count)> hotbars_=[] {
     std::array<std::array<int,hotbarSlots>,int(rpg::ClassId::Count)> bars{};
-    for(auto& bar:bars) bar={0,1,2,3,4,5,6,7,-1,-1,5,6,7,3,4,-1,-1,-1,-1,-1};
-    for(auto id:{rpg::ClassId::Warrior,rpg::ClassId::Mage,rpg::ClassId::Scout}) {bars[int(id)][8]=8;bars[int(id)][9]=9;bars[int(id)][15]=10;bars[int(id)][16]=11;} return bars;
+    for(auto& bar:bars) bar={0,1,2,3,4,5,6,7,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};
+    for(auto id:{rpg::ClassId::Warrior,rpg::ClassId::Mage,rpg::ClassId::Scout}) {
+      auto& bar=bars[int(id)];bar[8]=8;bar[9]=9;bar[10]=12;bar[11]=13;bar[12]=14;bar[15]=10;bar[16]=11;
+    } return bars;
   }();
   rpg::ClassId renderedClass_=rpg::ClassId::Warrior;
   int dragSpell_=-1,dragHotbar_=-1;

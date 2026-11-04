@@ -16,6 +16,8 @@ struct HandPose {
   DirectX::XMFLOAT3 Point(DirectX::XMFLOAT3 local) const;
 };
 DirectX::XMMATRIX WeaponFrame(const CharacterPose& pose);
+// Shield and palm share the solved forearm orientation and grip anchor.
+DirectX::XMMATRIX ShieldFrame(const CharacterPose& pose);
 HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool shield,float cast);
 // Spell release uses the same solved palm as drawing; an occupied offhand
 // emits beyond its shield face instead of hiding the trace inside equipment.

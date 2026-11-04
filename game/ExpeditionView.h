@@ -43,29 +43,5 @@ inline void Draw(Renderer& r,const rpg::Simulation& s,float time) {
       r.DrawEffectStreak(pos,{pos.x+.015f,pos.y+.05f,pos.z},.013f,{.78f,.34f,.08f,(1-phase)*.35f});
     }
   }
-  if(s.FrostFieldSeconds()<=0) return;
-  const auto center=s.FrostFieldPosition();
-  const float fade=std::min(1.f,s.FrostFieldSeconds()*2);
-  const auto ground=[&](float angle,float radius,float lift=0.f) -> DirectX::XMFLOAT3 {
-    const rpg::Vec2 p{center.x+std::sin(angle)*radius,center.z+std::cos(angle)*radius};
-    return {p.x,rpg::WorldMap::Height(p)+.06f+lift,p.z};
-  };
-  // A readable three-metre edge and branching ice fissures. Terrain-conforming
-  // segments remain shallow so hostile attack warnings stay visible above them.
-  for(int n=0;n<48;++n) {
-    const float a=n*6.2831853f/48,b=(n+1)*6.2831853f/48;
-    r.DrawEffectRibbon(ground(a,2.92f),ground(a,3),ground(b,3),ground(b,2.92f),{.20f,.50f,.72f,.24f*fade});
-  }
-  for(int ray=0;ray<12;++ray) {
-    const float a=ray*2.39996f;
-    r.DrawEffectRibbon(ground(a-.10f,1.2f),ground(a+.09f,1.2f),ground(a+.08f,2.65f),ground(a-.06f,2.55f),
-      {.28f,.53f,.64f,.10f*fade});
-    for(int segment=0;segment<4;++segment) {
-      const float radius=.35f+segment*.58f;
-      r.DrawEffectStreak(ground(a+.045f*std::sin(segment*3.f),radius),
-        ground(a+.045f*std::sin((segment+1)*3.f),radius+.58f),.035f,{.38f,.67f,.82f,.48f*fade});
-    }
-    for(float side:{-1.f,1.f}) r.DrawEffectStreak(ground(a,1.5f),ground(a+side*.20f,2.15f),.023f,{.3f,.59f,.75f,.38f*fade});
-  }
 }
 }

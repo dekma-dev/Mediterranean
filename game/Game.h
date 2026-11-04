@@ -6,6 +6,7 @@
 #include "game/Motion.h"
 #include "game/Animation.h"
 #include "game/CombatEffects.h"
+#include "game/SustainedEffects.h"
 #include "game/FootPlacement.h"
 #include "game/WorldView.h"
 #include "game/CharacterSelection.h"
@@ -48,6 +49,7 @@ public:
   float CameraPitch() const { return cameraPitch_; }
   float CameraHeight() const { return cameraHeight_; }
   const CombatEffects& Effects() const { return effects_; }
+  const SustainedEffects& Sustained() const { return sustained_; }
   const presentation::CreatureContacts& CreatureSteps() const { return creatureSteps_; }
   std::size_t StaticSceneInstances() const { return worldView_.StaticInstances(); }
   std::size_t StaticSceneBytes() const { return worldView_.StaticBytes(); }
@@ -72,6 +74,7 @@ private:
   facial::State playerFace_,keeperFace_,merchantFace_;
   animation::FootPlacement playerFeet_;
   CombatEffects effects_;
+  SustainedEffects sustained_;
   presentation::CreatureContacts creatureSteps_;
   motion::CameraBoom cameraBoom_;
   float cameraYaw_=0,cameraPitch_=.45f,cameraHeight_=1.4f;

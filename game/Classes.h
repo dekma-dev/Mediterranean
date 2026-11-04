@@ -144,6 +144,9 @@ inline float ClassRecoveryBarrier(ClassId id) {
 }
 inline bool AdvancedClass(ClassId id) {return id==ClassId::Warrior || id==ClassId::Mage || id==ClassId::Scout;}
 inline float AdvancedRate(ClassId id,int index) {
+ if(index==12) return id==ClassId::Warrior?1.05f:id==ClassId::Scout?.9f:.65f;
+ if(index==13) return id==ClassId::Warrior?.9f:id==ClassId::Scout?.65f:.65f;
+ if(index==14) return id==ClassId::Warrior?.65f:id==ClassId::Scout?.42f:.35f;
  if(index==10) return id==ClassId::Warrior?1.1f:id==ClassId::Scout?.7f:.85f;
  if(index==11) return id==ClassId::Warrior?.32f:id==ClassId::Scout?.15f:.12f;
  return index==8?(id==ClassId::Warrior?.70f:id==ClassId::Scout?.50f:.32f):
@@ -152,6 +155,25 @@ inline float AdvancedRate(ClassId id,int index) {
 inline SpellInfo ClassSpell(ClassId id,int index) {
  if(!ValidSpell(index)) return spells[0];
  auto result=spells[index];const auto& info=DescribeClass(id);
+ if(index>=12) {
+   result.range=info.range;
+   result.contact/=AdvancedRate(id,index);result.recovery/=AdvancedRate(id,index);
+   if(!AdvancedClass(id)) {result.name="Untrained discipline";result.description="This discipline is not available to this class.";return result;}
+   static constexpr const char* names[3][3]={{"Reverse cut","Crossguard","Crossing steel"},
+     {"Twin shot","Barbed arrow","Crossfire"},{"Ice needles","Arcane prism","Thermal rupture"}};
+   static constexpr const char* descriptions[3][3]={
+    {"A mobile 85% basic cut grants one Rage. Alternate with Strike on the same target within five seconds to build a chain. A successful alternation grants a six-point guard.",
+     "Level 3. A 55% heavy blow grants an 18-point ward and exposes for three seconds. Adds a chain step after either basic attack on the same target.",
+     "Level 4. Crossed cuts deal 115% heavy damage. A two-step chain adds 40% heavy damage and a 24-point ward; three steps add 60% and a 36-point ward. Consumes the chain on contact."},
+    {"A mobile paired volley deals 85% basic damage as one contact and grants one Focus. Alternate with Quick shot on the same target within five seconds to build a chain.",
+     "Level 3. A 55% heavy barbed arrow roots for two seconds and exposes for four. Adds a chain step after either basic shot on the same target.",
+     "Level 4. A mobile crossing volley deals 115% heavy damage. A two-step chain adds 40% heavy damage; three steps add 60%. A chained hit refreshes Disengage. Consumes the chain on contact."},
+    {"Mobile ice needles deal 85% basic damage, grant one Ember and slow for 2.5 seconds. Alternate with Ember on the same target within five seconds to build a chain.",
+     "Level 3. A mobile arcane prism deals 55% heavy damage and grants one Ember. Adds a chain step after either basic spell on the same target.",
+     "Level 4. A stationary fire-and-frost cast deals 115% heavy damage. A two-step chain adds 40% heavy damage; three steps add 60%. Consumes slow or root for another 35% heavy damage. Consumes the chain on contact."}};
+   const int row=id==ClassId::Warrior?0:id==ClassId::Scout?1:2;
+   result.name=names[row][index-12];result.description=descriptions[row][index-12];return result;
+ }
  if(index>=8) {
    result.range=info.range>3?info.range:3.2f;
    result.contact/=AdvancedRate(id,index);result.recovery/=AdvancedRate(id,index);

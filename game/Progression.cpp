@@ -156,6 +156,7 @@ void Simulation::DamagePlayer(float damage,float incomingFacing,float visualElap
   if (applied>0) EmitVisual(CombatVisualKind::Hurt,player_,height_+1.2f,incomingFacing,0,visualElapsed);
   if (Channeling()) { channelRemaining_=0; message_="Damage interrupted stabilization."; }
   if (health_==0) {
+    chain_.Clear();
     frostSeconds_=0;
     classResource_=0;barrier_=0;evasion_=0;
     target_=-1; height_=0; velocityY_=0; attackFlash_=0; StopMovement();
@@ -183,6 +184,7 @@ void Simulation::EndSparring(const char* result) {
 }
 
 void Simulation::Respawn() {
+  chain_.Clear();
   if(ReplayActive()) EndReplay(false);
   frostSeconds_=0;
   courtChannel_=0;courtChannelSite_=-1;
@@ -276,6 +278,7 @@ void Simulation::BeginReplay() {
   message_="Veteran rehearsal started. No XP or loot; health, potions and cooldowns are not refunded. Loading leaves the rehearsal.";
 }
 void Simulation::RestoreCampaignEncounter() {
+  chain_.Clear();
   enemies_=std::move(campaignEnemies_);replayChapter_=-1;
   expeditionMask_=courtSeals_=0;ritualStage_=0;ritualCharge_=courtChannel_=0;courtChannelSite_=-1;
   frostSeconds_=0;target_=-1;friendlyTarget_=-1;StopMovement();CancelAttack();CloseQuestDialogue();

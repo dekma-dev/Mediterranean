@@ -32,19 +32,28 @@ int main()try{
   auto bad=data;std::memcpy(bad.data()+24+12,&n,sizeof n);Reject(bad);
  }
  auto degenerate=data;std::memcpy(degenerate.data()+24+40,degenerate.data()+24,3*sizeof(float));Reject(degenerate);
- std::string garment;for(unsigned v:{0x31545747u,1u,3u,2u})Add(garment,v);
- for(unsigned part=0;part<3;++part)for(unsigned lod=0;lod<2;++lod) {
-  const unsigned count=unsigned(art[unsigned(classart::Part::WarriorSkirt)+part][lod].vertices.size());Add(garment,count);
-  for(unsigned v=0;v<count;++v)Add(garment,visual::SkinInfluence{{0,2,4,3},{.4f,.2f,.3f,.1f}});
+ std::string garment;for(unsigned v:{0x32545747u,2u,12u,2u})Add(garment,v);
+ for(unsigned part:{0u,1u,7u,8u,14u,15u,21u,22u,23u,24u,25u,26u}) {
+  Add(garment,part);
+  for(unsigned lod=0;lod<2;++lod) {
+   const unsigned count=unsigned(art[part][lod].vertices.size());Add(garment,count);
+   const auto influence=part>=21&&part<=23?visual::SkinInfluence{{0,2,4,3},{.4f,.2f,.3f,.1f}}:
+     visual::SkinInfluence{{0,1,6,7},{.2f,.4f,.3f,.1f}};
+   for(unsigned v=0;v<count;++v)Add(garment,influence);
+  }
  }
  const auto weights=classart::DecodeGarmentWeights(garment,art);
- Check(weights[0][0].size()==6 && weights[2][1].size()==3,"Garment LOD weights mismatch");
+ Check(weights[0][0].size()==6 && weights[23][1].size()==3 && weights[2][0].empty(),"Garment part/LOD weights mismatch");
  const auto rejectGarment=[&](const std::string& bad){bool rejected=false;try{classart::DecodeGarmentWeights(bad,art);}catch(const std::exception&){rejected=true;}Check(rejected,"Malformed garment weights accepted");};
  for(unsigned cut:{0u,15u,20u,unsigned(garment.size()-1)})rejectGarment(garment.substr(0,cut));
- auto badCount=garment;const unsigned count=100000;std::memcpy(badCount.data()+16,&count,4);rejectGarment(badCount);
- auto badBone=garment;const unsigned bone=31;std::memcpy(badBone.data()+20,&bone,4);rejectGarment(badBone);
+ for(unsigned part:{2u,27u,0xffffffffu}) {
+  auto bad=garment;std::memcpy(bad.data()+16,&part,4);rejectGarment(bad);
+ }
+ auto duplicate=garment;const unsigned firstPart=0;std::memcpy(duplicate.data()+316,&firstPart,4);rejectGarment(duplicate);
+ auto badCount=garment;const unsigned count=100000;std::memcpy(badCount.data()+20,&count,4);rejectGarment(badCount);
+ auto badBone=garment;const unsigned bone=10;std::memcpy(badBone.data()+24,&bone,4);rejectGarment(badBone);
  for(float value:{-.1f,1.1f,std::numeric_limits<float>::quiet_NaN(),.1f}) {
-  auto bad=garment;std::memcpy(bad.data()+36,&value,4);rejectGarment(bad);
+  auto bad=garment;std::memcpy(bad.data()+40,&value,4);rejectGarment(bad);
  }
  rejectGarment(garment+"x");
  std::cout<<"PASS: garment LOD/count, bone, finite normalization and truncation checks\n";

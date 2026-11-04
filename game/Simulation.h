@@ -1,4 +1,5 @@
 #pragma once
+#include "game/CombatChain.h"
 #include <array>
 #include <string>
 #include <vector>
@@ -123,6 +124,7 @@ struct CombatVisualEvent {
   Vec2 source{};
   float sourceHeight=0;
   bool heavy=false,empowered=false,technique=false,signature=false,opening=false;
+  int chain=0; // successful contact payoff, never speculative input
 };
 
 class Simulation {
@@ -153,6 +155,7 @@ public:
   const ExpeditionReport& ReplayReport() const { return replayReport_; }
   float ReplayReportTime() const { return replayReportTime_; }
   Vec2 FrostFieldPosition() const { return frostField_; }
+  static constexpr float frostFieldRadius=3.f;
   float FrostFieldSeconds() const { return frostSeconds_; }
   int EarnedPoints() const { return EarnedTalentPoints(Level()); }
   void Update(float seconds, const Command& command);
@@ -190,7 +193,7 @@ public:
   void StopMovement() { courtChannel_=0;courtChannelSite_=-1;queuedAttack_=-1; queueRemaining_=0; recoveryCast_=0; movementVelocity_={}; movementDistance_=groundMovementDistance_=0; jumpBuffer_=0; dashRemaining_=dashTravelLeft_=0; dashTarget_=0; CancelAttack(); }
   int QueuedAttack() const { return queuedAttack_; }
   bool CanBufferAttack(int index) const {
-    if(index<0 || index>1 || health_<=0 || Dashing() || CastingRecovery() || !TargetActor() || TargetActor()->health<=0) return false;
+    if((index!=0 && index!=1 && index!=12) || (index==12 && !AdvancedClass(class_)) || health_<=0 || Dashing() || CastingRecovery() || !TargetActor() || TargetActor()->health<=0) return false;
     const float remaining=Attacking()?(combat::Duration(HeavyAttack())-attackAge_)/AttackRate():0;
     const float wait=std::max(remaining,cooldowns_[index]);return wait>0 && wait<=.22f;
   }
@@ -202,7 +205,14 @@ public:
   bool OpeningAttack() const { return attackAbility_==7; }
   bool SignatureAttack() const { return attackAbility_==6; }
   bool TechniqueAttack() const { return attackAbility_==5; }
-  bool HeavyAttack() const { return attackAbility_==1 || attackAbility_==5 || attackAbility_==6 || attackAbility_>=8; }
+  bool HeavyAttack() const { return attackAbility_==1 || attackAbility_==5 || attackAbility_==6 || (attackAbility_>=8 && attackAbility_!=12); }
+  bool SteadyAttack(int index) const {
+    return CombatStyleInfo().steadyHeavy && (index==1 || index==5 || index==6 || index==9 || index==11 ||
+      ((index==8 || index==14) && class_==ClassId::Mage));
+  }
+  int ChainSteps() const {const auto* target=TargetActor();return target && target->health>0 && target->state!=EnemyState::Returning?chain_.Steps(target->id):0;}
+  float ChainSeconds() const {return ChainSteps()>0?chain_.remaining:0;}
+  bool ChainReady(int ability) const {return ChainSteps()>=2 && CombatChain::Finisher(ability);}
   float AttackSeconds() const { return Attacking()?attackAge_:-1.f; }
   float AttackProgress() const { return Attacking()?attackAge_/combat::Duration(HeavyAttack()):0; }
   float Health() const { return health_; }
@@ -232,7 +242,7 @@ public:
     return HasTalent(Talent::Executioner) && maximum>0 && health>0 && health<=maximum*.5f?1.25f:1.f;
   }
   float HeavyDamageAgainst(float health,float maximum) const { return HeavyDamage()*HeavyMultiplier(health,maximum); }
-  float AbilityCooldown(int index) const { return index>=5 && ValidSpell(index)?spells[index].cooldown:ValidSpell(index)?abilityCooldowns[index]-
+  float AbilityCooldown(int index) const { return index==12?spells[index].cooldown-BuildBonus(build_,&TalentInfo::basicCooldown):index>=5 && ValidSpell(index)?spells[index].cooldown:ValidSpell(index)?abilityCooldowns[index]-
     (index==3?BuildBonus(build_,&TalentInfo::mendCooldown):index==2?BuildBonus(build_,&TalentInfo::dashCooldown):
     index==1?BuildBonus(build_,&TalentInfo::heavyCooldown):BuildBonus(build_,&TalentInfo::basicCooldown)):0; }
   int DefeatedCount() const;
@@ -418,7 +428,8 @@ private:
   float landingSpeed_ = 0, landingElapsed_ = 0;
   bool damagedThisUpdate_ = false;
   bool jumpedThisUpdate_ = false, dashedThisUpdate_ = false;
-  std::array<float,12> cooldowns_{};
+  std::array<float,spells.size()> cooldowns_{};
+  CombatChain chain_;
   int target_ = -1, gold_ = 0;
   int friendlyTarget_=-1;
   std::array<Enemy,3> dummies_{};

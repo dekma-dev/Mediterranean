@@ -1,4 +1,7 @@
 {
+  "HOTBARS 8\n": "Versioned hotbar file header",
+  "CHAINS": "Versioned save cooldown record",
+  "CHAINS ": "Versioned save cooldown record",
   "Windowed startup did not preserve requested size/aspect or fit the desktop.": "Developer diagnostic/capture identifier; not a normal game UI message",
   "Startup window mismatch: client ": "Developer diagnostic/capture identifier; not a normal game UI message",
   ", expected ": "Developer diagnostic/capture identifier; not a normal game UI message",
