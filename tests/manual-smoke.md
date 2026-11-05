@@ -1,3 +1,40 @@
+## Four-class audio and combat opportunities (2026-11-05)
+
+- Restart the current Release launcher. Listen in character selection, enter the
+  world, return to character selection, Alt-Tab and mute/unmute each channel.
+  Menu/world themes should crossfade; world steps/combat/ambience must not leak
+  into character selection or continue while unfocused. The external launcher
+  is silent. Judge the two original synthesized scores for fatigue over several loops.
+- On Scout, compare Quick shot, Aimed shot and Twin shot: draw, string release
+  and spatial target contact should be separate. Cancel a heavy preparation;
+  its sound should fade without a release/hit. Walk over paving, grass, earth
+  and timber; compare quiet steps with landings and sword impacts.
+- On Mage, compare fire/frost/arcane preparation, moving projectiles and hits.
+  Heavy fire should have a larger material burst, frost visible shards and
+  arcane its own resonance. On Priest, compare golden ranged attacks with the
+  hand gathering/healing fan and choral completion. Watch from front, side and
+  normal combat distance, including eight-enemy pulls; danger borders must remain readable.
+- Warrior: use Iron guard just before a frontal hit, then Strike/Reverse cut.
+  Confirm one five-second riposte, bonus contact damage and ward. Rear hits or
+  late absorption must not prepare it. Heavy swings add effort while preserving
+  the existing sword impact. Watch body loading and bow release at 30/high Hz.
+- Mage: hit the same target with fire, frost and arcane, then move and commit a
+  normally stationary spell within eight seconds. It keeps its cast duration.
+  Failed range/visibility validation preserves readiness; accepted cancellation
+  spends it. Repeating fire alone must not fill all three school marks.
+- Scout: select a threat within nine metres and Disengage at least 1.5 m away.
+  The next Quick/Twin hit gains damage and a two-second slow. Try a short wall
+  obstruction, no target, cancellation and a missed shot. Only actual successful
+  travel grants the opportunity; misses do not spend the remaining five seconds.
+- Priest: finish Greater heal while injured, then Radiance/Rebuke within six
+  seconds. Confirm bonus damage and 18 ward. Interrupt healing and repeat at
+  full health: neither attempt should grant readiness. Load/die/respawn during
+  every class opportunity; transient bonuses and their VFX must clear.
+- Check the Russian status badge tooltip, remaining seconds and eligible hotbar
+  highlight with C/I/N/M/J open and closed. Compare the exported `mage-fire.wav`,
+  `scout-aimed.wav` and `priest-rebuke.wav` auditions with actual gameplay on
+  speakers/headphones. Automated PCM checks are not subjective sound approval.
+
 ## Cast preparation and attached recovery (2026-11-05)
 
 - On Mage, compare fire, frost, arcane and Thermal rupture preparation. Fragments

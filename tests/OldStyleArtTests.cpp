@@ -41,7 +41,7 @@ int main(int argc,char** argv){try {
    const auto& v=garment.vertices[i];const auto skinned=visual::SkinVertex(v,weights[i],palette);
    Check(std::isfinite(skinned.position.x)&&std::isfinite(skinned.position.y)&&std::isfinite(skinned.position.z),"Nonfinite garment skinning");
    if(v.position.y>.99f) {
-    const XMFLOAT3 anchor{v.position.x+pose.bodyShift,v.position.y+pose.bodyLift,v.position.z};
+    const auto anchor=pose.PelvisPoint(v.position);
     Check(XMVectorGetX(XMVector3Length(XMLoadFloat3(&skinned.position)-XMLoadFloat3(&anchor)))<.001f,"Garment waist detached from pelvis");++waist;
    }
    if(v.position.y<.77f)hemTravel=std::max(hemTravel,std::abs(skinned.position.z-v.position.z));
@@ -150,12 +150,13 @@ int main(int argc,char** argv){try {
    animation::Sample sample;sample.authoredGait=true;sample.authoredBlend=1;
    sample.authoredEquipment=cls==0?playerclips::Equipment::Sword:cls==1?playerclips::Equipment::Bow:playerclips::Equipment::Staff;
    sample.authoredStrike=controller.frame;sample.authoredStrikeWeight=controller.weight;sample.authoredStrikePhase=controller.phase;sample.authoredStrikeHeavy=heavy;
-   if(tick%3)continue;
+   if(tick>=30&&tick%3)continue;
    renderer.BeginFrame();renderer.SetCamera({-2.8f,1.55f,-3.7f},{0,1.02f,0});
    renderer.DrawMesh(visual::Mesh::Box,{0,-.04f,0},{8,.08f,8},{.27f,.25f,.21f,1},visual::Material::Stone);
    DrawCharacter(renderer,{0,0},0,XM_PI,{.32f,.30f,.25f,1},0,0,kit,sample,1);
    const auto path=folder/("attack-"+std::to_string(cls)+(heavy?"-heavy-":"-basic-")+std::to_string(tick/3)+".png");
-   Check(renderer.Capture(path.wstring())&&renderer.EndFrame(false)&&renderer.ValidateDebugMessages(),"Native class attack capture");
+   if(tick<30)Check(renderer.Capture((folder/("attack-detail-"+std::to_string(cls)+(heavy?"-heavy-":"-basic-")+std::to_string(tick)+".png")).wstring()),"Native 60 Hz preparation/contact capture");
+   Check((tick%3||renderer.Capture(path.wstring()))&&renderer.EndFrame(false)&&renderer.ValidateDebugMessages(),"Native class attack capture");
   }
  }
  // Real presentation controllers: idle -> carry walk/run -> attack -> settle.

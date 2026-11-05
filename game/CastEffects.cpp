@@ -99,6 +99,14 @@ void Prepare(Renderer& r,const rpg::Simulation& state,const Attachments& a){
    r.DrawEffectStreak(p,Mix(p,a.focus,.24f),.010f,{.67f,.82f,.73f,power*std::sin(u*pi)*.55f});}
   return;
  }
+ if(id==C::Priest){
+  const float radius=.20f+power*.20f;
+  Panel(r,a,Art::Seal,a.focus,radius,radius,-age*.5f,{1,.84f,.4f,power*.65f});
+  for(int n=0;n<6;++n){const float angle=n*tau/6+age*.4f;const auto p=Local(a,a.focus,std::cos(angle)*radius*1.4f,std::sin(angle)*radius*1.4f);
+   Stream(r,a,p,a.focus,.045f,age*3,power,{1,.94f,.72f,.7f},6);}
+  Stream(r,a,a.right,a.focus,.16f,age*3,power,{1,.83f,.46f,.65f});
+  if(state.HeavyAttack())Seal(r,a,.70f+power*.2f,0,{1,.83f,.4f,power*.26f});return;
+ }
  const bool mage=id==C::Mage,frost=mage && (ability==5 || ability==6 || ability==8 || ability==12),arcane=mage && (ability==10 || ability==13),thermal=mage && ability==14;
  const bool large=mage && (ability==8 || ability==9 || ability==11 || thermal);
  const auto color=frost?XMFLOAT4{.42f,.78f,1,.75f}:arcane?XMFLOAT4{.73f,.48f,1,.72f}:classfx::Color(id,.75f);
@@ -115,7 +123,7 @@ void Prepare(Renderer& r,const rpg::Simulation& state,const Attachments& a){
   else if(mage && !arcane)r.DrawEffectSprite(Art::Flame,p,.07f*scale,.12f*scale,-angle*.12f,{1,.84f,.55f,tint.w*.85f},true);
   else r.DrawEffectSprite(Art::Arcane,p,.065f*scale,.065f*scale,angle,tint);
  }
- const float radius=(.09f+.13f*power)*scale;
+ const float radius=(mage?.14f+.22f*power:.09f+.13f*power)*scale;
  if(frost){
   Panel(r,a,Art::Ice,a.focus,radius*.45f,radius*1.15f,age*.25f,{.60f,.85f,1,power*.9f});
   for(int n=0;n<6;++n){const float angle=n*tau/6+age*.45f;
@@ -130,6 +138,63 @@ void Prepare(Renderer& r,const rpg::Simulation& state,const Attachments& a){
   Seal(r,a,.62f+power*.33f,age*.15f,{footColor.x,footColor.y,footColor.z,power*.32f});
   for(int band=0;band<2;++band)Orbit(r,a,.50f+power*.18f,.24f+band*.45f,age*(band?-1.f:1.f)+band*pi,pi*1.15f,.019f,
     {band && thermal?cool.x:color.x,band && thermal?cool.y:color.y,band && thermal?cool.z:color.z,power*.36f},18);
+ }
+}
+void Discipline(Renderer& r,const rpg::Simulation& s,const Attachments& a,float clock){
+ if(!Valid(a) || !rpg::HasDiscipline(s.Class()))return;
+ const float remaining=s.DisciplineSeconds(),duration=s.Class()==C::Mage?8.f:s.Class()==C::Priest?6.f:5.f;
+ const float fade=combat::Smooth((duration-remaining)/.12f)*combat::Smooth(remaining/.18f);
+ if(s.Class()==C::Warrior){
+  if(s.GuardWindow()>0)Panel(r,a,Art::Slash,a.left,.18f,.36f,-.2f,{.8f,.85f,1,combat::Smooth(s.GuardWindow()/.12f)*.48f});
+  if(remaining>0)for(float side:{-1.f,1.f}){
+   const auto p=Local(a,a.right,side*.10f,.10f,0);
+   Panel(r,a,Art::Slash,p,.065f,.26f,side*.35f,{1,.73f,.38f,fade*(.48f+.12f*std::sin(clock*5))});}
+ }else if(s.Class()==C::Priest){
+  if(remaining<=0)return;
+  for(const auto p:{a.left,a.right}){Panel(r,a,Art::Seal,p,.19f,.19f,clock*.3f,{1,.85f,.44f,fade*.65f});
+   r.DrawEffectStreak(Local(a,p,0,-.15f),Local(a,p,0,.27f),.025f,{1,.94f,.72f,fade*.6f});}
+ }else if(s.Class()==C::Scout){
+  if(remaining<=0)return;
+  for(int n=0;n<3;++n){const auto p=Local(a,a.focus,(n-1)*.12f,.02f*std::sin(clock*4+n),-.10f);
+   const auto end=Local(a,p,0,.16f,.10f);
+   r.DrawEffectStreak(p,end,.014f,{.65f,.91f,.70f,fade*.75f});
+   r.DrawEffectStreak(Local(a,p,-.035f,.07f),end,.009f,{.85f,.95f,.74f,fade*.55f});}
+ }else{
+  const bool casting=s.ConfluenceCast() && s.AttackSeconds()<combat::StrokeStart(s.HeavyAttack());
+  const unsigned mask=remaining>0 || casting?7:s.ElementMask();
+  const XMFLOAT4 colors[]={{1,.40f,.10f,1},{.40f,.78f,1,1},{.75f,.46f,1,1}};
+  const auto center=casting?a.focus:Local(a,a.root,0,1.18f,0);
+  for(int n=0;n<3;++n)if(mask&(1u<<n)){
+   const float angle=clock*.75f+n*tau/3,rr=casting?.32f:.57f;
+   const auto p=Local(a,center,std::cos(angle)*rr,.15f*std::sin(angle),std::sin(angle)*rr);
+   auto color=colors[n];color.w=casting?.75f:remaining>0?fade*.70f:.38f;
+   r.DrawEffectSprite(n==0?Art::Flame:n==1?Art::Ice:Art::Arcane,p,.065f,.13f,-angle,color,n==0);
+   if(remaining>0 || casting)Stream(r,a,p,center,.06f,clock+n,.55f,color,6);
+  }
+ }
+}
+void DisciplinePulse(Renderer& r,const rpg::CombatVisualEvent& e,float age,const Attachments* caster){
+ if(age<=0 || age>=.65f || !std::isfinite(age))return;
+ if(e.actor==0 && caster && !Valid(*caster))return;
+ const float t=age/.65f,fade=combat::Smooth(age/.045f)*(1-combat::Smooth(t));
+ auto a=caster && e.actor==0?*caster:Preview({e.position.x,e.height-1.f,e.position.z},{e.position.x,e.height,e.position.z},e.facing);
+ const auto p=e.actor?XMFLOAT3{e.position.x,e.height,e.position.z}:e.school==C::Warrior?a.right:e.school==C::Scout?a.focus:Local(a,a.root,0,1.1f,0);
+ if(e.school==C::Priest){
+  for(int n=0;n<6;++n){const float angle=n*tau/6;const auto tip=Local(a,p,std::cos(angle)*(.25f+t*.45f),std::sin(angle)*(.25f+t*.65f));
+   r.DrawEffectStreak(p,tip,.028f,{1,.90f,.57f,fade*.8f});}
+  Panel(r,a,Art::Seal,p,.28f+t*.30f,.28f+t*.30f,0,{1,.85f,.4f,fade*.45f});
+ }else if(e.school==C::Mage){
+  const XMFLOAT4 colors[]={{1,.45f,.17f,fade*.7f},{.45f,.80f,1,fade*.7f},{.74f,.43f,1,fade*.7f}};
+  for(int n=0;n<3;++n){const float angle=n*tau/3+age*1.5f;const auto tip=Local(a,p,std::cos(angle)*(.25f+t*.38f),std::sin(angle)*(.25f+t*.38f));
+   Panel(r,a,Art::Seal,tip,.11f,.11f,angle,colors[n]);Stream(r,a,p,tip,.08f,age*4,.8f,colors[n],8);}
+ }else if(e.school==C::Warrior){
+  for(float side:{-1.f,1.f})Panel(r,a,Art::Slash,p,.12f,.30f+t*.25f,side*.65f,{1,.77f,.43f,fade*.75f});
+  for(int n=0;n<8;++n){const float angle=n*tau/8;const auto tip=Local(a,p,std::cos(angle)*age,.08f+std::sin(angle)*age-age*age);
+   r.DrawEffectSprite(Art::Sparks,tip,.035f,.09f,angle,{1,.77f,.42f,fade*.8f});}
+ }else if(e.school==C::Scout){
+  for(int n=0;n<5;++n){const float x=(n-2)*(.07f+t*.10f);const auto base=Local(a,p,x,-.15f+t*.20f,-t*.15f);
+   r.DrawEffectStreak(base,Local(a,base,x*.3f,.28f,.14f),.019f,{.66f,.9f,.72f,fade*.72f});}
+  r.DrawEffectSprite(Art::Smoke,p,.22f+t*.25f,.12f+t*.12f,0,{.58f,.68f,.57f,fade*.13f},true);
  }
 }
 void Complete(Renderer& r,const rpg::CombatVisualEvent& e,float age,const Attachments& a){
@@ -155,7 +220,7 @@ void Complete(Renderer& r,const rpg::CombatVisualEvent& e,float age,const Attach
   for(int n=0;n<3;++n)r.DrawEffectSprite(Art::Smoke,Local(a,a.root,std::sin(n*2.1f)*.35f,.20f+age*.3f,std::cos(n*2.1f)*.35f),.42f,.24f,float(n),{.57f,.73f,.86f,fade*.28f},true);return;
  }
  if(e.school==C::Priest || e.school==C::Paladin){
-  const float span=e.school==C::Priest?.70f:.48f;
+  const float span=e.school==C::Priest?.92f:.48f;
   Seal(r,a,.70f+t*.15f,0,{1,.80f,.32f,fade*.56f});
   for(float side:{-1.f,1.f})for(int n=0;n<4;++n){const auto base=Local(a,chest,side*.18f,.02f+n*.10f,0);
    const auto tip=Local(a,chest,side*(span+n*.11f),.22f+n*.13f+age*.16f,-.10f);

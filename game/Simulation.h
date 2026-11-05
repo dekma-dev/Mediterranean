@@ -1,5 +1,6 @@
 #pragma once
 #include "game/CombatChain.h"
+#include "game/ClassDiscipline.h"
 #include <array>
 #include <string>
 #include <vector>
@@ -110,7 +111,7 @@ struct ExpeditionReport {
 };
 
 // One-update presentation events. Never serialized or used to resolve combat.
-enum class CombatVisualKind { Strike, HeavyStrike, EnemySwing, Hit, HeavyHit, Hurt, Interrupt, Mend, Potion, DashStart, DashStop, DashImpact,SpellCast,BarrierHit,CastStart,UiClick,ReserveReady,CastCancelled,EnemyLance,EnemyQuake,EnemyTempest,EnemyExecution,EnemyPrepare,BossPrepare,BeastBite,BeastCharge };
+enum class CombatVisualKind { Strike, HeavyStrike, EnemySwing, Hit, HeavyHit, Hurt, Interrupt, Mend, Potion, DashStart, DashStop, DashImpact,SpellCast,BarrierHit,CastStart,UiClick,ReserveReady,CastCancelled,EnemyLance,EnemyQuake,EnemyTempest,EnemyExecution,EnemyPrepare,BossPrepare,BeastBite,BeastCharge,DisciplineReady,DisciplineSpent };
 struct CombatVisualEvent {
   CombatVisualKind kind = CombatVisualKind::Hit;
   Vec2 position;
@@ -127,6 +128,7 @@ struct CombatVisualEvent {
   bool heavy=false,empowered=false,technique=false,signature=false,opening=false;
   int chain=0; // successful contact payoff, never speculative input
   float destinationHeight=1.25f; // relative to ground, captured from the committed target
+  bool discipline=false; // accepted class opportunity, not speculative input
 };
 
 class Simulation {
@@ -192,7 +194,7 @@ public:
   float MovementDistance() const { return movementDistance_; } // excludes dash/respawn
   Vec2 MovementVelocity() const { return movementVelocity_; }
   float GroundMovementDistance() const { return groundMovementDistance_; }
-  void StopMovement() { courtChannel_=0;courtChannelSite_=-1;queuedAttack_=-1; queueRemaining_=0; recoveryCast_=0; movementVelocity_={}; movementDistance_=groundMovementDistance_=0; jumpBuffer_=0; dashRemaining_=dashTravelLeft_=0; dashTarget_=0; CancelAttack(); }
+  void StopMovement() { courtChannel_=0;courtChannelSite_=-1;queuedAttack_=-1; queueRemaining_=0; recoveryCast_=0; movementVelocity_={}; movementDistance_=groundMovementDistance_=0; jumpBuffer_=0; dashRemaining_=dashTravelLeft_=0; dashTarget_=retreatThreat_=0; CancelAttack(); }
   int QueuedAttack() const { return queuedAttack_; }
   bool CanBufferAttack(int index) const {
     if((index!=0 && index!=1 && index!=12) || (index==12 && !AdvancedClass(class_)) || health_<=0 || Dashing() || CastingRecovery() || !TargetActor() || TargetActor()->health<=0) return false;
@@ -208,10 +210,18 @@ public:
   bool SignatureAttack() const { return attackAbility_==6; }
   bool TechniqueAttack() const { return attackAbility_==5; }
   bool HeavyAttack() const { return attackAbility_==1 || attackAbility_==5 || attackAbility_==6 || (attackAbility_>=8 && attackAbility_!=12); }
-  bool SteadyAttack(int index) const {
+  bool NormallySteadyAttack(int index) const {
     return CombatStyleInfo().steadyHeavy && (index==1 || index==5 || index==6 || index==9 || index==11 ||
       ((index==8 || index==14) && class_==ClassId::Mage));
   }
+  bool SteadyAttack(int index) const {return NormallySteadyAttack(index) &&
+    !(class_==ClassId::Mage && (discipline_.ready>0 || (Attacking() && attackAbility_==index && attackConfluence_)));}
+  float DisciplineSeconds() const {return std::max(0.f,discipline_.ready);}
+  float GuardWindow() const {return std::max(0.f,discipline_.guard);}
+  unsigned ElementMask() const {return class_==ClassId::Mage && discipline_.elements>0 && TargetActor() &&
+    TargetActor()->id==discipline_.target && TargetActor()->health>0 && TargetActor()->state!=EnemyState::Returning?discipline_.mask:0;}
+  bool ConfluenceCast() const {return Attacking() && attackConfluence_;}
+  bool DisciplineReady(int ability) const {return DisciplineSeconds()>0 && (class_==ClassId::Mage?NormallySteadyAttack(ability):class_==ClassId::Priest?ability==0 || ability==1:ability==0 || ability==12);}
   int ChainSteps() const {const auto* target=TargetActor();return target && target->health>0 && target->state!=EnemyState::Returning?chain_.Steps(target->id):0;}
   float ChainSeconds() const {return ChainSteps()>0?chain_.remaining:0;}
   bool ChainReady(int ability) const {return ChainSteps()>=2 && CombatChain::Finisher(ability);}
@@ -384,7 +394,7 @@ private:
   void ResolveAttack(float elapsed);
   void ResolveContact(Enemy& enemy,float elapsed);
   void UpdateCombat(float dt,bool advanceAttack);
-  void CancelAttack() { attackAbility_=-1; attackAge_=attackDamage_=attackFlash_=0; attackTarget_=0; attackEmpowered_=false; }
+  void CancelAttack() { attackAbility_=-1; attackAge_=attackDamage_=attackFlash_=0; attackTarget_=0; attackEmpowered_=attackConfluence_=false; }
   void LearnTalent(int index);
   void ResetTalents();
   void ChangeBuild(const BuildCommand& command);
@@ -432,6 +442,10 @@ private:
   bool jumpedThisUpdate_ = false, dashedThisUpdate_ = false;
   std::array<float,spells.size()> cooldowns_{};
   CombatChain chain_;
+  ClassDiscipline discipline_;
+  bool attackConfluence_=false;
+  EntityId retreatThreat_=0;
+  Vec2 retreatOrigin_{},retreatThreatPosition_{};
   int target_ = -1, gold_ = 0;
   int friendlyTarget_=-1;
   std::array<Enemy,3> dummies_{};

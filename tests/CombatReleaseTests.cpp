@@ -61,14 +61,15 @@ void Native(Renderer& r,const std::filesystem::path& out){
    }
   }
  }
- for(auto id:{ClassId::Mage,ClassId::Scout})for(int ability:{0,1,5,12,13,14})for(float age:{.02f,.10f,.22f,.29f}){
+ for(auto id:{ClassId::Mage,ClassId::Scout,ClassId::Priest})for(int ability:{0,1,5,12,13,14})for(float age:{.02f,.10f,.22f,.29f}){
+  if(id==ClassId::Priest && ability>=8)continue;
   CombatVisualEvent e;e.kind=K::SpellCast;e.school=id;e.ability=ability;e.heavy=ability!=0 && ability!=12;
   e.position={-2,0};e.destination={2,2};e.flight=.24f;e.facing=.78f;const XMFLOAT3 origin{-2,1.35f,0};
   CombatEffects fx;fx.Emit(e,&origin);Tick(fx,age,60);begin();fx.Render(r);Check(r.EffectVertices()<1200,"Projectile over budget");
   Capture(r,out/("flight-"+std::to_string(int(id))+"-"+std::to_string(ability)+"-"+std::to_string(int(age*1000))+".png"));
  }
- for(auto id:{ClassId::Mage,ClassId::Scout}){
-  CombatVisualEvent e;e.kind=K::SpellCast;e.school=id;e.ability=14;e.flight=.24f;e.destination={2,2};
+ for(auto id:{ClassId::Mage,ClassId::Scout,ClassId::Priest}){
+  CombatVisualEvent e;e.kind=K::SpellCast;e.school=id;e.ability=id==ClassId::Priest?1:14;e.flight=.24f;e.destination={2,2};
   const XMFLOAT3 origin{-2,1.35f,0};Pixels first;
   for(int hz:{30,60,144}){CombatEffects fx;fx.Emit(e,&origin);Tick(fx,.13f,hz);begin();fx.Render(r);
    auto p=Capture(r,out/("flight-equal-"+std::to_string(int(id))+"-"+std::to_string(hz)+".png"));
@@ -97,13 +98,17 @@ void World(Renderer& r,const std::filesystem::path& out){
   Check(a==b && saved==game.State().Save(),"Rendering mutates release/gameplay");
   Check(game.RestoreSnapshot(Hero(ClassId::Warrior).Save()) && game.Effects().BurstCount()==0,"Load retained release");
  }
- for(auto id:{ClassId::Mage,ClassId::Scout})for(int ability:{0,5,13,14}){
+ for(auto id:{ClassId::Mage,ClassId::Scout,ClassId::Priest})for(int ability:{0,1,5,13,14}){
+  if(id==ClassId::Priest && ability>=8)continue;
   Game game;game.Initialize();Check(game.RestoreSnapshot(Hero(id).Save()),"Player release fixture");
   auto& enemy=const_cast<Enemy&>(game.State().Enemies()[0]);enemy.position={-4,10.5f};enemy.home=enemy.position;enemy.attackCooldown=100;enemy.health=500;
   game.SetCameraOrbit(1.1f,.45f,8);Command cast;cast.selectActor=100;cast.ability=ability;game.ExecuteCommand(cast,.001f);
   bool released=false;for(int n=0;n<600 && !released;++n){game.ExecuteCommand({},1.f/120);for(std::size_t i=0;i<game.State().VisualEventCount();++i)released|=game.State().VisualEvents()[i].kind==K::SpellCast;}
   Check(released,"Actual player release missing");game.ExecuteCommand({},.025f);
   r.BeginFrame();game.Render(r);Capture(r,out/("world-player-release-"+std::to_string(int(id))+"-"+std::to_string(ability)+".png"));
+  bool contact=false;for(int n=0;n<200 && !contact;++n){game.ExecuteCommand({},.01f);for(std::size_t i=0;i<game.State().VisualEventCount();++i){const auto k=game.State().VisualEvents()[i].kind;contact|=k==K::Hit || k==K::HeavyHit;}}
+  Check(contact,"Released spell never reached target");game.ExecuteCommand({},.08f);
+  r.BeginFrame();game.Render(r);Capture(r,out/("world-player-contact-"+std::to_string(int(id))+"-"+std::to_string(ability)+".png"));
   for(int n=0;n<100;++n)game.ExecuteCommand({},.01f);
   Check(game.RestoreSnapshot(Hero(id).Save()),"Cancel fixture");cast={};cast.selectActor=100;cast.ability=1;game.ExecuteCommand(cast,.001f);
   cast={};cast.haltMovement=true;game.ExecuteCommand(cast,.001f);Check(game.Effects().BurstCount()==0,"Cancelled preparation emitted release");

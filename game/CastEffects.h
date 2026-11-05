@@ -15,4 +15,6 @@ Attachments FromPose(const CharacterPose&,DirectX::XMFLOAT3 root,float facing,rp
 Attachments Preview(DirectX::XMFLOAT3 root,DirectX::XMFLOAT3 focus,float facing);
 void Prepare(Renderer&,const rpg::Simulation&,const Attachments&);
 void Complete(Renderer&,const rpg::CombatVisualEvent&,float age,const Attachments&);
+void Discipline(Renderer&,const rpg::Simulation&,const Attachments&,float clock);
+void DisciplinePulse(Renderer&,const rpg::CombatVisualEvent&,float age,const Attachments*);
 }

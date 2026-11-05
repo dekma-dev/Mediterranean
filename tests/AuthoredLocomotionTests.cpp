@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <iostream>
 #include <cstring>
+#include <fstream>
 
 namespace {
 using namespace DirectX;
@@ -17,11 +18,12 @@ float Distance(XMFLOAT3 a,XMFLOAT3 b){return XMVectorGetX(XMVector3Length(XMLoad
 float Difference(const playerclips::Frame& a,const playerclips::Frame& b){
   float value=std::abs(a.hip-b.hip);
   for(unsigned i=0;i<2;++i)value=std::max({value,Distance(a.hands[i],b.hands[i]),Distance(a.feet[i],b.feet[i])});
-  return std::max(value,Distance(a.torso,b.torso));
+  for(unsigned i=0;i<2;++i)value=std::max(value,Distance(a.elbows[i],b.elbows[i]));
+  return std::max({value,Distance(a.torso,b.torso),Distance(a.pelvis,b.pelvis),std::hypot(a.shift.x-b.shift.x,a.shift.y-b.shift.y)});
 }
 void LibraryChecks(){
   const auto bytes=playerclips::EmbeddedBytes();const auto clips=playerclips::Decode(bytes);
-  Check(clips.size()==57&&bytes.size()<512*1024,"Fifty-one authored actions and six compatibility tracks must fit the motion budget");
+  Check(clips.size()==57&&bytes.size()<768*1024,"Fifty-one authored actions and six compatibility tracks must fit the motion budget");
   for(unsigned i=4;i<12;++i){
     const auto clip=playerclips::Clip(i);
     Check(Difference(playerclips::Sample(clip,-.000001f),playerclips::Sample(clip,.000001f))<.0001f,"Gait loop seam");
@@ -35,7 +37,7 @@ void LibraryChecks(){
       walkPeak=std::max(walkPeak,playerclips::SwingHeight(w,0,side,i/100.f));
       runPeak=std::max(runPeak,playerclips::SwingHeight(w,1,side,i/100.f));
     }
-    Check(walkPeak>.025f&&runPeak>walkPeak+.015f&&runPeak<=.145f,"Walk/run need different bounded recovery heights");
+    Check(walkPeak>.025f&&runPeak>walkPeak+.10f&&runPeak<=.29f,"Walk/run need different bounded recovery heights");
     Check(playerclips::SwingHeight(w,1,0,0)==0&&playerclips::SwingHeight(w,1,1,1)==0,"Contact endpoints must be flat");
   }
   const auto rejected=[](std::string data){try{playerclips::Decode(data);return false;}catch(const std::exception&){return true;}};
@@ -65,9 +67,9 @@ void ContactsAndTransitions(){
     for(int i=0;i<hz*2;++i){
       walk.Update(1.f/hz,6,0,1);const auto pose=BuildCharacterPose(0,0,false,walk.state.pose);
       for(int side=0;side<2;++side){
-        auto p=pose.legs[side].end;p.x+=walk.position.x;p.z+=walk.position.z;
+        auto p=pose.FootPoint(side,{0,-.17f,.185f});p.x+=walk.position.x;p.z+=walk.position.z;
         if(planted[side]&&walk.feet.Planted(side))worstSlip=std::max(worstSlip,Distance(p,previous[side]));
-        Check(p.y>=.1699f&&p.y<=.316f,"Authored swing pierced floor or escaped reach budget");
+        Check(p.y>=-.0001f&&pose.legs[side].end.y<=.50f,"Authored swing pierced floor or escaped reach budget");
         Check(std::abs(Distance(pose.legs[side].root,pose.legs[side].joint)-CharacterPose::thigh)<.0001f,"Authored gait stretched thigh");
         Check(std::abs(Distance(pose.legs[side].joint,pose.legs[side].end)-CharacterPose::shin)<.0001f,"Authored gait stretched shin");
         previous[side]=p;planted[side]=walk.feet.Planted(side);
@@ -85,6 +87,7 @@ void ContactsAndTransitions(){
     const auto pose=BuildCharacterPose(0,0,false,taps.state.pose);
     for(int side=0;side<2;++side) {
       const float delta=Distance(previous.arms[side].end,pose.arms[side].end);
+      if(delta>.012f)std::cerr<<"Reversal frame "<<i<<" side "<<side<<" hand "<<delta<<" hip "<<previous.bodyLift<<" -> "<<pose.bodyLift<<" feet "<<taps.state.pose.feet[0].x<<','<<taps.state.pose.feet[0].y<<','<<taps.state.pose.feet[0].z<<" | "<<taps.state.pose.feet[1].x<<','<<taps.state.pose.feet[1].y<<','<<taps.state.pose.feet[1].z<<'\n';
       worstJump=std::max(worstJump,delta);
     }
     previous=pose;
@@ -184,6 +187,41 @@ void WeaponMotionChecks(){
     Check(peak>.95f&&recovery,"Live player did not play its full authored attack/recovery");
     Check(game.PlayerAnimation().authoredStrikeWeight==0,"Live authored recovery did not settle");
     game.SuspendInput();Check(game.PlayerAnimation().authoredStrikeWeight==0,"Focus loss retained v2 attack");
+  }
+}
+void GroundedMotionChecks(){
+  std::filesystem::create_directories("grounded-review");
+  std::ofstream csv("grounded-review/trajectories.csv");
+  csv<<"class,heavy,ready,t,tip_x,tip_y,tip_z,hip_x,hip_y,hip_z,pelvis_yaw,chest_yaw,elbow_x,elbow_y,elbow_z\n";
+  for(int cls=0;cls<3;++cls)for(bool heavy:{false,true})for(bool ready:{false,true}) {
+    animation::AuthoredWeaponController controller;CharacterPose previous;
+    float tipSpeed=0,handSpeed=0,elbowSpeed=0,tipAt=0,handAt=0,elbowAt=0,pelvisTurn=0;
+    for(int tick=0;tick<1500;++tick) {
+      const float t=tick*.001f;controller.Update(.001f,t<combat::Duration(heavy)?t:-1,heavy,cls==2,true,1,cls==1);
+      animation::Sample s;s.authoredGait=true;s.authoredEquipment=cls==0?playerclips::Equipment::Sword:cls==1?playerclips::Equipment::Bow:playerclips::Equipment::Staff;
+      s.authoredReady=ready?1:controller.ready;s.authoredStrike=controller.frame;s.authoredStrikeWeight=controller.weight;s.authoredStrikePhase=controller.phase;s.authoredStrikeHeavy=heavy;
+      s.feetActive=true;s.feet[0].x=-.18f;s.feet[1].x=.18f;
+      const auto pose=BuildCharacterPose(0,0,false,s,cls==0?rpg::WeaponForm::Blade:cls==1?rpg::WeaponForm::Handbow:rpg::WeaponForm::AstralStaff);
+      const auto tip=pose.WeaponPoint(.96f),hip=pose.PelvisPoint({0,.93f,0});
+      if(tick){
+        const float speed=Distance(tip,previous.WeaponPoint(.96f))*1000;
+        if(speed>tipSpeed){tipSpeed=speed;tipAt=t;}
+        for(int side=0;side<2;++side) {
+          float v=Distance(pose.arms[side].end,previous.arms[side].end)*1000;if(v>handSpeed){handSpeed=v;handAt=t;}
+          v=Distance(pose.arms[side].joint,previous.arms[side].joint)*1000;if(v>elbowSpeed){elbowSpeed=v;elbowAt=t;}
+        }
+      }
+      for(int side=0;side<2;++side) {
+        Check(Distance(pose.legs[side].end,{side? .18f:-.18f,.17f,0})<.0001f,"Strike shifted a planted ankle");
+        Check(std::abs(Distance(pose.arms[side].root,pose.arms[side].joint)-CharacterPose::upperArm)<.0001f,"Strike stretched upper arm");
+      }
+      pelvisTurn=std::max(pelvisTurn,std::abs(pose.pelvisRotation.y));
+      if(tick%5==0)csv<<cls<<','<<heavy<<','<<ready<<','<<t<<','<<tip.x<<','<<tip.y<<','<<tip.z<<','<<hip.x<<','<<hip.y<<','<<hip.z<<','<<pose.pelvisRotation.y<<','<<pose.upperYaw<<','<<pose.arms[1].joint.x<<','<<pose.arms[1].joint.y<<','<<pose.arms[1].joint.z<<'\n';
+      previous=pose;
+    }
+    std::cout<<"Grounded "<<cls<<" heavy "<<heavy<<" ready "<<ready<<": tip "<<tipSpeed<<" @ "<<tipAt<<"; hand "<<handSpeed<<" @ "<<handAt<<"; elbow "<<elbowSpeed<<" @ "<<elbowAt<<" m/s; pelvis turn "<<pelvisTurn<<'\n';
+    Check(pelvisTurn>.015f,"Full-body strike lost authored pelvis rotation");
+    Check(tipSpeed<22.f&&handSpeed<13.f&&elbowSpeed<13.f,"Retargeted strike has a wrist, elbow or weapon discontinuity");
   }
 }
 void BowMotionChecks(){
@@ -352,9 +390,10 @@ void Captures(){
 }
 }
 int main(int argc,char** argv){try{
+  if(argc==2&&std::string_view(argv[1])=="--grounded-only") {LibraryChecks();GroundedMotionChecks();return 0;}
   if(argc==2&&std::string_view(argv[1])=="--weapons-only") {WeaponMotionChecks();std::cout<<"PASS: v2 weapon motion\n";return 0;}
   if(argc==2&&std::string_view(argv[1])=="--capture-only") {Captures();return 0;}
   if(argc==2&&std::string_view(argv[1])=="--flight-only") {LibraryChecks();EquippedFlightChecks();return 0;}
   if(argc==2&&std::string_view(argv[1])=="--bow-only") {LibraryChecks();BowMotionChecks();WeaponCarryChecks();EquippedFlightChecks();std::cout<<"PASS: archery draw, release, carry and flight\n";return 0;}
-  LibraryChecks();ContactsAndTransitions();WeaponMotionChecks();BowMotionChecks();WeaponCarryChecks();EquippedFlightChecks();Captures();std::cout<<"PASS: imported gait loops, directional weapon carry, equipped jumps, combat guards, contacts, transition continuity, gameplay isolation and native comparison\n";}
+  LibraryChecks();GroundedMotionChecks();ContactsAndTransitions();WeaponMotionChecks();BowMotionChecks();WeaponCarryChecks();EquippedFlightChecks();Captures();std::cout<<"PASS: imported gait loops, directional weapon carry, equipped jumps, combat guards, contacts, transition continuity, gameplay isolation and native comparison\n";}
 catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

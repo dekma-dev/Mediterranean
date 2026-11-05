@@ -12,13 +12,13 @@ struct ClassInfo {
  std::array<float,3> color;
 };
 inline constexpr std::array<ClassInfo,int(ClassId::Count)> classes{{
- {"Warrior","Frontier guard","Melee / pressure","Heavy contact interrupts an enemy wind-up.",{"Arms","Guard","Spirit"},
+ {"Warrior","Frontier guard","Melee / pressure","Timely frontal protection opens a powerful answering cut.",{"Arms","Guard","Spirit"},
  {"Weapon training","Vitality","Restoration","Weapon mastery","Bulwark","Renewal","Executioner","Pursuit","Mercy"},
  {"Strike","Heavy strike","Dash","Iron guard"},100,0,0,0,35,2.5f,{.22f,.37f,.54f}},
  {"Paladin","Dawn sentinel","Melee / protection","Plate discipline absorbs four damage from each hit.",{"Judgement","Bastion","Devotion"},
  {"Consecrated edge","Sanctuary","Devotion","Templar oath","Stone faith","Absolution","Judgement","Pilgrim","Last prayer"},
  {"Smite","Judgement","Crusade","Prayer"},120,4,-2,2,38,2.5f,{.73f,.60f,.31f}},
- {"Scout","Woodland scout","Ranged / precision","Heavy shots gain damage beyond four metres.",{"Marksmanship","Survival","Medicine"},
+ {"Scout","Woodland scout","Ranged / precision","A successful retreat prepares an empowered pursuit shot.",{"Marksmanship","Survival","Medicine"},
  {"Steady aim","Trailcraft","Field dressing","Eagle eye","Bark cover","Quick dressing","Deadeye","Trail runner","Last bandage"},
  {"Quick shot","Aimed shot","Disengage","Evasive stance"},90,0,-1,0,28,9,{.31f,.48f,.28f}},
  {"Priest","Dawn acolyte","Ranged / healing","Heavy contact also restores eight health to the caster.",{"Radiance","Faith","Grace"},
@@ -27,7 +27,7 @@ inline constexpr std::array<ClassInfo,int(ClassId::Count)> classes{{
  {"Druid","Grove keeper","Ranged / nature","Living bark absorbs two damage; strong self-restoration.",{"Storm","Bark","Grove"},
  {"Storm seed","Oak heart","Living sap","Tempest","Ironbark","Spring rain","Thunderhead","Wild trail","Last bloom"},
  {"Thorn","Lightning","Wild step","Regrowth"},110,2,-2,0,48,7,{.26f,.51f,.35f}},
- {"Mage","Astral scholar","Ranged / burst","Heavy spells deal additional damage to healthy targets.",{"Flame","Frost","Arcana"},
+ {"Mage","Astral scholar","Ranged / burst","Combine fire, frost and arcane to cast one strong spell while moving.",{"Flame","Frost","Arcana"},
  {"Kindling","Frost mantle","Arcane renewal","Inferno","Ice shell","Clear mind","Combustion","Slipstream","Second breath"},
  {"Ember","Flare","Slipstream","Frost ward"},80,0,3,7,25,10,{.30f,.44f,.79f}},
  {"Necromancer","Ash binder","Ranged / life drain","Successful attacks restore health equal to 15% of damage.",{"Blood","Bone","Soul"},
@@ -277,14 +277,14 @@ inline SpellInfo ClassSpell(ClassId id,int index) {
  if(index==2 && ClassCombat(id).retreatDistance>0) {
   result.range=ClassCombat(id).retreatDistance;result.recovery=ClassCombat(id).retreatDuration;
   result.targeting="No target required / backward escape";
-  result.description="Step backward while facing the threat. Travel follows collision and stops at walls. No teleport or invulnerability.";
+  result.description=id==ClassId::Scout?"Retreat with collision. Move at least 1.5 metres away from a selected threat within nine metres to prepare Pursuit shot: your next basic hit within five seconds gains 45% basic damage and a two-second slow.":"Step backward while facing the threat. Travel follows collision and stops at walls. No teleport or invulnerability.";
  }
  if(index==3) {
    result.contact=ClassRecoveryCast(id); result.recovery=result.contact+.3f;
    result.targeting=ClassHealer(id)?"Self / missing health / stationary cast":"Self / defensive preparation";
    result.description=ClassHealer(id)?"Stand still to cast healing. Movement, jumping, damage or Escape interrupts it. Healing occurs only on completion.":
      id==ClassId::Scout?"Evade the next hit within three seconds. Does not heal or make you invulnerable to later attacks.":
-     id==ClassId::Warrior?"Raise a guard that absorbs damage and earns Rage when struck. Does not heal.":
+     id==ClassId::Warrior?"Absorb damage and gain Rage. A frontal hit in the first 0.8 seconds prepares Riposte: the next basic hit within five seconds gains 50% basic damage and a 12-point ward.":
      id==ClassId::Mage?"Raise a frost ward. Attacks that strike it slow the attacker. Does not heal.":
      id==ClassId::Demonologist?"Sacrifice eight health for a carapace and reduce Ravage's remaining cooldown by two seconds. Does not heal.":
      id==ClassId::Necromancer?"Sacrifice ten health to form a bone barrier. Cannot be used without enough health. Does not heal.":

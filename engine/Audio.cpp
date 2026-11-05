@@ -1,4 +1,5 @@
 #include "engine/Audio.h"
+#include "engine/AcousticDesign.h"
 #include <algorithm>
 #include <cmath>
 
@@ -39,6 +40,8 @@ Cue GroundCue(const rpg::WorldMap& map,rpg::Vec2 p,bool landing) {
   return landing?Cue::LandGrass:Cue::StepGrass;
 }
 float CueLevel(Cue cue) {
+  if(cue==Cue::WarriorEffort)return .48f;
+  if(cue==Cue::BowDraw || cue==Cue::FireGather || cue==Cue::FrostGather || cue==Cue::ArcaneGather || cue==Cue::HolyGather)return .55f;
   return cue>=Cue::PawGrass && cue<=Cue::HoofWood?.23f:cue==Cue::UiClick?.35f:IsStep(cue)?.35f:cue==Cue::Jump?.55f:IsLanding(cue)?.75f:1.f;
 }
 Cue CreatureGroundCue(const rpg::WorldMap& map,rpg::Vec2 position,bool hoof) {
@@ -70,6 +73,7 @@ Placement Place(rpg::Vec2 offset,float cameraYaw) {
   return {gain,std::cos(angle),std::sin(angle)};
 }
 std::vector<std::int16_t> Generate(Cue cue) {
+  if(HasAcousticDesign(cue))return AcousticEffect(cue);
   const bool healing=cue==Cue::Mend || cue==Cue::Potion;
   const bool mystical=(cue>=Cue::Holy && cue<=Cue::Ward) || cue==Cue::Cast || cue==Cue::Mend || cue==Cue::Interrupt;
   const float duration=(cue>=Cue::PawGrass && cue<=Cue::HoofWood)?.12f:
@@ -266,77 +270,12 @@ std::vector<std::int16_t> Generate(Cue cue) {
   result.front()=result.back()=0;
   return result;
 }
-std::vector<std::int16_t> GenerateMusic() {
-  // Original eight-bar, 80 BPM chronicle in D minor. Layered bowed partials,
-  // breath-like choir, distant horns, harp and sparse frame drums. Every note
-  // is evaluated in local time; releases overlap the next harmony naturally.
-  constexpr float roots[]={146.832f,116.541f,174.614f,130.813f,146.832f,116.541f,110.f,146.832f};
-  constexpr float melody[]={293.665f,349.228f,440.f,391.995f,349.228f,293.665f,261.626f,220.f,
-    349.228f,440.f,523.251f,440.f,391.995f,329.628f,277.183f,293.665f};
-  // Breath between phrases and unequal articulation avoid a clockwork solo.
-  constexpr float lengths[]={2.1f,1.5f,2.35f,1.15f,2.2f,1.7f,2.1f,1.1f,
-    2.4f,1.65f,2.25f,1.2f,2.15f,1.6f,1.45f,2.8f};
-  const auto envelope=[](float t,float attack,float sustain,float release) {
-    if(t<0 || t>=sustain+release) return 0.f;
-    const float rise=std::clamp(t/attack,0.f,1.f),fall=std::clamp((sustain+release-t)/release,0.f,1.f);
-    return rise*rise*(3-2*rise)*fall*fall*(3-2*fall);
-  };
-  const auto bowed=[](float hz,float t) {
-    const float phase=t+.00032f*Tone(4.7f,t);
-    return Tone(hz,phase)+.27f*Tone(hz*2,phase)+.12f*Tone(hz*3,phase)+.055f*Tone(hz*4,phase);
-  };
-  std::vector<std::int16_t> result(sampleRate*musicSeconds);
-  std::uint32_t seed=0x41535452;float breath=0;
-  for (size_t i=0;i<result.size();++i) {
-    const float t=float(i)/sampleRate;
-    seed^=seed<<13;seed^=seed>>17;seed^=seed<<5;
-    breath+=.04f*(float(seed&65535)/32767.5f-1-breath);
-    float value=0;
-    const int bar=std::min(7,int(t/6));
-    for(int b=std::max(0,bar-1);b<=bar;++b) {
-      const float local=t-b*6.f,root=roots[b],third=(b==0 || b==4 || b==7)?1.189207f:1.259921f;
-      const float swell=envelope(local,1.3f,5.4f,1.6f);
-      value+=.043f*swell*(bowed(root,local)+.65f*bowed(root*third,local)+.55f*bowed(root*1.498307f,local));
-      value+=.026f*swell*(Tone(root*.5f,local)+.55f*Tone(root*2,local)+breath*.6f);
-      if(b>=4) value+=.038f*envelope(local,.32f,2.5f,1.5f)*
-        (Tone(root*.5f,local)+.4f*Tone(root,local)+.18f*Tone(root*1.5f,local));
-      constexpr float harpTimes[]={0.f,.75f,2.25f,3.75f,4.5f};
-      const float harpNotes[]={root,root*1.498307f,root*2,root*third*2,root*1.498307f};
-      for(int h=0;h<5;++h) {
-        const float age=local-harpTimes[h]-.08f;
-        if(age>=0 && age<2.4f) value+=(h==0?.020f:.013f)*Decay(age,.007f,2.6f)*
-          (Tone(harpNotes[h],age)+.32f*Tone(harpNotes[h]*2.002f,age)*std::exp(-age*2)+
-           .12f*Tone(harpNotes[h]*3.01f,age)*std::exp(-age*5));
-      }
-    }
-    const int note=std::min(15,int(t/3));
-    for(int n=std::max(0,note-1);n<=note;++n) {
-      const float local=t-n*3.f,hz=melody[n];
-      const float phraseGain=n%4==0?1.f:n%4==3?.72f:.87f;
-      value+=.047f*phraseGain*envelope(local,.32f,lengths[n],.8f)*
-        (Tone(hz,local+.00032f*Tone(4.8f,local))+.14f*Tone(hz*2,local));
-      if(n%4==0) value+=.012f*Bell(hz*2,local-.42f);
-    }
-    // Sparse low percussion enters in the second half and leaves room for SFX.
-    if(t>=24 && t<44) {
-      const float beat=std::fmod(t,3.f);
-      value+=.045f*Sweep(78,38,.6f,beat)*Decay(beat,.008f,9.f)+.035f*breath*Decay(beat,.008f,18.f);
-    }
-    // Long, quiet chamber reflections, bounded to the generated buffer.
-    for(const auto tap:{std::pair<float,float>{.337f,.12f},{.593f,.08f}}) {
-      const size_t delay=size_t(tap.first*sampleRate);
-      if(i>=delay) value+=float(result[i-delay])/32767.f*tap.second;
-    }
-    value*=std::min({1.f,t/1.5f,(musicSeconds-t)/2.8f});
-    result[i]=Pcm(value);
-  }
-  result.front()=result.back()=0;
-  return result;
-}
+std::vector<std::int16_t> GenerateMusic() {return ComposeScore(false);}
+std::vector<std::int16_t> GenerateMenuMusic() {return ComposeScore(true);}
 Cue ClassRecoveryCue(rpg::ClassId school) {
   using C=rpg::ClassId;
   switch(school) {
-    case C::Paladin:case C::Priest:return Cue::Holy;
+    case C::Paladin:return Cue::Holy;case C::Priest:return Cue::HolyMend;
     case C::Warrior:case C::Scout:case C::Mage:case C::Engineer:return Cue::Ward;
     case C::Psionic:return Cue::Mind;
     case C::Bard:return Cue::Song;
@@ -447,6 +386,25 @@ Cue ClassReleaseCue(rpg::ClassId school) {
     case C::Demonologist:return Cue::Rend;default:return Cue::Cast;
   }
 }
+Cue PreparationCue(rpg::ClassId school,int ability){
+ if(school==rpg::ClassId::Scout)return Cue::BowDraw;
+ if(school==rpg::ClassId::Priest)return Cue::HolyGather;
+ if(school==rpg::ClassId::Mage){const auto element=rpg::ClassDiscipline::Element(ability);return element==2?Cue::FrostGather:element==4?Cue::ArcaneGather:Cue::FireGather;}
+ return Cue::Cast;
+}
+bool IsPreparation(Cue cue){return cue==Cue::Cast || cue==Cue::BowDraw || cue==Cue::FireGather || cue==Cue::FrostGather || cue==Cue::ArcaneGather || cue==Cue::HolyGather;}
+bool Preparing(const rpg::Simulation& state){return state.Health()>0 && (state.CastingRecovery() || (state.Attacking() && state.AttackSeconds()<combat::StrokeStart(state.HeavyAttack())));}
+Cue ReleaseCue(rpg::ClassId school,int ability,bool heavy){
+ if(school==rpg::ClassId::Scout)return heavy?Cue::BowHeavy:Cue::Bow;
+ if(school==rpg::ClassId::Mage){const auto element=rpg::ClassDiscipline::Element(ability);return element==2?Cue::FrostRelease:element==4?Cue::ArcaneRelease:heavy?Cue::FireHeavy:Cue::Fire;}
+ return ClassReleaseCue(school);
+}
+Cue ContactCue(rpg::ClassId school,int ability,bool heavy){
+ if(school==rpg::ClassId::Scout)return Cue::ArrowImpact;
+ if(school==rpg::ClassId::Priest)return Cue::HolyImpact;
+ if(school==rpg::ClassId::Mage){const auto element=rpg::ClassDiscipline::Element(ability);return element==2?Cue::FrostImpact:element==4?Cue::ArcaneImpact:Cue::FireImpact;}
+ return rpg::DescribeClass(school).range>3 && school!=rpg::ClassId::Engineer?Cue::SpellHit:heavy?Cue::HeavyHit:Cue::Hit;
+}
 void Events::Update(const rpg::Simulation& state,const presentation::CreatureContacts* contacts) {
   count=0;
   rpg::Vec2 origin{};bool placed=false;
@@ -460,11 +418,11 @@ void Events::Update(const rpg::Simulation& state,const presentation::CreatureCon
     placed=event.kind==K::BeastBite || event.kind==K::BeastCharge || event.kind==K::EnemyPrepare || event.kind==K::BossPrepare || event.kind==K::EnemySwing || event.kind==K::EnemyLance || event.kind==K::EnemyQuake || event.kind==K::EnemyTempest || event.kind==K::EnemyExecution || event.kind==K::Hit || event.kind==K::HeavyHit || event.kind==K::Interrupt;
     switch(event.kind) {
     case K::Strike:add(event.school==rpg::ClassId::Demonologist?Cue::Rend:Cue::Strike);break;
-    case K::HeavyStrike:add(event.school==rpg::ClassId::Warrior?Cue::Heavy:ClassReleaseCue(event.school));break;
+    case K::HeavyStrike:add(event.school==rpg::ClassId::Warrior?Cue::Heavy:ClassReleaseCue(event.school));if(event.school==rpg::ClassId::Warrior)add(Cue::WarriorEffort);break;
     case K::UiClick:add(Cue::UiClick);break;
-    case K::ReserveReady:add(Cue::ReserveReady);break;
+      case K::DisciplineReady:case K::ReserveReady:add(Cue::ReserveReady);break;
     case K::CastCancelled:add(Cue::CastCancelled);break;
-    case K::CastStart:add(Cue::Cast);break;
+    case K::CastStart:add(PreparationCue(event.school,event.ability));break;
     case K::EnemyPrepare: {
       auto cue=Cue::EnemyPrepare;
       for(const auto& actor:state.Combatants())if(actor.id==event.actor) {
@@ -475,7 +433,7 @@ void Events::Update(const rpg::Simulation& state,const presentation::CreatureCon
       add(cue);break;
     }
     case K::BossPrepare:add(Cue::BossPrepare);break;
-    case K::SpellCast:add(ClassReleaseCue(event.school));break;
+    case K::SpellCast:add(ReleaseCue(event.school,event.ability,event.heavy));break;
     case K::BeastBite:add(Cue::WolfBite);break;
     case K::BeastCharge:add(Cue::BoarRush);break;
     case K::EnemySwing:add(Cue::Enemy);break;
@@ -484,8 +442,7 @@ void Events::Update(const rpg::Simulation& state,const presentation::CreatureCon
     case K::EnemyTempest:add(Cue::HeavyHit);break;
     case K::EnemyExecution:add(Cue::Fire);break;
     case K::Hit:case K::HeavyHit:
-      add(rpg::DescribeClass(event.school).range>3 && event.school!=rpg::ClassId::Scout && event.school!=rpg::ClassId::Engineer?
-        Cue::SpellHit:event.kind==K::HeavyHit?Cue::HeavyHit:Cue::Hit);break;
+      add(ContactCue(event.school,event.ability,event.kind==K::HeavyHit));break;
     case K::Hurt:add(Cue::Hurt);break;
     case K::BarrierHit:add(Cue::Ward);break;
     case K::Interrupt:add(Cue::Interrupt);break; case K::Mend:add(ClassRecoveryCue(event.school));break;
@@ -531,6 +488,7 @@ Audio::~Audio() {
   for(auto* voice:ambience_) if(voice) voice->DestroyVoice();
   for(auto* voice:voices_) if(voice) voice->DestroyVoice();
   if(music_) music_->DestroyVoice();
+  if(menuMusic_) menuMusic_->DestroyVoice();
   if(combatMusic_) combatMusic_->DestroyVoice();
   if(master_) master_->DestroyVoice();
   if(engine_) engine_->Release();
@@ -550,14 +508,19 @@ bool Audio::Initialize(bool muteOutput) {
   for(size_t i=0;i<samples_.size();++i)
     for(auto value:samples_[i]) peaks_[i]=std::max(peaks_[i],std::abs(int(value))/32767.f);
   score_=sound::GenerateMusic();
+  menuScore_=sound::GenerateMenuMusic();
   combatScore_=sound::GenerateCombatLayer();
   for(auto*& voice:voices_) if(FAILED(engine_->CreateSourceVoice(&voice,&format))) return false;
   if(FAILED(engine_->CreateSourceVoice(&music_,&format))) return false;
+  if(FAILED(engine_->CreateSourceVoice(&menuMusic_,&format))) return false;
   if(FAILED(engine_->CreateSourceVoice(&combatMusic_,&format))) return false;
   XAUDIO2_BUFFER buffer{}; buffer.AudioBytes=UINT32(score_.size()*2); buffer.pAudioData=reinterpret_cast<const BYTE*>(score_.data());
   buffer.LoopCount=XAUDIO2_LOOP_INFINITE;
   music_->SetVolume(0);
   if(FAILED(music_->SubmitSourceBuffer(&buffer))) return false;
+  buffer.AudioBytes=UINT32(menuScore_.size()*2);buffer.pAudioData=reinterpret_cast<const BYTE*>(menuScore_.data());
+  menuMusic_->SetVolume(0);
+  if(FAILED(menuMusic_->SubmitSourceBuffer(&buffer)))return false;
   buffer.AudioBytes=UINT32(combatScore_.size()*2);buffer.pAudioData=reinterpret_cast<const BYTE*>(combatScore_.data());
   combatMusic_->SetVolume(0);
   if(FAILED(combatMusic_->SubmitSourceBuffer(&buffer))) return false;
@@ -570,7 +533,7 @@ bool Audio::Initialize(bool muteOutput) {
     if(FAILED(ambience_[i]->SubmitSourceBuffer(&buffer)) || FAILED(ambience_[i]->Start(0,1))) return false;
   }
   // Start both loop clocks together so combat can fade in on the same beat.
-  return SUCCEEDED(music_->Start(0,1)) && SUCCEEDED(combatMusic_->Start(0,1)) && SUCCEEDED(engine_->CommitChanges(1));
+  return SUCCEEDED(music_->Start(0,1)) && SUCCEEDED(menuMusic_->Start(0,1)) && SUCCEEDED(combatMusic_->Start(0,1)) && SUCCEEDED(engine_->CommitChanges(1));
 }
 void Audio::ClearEffects() {
   for(auto* voice:voices_) if(voice) { voice->Stop(); voice->FlushSourceBuffers(); }
@@ -580,23 +543,29 @@ void Audio::Suspend(bool value) {
   if(!engine_ || value==suspended_) return;
   suspended_=value;
   if(value) {ambientMix_.Reset();for(auto* voice:ambience_) if(voice) voice->SetVolume(0);}
-  if(value) { engine_->StopEngine(); ClearEffects(); events_.Reset(); intensity_.Reset();musicGain_=0;music_->SetVolume(0);combatMusic_->SetVolume(0);generation_=~0u; }
+  if(value) { engine_->StopEngine(); ClearEffects(); events_.Reset(); intensity_.Reset();musicGain_=0;music_->SetVolume(0);menuMusic_->SetVolume(0);combatMusic_->SetVolume(0);generation_=~0u; }
   else engine_->StartEngine();
 }
-void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds,float cameraYaw,const presentation::CreatureContacts* contacts) {
+void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds,float cameraYaw,const presentation::CreatureContacts* contacts,bool menu) {
   if(!music_ || suspended_) return;
   musicGain_=sound::MusicGain(musicGain_,musicVolume,seconds);
-  music_->SetVolume(musicGain_*.30f);
+  const float dt=std::isfinite(seconds)?std::clamp(seconds,0.f,.1f):0;
+  if(generation_==~0u)menuBlend_=float(menu);
+  menuBlend_+=(float(menu)-menuBlend_)*-std::expm1(-dt/1.25f);
+  music_->SetVolume(musicGain_*.38f*(1-menuBlend_));
+  menuMusic_->SetVolume(musicGain_*.38f*menuBlend_);
+  if(menu!=wasMenu_){ClearEffects();events_.Reset();intensity_.Reset();ambientMix_.Reset();wasMenu_=menu;}
   if(generation!=generation_) {
     generation_=generation; ClearEffects(); events_.Reset(); variations_.fill(0);intensity_.Reset();
     ambientMix_.Reset();
   }
-  if(state.Health()<=0) intensity_.Reset();
+  if(menu || state.Health()<=0) intensity_.Reset();
   else intensity_.Update(sound::CombatThreat(state),seconds);
   combatMusic_->SetVolume(musicGain_*.30f*intensity_.value);
   ambientMix_.Update(state.Player(),intensity_.value,seconds);
   for(size_t i=0;i<ambience_.size();++i)
-    ambience_[i]->SetVolume(std::clamp(effectsVolume,0.f,1.f)*.35f*ambientMix_.levels[i]);
+    ambience_[i]->SetVolume(menu?0:std::clamp(effectsVolume,0.f,1.f)*.35f*ambientMix_.levels[i]);
+  if(menu){ClearEffects();return;}
   events_.Update(state,contacts);
   if(effectsVolume<=0) { ClearEffects(); return; }
   // Apply the voice changes as one XAudio2 operation set so a new effect never
@@ -614,6 +583,7 @@ void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicV
     buffer.AudioBytes=UINT32(pcm.size()*2); buffer.pAudioData=reinterpret_cast<const BYTE*>(pcm.data());
     if(SUCCEEDED(voice->SubmitSourceBuffer(&buffer))) {
       voiceLevels_[v]=sound::CueLevel(cue); voicePeaks_[v]=peaks_[index];
+      preparation_[v]=sound::IsPreparation(cue);preparationGain_[v]=1;
       origins_[v]=events_.origins[i];spatial_[v]=events_.spatial[i];
       voice->Start(0,mixOperation);
     }
@@ -624,9 +594,15 @@ void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicV
   for(size_t v=0;v<voices_.size();++v) {
     XAUDIO2_VOICE_STATE status{}; voices_[v]->GetState(&status,XAUDIO2_VOICE_NOSAMPLESPLAYED);
     if(!status.BuffersQueued) voiceLevels_[v]=voicePeaks_[v]=0;
+    // A release or cancelled channel fades its preparation once; a later cast
+    // cannot revive the previous tail. Physical impacts retain their full tail.
+    if(preparation_[v] && (!sound::Preparing(state) || preparationGain_[v]<1)) {
+      preparationGain_[v]*=std::exp(-dt/.035f);
+      if(preparationGain_[v]<.005f){voices_[v]->Stop();voices_[v]->FlushSourceBuffers();voiceLevels_[v]=voicePeaks_[v]=0;}
+    }
     const auto player=state.Player();
     const auto place=spatial_[v]?sound::Place({origins_[v].x-player.x,origins_[v].z-player.z},cameraYaw):sound::Placement{};
-    levels[v]=voiceLevels_[v]*place.gain;
+    levels[v]=voiceLevels_[v]*place.gain*(preparation_[v]?preparationGain_[v]:1.f);
     if(outputChannels_==2) {
       const float matrix[]={place.left,place.right};
       voices_[v]->SetOutputMatrix(master_,1,2,matrix,mixOperation);

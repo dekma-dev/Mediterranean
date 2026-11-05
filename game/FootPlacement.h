@@ -13,6 +13,7 @@ public:
     previous_=position; heading_=yaw; pending_=0; ready_=true;
     for (int i=0;i<2;++i) {
       feet_[i]={}; feet_[i].point=Neutral(position,yaw,i); feet_[i].point.yaw=yaw;
+      feet_[i].goal=feet_[i].point;
     }
     next_=0;firstStep_=true;
     support_=supportVelocity_=0;
@@ -59,6 +60,7 @@ public:
 private:
   struct Step {
     Foot point,from,goal;
+    rpg::Vec2 root{},velocity{};
     float age=0,duration=.16f,lift=.1f;
     bool stepping=false;
   };
@@ -78,31 +80,58 @@ private:
     foot.age=std::min(foot.duration,foot.age+dt);
     auto desired=Neutral(position,yaw,i);
     const float speed=std::hypot(velocity.x,velocity.z);
-    const float lead=TravelGait(speed).reach/std::max(speed,.7f);
+    const float lead=.82f*TravelGait(speed).reach/std::max(speed,.7f);
     desired.x+=velocity.x*lead;
     desired.z+=velocity.z*lead;
-    foot.goal.x=motion::Ease(foot.goal.x,desired.x,24,dt);
-    foot.goal.z=motion::Ease(foot.goal.z,desired.z,24,dt);
+    // Feed forward actor travel; otherwise a 24 Hz position filter lands the
+    // foot almost 30 cm behind its intended contact at sprint speed.
+    foot.goal.x=motion::Ease(foot.goal.x+velocity.x*dt,desired.x,24,dt);
+    foot.goal.z=motion::Ease(foot.goal.z+velocity.z*dt,desired.z,24,dt);
+    foot.velocity.x=motion::Ease(foot.velocity.x,velocity.x,18,dt);
+    foot.velocity.z=motion::Ease(foot.velocity.z,velocity.z,18,dt);
     foot.goal.y=rpg::WorldMap::Height({foot.goal.x,foot.goal.z})+.17f;
     foot.goal.yaw=motion::FollowAngle(foot.goal.yaw,yaw,24,dt);
     const float t=foot.age/foot.duration;
-    // Quintic recovery has zero velocity and acceleration at both contacts.
-    const float u=t*t*t*(10+t*(-15+6*t));
+    // Recover relative to the moving pelvis. World-space interpolation between
+    // a fixed takeoff and a moving goal left the foot far behind the body.
+    // Matching -actor velocity at both relative endpoints gives stationary
+    // world-space takeoff/contact, with retraction before the landing.
+    const float u=t*t*(3-2*t);
+    const float tangent=foot.duration*(-(2*t*t*t-3*t*t+t)+.22f*std::sin(t*motion::tau)*std::sin(t*motion::tau*.5f));
     float height=foot.lift*16*t*t*(1-t)*(1-t);
     if(sample.authoredGait) {
       float amount=0;for(float w:sample.gaitWeights)amount+=Unit(w);
       // Sample the imported recovery shape inside the accepted step interval.
       height=height*(1-Unit(amount))+playerclips::SwingHeight(sample.gaitWeights,sample.runBlend,i,t);
     }
-    foot.point={foot.from.x+(foot.goal.x-foot.from.x)*u,foot.from.y+(foot.goal.y-foot.from.y)*u+height,
-      foot.from.z+(foot.goal.z-foot.from.z)*u,foot.from.yaw+motion::AngleDelta(foot.from.yaw,foot.goal.yaw)*u};
+    foot.point={foot.from.x+(position.x-foot.root.x)*(1-u)+(foot.goal.x-foot.from.x)*u+foot.velocity.x*tangent,
+      foot.from.y+(foot.goal.y-foot.from.y)*u+height,
+      foot.from.z+(position.z-foot.root.z)*(1-u)+(foot.goal.z-foot.from.z)*u+foot.velocity.z*tangent,
+      foot.from.yaw+motion::AngleDelta(foot.from.yaw,foot.goal.yaw)*u};
     // Toe clearance through recovery, followed by a restrained heel approach.
     // Flat, locked contacts remain unchanged at the two endpoints.
-    foot.point.pitch=.24f*std::sin(t*motion::tau)*std::sin(t*motion::tau*.5f);
+    foot.point.pitch=foot.from.pitch*(1-u)+.24f*std::sin(t*motion::tau)*std::sin(t*motion::tau*.5f);
+    // The ankle must also clear the rotated sole's front and heel corners.
+    const float floor=rpg::WorldMap::Height({foot.point.x,foot.point.z});
+    foot.point.y=std::max(foot.point.y,floor+.17f*std::cos(foot.point.pitch)+.185f*std::abs(std::sin(foot.point.pitch)));
     if(foot.age>=foot.duration){foot.point=foot.goal;foot.stepping=false;}
+  }
+  static void RollSupport(Step& foot,float dt,rpg::Vec2 position,rpg::Vec2 velocity) {
+    // The toe remains fixed in world space while the heel rises. Storing the
+    // flat contact separately also lets a stopped or interrupted step settle
+    // without either sliding the sole or snapping the ankle to its flat pose.
+    const float forward=velocity.x*std::sin(foot.goal.yaw)+velocity.z*std::cos(foot.goal.yaw);
+    const float behind=(position.x-foot.goal.x)*std::sin(foot.goal.yaw)+(position.z-foot.goal.z)*std::cos(foot.goal.yaw);
+    const float target=.62f*SmoothStep((behind-.08f)/.34f)*Unit(forward/.8f);
+    const float pitch=motion::Ease(foot.point.pitch,target,24,dt),s=std::sin(pitch),c=std::cos(pitch);
+    const float dz=.185f*(1-c)+.17f*s;
+    foot.point=foot.goal;foot.point.pitch=pitch;
+    foot.point.x+=std::sin(foot.goal.yaw)*dz;foot.point.z+=std::cos(foot.goal.yaw)*dz;
+    foot.point.y+=.185f*s-.17f*(1-c);
   }
   void Tick(float dt,rpg::Vec2 position,float yaw,rpg::Vec2 velocity,const Sample& sample) {
     const float speed=std::hypot(velocity.x,velocity.z);
+    for(auto& foot:feet_)if(!foot.stepping)RollSupport(foot,dt,position,velocity);
     // Alternate ordinary steps. A supporting foot may release early during a
     // fast run/reversal to keep the leg reachable instead of sliding its contact.
     for (int order=0;order<2;++order) {
@@ -110,20 +139,23 @@ private:
       auto& foot=feet_[i];
       if (foot.stepping) continue;
       const auto neutral=Neutral(position,yaw,i);
-      const float error=std::hypot(foot.point.x-neutral.x,foot.point.z-neutral.z);
+      const float error=std::hypot(foot.goal.x-neutral.x,foot.goal.z-neutral.z);
       const float angle=std::abs(motion::AngleDelta(foot.point.yaw,yaw));
       const auto timing=TravelGait(speed);
-      const float behind=speed>.1f?((neutral.x-foot.point.x)*velocity.x+(neutral.z-foot.point.z)*velocity.z)/speed:error;
+      const float behind=speed>.1f?((neutral.x-foot.goal.x)*velocity.x+(neutral.z-foot.goal.z)*velocity.z)/speed:error;
       const float release=firstStep_&&i==next_?.065f:timing.reach;
       if ((behind>(speed>.1f?release:.065f) || (speed<=.1f&&error>.065f) || angle>.48f) &&
           (!feet_[1-i].stepping || behind>timing.reach+.015f || angle>.95f)) {
         foot.stepping=true; foot.from=foot.point; foot.age=0;
+        foot.root={position.x-velocity.x*dt,position.z-velocity.z*dt};foot.velocity=velocity;
         foot.duration=speed>.1f?timing.swing:.28f;
         if(firstStep_&&speed>.1f)
           foot.duration=std::max(.12f,timing.period*(.5f-timing.stance*.5f)-.065f/speed);
         foot.lift=speed>.1f?.10f:.055f;
         foot.goal=neutral;
-        const float lead=timing.reach/std::max(speed,.7f);
+        // Land closer to the centre of mass; heel rise supplies the longer
+        // rear part of support instead of overstriding and squatting at contact.
+        const float lead=.82f*timing.reach/std::max(speed,.7f);
         foot.goal.x+=velocity.x*lead; foot.goal.z+=velocity.z*lead;
         next_=1-i;
         firstStep_=false;

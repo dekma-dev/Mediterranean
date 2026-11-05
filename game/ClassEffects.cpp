@@ -73,7 +73,7 @@ XMFLOAT4 Color(C school,float alpha) {
 void Projectile(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float age) {
   if(!std::isfinite(age) || age<0)return;
   spellvfx::Flight(r,e,origin,age);
-  if(e.school==C::Mage || e.school==C::Scout)return; // complete material + geometry path
+  if(e.school==C::Mage || e.school==C::Scout || e.school==C::Priest)return; // complete material + geometry path
   const bool physical=e.school==C::Scout || e.school==C::Engineer;
   const float flight=std::max(.01f,e.flight),t=Unit(age/flight);
   const float fade=1-Unit((age-flight)/(physical?.045f:.10f));
@@ -137,6 +137,7 @@ void Projectile(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,floa
 }
 void Impact(Renderer& r,const rpg::CombatVisualEvent& e,float age) {
   spellvfx::Contact(r,e,age);
+  if(e.school==C::Priest)return;
   const float phase=Unit(age/.48f),fade=(1-phase)*(1-phase);
   const float flash=std::pow(1-Unit(age/.095f),2.f);
   const float size=(e.heavy?1.1f:.72f)*(e.empowered?1.2f:1);

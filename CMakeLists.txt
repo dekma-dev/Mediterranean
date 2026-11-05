@@ -130,6 +130,8 @@ add_library(MediterraneanClient STATIC
   "${scene_shader_header}"
   engine/Engine.cpp
   engine/Audio.cpp
+  engine/AcousticDesign.cpp
+  engine/RecordedAudio.cpp
   engine/Renderer.cpp
   game/SpellVfx.cpp
   game/CastEffects.cpp
@@ -176,6 +178,10 @@ set_property(SOURCE assets/authored/Collection.rc APPEND PROPERTY OBJECT_DEPENDS
 set_property(SOURCE assets/authored/Collection.rc APPEND PROPERTY OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/class-garments.weights")
 target_include_directories(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored")
 target_include_directories(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui")
+
+target_sources(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/audio/AudioArtwork.rc")
+target_include_directories(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/audio")
+set_source_files_properties(assets/audio/AudioArtwork.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/audio/combat-recordings.bank;${CMAKE_CURRENT_SOURCE_DIR}/assets/audio/menu-choir.wav;${CMAKE_CURRENT_SOURCE_DIR}/assets/audio/world-choir.wav;${CMAKE_CURRENT_SOURCE_DIR}/assets/audio/combat-choir.wav")
 target_include_directories(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/effects")
 set_property(SOURCE assets/ui/UiArtwork.rc APPEND PROPERTY OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/effects/combat-vfx.png")
 add_library(LaunchSupport STATIC launcher/LaunchSupport.cpp)
@@ -351,6 +357,10 @@ if (BUILD_TESTING)
   target_link_libraries(CastingEffectsTests PRIVATE MediterraneanClient)
   add_test(NAME CastingEffectsTests COMMAND CastingEffectsTests)
   set_tests_properties(CastingEffectsTests PROPERTIES TIMEOUT 120)
+  add_executable(ClassDisciplineTests tests/ClassDisciplineTests.cpp)
+  target_link_libraries(ClassDisciplineTests PRIVATE MediterraneanClient)
+  add_test(NAME ClassDisciplineTests COMMAND ClassDisciplineTests)
+  set_tests_properties(ClassDisciplineTests PROPERTIES TIMEOUT 120)
   add_executable(FrontierExpansionTests tests/FrontierExpansionTests.cpp)
   target_link_libraries(FrontierExpansionTests PRIVATE MediterraneanClient)
   target_compile_definitions(FrontierExpansionTests PRIVATE RPG_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")

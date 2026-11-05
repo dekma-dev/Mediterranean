@@ -161,13 +161,17 @@ void Simulation::UseAbility(int index,float visualElapsed) {
       message_=std::string(Spell(3).name)+" casting.";
     } else CompleteRecovery(visualElapsed);
   } else if (index==2) {
+    retreatThreat_=0;
     if (RetreatMobility()) {
       if (const auto* target=TargetActor(); target && target->health>0 && target->state!=EnemyState::Returning) {
         const auto offset=Difference(target->position,player_);
         if(Length(offset)>.001f) facing_=std::atan2(offset.x,offset.z);
+        if(class_==ClassId::Scout && Length(offset)<=9.f) {
+          retreatThreat_=target->id;retreatOrigin_=player_;retreatThreatPosition_=target->position;
+        }
       }
       retreatDirection_={-std::sin(facing_),-std::cos(facing_)};
-      dashTarget_=0;dashTravelLeft_=CombatStyleInfo().retreatDistance;
+      dashTarget_=retreatThreat_;dashTravelLeft_=CombatStyleInfo().retreatDistance;
     } else {
     switch (CheckDashTarget()) {
     case DashCheck::NoTarget: message_="Press Tab to select a living enemy."; return;
@@ -197,6 +201,8 @@ void Simulation::UseAbility(int index,float visualElapsed) {
     const auto direction=Difference(enemy.position,player_);
     facing_=std::atan2(direction.x,direction.z);
     attackAbility_=index; attackTarget_=enemy.id; attackAge_=0;
+    attackConfluence_=class_==ClassId::Mage && NormallySteadyAttack(index) && discipline_.Take();
+    if(attackConfluence_) EmitVisual(CombatVisualKind::DisciplineSpent,player_,height_+1.f,facing_,0,visualElapsed);
     attackEmpowered_=index==1 && EmpoweredReady();
     if(attackEmpowered_) classResource_=0;
     attackDamage_=index==0?StrikeDamage():HeavyDamage();
@@ -216,7 +222,7 @@ void Simulation::UseAbility(int index,float visualElapsed) {
       attackDamage_*=class_==ClassId::Demonologist?.85f:.65f;
       if(class_==ClassId::Demonologist) health_-=std::min(6.f,std::max(0.f,health_-1));
     } attackFlash_=.2f;
-    if(ClassInfo().range>3 && !PhysicalLauncher(WeaponFor(class_).form))
+    if(ClassInfo().range>3)
       EmitVisual(CombatVisualKind::CastStart,player_,height_,facing_);
     message_=std::string(Spell(index).name)+" committed.";
   }
@@ -225,19 +231,23 @@ void Simulation::UseAbility(int index,float visualElapsed) {
 
 void Simulation::CompleteRecovery(float visualElapsed) {
   recoveryCast_=0;
+  bool benediction=false;
   if(health_<=ClassRecoveryCost(class_)) {message_="Not enough health for the pact.";return;}
   health_-=ClassRecoveryCost(class_);
   if(ClassHealer(class_)) {
     const float requested=MendHealingNow(),healed=std::min(requested,MaxHealth()-health_);health_+=healed;
     if(HasTalent(Talent::Overflow)) barrier_=std::max(barrier_,(requested-healed)*.5f);
     if(healed>0) Emit(FeedbackKind::Heal,player_,int(healed));
+    if(healed>0 && class_==ClassId::Priest){discipline_.Prime(6,visualElapsed);benediction=true;}
   }
   const float ward=RecoveryWard();
   barrier_=std::max(barrier_,ward);
+  if(class_==ClassId::Warrior) discipline_.guard=.8f-visualElapsed;
   if(class_==ClassId::Scout) evasion_=3;
   if(class_==ClassId::Demonologist) cooldowns_[1]=std::max(0.f,cooldowns_[1]-2);
   if(class_==ClassId::Psionic) classResource_=CombatStyleInfo().capacity;
   EmitVisual(CombatVisualKind::Mend,player_,height_,facing_,0,visualElapsed);
+  if(benediction)EmitVisual(CombatVisualKind::DisciplineReady,player_,height_+1.f,facing_,0,visualElapsed);
   message_=std::string(Spell(3).name)+(ClassHealer(class_)?" completed.":" raised protection.");
 }
 
@@ -323,6 +333,17 @@ void Simulation::ResolveContact(Enemy& enemy,float elapsed) {
   // actions, while preserving the weapon damage captured when the cast began.
   const float finishing=index==1?HeavyMultiplier(enemy.health,enemy.MaxHealth()):1.f;
   float bonus=0;
+  bool disciplineSpent=false;
+  if(enemy.id==attackTarget_ && (class_==ClassId::Priest?(index==0 || index==1):(index==0 || index==12)) &&
+      (class_==ClassId::Warrior || class_==ClassId::Scout || class_==ClassId::Priest) && discipline_.Take(elapsed)) {
+    disciplineSpent=true;
+    bonus+=StrikeDamage()*(class_==ClassId::Warrior?.50f:class_==ClassId::Priest?.25f:.45f);
+    if(class_==ClassId::Warrior || class_==ClassId::Priest) barrier_=std::max(barrier_,class_==ClassId::Priest?18.f:12.f);
+    else enemy.snared=std::max(enemy.snared,2.f);
+    EmitVisual(CombatVisualKind::DisciplineSpent,enemy.position,enemy.ContactHeight(),facing_,enemy.id,elapsed);
+  }
+  if(class_==ClassId::Mage && enemy.id==attackTarget_ && !attackConfluence_ && discipline_.Contact(enemy.id,index,elapsed))
+    EmitVisual(CombatVisualKind::DisciplineReady,player_,height_+1.f,facing_,0,elapsed);
   // Only the committed primary contact advances/spends the chain. Secondary
   // victims cannot duplicate the reward or steal a chain bound to another foe.
   int chainSpent=0;
@@ -468,7 +489,7 @@ void Simulation::ResolveContact(Enemy& enemy,float elapsed) {
   Emit(FeedbackKind::Damage,enemy.position,static_cast<int>(damage));
   const auto eventBefore=visualEventCount_;
   EmitVisual((index==0 || index==7 || index==12)?CombatVisualKind::Hit:CombatVisualKind::HeavyHit,enemy.position,enemy.ContactHeight(),facing_,enemy.id,elapsed);
-  if(visualEventCount_>eventBefore) visualEvents_[visualEventCount_-1].chain=chainSpent;
+  if(visualEventCount_>eventBefore) {visualEvents_[visualEventCount_-1].chain=chainSpent;visualEvents_[visualEventCount_-1].discipline=disciplineSpent || attackConfluence_;}
   enemy.hitFlash=std::max(0.f,.2f-elapsed); enemy.damagedThisUpdate=true; attackFlash_=.2f;
   message_=attackEmpowered_?CombatStyleInfo().payoff:"Hit.";
   enemy.state=enemy.kind==EnemyKind::Dummy?EnemyState::Idle:EnemyState::Pursuing;
@@ -580,7 +601,7 @@ const char* Simulation::AbilityStatus(int index) const {
 }
 
 void Simulation::PrepareFrontierEnemies(int rank) {
-  chain_.Clear(); // Encounter actors reuse IDs; old contacts must not follow them.
+  chain_.Clear();discipline_.Clear();retreatThreat_=0; // Encounter actors reuse IDs; old contacts must not follow them.
   constexpr Vec2 west[]={{-23,15},{-19,19},{-24,23}};
   constexpr Vec2 north[]={{-6,25},{0,27},{6,25}};
   constexpr Vec2 highlands[6][6]={
@@ -870,13 +891,14 @@ void Simulation::Update(float seconds,const Command& command) {
   for(auto& dummy:dummies_) dummy.hitFlash=std::max(0.f,dummy.hitFlash-dt);
   sparringReportTime_=std::max(0.f,sparringReportTime_-dt);
   if (health_<=0) {
-    chain_.Clear();
+    chain_.Clear();discipline_.Clear();retreatThreat_=0;
     CloseQuestDialogue(); jumpBuffer_=0;
     if (command.respawn) Respawn();
     else message_="You have fallen. Enter returns to Dawnwatch with progress retained. R resets all.";
     return;
   }
   chain_.Advance(dt);
+  discipline_.Advance(dt);
   for (auto& cooldown : cooldowns_) cooldown=std::max(0.f,cooldown-dt);
   potionCooldown_=std::max(0.f,potionCooldown_-dt);
   evasion_=std::max(0.f,evasion_-dt);
@@ -1114,6 +1136,15 @@ void Simulation::Update(float seconds,const Command& command) {
       }
     }
     if (!Dashing()) {
+      const Vec2 away=Difference(retreatOrigin_,retreatThreatPosition_),travel=Difference(player_,retreatOrigin_);
+      const float length=Length(away);
+      if(class_==ClassId::Scout && retreatThreat_ && target && target->health>0 && target->state!=EnemyState::Returning &&
+          length>.001f && (travel.x*away.x+travel.z*away.z)/length>=1.5f) {
+        const float elapsed=endedEarly?0:dt-step;
+        discipline_.Prime(5,elapsed);
+        EmitVisual(CombatVisualKind::DisciplineReady,player_,height_+1.f,facing_,0,elapsed);
+      }
+      retreatThreat_=0;
       if(!blocked && !endedEarly && HasTalent(Talent::SecondWind)) barrier_=std::max(barrier_,18.f);
       EmitVisual(blocked?CombatVisualKind::DashImpact:CombatVisualKind::DashStop,
         player_,height_,facing_,0,endedEarly?0:dt-step);

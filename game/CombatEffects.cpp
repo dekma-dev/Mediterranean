@@ -16,6 +16,7 @@ bool HostileRelease(K kind) {return kind==K::EnemyQuake || kind==K::EnemyTempest
 float BurstLife(const rpg::CombatVisualEvent& e) {
   if(e.kind==K::SpellCast)return std::clamp((std::isfinite(e.flight)?e.flight:0.f)+.16f,.16f,.95f);
   if(HostileRelease(e.kind))return .72f;
+  if(e.kind==K::DisciplineReady || e.kind==K::DisciplineSpent)return .65f;
   return e.kind==K::Hit || e.kind==K::HeavyHit?spellvfx::ContactLifetime(e):Healing(e.kind)?.8f:Dashing(e.kind)?.42f:burstLife;
 }
 float Unit(float x) { return std::clamp(x,0.f,1.f); }
@@ -282,6 +283,10 @@ std::size_t CombatEffects::TrailCount() const {
 bool CombatEffects::HasRecovery() const {
   return std::any_of(bursts_.begin(),bursts_.end(),[](const Burst& b){return b.event.kind==K::Mend && b.age<BurstLife(b.event);});
 }
+bool CombatEffects::NeedsPose() const {
+  return HasRecovery() || std::any_of(bursts_.begin(),bursts_.end(),[](const Burst& b){return b.event.actor==0 &&
+    (b.event.kind==K::DisciplineReady || b.event.kind==K::DisciplineSpent) && b.age<BurstLife(b.event);});
+}
 void CombatEffects::Render(Renderer& renderer,const castfx::Attachments* caster) const {
   // Warning contours are already submitted by Game. Contact geometry gets
   // the next budget, before weapon wakes and player cosmetics. Sort without
@@ -395,6 +400,7 @@ void CombatEffects::Render(Renderer& renderer,const castfx::Attachments* caster)
       classfx::Projectile(renderer,e,burst.spellOrigin,burst.age);
       continue;
     }
+    if(e.kind==K::DisciplineReady || e.kind==K::DisciplineSpent){castfx::DisciplinePulse(renderer,e,burst.age,caster);continue;}
     if(e.kind==K::BarrierHit) { classfx::BarrierContact(renderer,e,burst.age);continue; }
     if(e.kind==K::Hit || e.kind==K::HeavyHit) {
       classfx::Impact(renderer,e,burst.age);continue;

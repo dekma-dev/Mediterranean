@@ -36,8 +36,11 @@ struct AuthoredWeaponController {
       const float start=contact*.40f,end=contact+(heavy?.95f:.75f);
       phase=playerclips::AttackPhase(clip,clock,start,contact,end);
       const auto target=playerclips::Sample(clip,phase);
-      const float w=combat::Smooth(clock/std::min(.10f,start))*(1-combat::Smooth((clock-contact-.10f)/(end-contact-.10f)));
-      blendAge=std::min(.10f,blendAge+dt);const float blend=combat::Smooth(blendAge/.10f);
+      const float w=combat::Smooth(clock/std::min(.22f,contact))*(1-combat::Smooth((clock-contact-.10f)/(end-contact-.10f)));
+      blendAge=std::min(.10f,blendAge+dt);
+      // Fade an interrupted stroke once. Multiplying two entrance envelopes
+      // compressed a fresh attack's preparation into its last few frames.
+      const float blend=outgoingWeight>0?combat::Smooth(blendAge/.10f):1.f;
       weight=outgoingWeight*(1-blend)+w*blend;
       // Blend weighted displacements, so a nearly invisible incoming guard does
       // not pull the still-visible outgoing hand to an unrelated position.

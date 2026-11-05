@@ -20,6 +20,29 @@ LimbPose Solve(XMFLOAT3 root,XMFLOAT3 target,XMFLOAT3 bend,float upper,float low
   XMStoreFloat3(&result.end,origin+axis*distance);
   return result;
 }
+LimbPose SolveArm(XMFLOAT3 root,XMFLOAT3 target,XMFLOAT3 authoredBend) {
+  const auto delta=XMLoadFloat3(&target)-XMLoadFloat3(&root);
+  const auto axis=XMVector3Normalize(delta);
+  // Transport the resting elbow plane with the reach direction. A fixed pole
+  // becomes parallel to the arm during a bow draw and flips the elbow through
+  // the shoulder. This frame has its singularity above the shoulder, outside
+  // the authored reach range, instead of inside the playable draw/carry arc.
+  auto q=XMVectorSet(-XMVectorGetZ(axis),0,XMVectorGetX(axis),1-XMVectorGetY(axis));
+  const auto base=XMVectorGetX(XMVector4LengthSq(q))>.000001f?
+    XMVector3Rotate(XMVectorSet(0,0,-1,0),XMQuaternionNormalize(q)):XMVectorSet(0,0,-1,0);
+  auto desired=XMLoadFloat3(&authoredBend);desired-=axis*XMVector3Dot(desired,axis);
+  const float length=XMVectorGetX(XMVector3Length(desired));
+  auto bend=base;
+  if(length>.00001f) {
+    desired/=length;
+    const float agreement=std::max(0.f,XMVectorGetX(XMVector3Dot(base,desired)));
+    // Retain the authored swivel within the anatomical hemisphere. Fade it
+    // out continuously when grip retargeting would invert the bend plane.
+    bend=XMVector3Normalize(XMVectorLerp(base,desired,agreement*.85f));
+  }
+  XMFLOAT3 pole;XMStoreFloat3(&pole,bend);
+  return Solve(root,target,pole,CharacterPose::upperArm,CharacterPose::forearm,.006f);
+}
 }
 DirectX::XMFLOAT3 CharacterPose::UpperDirection(DirectX::XMFLOAT3 p) const {
   const float y=p.y*std::cos(upperPitch)-p.z*std::sin(upperPitch);
@@ -29,17 +52,32 @@ DirectX::XMFLOAT3 CharacterPose::UpperDirection(DirectX::XMFLOAT3 p) const {
     -x*std::sin(upperYaw)+z*std::cos(upperYaw)};
 }
 DirectX::XMFLOAT3 CharacterPose::UpperPoint(DirectX::XMFLOAT3 p) const {
-  p.y-=.95f; p=UpperDirection(p); p.y+=.95f+bodyLift; p.x+=bodyShift; return p;
+  p.y-=.95f; p=UpperDirection(p); p.y+=.95f+bodyLift; p.x+=bodyShift;p.z+=bodyForward; return p;
+}
+DirectX::XMMATRIX CharacterPose::PelvisTransform() const {
+  using namespace DirectX;
+  return XMMatrixTranslation(0,-.93f,0)*XMMatrixRotationX(pelvisRotation.x)*
+    XMMatrixRotationZ(pelvisRotation.z)*XMMatrixRotationY(pelvisRotation.y)*
+    XMMatrixTranslation(bodyShift,.93f+bodyLift,bodyForward);
+}
+DirectX::XMFLOAT3 CharacterPose::PelvisPoint(DirectX::XMFLOAT3 p) const {
+  DirectX::XMStoreFloat3(&p,DirectX::XMVector3TransformCoord(DirectX::XMLoadFloat3(&p),PelvisTransform()));return p;
 }
 DirectX::XMFLOAT3 CharacterPose::WeaponPoint(float distance) const {
   const auto hand=hasGripSocket?weaponGrip:arms[1].end;
   return {hand.x+weaponDirection.x*distance,hand.y+weaponDirection.y*distance,hand.z+weaponDirection.z*distance};
 }
+DirectX::XMFLOAT3 CharacterPose::FootPoint(unsigned side,DirectX::XMFLOAT3 local) const {
+  using namespace DirectX;
+  const auto& ankle=legs[side].end;
+  XMStoreFloat3(&local,XMVector3TransformCoord(XMLoadFloat3(&local),XMMatrixRotationX(footPitch[side])*
+    XMMatrixRotationY(footYaw[side])*XMMatrixTranslation(ankle.x,ankle.y,ankle.z)));return local;
+}
 DirectX::XMMATRIX CharacterPose::HeadTransform() const {
   using namespace DirectX;
   return XMMatrixTranslation(0,-1.61f,0)*XMMatrixRotationX(headPitch)*XMMatrixRotationY(headYaw)*
     XMMatrixTranslation(0,1.61f-.95f,0)*XMMatrixRotationX(upperPitch)*XMMatrixRotationZ(upperRoll)*
-    XMMatrixRotationY(upperYaw)*XMMatrixTranslation(bodyShift,.95f+bodyLift,0);
+    XMMatrixRotationY(upperYaw)*XMMatrixTranslation(bodyShift,.95f+bodyLift,bodyForward);
 }
 DirectX::XMFLOAT3 CharacterPose::HeadPoint(DirectX::XMFLOAT3 point) const {
   DirectX::XMFLOAT3 result;
@@ -99,7 +137,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   if(bow&&newStrike) {
     const auto& track=playerclips::Collection()[unsigned(heavy?playerclips::Clip::BowPowerRelease:playerclips::Clip::BowRelease)];
     const float p=dynamics.authoredStrikePhase;
-    pose.bowDraw=stroke.weight*animation::SmoothStep(p/track.contact)*(1-animation::SmoothStep((p-track.contact)/.055f));
+    pose.bowDraw=stroke.weight*animation::SmoothStep(p/track.contact)*(1-animation::SmoothStep((p-track.contact)/.18f));
     pose.bowArrow=p<=track.contact?stroke.weight*animation::SmoothStep(p/.035f):0;
   }
   pose.handCast=cast;
@@ -117,6 +155,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   // priority over locomotion, while contacts still compensate pelvis height.
   const float clipWeight=(1-swing)*(1-burst)*(1-hit);
   const float authoredBlend=dynamics.authoredGait?animation::Unit(dynamics.authoredBlend):0;
+  pose.upperPitch-=travel*.09f*authoredBlend;
   const auto& gesture=dynamics.action;
   const float gestureWeight=animation::SmoothStep(std::max(std::hypot(gesture.left.x,gesture.left.y,gesture.left.z),
     std::hypot(gesture.right.x,gesture.right.y,gesture.right.z))/.25f);
@@ -152,6 +191,10 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     gaitClip.weapon={direction.x*gaitAmount,direction.y*gaitAmount,direction.z*gaitAmount};
   }
   const float idleWeight=authoredBlend*(1-gaitAmount)*clipWeight*(1-air)*(1-castLayer);
+  // Hands are interpolated to the strike later; fading their carry here too
+  // would pull the wrists towards the unarmed rest pose halfway through a cut.
+  const float handAuthoredWeight=authoredBlend*(1-burst)*(1-hit)*(1-air)*(1-castLayer);
+  const float handIdleWeight=handAuthoredWeight*(1-gaitAmount);
   pose.bodyLift+=gaitClip.hip*authoredWeight+idleClip.hip*idleWeight;
   pose.upperPitch+=gaitClip.torso.x*authoredWeight+idleClip.torso.x*idleWeight;
   pose.bodyLift+=dynamics.motion.hip*clipWeight;
@@ -172,7 +215,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   pose.bodyShift=support*.032f+bank*.018f;
   // Load the rear side during anticipation and transfer weight through contact.
   // Feet remain solved against their planted targets below.
-  if(timed)pose.bodyShift+=stroke.weight*(stroke.cut*2-1)*(heavy?.035f:.022f)*(1-air)*(1-burst);
+  if(timed&&!newStrike)pose.bodyShift+=stroke.weight*(stroke.cut*2-1)*(heavy?.035f:.022f)*(1-air)*(1-burst);
   pose.upperRoll=-support*.035f-bank*.08f+dynamics.motion.roll*clipWeight;
   pose.upperRoll+=gaitClip.torso.z*authoredWeight+idleClip.torso.z*idleWeight;
   // Lateral contacts roll away from the blow and twist the shoulders slightly.
@@ -181,9 +224,9 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   pose.upperYaw+=animation::Signed(dynamics.hitSide)*.07f;
   // The shoulders counter the planted-leg transfer; descending opens the
   // chest and lowers the hips before the existing impact compression.
-  pose.upperYaw+=animation::Signed((sourceFeet[0].z-sourceFeet[1].z)/.6f)*.072f*(1-swing)*contactWeight;
+  pose.upperYaw+=animation::Signed((sourceFeet[0].z-sourceFeet[1].z)/.6f)*.072f*(1-swing)*contactWeight*(1-authoredBlend);
   const float actionWeight=(1-burst)*(1-hit);
-  const auto action=dynamics.action*(actionWeight*(newStrike&&(rpg::StaffWeapon(form)||bow)?1-stroke.weight*.95f:1));
+  const auto action=dynamics.action*(actionWeight*(newStrike?1-stroke.weight:1));
   pose.upperPitch+=action.pitch; pose.upperYaw+=action.yaw; pose.upperRoll+=action.roll;
   pose.bodyLift+=action.hip*(1-air);
   pose.handCast=std::max(pose.handCast,animation::Unit(action.open));
@@ -201,10 +244,46 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
       pose.bodyLift-=stroke.coil*(heavy?.065f:.035f)*(1-air);
     }
   }
+  // Full-body source channels share the same layer weights as the chest.
+  // Feet retain world anchors; the pelvis moves over them and IK compensates.
+  const auto addBody=[&](const playerclips::Frame& f,float weight) {
+    pose.pelvisRotation.x+=f.pelvis.x*weight;pose.pelvisRotation.y+=f.pelvis.y*weight;pose.pelvisRotation.z+=f.pelvis.z*weight;
+    pose.bodyShift+=f.shift.x*weight;pose.bodyForward+=f.shift.y*weight;
+  };
+  addBody(gaitClip,authoredWeight);addBody(idleClip,idleWeight);
+  addBody(jumpClip,authoredAir*(1-swing));
+  if(authoredLanding)addBody(landClip,landing*(1-swing));
+  if(newStrike)addBody(attackClip,stroke.weight*(1-air)*(1-burst));
+  if(newStrike && (dynamics.authoredEquipment==playerclips::Equipment::Sword || bow)) {
+    const auto clip=bow?(heavy?playerclips::Clip::BowPowerRelease:playerclips::Clip::BowRelease):(heavy?playerclips::Clip::Overhead:playerclips::Clip::Slash);
+    const float contact=playerclips::Collection()[unsigned(clip)].contact;
+    const float phase=dynamics.authoredStrikePhase;
+    const float load=animation::Gesture(phase,contact*.62f,std::max(.01f,contact));
+    const float release=animation::Gesture((phase-contact)/std::max(.01f,1-contact),.17f,.78f);
+    const float weight=stroke.weight*(1-air)*(1-burst)*(1-hit);
+    if(bow){pose.upperPitch+=weight*(.035f*load-.055f*release);pose.upperYaw+=weight*(.035f*load-.06f*release);
+      pose.bodyForward+=weight*(.014f*load-.022f*release);}
+    else {pose.bodyLift-=weight*(heavy?.028f:.014f)*load;pose.bodyForward+=weight*((heavy?.045f:.026f)*release-.018f*load);
+      pose.upperPitch+=weight*(.06f*release-.035f*load);pose.upperRoll+=weight*.025f*release;}
+  }
+  std::array<XMFLOAT3,2> elbowPoles{};
+  for(int i=0;i<2;++i) {
+    const XMFLOAT3 fallback{i==0?-.8f:.8f,-.2f,-1};
+    auto pole=XMLoadFloat3(&fallback);
+    const auto addPole=[&](const playerclips::Frame& f,float w) {
+      const auto p=XMLoadFloat3(&f.elbows[i]);
+      if(XMVectorGetX(XMVector3LengthSq(p))>.0001f)pole=XMVectorLerp(pole,XMVector3Normalize(p),std::clamp(w,0.f,1.f));
+    };
+    addPole(idleClip,authoredBlend*(1-gaitAmount));addPole(gaitClip,authoredBlend*gaitAmount);
+    addPole(flightArms,authoredAir);if(authoredLanding)addPole(landingArms,landing);
+    if(newStrike)addPole(attackClip,stroke.weight*(1-burst)*(1-hit));
+    XMStoreFloat3(&elbowPoles[i],XMVector3Normalize(pole));
+    elbowPoles[i]=pose.UpperDirection(elbowPoles[i]);
+  }
   std::array<XMFLOAT3,2> contacts{};
   if (contactWeight>0) for (int i=0;i<2;++i) {
     const auto& foot=sourceFeet[i];
-    const float hip=(i==0?-.17f:.17f)+pose.bodyShift;
+    const float hip=pose.PelvisPoint({i==0?-.17f:.17f,.93f,0}).x;
     // Use the same bounded contact for standing and departure, including its
     // heading. Losing the heading at release visibly twists a turning boot.
     float x=std::isfinite(foot.x)?foot.x-hip:0,z=std::isfinite(foot.z)?foot.z:0;
@@ -213,7 +292,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
       const float y=std::isfinite(foot.y) && foot.y>=-.2f && foot.y<=1.f?std::clamp(foot.y,-.16f,.50f):.17f;
     contacts[i]={hip+x,y,z};
     pose.footYaw[i]=std::isfinite(foot.yaw)?std::remainder(foot.yaw,motion::tau)*contactWeight:0;
-    pose.footPitch[i]=std::isfinite(foot.pitch)?std::clamp(foot.pitch,-.3f,.3f)*contactWeight:0;
+    pose.footPitch[i]=std::isfinite(foot.pitch)?std::clamp(foot.pitch,-.3f,.65f)*contactWeight:0;
   }
   // The push leg sweeps back, then the opposite leg reaches into the catch.
   const float drive=1-2*animation::SmoothStep((animation::Unit(dynamics.dashPhase)-.20f)/.50f);
@@ -240,24 +319,26 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     // poses without a world contact controller. With anatomical shin length,
     // even breathing can otherwise lift a standing ankle beyond its reach.
     // Retaining this fit through departure also prevents a takeoff hip snap.
-    const float x=target.x-(side*.17f+pose.bodyShift);
+    const auto hip=pose.PelvisPoint({side*.17f,.93f,0});
+    const float x=target.x-hip.x,z=target.z-hip.z;
     // Keep a small non-singular bend without reintroducing a visible idle
     // crouch. The solver itself reserves 0.05 mm of extension.
     constexpr float reach=CharacterPose::thigh+CharacterPose::shin-.0002f;
     pose.bodyLift=std::min(pose.bodyLift,
-      target.y+std::sqrt(std::max(0.f,reach*reach-x*x-target.z*target.z))-.93f);
+      target.y+std::sqrt(std::max(0.f,reach*reach-x*x-z*z))-(hip.y-pose.bodyLift));
   }
   for (int i=0;i<2;++i) {
     const float side=i==0?-1.f:1.f;
-    pose.legs[i]=Solve({side*.17f+pose.bodyShift,.93f+pose.bodyLift,0},targets[i],{0,0,1},CharacterPose::thigh,CharacterPose::shin,.00005f);
+    const XMFLOAT3 knee{std::sin(pose.pelvisRotation.y)*.35f,0,std::cos(pose.pelvisRotation.y)};
+    pose.legs[i]=Solve(pose.PelvisPoint({side*.17f,.93f,0}),targets[i],knee,CharacterPose::thigh,CharacterPose::shin,.00005f);
     const float armStride=strides[i]+(std::clamp(contacts[i].z/.30f,-1.f,1.f)-strides[i])*contactWeight;
     const float attack=i==1&&!newStrike?swing:0;
     XMFLOAT3 hand{side*(.40f+air*.035f),1.02f+attack*.52f+air*.12f+landing*.08f+hit*.08f+dash*.12f+brake*.07f,
       .10f-armStride*.13f+attack*.21f+sway*side*.014f-dash*.20f+brake*.12f};
     hand.z+=dynamics.motion.reach*clipWeight;
-    hand.x+=gaitClip.hands[i].x*authoredWeight+idleClip.hands[i].x*idleWeight;
-    hand.y+=gaitClip.hands[i].y*authoredWeight+idleClip.hands[i].y*idleWeight;
-    hand.z+=(gaitClip.hands[i].z+armStride*.13f*gaitAmount)*authoredWeight+idleClip.hands[i].z*idleWeight;
+    hand.x+=gaitClip.hands[i].x*handAuthoredWeight+idleClip.hands[i].x*handIdleWeight;
+    hand.y+=gaitClip.hands[i].y*handAuthoredWeight+idleClip.hands[i].y*handIdleWeight;
+    hand.z+=(gaitClip.hands[i].z+armStride*.13f*gaitAmount)*handAuthoredWeight+idleClip.hands[i].z*handIdleWeight;
     // Reach forward on descent to brace for impact; rising arms trail the push.
     hand.z+=air*(.18f*animation::SmoothStep(-rise)-.10f*std::max(0.f,rise))*(1-swing);
     if(authoredAir>0) {
@@ -277,7 +358,12 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
       hand.z+=gaitClip.hands[i].z*authoredWeight*.25f;
     }
     if (timed) {
-      const float cut=stroke.cut,weight=stroke.weight*(1-burst);
+      const float cut=stroke.cut;
+      float weight=stroke.weight*(1-burst);
+      if(i==0&&newStrike&&(bow||rpg::StaffWeapon(form))) {
+        const auto clip=bow?(heavy?playerclips::Clip::BowPowerRelease:playerclips::Clip::BowRelease):heavy?playerclips::Clip::StaffSweep:playerclips::Clip::StaffThrust;
+        weight*=animation::SmoothStep(dynamics.authoredStrikePhase/playerclips::Collection()[unsigned(clip)].contact);
+      }
       // Coil beside the shoulder, cut across the body, then return to guard.
       XMFLOAT3 attackHand=i==1?
         XMFLOAT3{.46f-cut*.34f,(heavy?1.66f:1.48f)-cut*.38f,-.13f+cut*.59f}:
@@ -307,8 +393,11 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
       hand.y+=.20f*animation::Unit(action.aim);hand.z+=.20f*animation::Unit(action.aim);
       if(form==rpg::WeaponForm::Handbow) hand.x-=.12f*animation::Unit(action.aim);
     }
-    pose.arms[i]=Solve(pose.UpperPoint({side*.305f,1.43f,0}),pose.UpperPoint(hand),
-      pose.UpperDirection({side*.8f,-.2f,-1}),CharacterPose::upperArm,CharacterPose::forearm);
+    const auto shoulder=pose.UpperPoint({side*.305f,1.43f,0}),wrist=pose.UpperPoint(hand);
+    // Legacy procedural gestures have no authored elbow channel. Retain their
+    // established bend plane; the transported solver belongs to authored clips.
+    pose.arms[i]=dynamics.authoredGait || newStrike?SolveArm(shoulder,wrist,elbowPoles[i]):
+      Solve(shoulder,wrist,elbowPoles[i],CharacterPose::upperArm,CharacterPose::forearm);
   }
   XMFLOAT3 weapon{.12f,-.76f+swing*1.72f+landing*.25f+air*.20f+dash*.32f+brake*.16f,.63f-swing*.45f};
   if(rpg::StaffWeapon(form))weapon={.10f,.99f,.04f+dash*.18f};
@@ -374,25 +463,27 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   const auto wristOffset=-shaftRight*.055f+shaftForward*.043f;
   if(pose.hasGripSocket) {
     XMFLOAT3 wrist;XMStoreFloat3(&wrist,XMLoadFloat3(&pose.arms[1].end)+wristOffset);
-    pose.arms[1]=Solve(pose.arms[1].root,wrist,pose.UpperDirection({.8f,-.2f,-1}),CharacterPose::upperArm,CharacterPose::forearm);
+    pose.arms[1]=SolveArm(pose.arms[1].root,wrist,elbowPoles[1]);
     XMStoreFloat3(&pose.weaponGrip,XMLoadFloat3(&pose.arms[1].end)-wristOffset);
   }
   if(rpg::StaffWeapon(form)&&!shield&&dynamics.authoredGait&&dynamics.authoredEquipment==playerclips::Equipment::Staff) {
+    const auto& strike=playerclips::Collection()[unsigned(heavy?playerclips::Clip::StaffSweep:playerclips::Clip::StaffThrust)];
+    const float loaded=newStrike?animation::SmoothStep(dynamics.authoredStrikePhase/strike.contact):1.f;
     pose.staffGripWeight=authoredBlend*(1-burst)*(1-hit)*(1-cast)*
-      std::max(ready,stroke.weight)*(1-animation::Unit(action.open)*(1-stroke.weight));
+      std::max(ready,stroke.weight*loaded)*(1-animation::Unit(action.open)*(1-stroke.weight));
     // Retarget the two-handed shaft onto the shorter, wider native skeleton.
     // Project the shared grip into BOTH reach spheres before solving either arm.
     auto grip=XMLoadFloat3(&pose.weaponGrip),axis=shaftUp;
     const auto right=XMLoadFloat3(&pose.arms[1].root),left=XMLoadFloat3(&pose.arms[0].root);
-    const float reach=CharacterPose::upperArm+CharacterPose::forearm-.002f;
+    const float reach=CharacterPose::upperArm+CharacterPose::forearm-.007f;
     for(int iteration=0;iteration<12;++iteration)for(auto centre:{left-wristOffset-axis*.26f,right-wristOffset}) {
       const auto d=grip-centre;const float len=XMVectorGetX(XMVector3Length(d));
       if(len>reach)grip=centre+d*(reach/len);
     }
     XMFLOAT3 r,l;XMStoreFloat3(&r,XMVectorLerp(XMLoadFloat3(&pose.arms[1].end),grip+wristOffset,pose.staffGripWeight));
     XMStoreFloat3(&l,XMVectorLerp(XMLoadFloat3(&pose.arms[0].end),grip+axis*.26f+wristOffset,pose.staffGripWeight));
-    pose.arms[1]=Solve(pose.arms[1].root,r,pose.UpperDirection({.22f,-1,-.55f}),CharacterPose::upperArm,CharacterPose::forearm);
-    pose.arms[0]=Solve(pose.arms[0].root,l,pose.UpperDirection({-.22f,-1,-.55f}),CharacterPose::upperArm,CharacterPose::forearm);
+    pose.arms[1]=SolveArm(pose.arms[1].root,r,elbowPoles[1]);
+    pose.arms[0]=SolveArm(pose.arms[0].root,l,elbowPoles[0]);
     XMStoreFloat3(&pose.weaponGrip,XMLoadFloat3(&pose.arms[1].end)-wristOffset);
   }
   if(bow && pose.bowDraw>0) {
@@ -402,10 +493,22 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     const auto localRight=pose.UpperDirection({1,0,0});const auto lateral=XMLoadFloat3(&localRight);
     const auto right=XMVector3Normalize(lateral-up*XMVector3Dot(lateral,up));
     const auto forward=XMVector3Cross(right,up);
-    const auto nock=XMLoadFloat3(&pose.weaponGrip)+up*.035f-forward*(.07f+.40f*pose.bowDraw);
-    const float grip=pose.bowDraw*(1.1f-.1f*pose.bowDraw);
+    const auto nockOffset=up*.035f-forward*(.07f+.40f*pose.bowDraw);
+    auto sharedGrip=XMLoadFloat3(&pose.weaponGrip);
+    const auto leftRoot=XMLoadFloat3(&pose.arms[0].root),rightRoot=XMLoadFloat3(&pose.arms[1].root);
+    constexpr float reach=CharacterPose::upperArm+CharacterPose::forearm-.007f;
+    for(int iteration=0;iteration<12;++iteration)for(auto centre:{leftRoot-wristOffset-nockOffset,rightRoot-wristOffset}) {
+      const auto d=sharedGrip-centre;const float length=XMVectorGetX(XMVector3Length(d));
+      if(length>reach)sharedGrip=centre+d*(reach/length);
+    }
+    sharedGrip=XMVectorLerp(XMLoadFloat3(&pose.weaponGrip),sharedGrip,animation::SmoothStep(pose.bowDraw/.6f));
+    XMFLOAT3 holdingWrist;XMStoreFloat3(&holdingWrist,sharedGrip+wristOffset);
+    pose.arms[1]=SolveArm(pose.arms[1].root,holdingWrist,elbowPoles[1]);
+    XMStoreFloat3(&pose.weaponGrip,XMLoadFloat3(&pose.arms[1].end)-wristOffset);
+    const auto nock=XMLoadFloat3(&pose.weaponGrip)+nockOffset;
+    const float grip=animation::SmoothStep(pose.bowDraw/.8f);
     XMFLOAT3 target;XMStoreFloat3(&target,XMVectorLerp(XMLoadFloat3(&pose.arms[0].end),nock+wristOffset,grip));
-    pose.arms[0]=Solve(pose.arms[0].root,target,pose.UpperDirection({-.8f,.15f,-.4f}),CharacterPose::upperArm,CharacterPose::forearm);
+    pose.arms[0]=SolveArm(pose.arms[0].root,target,elbowPoles[0]);
   }
   return pose;
 }

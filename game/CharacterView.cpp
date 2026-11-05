@@ -79,7 +79,7 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
         const float pitch=-.25f*XMVectorGetZ(direction);
         renderer.DrawMeshTransformed(fitting.mesh,XMMatrixRotationX(pitch)*XMMatrixRotationZ(roll)*
           XMMatrixTranslation(fitting.position.x,fitting.position.y-.95f,0)*torso*
-          XMMatrixTranslation(pose.bodyShift,.95f+pose.bodyLift,0)*actorTransform,fitting.color,fitting.material);
+          XMMatrixTranslation(pose.bodyShift,.95f+pose.bodyLift,pose.bodyForward)*actorTransform,fitting.color,fitting.material);
         continue;
       }
       if(fitting.mesh==M::GuardShoulderLeft || fitting.mesh==M::GuardShoulderRight) {
@@ -182,7 +182,7 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
         }
       }
       const float bootYaw=yaw+pose.footYaw[i];
-      const XMFLOAT3 foot{ankle.x+std::sin(bootYaw)*.035f,ankle.y-.035f,ankle.z+std::cos(bootYaw)*.035f};
+      const auto foot=world(pose.FootPoint(i,{0,-.055f,.035f}));
       renderer.DrawMesh(outfit.boots?M::PlayerBoot:M::Boot,foot,outfit.boots?XMFLOAT3{.145f,.23f,.30f}:XMFLOAT3{.15f,.16f,.28f},outfit.boots?leather:skin,outfit.boots?S::WornLeather:S::Skin,bootYaw,pose.footPitch[i]);
       if (outfit.boots) {
         if(!oldStyle)renderer.DrawSegment({knee.x,knee.y-.025f,knee.z},{knee.x,knee.y+.025f,knee.z},.245f,.26f,{.39f,.29f,.15f,1},S::Cloth);

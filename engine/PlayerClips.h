@@ -18,12 +18,17 @@ struct Frame {
  std::array<DirectX::XMFLOAT3,2> hands{},feet{};
  float hip=0;
  DirectX::XMFLOAT3 weapon{},torso{};
+ // Pelvis orientation is independent of the global chest orientation. Elbows
+ // are shoulder-relative chest-space directions, retained through retargeting.
+ DirectX::XMFLOAT3 pelvis{};
+ DirectX::XMFLOAT2 shift{}; // Lateral and forward displacement, metres.
+ std::array<DirectX::XMFLOAT3,2> elbows{};
 };
+inline constexpr unsigned frameChannels=30;
 struct Track {
  float duration=0,load=0,contact=0,takeoff=0,landing=0,stance=0,speed=0;
  bool loop=false;
  std::vector<Frame> frames;
-  std::vector<float> arc;
 };
 using Library=std::array<Track,unsigned(Clip::Count)>;
 Library Decode(std::string_view bytes);

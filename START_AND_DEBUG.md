@@ -1,3 +1,14 @@
+## Current four-class audio and combat (2026-11-05)
+
+Restart `build-ninja-release/MediterraneanLauncher.exe` for play. Visual Studio
+debugging uses `build-local/Debug/RPGNative.exe`. Character selection now has
+its own music; check sound sliders before comparing Mage, Scout, Priest and
+Warrior attacks at a practice dummy. Existing characters and bindings are kept.
+
+`AudioTests` writes short class auditions and complete music previews into its
+build directory. See `docs/four-class-combat-audio.md` and the first checklist
+in `tests/manual-smoke.md` for the four combat opportunity triggers.
+
 ## Current cast preparation and attached recovery (2026-11-05)
 
 Use `build-ninja-release/MediterraneanLauncher.exe` for play or

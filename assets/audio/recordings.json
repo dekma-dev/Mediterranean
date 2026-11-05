@@ -1,0 +1,80 @@
+{
+  "license": "CC0-1.0",
+  "source_sha256": {
+    "battle_sound_effects/Bow.wav": "0dc8cf132cf583563936ac3a4d776e196210d5f6703b4ebdd7c68e8f35b9f3e3",
+    "fireball.wav": "3992598c814de25c318780e506aeda673a7e410b7b3c4f0793883483ff9766b8",
+    "yelling sounds/3grunt3.wav": "6006516ae7979896a4053cfc88f26ef575a67133fa0c51de5d9a893498960cc9",
+    "Fantozzi-footsteps/flac/Fantozzi-StoneL1.flac": "7cfa4a2f500ae2bd19a961022296611d837c34ca2e556fe68deb692388f49971",
+    "Fantozzi-footsteps/flac/Fantozzi-SandL1.flac": "93a2630579a82507e3c6ceab9b012f71a50cf8922f4beadb14057dcc0636b099",
+    "yelling sounds/3grunt4.wav": "4ba97adf030acefa10195f88c3fb329ebbea2c9638bd412896e1b4fc0ca35404",
+    "Fantozzi-footsteps/flac/Fantozzi-StoneR2.flac": "d66330b4a32e93b0dfdcb8c53667654de8702a0fa48b2d06c48d94dc66b3e1cc",
+    "Fantozzi-footsteps/flac/Fantozzi-SandR2.flac": "0356f659313887f01a9f21fd5bedf57a77073d0d74d57b5621279ee453a80f3c",
+    "yelling sounds/3grunt5.wav": "32705e7835d0cdce3eb6e9d3a512ef128ee6c50564bd53bb0723b4474be85181",
+    "Fantozzi-footsteps/flac/Fantozzi-StoneL3.flac": "37a25f4254cf8f2e56d271912b0569f3bb15c57bf3fde9de492466eb23853b0d",
+    "Fantozzi-footsteps/flac/Fantozzi-SandL3.flac": "042820e65cc947d8bb8adf18524ffff7cdf5fc310f9412cbf8bdf7a139984c21",
+    "Fantasy Choir 1.wav": "2e1e507276d0058797bfd002768a512fca2a4ccc4f337bdfa49415b95ab623e4",
+    "Fantasy Choir 2.wav": "594b5b90d5f51784864c4fe7724e1c6a43e2a0c0d330fe206896681f879a3f05",
+    "Fantasy Choir 3.wav": "98002f8f296e192bb8982010d4e31e4b403e471fc414467ec76cc0afd81e282a"
+  },
+  "music": [
+    {
+      "file": "menu-choir.wav",
+      "seconds": 53.102,
+      "bytes": 2451754
+    },
+    {
+      "file": "world-choir.wav",
+      "seconds": 126.131,
+      "bytes": 5823194
+    },
+    {
+      "file": "combat-choir.wav",
+      "seconds": 91.241,
+      "bytes": 4212514
+    }
+  ],
+  "effects": {
+    "Bow0": 7475,
+    "BowHeavy0": 8438,
+    "Fire0": 33819,
+    "FireHeavy0": 45690,
+    "FireImpact0": 52394,
+    "WarriorEffort0": 11025,
+    "Step0": 8222,
+    "Land0": 11161,
+    "StepDirt0": 9758,
+    "LandDirt0": 12906,
+    "StepGrass0": 9758,
+    "LandGrass0": 12906,
+    "Bow1": 7685,
+    "BowHeavy1": 8689,
+    "Fire1": 35128,
+    "FireHeavy1": 47493,
+    "FireImpact1": 54476,
+    "WarriorEffort1": 5516,
+    "Step1": 7113,
+    "Land1": 9901,
+    "StepDirt1": 7501,
+    "LandDirt1": 10342,
+    "StepGrass1": 7501,
+    "LandGrass1": 10342,
+    "Bow2": 7259,
+    "BowHeavy2": 8179,
+    "Fire2": 32468,
+    "FireHeavy2": 43827,
+    "FireImpact2": 50242,
+    "WarriorEffort2": 7967,
+    "Step2": 7297,
+    "Land2": 10110,
+    "StepDirt2": 6604,
+    "LandDirt2": 9322,
+    "StepGrass2": 6604,
+    "LandGrass2": 9322
+  },
+  "outputs": {
+    "combat-choir.wav": "58ef57887504fd753c1ea708ff50228b747cdd7935b2ff60c4af9ca6f16674c8",
+    "combat-recordings.bank": "2924b907bca2da0cb6f7bc56ae9050fcf7a56d6350b725e752694952322bd593",
+    "menu-choir.wav": "abd974a5febef44157b0fdb59d13ffc4461822b54031cfa33d21a367e3e6a25b",
+    "world-choir.wav": "179fe14b2c1d9cea18ae403683e52117ad5aa60475815054d995028813e1d2e5"
+  }
+}

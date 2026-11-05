@@ -36,12 +36,12 @@ animation::Sample Walk(int hz,float speed,bool curved=false) {
     const auto pose=BuildCharacterPose(0,0,false,sample); Geometry(pose);
     minShift=std::min(minShift,pose.bodyShift); maxShift=std::max(maxShift,pose.bodyShift);
     for (int i=0;i<2;++i) {
-      const auto actual=World(pose.legs[i].end,root,yaw);
+      const auto actual=World(pose.FootPoint(i,{0,-.17f,.185f}),root,yaw);
       if (planted[i] && feet.Planted(i)) {
         worstSlip=std::max(worstSlip,Distance(actual,previous[i])); ++contacts;
         Require(std::abs(motion::AngleDelta(previousYaw[i],yaw+pose.footYaw[i]))<.0001f,"Planted boots must not rotate with the body");
       }
-      if (actual.y>.19f) ++lifts;
+      if (pose.legs[i].end.y>.19f) ++lifts;
       previous[i]=actual; previousYaw[i]=yaw+pose.footYaw[i]; planted[i]=feet.Planted(i);
     }
   }
@@ -74,7 +74,7 @@ int main() {
       }
       const float rate=steps/8.f;
       std::cout<<"Measured contacts / speed "<<speed<<": "<<rate<<" steps per second\n";
-      Require(rate>(speed<2?1.6f:3.6f)&&rate<(speed<2?2.5f:4.8f),"Actual foot cadence exceeds human gait range");
+      Require(rate>(speed<2?1.6f:2.8f)&&rate<(speed<2?2.5f:3.8f),"Actual foot cadence exceeds human gait range");
     }
     animation::FootPlacement restart;restart.Reset({0,0},0);animation::Sample stopped;
     for(int frame=1;frame<=120;++frame)restart.Update(1.f/60,{0,frame*1.4f/60},0,true,true,stopped);

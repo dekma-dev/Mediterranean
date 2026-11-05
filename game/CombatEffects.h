@@ -26,6 +26,7 @@ public:
   bool Tracking(rpg::EntityId actor) const;
   std::size_t BurstCount() const;
   bool HasRecovery() const;
+  bool NeedsPose() const;
   std::size_t TrailCount() const;
   static DirectX::XMFLOAT3 SpellTracePoint(DirectX::XMFLOAT3 origin,rpg::Vec2 destination,float progress,float arc=.16f,float targetHeight=1.25f);
   void Render(Renderer& renderer,const castfx::Attachments* caster=nullptr) const;

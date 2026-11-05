@@ -118,7 +118,9 @@ void Simulation::EmitVisual(CombatVisualKind kind,Vec2 position,float height,flo
     const bool attack=kind==CombatVisualKind::SpellCast || kind==CombatVisualKind::Strike ||
       kind==CombatVisualKind::HeavyStrike || kind==CombatVisualKind::Hit || kind==CombatVisualKind::HeavyHit;
     event.ability=attack?attackAbility_:-1;
+    if(kind==CombatVisualKind::CastStart)event.ability=Attacking()?attackAbility_:CastingRecovery()?3:-1;
     event.opening=attack && OpeningAttack();event.signature=attack && SignatureAttack();event.technique=attack && TechniqueAttack();event.heavy=attack && HeavyAttack();event.empowered=attack && attackEmpowered_;
+    event.discipline=attack && attackConfluence_;
     if(kind==CombatVisualKind::SpellCast) {
       for(const auto& enemy:Combatants()) if(enemy.id==attackTarget_) {event.destination=enemy.position;event.destinationHeight=enemy.ContactHeight();}
       if(sparring_ && trainer_.id==attackTarget_) event.destination=trainer_.position;
@@ -143,6 +145,11 @@ void Simulation::DamagePlayer(float damage,float incomingFacing,float visualElap
   }
   const float incoming=std::max(1.f,damage-DamageReduction());
   const float absorbed=std::min(barrier_,incoming);barrier_-=absorbed;
+  if(class_==ClassId::Warrior && absorbed>0 && discipline_.guard+visualElapsed>0 &&
+      -std::cos(incomingFacing-facing_)>=.25f) {
+    discipline_.guard=-1;discipline_.Prime(5,visualElapsed);
+    EmitVisual(CombatVisualKind::DisciplineReady,player_,height_+1.f,facing_,0,visualElapsed);
+  }
   if(absorbed>0 && class_==ClassId::Warrior) classResource_=std::min(CombatStyleInfo().capacity,classResource_+1);
   const float applied=std::min(sparring_?std::max(0.f,health_-1):health_,incoming-absorbed);
   health_-=applied;
@@ -156,7 +163,7 @@ void Simulation::DamagePlayer(float damage,float incomingFacing,float visualElap
   if (applied>0) EmitVisual(CombatVisualKind::Hurt,player_,height_+1.2f,incomingFacing,0,visualElapsed);
   if (Channeling()) { channelRemaining_=0; message_="Damage interrupted stabilization."; }
   if (health_==0) {
-    chain_.Clear();
+    chain_.Clear();discipline_.Clear();retreatThreat_=0;
     frostSeconds_=0;
     classResource_=0;barrier_=0;evasion_=0;
     target_=-1; height_=0; velocityY_=0; attackFlash_=0; StopMovement();
@@ -184,7 +191,7 @@ void Simulation::EndSparring(const char* result) {
 }
 
 void Simulation::Respawn() {
-  chain_.Clear();
+  chain_.Clear();discipline_.Clear();retreatThreat_=0;
   if(ReplayActive()) EndReplay(false);
   frostSeconds_=0;
   courtChannel_=0;courtChannelSite_=-1;
@@ -278,7 +285,7 @@ void Simulation::BeginReplay() {
   message_="Veteran rehearsal started. No XP or loot; health, potions and cooldowns are not refunded. Loading leaves the rehearsal.";
 }
 void Simulation::RestoreCampaignEncounter() {
-  chain_.Clear();
+  chain_.Clear();discipline_.Clear();retreatThreat_=0;
   enemies_=std::move(campaignEnemies_);replayChapter_=-1;
   expeditionMask_=courtSeals_=0;ritualStage_=0;ritualCharge_=courtChannel_=0;courtChannelSite_=-1;
   frostSeconds_=0;target_=-1;friendlyTarget_=-1;StopMovement();CancelAttack();CloseQuestDialogue();

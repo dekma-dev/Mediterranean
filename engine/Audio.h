@@ -11,15 +11,22 @@ constexpr unsigned sampleRate=22050;
 constexpr unsigned musicSeconds=48;
 enum class Cue { Strike,Heavy,Enemy,Hit,HeavyHit,Hurt,Interrupt,Mend,Potion,Step,Jump,Land,Dash,Cast,Bow,Pistol,
   Holy,Fire,Thorn,Soul,Mind,Song,Rend,Ward,SpellHit,StepGrass,StepDirt,StepWood,LandGrass,LandDirt,LandWood,UiClick,ReserveReady,CastCancelled,EnemyPrepare,BossPrepare,
-  PawGrass,PawDirt,PawStone,PawWood,HoofGrass,HoofDirt,HoofStone,HoofWood,WolfThreat,BoarThreat,WolfBite,BoarRush,Count };
+  PawGrass,PawDirt,PawStone,PawWood,HoofGrass,HoofDirt,HoofStone,HoofWood,WolfThreat,BoarThreat,WolfBite,BoarRush,
+  BowDraw,BowHeavy,ArrowImpact,FireGather,FireHeavy,FireImpact,FrostGather,FrostRelease,FrostImpact,ArcaneGather,ArcaneRelease,ArcaneImpact,HolyGather,HolyImpact,HolyMend,WarriorEffort,Count };
 bool IsStep(Cue cue);
 bool IsLanding(Cue cue);
 Cue GroundCue(const rpg::WorldMap& map,rpg::Vec2 position,bool landing=false);
 Cue CreatureGroundCue(const rpg::WorldMap& map,rpg::Vec2 position,bool hoof);
 Cue ClassReleaseCue(rpg::ClassId school);
 Cue ClassRecoveryCue(rpg::ClassId school);
+Cue PreparationCue(rpg::ClassId school,int ability);
+Cue ReleaseCue(rpg::ClassId school,int ability,bool heavy);
+Cue ContactCue(rpg::ClassId school,int ability,bool heavy);
+bool IsPreparation(Cue cue);
+bool Preparing(const rpg::Simulation& state);
 std::vector<std::int16_t> Generate(Cue cue);
 std::vector<std::int16_t> GenerateMusic();
+std::vector<std::int16_t> GenerateMenuMusic();
 std::vector<std::int16_t> GenerateCombatLayer();
 enum class Ambience { Wind,Village,Astral,Count };
 std::vector<std::int16_t> GenerateAmbience(Ambience kind);
@@ -56,17 +63,20 @@ public:
   ~Audio();
   bool Initialize(bool muteOutput=false);
   void Suspend(bool value);
-  void Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds=1.f/60,float cameraYaw=0,const presentation::CreatureContacts* contacts=nullptr);
+  void Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds=1.f/60,float cameraYaw=0,const presentation::CreatureContacts* contacts=nullptr,bool menu=false);
 private:
   IXAudio2* engine_=nullptr;
   IXAudio2MasteringVoice* master_=nullptr;
   IXAudio2SourceVoice* music_=nullptr;
+  IXAudio2SourceVoice* menuMusic_=nullptr;
   IXAudio2SourceVoice* combatMusic_=nullptr;
   std::array<IXAudio2SourceVoice*,3> ambience_{};
   std::array<std::vector<std::int16_t>,3> ambienceSamples_;
   sound::AmbientMix ambientMix_;
   std::array<IXAudio2SourceVoice*,12> voices_{};
   std::array<float,12> voiceLevels_{},voicePeaks_{};
+  std::array<float,12> preparationGain_{};
+  std::array<bool,12> preparation_{};
   std::array<rpg::Vec2,12> origins_{};
   std::array<bool,12> spatial_{};
   unsigned outputChannels_=0;
@@ -74,6 +84,9 @@ private:
   std::array<unsigned,size_t(sound::Cue::Count)> variations_{};
   std::array<std::vector<std::int16_t>,size_t(sound::Cue::Count)> samples_;
   std::vector<std::int16_t> score_;
+  std::vector<std::int16_t> menuScore_;
+  float menuBlend_=0;
+  bool wasMenu_=false;
   std::vector<std::int16_t> combatScore_;
   sound::MusicIntensity intensity_;
   sound::Events events_;

@@ -43,10 +43,10 @@ void Release(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float a
  const float sx=std::sin(e.facing),cx=std::cos(e.facing);
  const auto local=[&](float x,float y,float z=0.f){return Add(origin,{cx*x+sx*z,y,-sx*x+cx*z});};
  const bool physical=e.school==C::Scout;
- const auto element=School(e.ability);const bool cold=element==Element::Frost,arcane=element==Element::Arcane;
- const XMFLOAT4 tint=physical?XMFLOAT4{.70f,.83f,.72f,fade*.35f}:cold?XMFLOAT4{.45f,.78f,1,fade*.7f}:
+ const auto element=School(e.ability);const bool holy=e.school==C::Priest,cold=!holy && element==Element::Frost,arcane=!holy && element==Element::Arcane;
+ const XMFLOAT4 tint=holy?XMFLOAT4{1,.88f,.51f,fade*.7f}:physical?XMFLOAT4{.70f,.83f,.72f,fade*.35f}:cold?XMFLOAT4{.45f,.78f,1,fade*.7f}:
   arcane?XMFLOAT4{.68f,.38f,1,fade*.7f}:XMFLOAT4{1,.47f,.12f,fade*.65f};
- const float radius=(physical?.09f:.14f)+age*(physical?1.f:2.2f);
+ const float radius=(physical?.09f:.25f)+age*(physical?1.f:3.4f);
  r.DrawEffectSurface(physical?Art::Slash:cold?Art::Ice:Art::Seal,local(-radius,-radius),local(-radius,radius),local(radius,radius),local(radius,-radius),tint);
  if(!physical)for(int n=0;n<5;++n){
   const float a=n*tau/5+e.ability*.4f;const auto p=local(std::cos(a)*age*1.3f,std::sin(a)*age*1.3f,-age*.65f);
@@ -90,12 +90,31 @@ void MageContact(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 p,float ag
  }
 }
 }
-float ContactLifetime(const rpg::CombatVisualEvent& e){return e.school==C::Mage?(e.heavy || e.chain>=2?.88f:.70f):.66f;}
+float ContactLifetime(const rpg::CombatVisualEvent& e){return e.school==C::Priest?.88f:e.school==C::Mage?(e.heavy || e.chain>=2?.88f:.70f):.66f;}
 void Contact(Renderer& r,const rpg::CombatVisualEvent& e,float age){
  if(!std::isfinite(age)||age<0 || age>=ContactLifetime(e))return;
  const XMFLOAT3 p{e.position.x-std::sin(e.facing)*.36f,e.height,e.position.z-std::cos(e.facing)*.36f};
  const float power=(e.heavy?1.15f:.72f)*(e.empowered?1.15f:1)*(e.chain>=2?1.12f:1);
- if(e.school==C::Mage){MageContact(r,e,p,age,power);return;}
+ if(e.school==C::Mage){
+  MageContact(r,e,p,age,power*(e.heavy?1.8f:1.4f));
+  const float blast=Envelope(age,.24f,.012f);const auto element=School(e.ability);
+  const XMFLOAT4 color=element==Element::Frost?XMFLOAT4{.48f,.80f,1,blast*.68f}:element==Element::Arcane?XMFLOAT4{.72f,.49f,1,blast*.6f}:XMFLOAT4{1,.64f,.28f,blast*.58f};
+  for(int n=0;n<8;++n){const float angle=n*tau/8,reach=(.25f+age*4.5f)*power;
+   const auto tip=Add(p,{std::cos(angle)*reach,std::sin(angle)*reach,std::sin(angle*2+e.facing)*reach*.55f});
+   r.DrawEffectStreak(p,tip,.035f*power,color);}
+  r.DrawEffectSprite(Art::Sparks,p,.75f*power,.75f*power,0,{1,.92f,.77f,blast*.65f});return;
+ }
+ if(e.school==C::Priest){
+  const float fade=Envelope(age,.88f,.025f),flash=Envelope(age,.22f,.008f),size=power*(e.signature?1.25f:1.f);
+  const float sx=std::sin(e.facing),cx=std::cos(e.facing);
+  const auto plane=[&](float x,float y){return Add(p,{cx*x,y,-sx*x});};
+  r.DrawEffectSurface(Art::Slash,plane(-.24f*size,-.70f*size),plane(-.24f*size,1.25f*size),plane(.24f*size,1.25f*size),plane(.24f*size,-.70f*size),{1,.90f,.57f,fade*.75f});
+  r.DrawEffectSprite(Art::Seal,p,(.35f+age*.8f)*size,(.35f+age*.8f)*size,-age*.35f,{1,.83f,.39f,fade*.58f});
+  for(int n=0;n<8;++n){const float a=n*tau/8,reach=(.30f+age*1.6f)*size;
+   r.DrawEffectStreak(plane(std::cos(a)*.14f,std::sin(a)*.14f),plane(std::cos(a)*reach,std::sin(a)*reach),.025f,{1,.94f,.72f,fade*.6f});}
+  Stamp(r,e.position,.8f*size,0,{1,.82f,.35f,fade*.32f});
+  r.DrawEffectSprite(Art::Sparks,p,.65f*size,.65f*size,0,{1,.96f,.83f,flash*.8f});return;
+ }
  const float flash=Envelope(age,.18f,.008f),fade=Envelope(age,.32f);
  if(e.school==C::Warrior || e.school==C::Demonologist){
   const auto color=e.school==C::Warrior?XMFLOAT4{.82f,.90f,1,fade*.78f}:XMFLOAT4{1,.24f,.25f,fade*.78f};
@@ -127,7 +146,7 @@ void Contact(Renderer& r,const rpg::CombatVisualEvent& e,float age){
  }
 }
 void Flight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float age){
- if((e.school!=C::Mage && e.school!=C::Scout) || !std::isfinite(age) || !std::isfinite(e.flight) || e.flight<=0 || age<0 || age>=e.flight+.16f)return;
+ if((e.school!=C::Mage && e.school!=C::Scout && e.school!=C::Priest) || !std::isfinite(age) || !std::isfinite(e.flight) || e.flight<=0 || age<0 || age>=e.flight+.16f)return;
  Release(r,e,origin,age);
  const float t=Unit(age/e.flight),after=std::max(0.f,age-e.flight),fade=1-combat::Smooth(after/.16f);
  const auto point=[&](float u){return CombatEffects::SpellTracePoint(origin,e.destination,Unit(u),e.school==C::Mage?.28f:0.f,e.destinationHeight);};
@@ -147,6 +166,14 @@ void Flight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float ag
    if(e.heavy || count>1)r.DrawEffectStreak(Add(point(t-.8f/length),offset),tip,.022f,{.63f,.82f,.73f,arrowFade*.22f});
   }
   if(e.ability==13)r.DrawEffectSprite(Art::Sparks,head,.075f,.075f,age*5,{.65f,.75f,.28f,arrowFade*.5f});
+  return;
+ }
+ if(e.school==C::Priest){
+  const float front=1-combat::Smooth(after/.035f),tail=std::max(0.f,t-1.65f*power/length);
+  r.DrawEffectStreak(point(tail),head,.075f*power,{1,.84f,.40f,fade*.55f});
+  r.DrawEffectStreak(point(tail),head,.022f*power,{1,.97f,.82f,fade*.85f});
+  r.DrawEffectSprite(Art::Seal,head,.24f*power,.24f*power,age*2,{1,.88f,.48f,front*.7f});
+  for(int n=0;n<4;++n){const float a=n*pi*.5f,side=std::cos(a)*.40f*power;const auto tip=Add(head,{cx*side,std::sin(a)*.40f*power,-sx*side});r.DrawEffectStreak(head,tip,.025f,{1,.96f,.78f,front*.7f});}
   return;
  }
  const auto element=School(e.ability);const bool frost=element==Element::Frost,arcane=element==Element::Arcane,mixed=element==Element::Thermal;
@@ -169,7 +196,7 @@ void Flight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float ag
   for(int n=1;n<=7;++n){
    const float u=t-span*n/8;if(u<0)continue;
    const float opacity=fade*(1-float(n)/9);auto p=point(u);p.y+=after*.38f;
-   const float size=(.13f+after*.12f)*power*(1-float(n)/10);
+   const float size=(.23f+after*.17f)*power*(1-float(n)/10);
    if(ice)r.DrawEffectSprite(Art::Ice,p,size*.4f,size,age*2+n*.8f,{.55f,.80f,1,opacity*.48f});
    else r.DrawEffectSprite(arcane?Art::Arcane:Art::Flame,p,size,size*1.35f,n*.55f+age*.8f,
     arcane?XMFLOAT4{.73f,.45f,1,opacity*.38f}:XMFLOAT4{1,.83f,.54f,opacity*.65f},!arcane);
@@ -181,8 +208,8 @@ void Flight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float ag
   const int count=e.ability==12?3:1;
   for(int n=0;n<count;++n){const float offset=(n-(count-1)*.5f)*.09f*std::sin(t*pi);
    r.DrawEffectSprite(Art::Ice,Add(head,{cx*offset,0,-sx*offset}),.065f*power,.26f*power,roll,{.67f,.88f,1,headFade*.95f});}
- }else if(arcane)r.DrawEffectSprite(Art::Arcane,head,.23f*power,.23f*power,age*5,{.86f,.66f,1,headFade*.85f});
- else {r.DrawEffectSprite(Art::Flame,head,.16f*power,.24f*power,roll,{1,.85f,.60f,headFade*.95f},true);
+ }else if(arcane)r.DrawEffectSprite(Art::Arcane,head,.36f*power,.36f*power,age*5,{.86f,.66f,1,headFade*.85f});
+ else {r.DrawEffectSprite(Art::Flame,head,.29f*power,.43f*power,roll,{1,.85f,.60f,headFade*.95f},true);
   if(mixed)r.DrawEffectSprite(Art::Ice,head,.075f*power,.23f*power,roll+.35f,{.55f,.82f,1,headFade*.85f});}
  r.DrawEffectGlow(head,.035f*power,{.9f,.92f,1,headFade*.6f});
 }

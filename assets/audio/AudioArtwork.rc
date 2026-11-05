@@ -1,0 +1,5 @@
+#include <winres.h>
+610 RCDATA "combat-recordings.bank"
+620 RCDATA "menu-choir.wav"
+621 RCDATA "world-choir.wav"
+622 RCDATA "combat-choir.wav"

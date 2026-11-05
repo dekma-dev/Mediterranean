@@ -25,9 +25,10 @@ visual::BodyPalette BuildCharacterRig(const CharacterPose& pose,const CharacterO
     XMStoreFloat4x4(&result.joints[bone],matrix);
     XMStoreFloat4x4(&result.normals[bone],normal);
   };
-  store(0,XMMatrixTranslation(pose.bodyShift,pose.bodyLift,0),XMMatrixIdentity());
+  const auto pelvis=XMMatrixRotationX(pose.pelvisRotation.x)*XMMatrixRotationZ(pose.pelvisRotation.z)*XMMatrixRotationY(pose.pelvisRotation.y);
+  store(0,pose.PelvisTransform(),pelvis);
   const auto torso=XMMatrixRotationX(pose.upperPitch)*XMMatrixRotationZ(pose.upperRoll)*XMMatrixRotationY(pose.upperYaw);
-  store(1,XMMatrixTranslation(0,-.95f,0)*torso*XMMatrixTranslation(pose.bodyShift,.95f+pose.bodyLift,0),torso);
+  store(1,XMMatrixTranslation(0,-.95f,0)*torso*XMMatrixTranslation(pose.bodyShift,.95f+pose.bodyLift,pose.bodyForward),torso);
   for(unsigned side=0;side<2;++side) for(unsigned limb=0;limb<2;++limb) {
     const auto& chain=limb?pose.arms[side]:pose.legs[side];
     // The IK elbow/knee plane is continuous through raised/forward limbs.

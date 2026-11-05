@@ -955,6 +955,12 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    "Evades the next incoming hit while this effect lasts.",Seconds(s.EvasionSeconds())+"s",false);
  if(s.EmpoweredReady()) statusBadge(ux+58+playerStatus++*39,statusY,24,"Full reserve",
    "Your class reserve is full. Spend it with a heavy attack or signature.","Ready",false);
+ if(rpg::HasDiscipline(s.Class())) {
+   const auto mask=s.ElementMask();const int elements=int(bool(mask&1))+int(bool(mask&2))+int(bool(mask&4));
+   statusBadge(ux+58+playerStatus++*39,statusY,s.Class()==rpg::ClassId::Warrior?18:s.Class()==rpg::ClassId::Scout?22:24,
+     rpg::DisciplineName(s.Class()),rpg::DisciplineDescription(s.Class()),
+     s.ConfluenceCast()?"Active":s.DisciplineSeconds()>0?Seconds(s.DisciplineSeconds())+"s":elements?std::to_string(elements)+" / 3":"-",false);
+ }
  if (s.TargetActor()) {
   const auto& target=*s.TargetActor();
   const float tx=anchors.target.x,ty=anchors.target.y;
@@ -1078,12 +1084,12 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.Line(x+4,y+47,x+50,y+47,3,classAccent);
     c.Center(x,y+33,54,"NEXT",10,ink);
   }
-  if(i>=0 && s.ChainReady(i) && (ready || s.CanBufferAttack(i))) {
+  if(i>=0 && (s.ChainReady(i) || s.DisciplineReady(i)) && (ready || s.CanBufferAttack(i))) {
     const float pulse=.55f+.20f*std::sin(time*5);
-    const Color glow{.85f,.73f,.38f,pulse};
+    const Color glow=s.DisciplineReady(i)?Color{.55f,.85f,1,pulse}:Color{.85f,.73f,.38f,pulse};
     c.Line(x+2,y+2,x+52,y+2,2,glow);c.Line(x+2,y+49,x+52,y+49,2,glow);
     c.Line(x+2,y+2,x+2,y+49,2,glow);c.Line(x+52,y+2,x+52,y+49,2,glow);
-    c.Center(x+34,y+33,18,std::to_string(s.ChainSteps()),11,gold);
+    if(s.ChainReady(i))c.Center(x+34,y+33,18,std::to_string(s.ChainSteps()),11,gold);
   }
   regions_.push_back({rect,{Action::Hotbar,slotIndex},ready || (!CapturesMovement() && s.CanBufferAttack(i))});
 
@@ -1095,7 +1101,10 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.FitText(486,520,278,(s.ChainSteps()>=2?"CHAIN READY":"CHAIN STARTED")+std::string(" / ")+std::to_string(s.ChainSteps())+" / "+Seconds(s.ChainSeconds())+"s",10,gold);
    c.RectFill({485,532,280*s.ChainSeconds()/5,1},classAccent);
  }
- if(s.EvasionSeconds()>0) c.Center(505,505,270,"EVASION / "+Seconds(s.EvasionSeconds())+"s",12,classAccent);
+ if((s.DisciplineSeconds()>0 || s.ConfluenceCast()) && !HasPanels()) {
+   c.Gradient({480,498,325,17},{.035f,.065f,.08f,.88f},{.035f,.065f,.08f,.25f});
+   c.FitText(486,500,313,s.ConfluenceCast()?"CONFLUENCE / MOBILE CAST":std::string(rpg::DisciplineName(s.Class()))+" / "+Seconds(s.DisciplineSeconds())+"s",11,{.70f,.86f,1,1});
+ }else if(s.EvasionSeconds()>0) c.Center(505,505,270,"EVASION / "+Seconds(s.EvasionSeconds())+"s",12,classAccent);
  const auto cast=ReadPlayerCast(s);
  if(cast.ability>=0) {
    c.Skin({475,534,330,21},8);
@@ -1590,7 +1599,8 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.FitText(874,435,258,(selectedSpell<2 || selectedSpell>=5)?"Contact "+Number(spell.contact)+"s / recovery "+Number(spell.recovery)+"s":
       selectedSpell==2?Number(s.RetreatMobility()?style.retreatDistance:3.5f)+" m travel / "+Number(s.MobilityDuration())+"s burst":
       (spell.contact>0?Number(spell.contact)+"s stationary preparation":"Instant defense"),12,muted);
-    c.Paragraph({874,455,258,25},selectedSpell==1 && style.steadyHeavy?"Stand still until release":spell.targeting,12,muted,1);
+    c.Paragraph({874,455,258,25},s.Class()==rpg::ClassId::Mage && s.NormallySteadyAttack(selectedSpell) && !s.SteadyAttack(selectedSpell)?
+      "Confluence allows movement":selectedSpell==1 && style.steadyHeavy?"Stand still until release":spell.targeting,12,muted,1);
     c.Text(874,483,"RELATED TALENTS",11,gold);
     for(int i=0;i<3;++i) if (rpg::ValidTalent(spell.upgrades[i])) {
      const auto talent=spell.upgrades[i];

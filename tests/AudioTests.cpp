@@ -20,7 +20,46 @@ void WriteWave(const char* path,const std::vector<std::int16_t>& samples,unsigne
   out.write(reinterpret_cast<const char*>(samples.data()),std::streamsize(samples.size()*2));
   Require(bool(out),"Audio preview write failed");
 }
+void FocusedCombatAudio(){
+ using C=rpg::ClassId;using Q=sound::Cue;
+ struct Case{C id;int ability;Q prepare,release,contact;const char* file;};
+ const Case cases[]={{C::Warrior,1,Q::Count,Q::Heavy,Q::HeavyHit,"warrior-heavy.wav"},
+  {C::Scout,1,Q::BowDraw,Q::BowHeavy,Q::ArrowImpact,"scout-aimed.wav"},
+  {C::Mage,1,Q::FireGather,Q::FireHeavy,Q::FireImpact,"mage-fire.wav"},
+  {C::Mage,12,Q::FrostGather,Q::FrostRelease,Q::FrostImpact,"mage-frost.wav"},
+  {C::Mage,13,Q::ArcaneGather,Q::ArcaneRelease,Q::ArcaneImpact,"mage-arcane.wav"},
+  {C::Priest,1,Q::HolyGather,Q::Holy,Q::HolyImpact,"priest-rebuke.wav"}};
+ for(const auto& test:cases)for(int hz:{30,60,144}){
+  rpg::Simulation s;Require(s.Load("MEDITERRANEAN 3\n12 -3.8 50 0 3 90\n5 1 1 0\n4\n0 0 0 0\n"
+   "100 -4 7 0 0 1 3 0 0\n101 4 9 0 0 1 3 0 0\n102 0 12 0 0 1 3 0 0\n"),"Focused audio fixture");
+  auto save=s.Save();const auto at=save.find("PROFILE ");save.replace(at,save.find('\n',at)-at,"PROFILE "+std::to_string(int(test.id))+" \"Tester\" 7 1 3");Require(s.Load(save),"Focused audio class");
+  struct Event{Q cue;float time;};std::vector<Event> heard;sound::Events events;
+  rpg::Command input;input.selectActor=210;input.ability=test.ability;
+  s.Update(.001f,input);events.Update(s);Require(s.Attacking(),"Focused sound attack rejected");
+  for(unsigned n=0;n<events.count;++n)heard.push_back({events.cues[n],0});
+  float time=0,released=-1;int prepares=Has(events,test.prepare),releases=0,contacts=0,efforts=0;
+  while(s.Attacking()){
+   time+=1.f/hz;s.Update(1.f/hz,{});events.Update(s);
+   prepares+=Has(events,test.prepare);releases+=Has(events,test.release);contacts+=Has(events,test.contact);efforts+=Has(events,Q::WarriorEffort);
+   if(Has(events,test.release)){released=time;Require(!sound::Preparing(s),"Release retained preparation state");}
+   for(unsigned n=0;n<events.count;++n){heard.push_back({events.cues[n],time});if(events.cues[n]==test.contact)Require(events.spatial[n],"Focused hit lost target position");}
+  }
+  Require(prepares==(test.id==C::Warrior?0:1) && releases==1 && contacts==1,"Class attack must emit each phase exactly once");
+  Require(efforts==(test.id==C::Warrior?1:0),"Warrior effort leaked into another class");
+  if(hz==60){
+   std::vector<float> mix(sound::sampleRate*5);float peak=0;
+   for(const auto& event:heard){const auto pcm=sound::Generate(event.cue);const auto start=std::size_t(event.time*sound::sampleRate);
+    for(std::size_t n=0;n<pcm.size() && n+start<mix.size();++n){const float now=float(n+start)/sound::sampleRate;
+     const float fade=sound::IsPreparation(event.cue) && released>=0 && now>released?std::exp(-(now-released)/.035f):1;
+     mix[n+start]+=pcm[n]*sound::CueLevel(event.cue)*fade;}}
+   for(float x:mix)peak=std::max(peak,std::abs(x));const float gain=std::min(.85f,22000/std::max(peak,1.f));
+   std::vector<std::int16_t> pcm(mix.size());for(std::size_t n=0;n<mix.size();++n)pcm[n]=std::int16_t(mix[n]*gain);
+   WriteWave(test.file,pcm);
+  }
+ }
+}
 int main() {
+  FocusedCombatAudio();
   for(int hz:{30,60,144,1000}) for(bool boss:{false,true}) {
     rpg::Simulation fight;
     auto& enemies=const_cast<std::vector<rpg::Enemy>&>(fight.Enemies());
@@ -202,6 +241,9 @@ int main() {
       Require(sound::Generate(cue)!=sound::Generate(sound::ClassReleaseCue(rpg::ClassId(j))),"Ranged class sound identities collapsed");
   }
   const auto music=sound::GenerateMusic(); bytes+=music.size()*2;
+  const auto menuMusic=sound::GenerateMenuMusic();bytes+=menuMusic.size()*2;
+  Require(menuMusic!=music && menuMusic.size()==music.size(),"Menu and world need separate scores");
+  WriteWave("character-menu-music.wav",menuMusic);
   const auto combatMusic=sound::GenerateCombatLayer();bytes+=combatMusic.size()*2;
   Require(combatMusic.size()==sound::sampleRate*6 && combatMusic.front()==0 && combatMusic.back()==0 &&
     combatMusic==sound::GenerateCombatLayer(),"Combat layer duration, edges or determinism failed");
@@ -242,14 +284,13 @@ int main() {
   Require(peak>1000 && peak<16000 && energy/music.size()>10000,"Music mix needs headroom and non-silent content");
   // Twelve short creature cues add at most 112 KiB; preserve the existing score.
   size_t creatureBytes=0;
-  for(unsigned i=unsigned(sound::Cue::PawGrass);i<unsigned(sound::Cue::Count);++i) {
+  for(unsigned i=unsigned(sound::Cue::PawGrass);i<=unsigned(sound::Cue::BoarRush);++i) {
     const auto pcm=sound::Generate(sound::Cue(i));creatureBytes+=pcm.size()*2;
-    for(unsigned j=i+1;j<unsigned(sound::Cue::Count);++j)
+    for(unsigned j=i+1;j<=unsigned(sound::Cue::BoarRush);++j)
       Require(pcm!=sound::Generate(sound::Cue(j)),"Creature species/surface cues must differ");
   }
   Require(creatureBytes<=112*1024,"Creature cues exceeded their incremental PCM budget");
-  Require(bytes-creatureBytes<4*1024*1024 && bytes<4*1024*1024+112*1024,
-    "Resident PCM exceeded base plus creature budget");
+  Require(bytes<8*1024*1024,"Resident PCM exceeded the two-score/four-class 8 MiB budget");
   WriteWave("dawnwatch-music.wav",music); WriteWave("effects-preview.wav",preview);
   const auto impact=sound::Generate(sound::Cue::HeavyHit);
   std::vector<std::int16_t> stereo(sound::sampleRate*7*2);
@@ -321,7 +362,7 @@ int main() {
     focus.Update(.01f,{});cues.Update(focus);Require(!Has(cues,sound::Cue::ReserveReady),"Ready reserve must not repeat its cue");
     focus.CreateCharacter(rpg::ClassId::Priest,"Tester");auto wounded=focus.Save();const auto hp=wounded.find(" 95 ");
     Require(hp!=std::string::npos,"Priest recovery fixture");wounded.replace(hp,4," 40 ");Require(focus.Load(wounded),"Priest fixture load");
-    focus.Update(.01f,cast);cues.Update(focus);Require(Has(cues,sound::Cue::Cast),"Preparation cue missing");
+    focus.Update(.01f,cast);cues.Update(focus);Require(Has(cues,sound::Cue::HolyGather),"Priest preparation cue missing");
     rpg::Command move;move.movement={1,0};focus.Update(.01f,move);cues.Update(focus);
     Require(Has(cues,sound::Cue::CastCancelled) && !Has(cues,sound::Cue::Holy),"Interrupted cast must fizzle without completion audio");
     focus.Update(.01f,{});cues.Update(focus);Require(!Has(cues,sound::Cue::CastCancelled),"Cancelled cast replayed its cue");
@@ -405,6 +446,8 @@ int main() {
       }
       device.Update(simulation,1,0,0); device.Suspend(true); device.Suspend(true);
       device.Suspend(false); device.Update(simulation,2,0,0);
+      for(int frame=0;frame<90;++frame)device.Update(simulation,3,0,0,1.f/60,0,nullptr,true);
+      for(int frame=0;frame<90;++frame)device.Update(simulation,4,0,0,1.f/60,0,nullptr,false);
       std::cout<<"Muted XAudio2 device startup, suspend/resume and cleanup exercised.\n";
     } else std::cout<<"No audio endpoint available; silent initialization fallback exercised.\n";
   }

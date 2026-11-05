@@ -675,7 +675,7 @@ void Game::Render(Renderer& renderer,bool showInterface) {
     simulation_.AttackSeconds()<combat::StrokeStart(simulation_.HeavyAttack()));
   auto sockets=castfx::Preview({player.x,y,player.z},{player.x,y+1.25f,player.z},playerPose_.facing);
   sockets.alive=simulation_.Health()>0;
-  if(preparing || effects_.HasRecovery()) {
+  if(preparing || effects_.NeedsPose() || simulation_.DisciplineSeconds()>0 || simulation_.GuardWindow()>0 || simulation_.ElementMask()!=0) {
     const bool shield=playerOutfit.shield;
     const auto form=rpg::WeaponFor(simulation_.Class()).form;
     const auto pose=BuildCharacterPose(simulation_.ClassInfo().range>3?0:playerPose_.attack,playerPose_.gait,shield,playerAnimation_.pose,form);
@@ -683,6 +683,7 @@ void Game::Render(Renderer& renderer,bool showInterface) {
       shield && !(simulation_.Class()==rpg::ClassId::Scout && playerOutfit.weapon),playerOutfit.weapon,sockets.alive);
   }
   if(preparing)classfx::Prepare(renderer,simulation_,sockets);
+  castfx::Discipline(renderer,simulation_,sockets,time_);
   sustained_.Render(renderer,simulation_,time_,playerPose_.facing);
   effects_.Render(renderer,&sockets);
   const bool drawInterface=showInterface && (hudVisible_ || interface_.HasPanels() || simulation_.Health()<=0);

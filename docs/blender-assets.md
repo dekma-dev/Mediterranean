@@ -1,10 +1,21 @@
 # Blender collection in the native renderer
 
+## Grounded locomotion and full-body weapon motion (2026-11-05)
+
+The current editable motion source is `assets/authored/player-motion-v8.blend`.
+It revises 43 of the 51 retained actions, with the same 57 native track identities.
+PCL3 now transports pelvis orientation/translation and elbow planes as well as
+the original wrist, foot, chest and weapon channels. The native retarget keeps
+toe contacts during heel rise, matches recovery to actor travel, and retains
+anatomical arm lengths through sword, staff and bow actions. Models, faces and
+the original thirteen-model collection are unchanged. See
+[grounded motion revision](grounded-motion-revision.md) for scope and validation.
+
 ## Fitted limb armor and equipped jumps (2026-11-05)
 
 The class library now has 33 parts: six new fitted limb/cuff assemblies append
 to the accepted 27 parts. Three equipped jump actions append to the 48 accepted
-Blender actions, with `player-motion-v7.blend` as the current motion source.
+Blender actions, retained in `player-motion-v7.blend` as the preceding motion source.
 Shield and palm orientation now follow the solved forearm. Native records,
 existing source mesh objects, earlier actions, garment weights and all frozen
 face/body/collection assets pass preservation checks. See

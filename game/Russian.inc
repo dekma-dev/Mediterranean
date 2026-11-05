@@ -1897,3 +1897,22 @@
 {"Release to remove / restore from N", "Отпустите, чтобы убрать. Вернуть — из N"},
 {"REQUIRES LEVEL 3", "НУЖЕН УРОВЕНЬ 3"},
 {"REQUIRES LEVEL 4", "НУЖЕН УРОВЕНЬ 4"},
+
+{"Riposte", "Ответный удар"},
+{"Elemental confluence", "Слияние стихий"},
+{"Pursuit shot", "Выстрел преследования"},
+{"Absorb a frontal hit within 0.8 seconds of Iron guard. For five seconds, your next Strike or Reverse cut adds 50% basic damage and a 12-point ward. Misses do not consume it.", "Поглотите удар спереди в первые 0,8 с «Железной защиты». В течение 5 с следующее «Удар» или «Обратный удар» получает +50% базового урона и защиту на 12 ед. Промах не расходует усиление."},
+{"Land fire, frost and arcane on the same target, within six seconds between new elements. Gain eight seconds to commit one normally stationary spell while moving. It is spent on commitment, even if cancelled.", "Поразите одну цель огнём, льдом и арканой с интервалом не более 6 с между новыми стихиями. В течение 8 с можно начать одно обычно неподвижное заклинание на ходу. Усиление расходуется при начале каста, даже при отмене."},
+{"Disengage at least 1.5 metres away from a selected living threat within nine metres. For five seconds, your next Quick shot or Twin shot adds 45% basic damage and slows for two seconds. Misses do not consume it.", "Отступите минимум на 1,5 м от выбранного живого противника в пределах 9 м. В течение 5 с следующий «Быстрый выстрел» или «Парный выстрел» получает +45% базового урона и замедляет на 2 с. Промах не расходует усиление."},
+{"CONFLUENCE / MOBILE CAST", "СЛИЯНИЕ / КАСТ НА ХОДУ"},
+{"Confluence allows movement", "Слияние позволяет двигаться"},
+{"Timely frontal protection opens a powerful answering cut.", "Своевременная защита от удара спереди позволяет нанести усиленный ответный удар."},
+{"A successful retreat prepares an empowered pursuit shot.", "Удачный отход подготавливает усиленный выстрел преследования."},
+{"Combine fire, frost and arcane to cast one strong spell while moving.", "Сочетайте огонь, лёд и аркану, чтобы произнести одно сильное заклинание на ходу."},
+{"Absorb damage and gain Rage. A frontal hit in the first 0.8 seconds prepares Riposte: the next basic hit within five seconds gains 50% basic damage and a 12-point ward.", "Поглощает урон и даёт ярость. Удар спереди в первые 0,8 с готовит ответ: следующее базовое попадание в течение 5 с наносит +50% базового урона и даёт защиту на 12 ед."},
+{"Retreat with collision. Move at least 1.5 metres away from a selected threat within nine metres to prepare Pursuit shot: your next basic hit within five seconds gains 45% basic damage and a two-second slow.", "Отход учитывает препятствия. Отступите минимум на 1,5 м от выбранного противника в пределах 9 м: следующее базовое попадание в течение 5 с нанесёт +45% базового урона и замедлит на 2 с."},
+
+{"Active", "Активно"},
+
+{"Benediction", "Благословение"},
+{"Complete Greater heal and restore missing health. For six seconds, your next Radiance or Rebuke hit adds 25% basic damage and grants an 18-point ward. Interrupted healing grants nothing.", "Завершите «Великое исцеление» и восстановите недостающее здоровье. В течение 6 с следующее попадание «Сияния» или «Возмездия» получает +25% базового урона и даёт защиту на 18 ед. Прерванное лечение ничего не даёт."},
