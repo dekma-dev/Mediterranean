@@ -5,6 +5,7 @@
 #include <array>
 
 class Renderer;
+namespace castfx {struct Attachments;}
 
 // Bounded cosmetic state, advanced by Game updates rather than render calls.
 class CombatEffects {
@@ -24,9 +25,10 @@ public:
   float DashHistorySeconds() const { return wake_.count?wake_.samples[0].age:0; }
   bool Tracking(rpg::EntityId actor) const;
   std::size_t BurstCount() const;
+  bool HasRecovery() const;
   std::size_t TrailCount() const;
-  static DirectX::XMFLOAT3 SpellTracePoint(DirectX::XMFLOAT3 origin,rpg::Vec2 destination,float progress,float arc=.16f);
-  void Render(Renderer& renderer) const;
+  static DirectX::XMFLOAT3 SpellTracePoint(DirectX::XMFLOAT3 origin,rpg::Vec2 destination,float progress,float arc=.16f,float targetHeight=1.25f);
+  void Render(Renderer& renderer,const castfx::Attachments* caster=nullptr) const;
 private:
   struct Burst { rpg::CombatVisualEvent event; float age=1; unsigned seed=0; DirectX::XMFLOAT3 spellOrigin{}; };
   struct Sample { DirectX::XMFLOAT3 root,tip; float age=0; };

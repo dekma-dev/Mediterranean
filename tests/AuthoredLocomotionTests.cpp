@@ -203,8 +203,11 @@ void BowMotionChecks(){
         XMFLOAT3 nock;XMStoreFloat3(&nock,XMVector3TransformCoord(XMVectorSet(0,.035f,-.07f-.40f*pose.bowDraw,1),WeaponFrame(pose)));
         worstNock=std::max(worstNock,Distance(nock,BuildHandPose(pose,0,true,false,0).Point({0,0,0})));drawn=true;
         Check(BuildHandPose(pose,0,true,false,0).curl>.75f,"Archer drawing hand stayed open");
+        const auto contact=playerclips::Collection()[unsigned(heavy?playerclips::Clip::BowPowerRelease:playerclips::Clip::BowRelease)].contact;
+        if(controller.phase<contact)Check(pose.bowArrow>.9f,"Drawing bow lost its nocked arrow");
       }
-      released|=pose.bowArrow<.01f;
+      const auto contact=playerclips::Collection()[unsigned(heavy?playerclips::Clip::BowPowerRelease:playerclips::Clip::BowRelease)].contact;
+      if(controller.phase>contact) {Check(pose.bowArrow==0,"Released arrow respawned during recovery");released=true;}
       Check(pose.bowDraw>=0&&pose.bowDraw<=1&&pose.bowArrow>=0&&pose.bowArrow<=1,"Invalid bow draw/release channel");
       previous=pose;havePrevious=true;
     }
@@ -221,6 +224,7 @@ void WeaponCarryChecks(){
     animation::Sample sample;sample.authoredGait=true;sample.authoredEquipment=equipment;
     const auto relaxed=BuildCharacterPose(0,0,false,sample,form);
     sample.authoredReady=1;const auto guard=BuildCharacterPose(0,0,false,sample,form);
+    if(equipment==E::Bow)Check(relaxed.bowArrow==0&&guard.bowArrow==0,"Relaxed bow carries an unsupported arrow");
     Check(Distance(relaxed.WeaponPoint(.8f),guard.WeaponPoint(.8f))>.16f,"Relaxed carry and combat guard are indistinguishable");
     if(equipment==E::Staff)Check(relaxed.staffGripWeight==0&&guard.staffGripWeight>.99f,"Staff support hand must release during relaxed carry");
     if(equipment==E::Sword) {
@@ -267,6 +271,7 @@ void EquippedFlightChecks(){
       state.Update(.001f,height,velocity,0,true,0,tick==1000?3.f:0);
       animation::ApplyAuthoredLocomotion(state,.001f,equipment);
       const auto pose=BuildCharacterPose(0,0,shield,state.pose,form);
+      if(equipment==E::Bow)Check(pose.bowArrow==0,"Jumping archer carries an unsupported arrow");
       for(unsigned side=0;side<2;++side) {
         Check(Distance(BuildHandPose(pose,side,true,shield,0).Point({0,-.055f,-.043f}),pose.arms[side].end)<.0001f,"Equipped flight detached the wrist");
         Check(std::abs(Distance(pose.arms[side].joint,pose.arms[side].end)-CharacterPose::forearm)<.0001f,"Equipped flight stretched the forearm");
@@ -350,5 +355,6 @@ int main(int argc,char** argv){try{
   if(argc==2&&std::string_view(argv[1])=="--weapons-only") {WeaponMotionChecks();std::cout<<"PASS: v2 weapon motion\n";return 0;}
   if(argc==2&&std::string_view(argv[1])=="--capture-only") {Captures();return 0;}
   if(argc==2&&std::string_view(argv[1])=="--flight-only") {LibraryChecks();EquippedFlightChecks();return 0;}
+  if(argc==2&&std::string_view(argv[1])=="--bow-only") {LibraryChecks();BowMotionChecks();WeaponCarryChecks();EquippedFlightChecks();std::cout<<"PASS: archery draw, release, carry and flight\n";return 0;}
   LibraryChecks();ContactsAndTransitions();WeaponMotionChecks();BowMotionChecks();WeaponCarryChecks();EquippedFlightChecks();Captures();std::cout<<"PASS: imported gait loops, directional weapon carry, equipped jumps, combat guards, contacts, transition continuity, gameplay isolation and native comparison\n";}
 catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

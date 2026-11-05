@@ -1,3 +1,48 @@
+## Cast preparation and attached recovery (2026-11-05)
+
+- On Mage, compare fire, frost, arcane and Thermal rupture preparation. Fragments
+  should gather at the moving casting focus and stop at release/cancellation.
+  Strong spells add a low seal and broken rising bands; target bodies and hostile
+  danger boundaries must stay visible. Orbit to both sides and repeat on slopes.
+- On Scout, compare heavy shots and stronger variants. Sight marks converge on
+  the physical weapon, with restrained air streaks for strong shots. Warrior
+  ordinary swings must not gain a spell-casting halo. Unequip/re-equip weapons
+  and shields where allowed: hand-attached effects must follow the actual grip.
+- Trigger each class's recovery/protection: Warrior/Engineer guard sparks,
+  Scout wraps, Mage ice plates, Priest/Paladin gold fans, Druid leaves/strands,
+  Bard waves, Psionic lenses and soul/pact streams. For timed channels, interrupt
+  with movement/jump/Escape and verify no false completion. Instant protection
+  remains instant; visual differences do not grant healing to non-healers.
+- Move/turn immediately after successful completion or drinking a potion.
+  The pulse must remain with the player rather than its original location.
+  Die/load/return to character selection during it: no stale aura may replay.
+  Compare 30/60/high refresh and check crowded fights for readable ground
+  warnings. Observe the complete motion in-game; still captures are insufficient
+  for accepting final timing, animation quality or reference fidelity.
+
+## Projectile release and hostile contacts (2026-11-05)
+
+- On Mage, compare basic fire, frost control, Arcane prism and Thermal rupture
+  on a dummy. Watch the brief hand release, distinct flying heads and draining
+  wakes. Cancel during preparation; no release/hit should appear. Repeat with
+  side/back/near cameras and at short/long range.
+- On Scout, compare single/twin/barbed/crossing shots. Shafts should retain
+  physical length and converge on the committed target. Changing selection
+  after release must not redirect them. Test wolves/boars on slopes: hits belong
+  on their bodies, not above them at humanoid chest height.
+- On Warrior, compare basic/reverse/crossed cuts from front and side. The blade
+  edge must follow the sampled weapon, with a brief oriented slash and falling
+  metal fragments; stop/load/death must leave no stuck wake.
+- Fight each boss rotation: Doomquake keeps the inner safe flank clear;
+  Tempest has raised broken spirals; Execution/Veil lance has a directed split
+  discharge. Damage and full contact geometry occur together; later dust does
+  not represent a second damaging wave. Interrupt before release and verify
+  that no discharge appears. Walk out/around the previously shown boundaries.
+- Pull several casters, rotate the camera, load/reset and repeat. Danger
+  contours must remain readable and all contact residue must disappear.
+  Compare 30/60/high-refresh play; record normal-camera readability and GPU
+  timings separately from automated native-capture correctness.
+
 # Native smoke test
 
 ## Sustained states and hostile charges (2026-11-05)

@@ -1,3 +1,28 @@
+## Current cast preparation and attached recovery (2026-11-05)
+
+Use `build-ninja-release/MediterraneanLauncher.exe` for play or
+`build-local/Debug/RPGNative.exe` for Visual Studio debugging. Restart an
+already running game to load the rebuilt code.
+
+Compare Mage elemental charges, Scout heavy aiming and each class's
+recovery/protection. Move immediately after completion: the brief pulse must
+follow the character. Cancel a timed cast with movement/jump/Escape; no false
+completion should appear. Existing hotbar bindings and spell rules are kept.
+See `docs/casting-and-recovery-effects.md` and the new manual smoke checklist.
+
+## Current projectile and hostile release effects (2026-11-05)
+
+Restart through `build-ninja-release/MediterraneanLauncher.exe` for play;
+Visual Studio debugging uses `build-local/Debug/RPGNative.exe`. Both targets
+include the new release/flight/contact revision. An already running game keeps
+its old code until restarted.
+
+Compare Mage fire/frost/arcane/thermal releases, Scout arrow variants and
+Warrior reverse/crossed cuts. Fight the three boss patterns to inspect quake
+fissures, raised tempest bands and directed execution strands. Existing keys
+and saved hotbar layouts are unchanged. See `docs/combat-release-effects.md`
+and the projectile/hostile-contact checklist in `tests/manual-smoke.md`.
+
 ## Current sustained states and hostile charges (2026-11-05)
 
 Launch `build-ninja-release/MediterraneanLauncher.exe` for play or use

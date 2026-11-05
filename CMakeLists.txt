@@ -132,6 +132,7 @@ add_library(MediterraneanClient STATIC
   engine/Audio.cpp
   engine/Renderer.cpp
   game/SpellVfx.cpp
+  game/CastEffects.cpp
   game/SustainedEffects.cpp
   engine/AuthoredAssets.cpp
   engine/WolfAnimation.cpp
@@ -342,6 +343,14 @@ if (BUILD_TESTING)
   target_link_libraries(SustainedEffectsTests PRIVATE MediterraneanClient)
   add_test(NAME SustainedEffectsTests COMMAND SustainedEffectsTests)
   set_tests_properties(SustainedEffectsTests PROPERTIES TIMEOUT 120)
+  add_executable(CombatReleaseTests tests/CombatReleaseTests.cpp)
+  target_link_libraries(CombatReleaseTests PRIVATE MediterraneanClient)
+  add_test(NAME CombatReleaseTests COMMAND CombatReleaseTests)
+  set_tests_properties(CombatReleaseTests PROPERTIES TIMEOUT 120)
+  add_executable(CastingEffectsTests tests/CastingEffectsTests.cpp)
+  target_link_libraries(CastingEffectsTests PRIVATE MediterraneanClient)
+  add_test(NAME CastingEffectsTests COMMAND CastingEffectsTests)
+  set_tests_properties(CastingEffectsTests PROPERTIES TIMEOUT 120)
   add_executable(FrontierExpansionTests tests/FrontierExpansionTests.cpp)
   target_link_libraries(FrontierExpansionTests PRIVATE MediterraneanClient)
   target_compile_definitions(FrontierExpansionTests PRIVATE RPG_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")

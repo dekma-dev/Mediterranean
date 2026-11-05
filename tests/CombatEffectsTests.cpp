@@ -248,7 +248,7 @@ int main() {
     Require(renderer.EffectVertices()>0 && renderer.EffectVertices()<3000,"Enemy special effect exceeds its fixed geometry budget");
     const auto path=L"enemy-special-"+std::to_wstring(int(kind))+L".png";
     Capture(renderer,path.c_str());
-    for(int i=0;i<12;++i) special.Advance(.05f);
+    for(int i=0;i<16;++i) special.Advance(.05f);
     scene();special.Render(renderer);
     Require(renderer.EffectVertices()==0 && renderer.EndFrame(false),"Enemy spell effect failed to expire");
   }

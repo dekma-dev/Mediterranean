@@ -10,6 +10,9 @@ existing source mesh objects, earlier actions, garment weights and all frozen
 face/body/collection assets pass preservation checks. See
 [class art](oldstyle-player-art.md#fitted-limb-equipment-and-armed-flight-2026-11-05)
 for scope and `.blender-local/limbs-flight-20261105` for local evidence/review.
+All six game/launcher outputs contain the new assets and corrected attachment
+behavior. Final draw/release/carry/flight checks pass in Release and Debug;
+fixture-save game launches and embedded-resource hashes match all six outputs.
 
 ## Upper garments and carried weapons (2026-11-05)
 

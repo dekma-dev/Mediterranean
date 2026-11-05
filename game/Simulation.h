@@ -39,6 +39,7 @@ struct Enemy {
   float respawn=0,roamTime=0;
   bool elite=false;
   bool Beast() const {return kind==EnemyKind::Wolf || kind==EnemyKind::Boar;}
+  float ContactHeight() const {return kind==EnemyKind::Wolf?.72f:kind==EnemyKind::Boar?.85f:1.25f;}
   bool Boss() const { return kind==EnemyKind::Captain && rank>0; }
   bool Enraged() const { return Boss() && health>0 && health<=MaxHealth()*.4f; }
   float MaxHealth() const { return Beast()?(kind==EnemyKind::Boar?95.f:80.f)+rank*16.f+(elite?90.f:0):kind==EnemyKind::Dummy?200.f:Boss()?240.f+rank*32.f:(kind==EnemyKind::Trainer?180.f:kind==EnemyKind::Captain?120.f:kind==EnemyKind::Reaver?105.f:80.f)+rank*18.f; }
@@ -125,6 +126,7 @@ struct CombatVisualEvent {
   float sourceHeight=0;
   bool heavy=false,empowered=false,technique=false,signature=false,opening=false;
   int chain=0; // successful contact payoff, never speculative input
+  float destinationHeight=1.25f; // relative to ground, captured from the committed target
 };
 
 class Simulation {
@@ -422,7 +424,7 @@ private:
   int classResource_=0;
   bool attackEmpowered_=false;
   float barrier_=0,recoveryCast_=0,evasion_=0;
-  void CompleteRecovery();
+  void CompleteRecovery(float visualElapsed=0);
   float movementDistance_ = 0;
   float groundMovementDistance_ = 0;
   float landingSpeed_ = 0, landingElapsed_ = 0;

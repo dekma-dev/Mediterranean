@@ -20,6 +20,8 @@ runtime samples their flight and recovery portions while retaining existing
 landing/contact clocks. The sword stays forward and beside the body; it no
 longer makes the unnecessary overhead lift found during review. Bow activation
 starts from an upright bow direction instead of a lowered sword direction.
+The carried bow has no unsupported arrow. A nocked arrow appears during the
+actual draw, disappears at release and remains absent during recovery.
 Shield, gripping palm and occupied-offhand release socket share the forearm
 frame, including legacy shield geometry.
 
@@ -28,6 +30,16 @@ existing source mesh objects and garment weights are preserved. Original
 collection copies, anatomical body, faces and hair remain unchanged. New local
 scripts, before copies, preservation evidence and native review are under
 `.blender-local/limbs-flight-20261105`.
+
+The 33-part KIT1 archive occupies 23,107,884 bytes; the six added high-detail
+parts contain 63,896 triangles in aggregate, with separate reduced LODs.
+Validation passes thirteen Release suites and eight Debug suites. After the
+final arrow-visibility correction, draw/release/carry/flight checks are repeated
+in both configurations and native archery captures are regenerated. All six
+game/launcher builds are synchronized; fixture-save launches and embedded
+resource hashes are verified after that correction. The local
+`.blender-local/limbs-flight-20261105/review.html` contains the actual native
+models, detail views and motion sequences at their recorded speed.
 
 ## Upper garment articulation pass (2026-11-05)
 

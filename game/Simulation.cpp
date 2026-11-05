@@ -159,7 +159,7 @@ void Simulation::UseAbility(int index,float visualElapsed) {
       recoveryCast_=RecoveryCastDuration();
       EmitVisual(CombatVisualKind::CastStart,player_,height_,facing_);
       message_=std::string(Spell(3).name)+" casting.";
-    } else CompleteRecovery();
+    } else CompleteRecovery(visualElapsed);
   } else if (index==2) {
     if (RetreatMobility()) {
       if (const auto* target=TargetActor(); target && target->health>0 && target->state!=EnemyState::Returning) {
@@ -223,7 +223,7 @@ void Simulation::UseAbility(int index,float visualElapsed) {
   cooldowns_[index]=AbilityCooldown(index);
 }
 
-void Simulation::CompleteRecovery() {
+void Simulation::CompleteRecovery(float visualElapsed) {
   recoveryCast_=0;
   if(health_<=ClassRecoveryCost(class_)) {message_="Not enough health for the pact.";return;}
   health_-=ClassRecoveryCost(class_);
@@ -237,7 +237,7 @@ void Simulation::CompleteRecovery() {
   if(class_==ClassId::Scout) evasion_=3;
   if(class_==ClassId::Demonologist) cooldowns_[1]=std::max(0.f,cooldowns_[1]-2);
   if(class_==ClassId::Psionic) classResource_=CombatStyleInfo().capacity;
-  EmitVisual(CombatVisualKind::Mend,player_,height_,facing_);
+  EmitVisual(CombatVisualKind::Mend,player_,height_,facing_,0,visualElapsed);
   message_=std::string(Spell(3).name)+(ClassHealer(class_)?" completed.":" raised protection.");
 }
 
@@ -467,7 +467,7 @@ void Simulation::ResolveContact(Enemy& enemy,float elapsed) {
   if (trainingTarget) sparringDealt_+=int(damage);
   Emit(FeedbackKind::Damage,enemy.position,static_cast<int>(damage));
   const auto eventBefore=visualEventCount_;
-  EmitVisual((index==0 || index==7 || index==12)?CombatVisualKind::Hit:CombatVisualKind::HeavyHit,enemy.position,1.25f,facing_,enemy.id,elapsed);
+  EmitVisual((index==0 || index==7 || index==12)?CombatVisualKind::Hit:CombatVisualKind::HeavyHit,enemy.position,enemy.ContactHeight(),facing_,enemy.id,elapsed);
   if(visualEventCount_>eventBefore) visualEvents_[visualEventCount_-1].chain=chainSpent;
   enemy.hitFlash=std::max(0.f,.2f-elapsed); enemy.damagedThisUpdate=true; attackFlash_=.2f;
   message_=attackEmpowered_?CombatStyleInfo().payoff:"Hit.";
@@ -1141,7 +1141,7 @@ void Simulation::Update(float seconds,const Command& command) {
   }
   if(CastingRecovery()) {
     if(damagedThisUpdate_ || health_<=0) {recoveryCast_=0;EmitVisual(CombatVisualKind::CastCancelled,player_,height_,facing_);message_="Cast interrupted by damage.";}
-    else if(advanceRecovery) {recoveryCast_=std::max(0.f,recoveryCast_-dt);if(recoveryCast_==0) CompleteRecovery();}
+    else if(advanceRecovery) {const float remaining=recoveryCast_;recoveryCast_=std::max(0.f,remaining-dt);if(recoveryCast_==0) CompleteRecovery(std::max(0.f,dt-remaining));}
   }
   if (health_>0) SeparateEnemies(dt);
   if (Channeling()) {

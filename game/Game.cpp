@@ -1,3 +1,4 @@
+#include "game/CastEffects.h"
 #include "game/Localization.h"
 #include "game/Game.h"
 #include "game/CourtView.h"
@@ -609,8 +610,9 @@ void Game::Render(Renderer& renderer,bool showInterface) {
       renderer.DrawEffectRing({dummy.position.x,.035f,dummy.position.z},.65f,{.85f,.65f,.25f,.65f});
     if(dummy.hitFlash>0) renderer.DrawEffectRing({dummy.position.x,1.3f,dummy.position.z},.35f,{1,.65f,.25f,dummy.hitFlash*3});
   }
+  const auto playerOutfit=CharacterOutfit::From(simulation_.Items(),simulation_.Class(),simulation_.Look());
   DrawCharacter(renderer,player,y,playerPose_.facing,simulation_.HurtFlash()>0?XMFLOAT4{1,.48f,.35f,1}:
-    XMFLOAT4{simulation_.ClassInfo().color[0],simulation_.ClassInfo().color[1],simulation_.ClassInfo().color[2],1},simulation_.ClassInfo().range>3?0:playerPose_.attack,playerPose_.gait,CharacterOutfit::From(simulation_.Items(),simulation_.Class(),simulation_.Look()),playerAnimation_.pose,1);
+    XMFLOAT4{simulation_.ClassInfo().color[0],simulation_.ClassInfo().color[1],simulation_.ClassInfo().color[2],1},simulation_.ClassInfo().range>3?0:playerPose_.attack,playerPose_.gait,playerOutfit,playerAnimation_.pose,1);
   const auto anchor=rpg::WorldMap::astralAnchor;
   const bool stable=simulation_.AnchorState()>=rpg::AnchorQuest::Return;
   const XMFLOAT4 crystal=stable?XMFLOAT4{.3f,.95f,.65f,1}:XMFLOAT4{.72f,.4f,.95f,1};
@@ -669,17 +671,20 @@ void Game::Render(Renderer& renderer,bool showInterface) {
       }
     }
   }
-  if(simulation_.CastingRecovery() || (simulation_.Attacking() && simulation_.ClassInfo().range>3 &&
-     simulation_.AttackSeconds()<combat::StrokeStart(simulation_.HeavyAttack()))) {
-    const bool shield=simulation_.Items().Worn(rpg::GearSlot::Offhand)!=rpg::Item::None;
+  const bool preparing=simulation_.CastingRecovery() || (simulation_.Attacking() && simulation_.ClassInfo().range>3 &&
+    simulation_.AttackSeconds()<combat::StrokeStart(simulation_.HeavyAttack()));
+  auto sockets=castfx::Preview({player.x,y,player.z},{player.x,y+1.25f,player.z},playerPose_.facing);
+  sockets.alive=simulation_.Health()>0;
+  if(preparing || effects_.HasRecovery()) {
+    const bool shield=playerOutfit.shield;
     const auto form=rpg::WeaponFor(simulation_.Class()).form;
-    const auto pose=BuildCharacterPose(0,playerPose_.gait,shield,playerAnimation_.pose,form);
-    const auto local=rpg::PhysicalLauncher(form)?WeaponReleasePoint(pose,form):SpellReleasePoint(pose,shield);
-    const float sx=std::sin(playerPose_.facing),cx=std::cos(playerPose_.facing);
-    classfx::Prepare(renderer,simulation_,{player.x+cx*local.x+sx*local.z,y+local.y,player.z-sx*local.x+cx*local.z},playerPose_.facing);
+    const auto pose=BuildCharacterPose(simulation_.ClassInfo().range>3?0:playerPose_.attack,playerPose_.gait,shield,playerAnimation_.pose,form);
+    sockets=castfx::FromPose(pose,{player.x,y,player.z},playerPose_.facing,form,
+      shield && !(simulation_.Class()==rpg::ClassId::Scout && playerOutfit.weapon),playerOutfit.weapon,sockets.alive);
   }
+  if(preparing)classfx::Prepare(renderer,simulation_,sockets);
   sustained_.Render(renderer,simulation_,time_,playerPose_.facing);
-  effects_.Render(renderer);
+  effects_.Render(renderer,&sockets);
   const bool drawInterface=showInterface && (hudVisible_ || interface_.HasPanels() || simulation_.Health()<=0);
   for (std::size_t i=0;drawInterface && i<simulation_.Feedback().size();++i) {
     const auto& feedback=simulation_.Feedback()[i];

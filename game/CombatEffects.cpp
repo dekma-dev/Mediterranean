@@ -1,6 +1,7 @@
 #include "game/CombatEffects.h"
 #include "game/ClassEffects.h"
 #include "game/SpellVfx.h"
+#include "game/CastEffects.h"
 #include "engine/Renderer.h"
 #include <algorithm>
 #include <cmath>
@@ -11,20 +12,14 @@ using namespace DirectX;
 constexpr float trailLife=.16f,burstLife=.48f,sweepLife=.32f;
 bool Healing(K kind) { return kind==K::Mend || kind==K::Potion; }
 bool Dashing(K kind) { return kind==K::DashStart || kind==K::DashStop || kind==K::DashImpact; }
+bool HostileRelease(K kind) {return kind==K::EnemyQuake || kind==K::EnemyTempest || kind==K::EnemyExecution || kind==K::EnemyLance;}
 float BurstLife(const rpg::CombatVisualEvent& e) {
-  if(e.kind==K::SpellCast)return std::clamp((std::isfinite(e.flight)?e.flight:0.f)+.10f,.10f,.95f);
+  if(e.kind==K::SpellCast)return std::clamp((std::isfinite(e.flight)?e.flight:0.f)+.16f,.16f,.95f);
+  if(HostileRelease(e.kind))return .72f;
   return e.kind==K::Hit || e.kind==K::HeavyHit?spellvfx::ContactLifetime(e):Healing(e.kind)?.8f:Dashing(e.kind)?.42f:burstLife;
 }
 float Unit(float x) { return std::clamp(x,0.f,1.f); }
 XMFLOAT3 GroundPoint(float x,float z,float lift) {return {x,rpg::WorldMap::Height({x,z})+lift,z};}
-void GroundRing(Renderer& renderer,rpg::Vec2 center,float radius,XMFLOAT4 color) {
-  const auto point=[&](float angle,float r) {return GroundPoint(center.x+std::sin(angle)*r,center.z+std::cos(angle)*r,.07f);};
-  for(int i=0;i<32;++i) {
-    const float a=i*motion::tau/32,b=(i+1)*motion::tau/32;
-    renderer.DrawEffectRibbon(point(a,radius-.025f),point(a,radius+.025f),
-      point(b,radius+.025f),point(b,radius-.025f),color,1,1);
-  }
-}
 XMFLOAT4 Tint(K kind) {
   if (kind==K::Interrupt) return {.67f,.30f,1,1};
   if (kind==K::HeavyStrike || kind==K::HeavyHit) return {.18f,.65f,1,1};
@@ -181,11 +176,12 @@ void CombatEffects::Advance(float dt) {
     trail.count=std::size_t(end-trail.samples.begin());
   }
 }
-XMFLOAT3 CombatEffects::SpellTracePoint(XMFLOAT3 origin,rpg::Vec2 destination,float progress,float arc) {
+XMFLOAT3 CombatEffects::SpellTracePoint(XMFLOAT3 origin,rpg::Vec2 destination,float progress,float arc,float targetHeight) {
   const float u=std::isfinite(progress)?Unit(progress):0;
   arc=std::isfinite(arc)?std::clamp(arc,0.f,.5f):0;
+  targetHeight=std::isfinite(targetHeight)?std::clamp(targetHeight,.3f,3.f):1.25f;
   // Current enemy capsules stand on map ground, including when the caster jumps.
-  return {origin.x+(destination.x-origin.x)*u,origin.y+(rpg::WorldMap::Height(destination)+1.25f-origin.y)*u+arc*std::sin(u*3.14159265f),
+  return {origin.x+(destination.x-origin.x)*u,origin.y+(rpg::WorldMap::Height(destination)+targetHeight-origin.y)*u+arc*std::sin(u*3.14159265f),
     origin.z+(destination.z-origin.z)*u};
 }
 void CombatEffects::Emit(const rpg::CombatVisualEvent& event,const XMFLOAT3* spellOrigin) {
@@ -283,7 +279,21 @@ std::size_t CombatEffects::BurstCount() const {
 std::size_t CombatEffects::TrailCount() const {
   return std::count_if(trails_.begin(),trails_.end(),[](const Trail& trail) { return trail.age<sweepLife || trail.count>1; });
 }
-void CombatEffects::Render(Renderer& renderer) const {
+bool CombatEffects::HasRecovery() const {
+  return std::any_of(bursts_.begin(),bursts_.end(),[](const Burst& b){return b.event.kind==K::Mend && b.age<BurstLife(b.event);});
+}
+void CombatEffects::Render(Renderer& renderer,const castfx::Attachments* caster) const {
+  // Warning contours are already submitted by Game. Contact geometry gets
+  // the next budget, before weapon wakes and player cosmetics. Sort without
+  // allocation; simultaneous crowded releases retain all their silhouettes.
+  std::array<const Burst*,maxBursts> releases{};std::size_t releaseCount=0;
+  for(const auto& b:bursts_)if(HostileRelease(b.event.kind) && b.age<BurstLife(b.event))releases[releaseCount++]=&b;
+  std::sort(releases.begin(),releases.begin()+releaseCount,[](const Burst* a,const Burst* b){
+    if(a->age!=b->age)return a->age<b->age;
+    if(a->event.actor!=b->event.actor)return a->event.actor<b->event.actor;
+    return a->event.kind<b->event.kind;
+  });
+  for(std::size_t i=0;i<releaseCount;++i)spellvfx::EnemyContact(renderer,releases[i]->event,releases[i]->age,releaseCount<=2);
   for(const auto& print:footprints_) {
     if(print.age>=2.8f)continue;
     const auto& e=print.contact;const float c=std::cos(e.facing),s=std::sin(e.facing);
@@ -357,11 +367,17 @@ void CombatEffects::Render(Renderer& renderer) const {
       const auto& a=trail.samples[i-1]; const auto& b=trail.samples[i];
       renderer.DrawEffectRibbon(a.root,a.tip,b.tip,b.root,color,
         std::pow(Unit(1-a.age/trailLife),2.f),std::pow(Unit(1-b.age/trailLife),2.f));
+      if(trail.school==rpg::ClassId::Warrior && trail.kind!=K::EnemySwing){
+        const auto edge=[](const Sample& s){return XMFLOAT3{s.tip.x+(s.root.x-s.tip.x)*.12f,s.tip.y+(s.root.y-s.tip.y)*.12f,s.tip.z+(s.root.z-s.tip.z)*.12f};};
+        renderer.DrawEffectRibbon(edge(a),a.tip,b.tip,edge(b),{.77f,.88f,1,.55f},
+          std::pow(Unit(1-a.age/trailLife),3.f),std::pow(Unit(1-b.age/trailLife),3.f));
+      }
     }
   }
   for (const auto& burst : bursts_) {
     if (burst.age>=BurstLife(burst.event)) continue;
     const auto& e=burst.event;
+    if(HostileRelease(e.kind))continue;
     spellvfx::EnemyContact(renderer,e,burst.age);
     if(e.kind==K::BeastBite || e.kind==K::BeastCharge) {
       const bool charge=e.kind==K::BeastCharge;const float fade=Unit(1-burst.age/.45f);
@@ -374,28 +390,6 @@ void CombatEffects::Render(Renderer& renderer) const {
       }
       continue;
     }
-    if(e.kind==K::EnemyQuake || e.kind==K::EnemyLance || e.kind==K::EnemyTempest || e.kind==K::EnemyExecution) {
-      const float fade=std::pow(Unit(1-burst.age/.35f),2.f);
-      const auto point=[&](float angle,float radius,float y) -> XMFLOAT3 {
-        return GroundPoint(e.position.x+std::sin(angle)*radius,e.position.z+std::cos(angle)*radius,y);
-      };
-      if(e.kind==K::EnemyQuake || e.kind==K::EnemyTempest) {
-        const bool tempest=e.kind==K::EnemyTempest;
-        for(float radius:{tempest?1.9f:rpg::Enemy::shockInner,tempest?3.8f:rpg::Enemy::shockOuter})
-          GroundRing(renderer,e.position,radius,{1,.27f,.06f,fade});
-        for(int i=0;i<24;++i) {
-          const float angle=i*motion::tau/24;
-          renderer.DrawEffectGlow(point(angle,tempest?2.8f:4.2f,.15f+burst.age*1.6f),.18f,{1,.37f,.08f,fade});
-        }
-      } else {
-        const auto start=point(e.facing,.25f,1.05f),end=point(e.facing,e.kind==K::EnemyExecution?8.f:7.f,1.05f);
-        const float x=std::cos(e.facing)*.12f,z=-std::sin(e.facing)*.12f;
-        renderer.DrawEffectRibbon({start.x-x,start.y,start.z-z},{start.x+x,start.y,start.z+z},
-          {end.x+x,end.y,end.z+z},{end.x-x,end.y,end.z-z},{.58f,.35f,1,fade});
-        renderer.DrawEffectGlow(end,.3f,{.75f,.62f,1,fade});
-      }
-      continue;
-    }
     if(e.kind==K::CastStart) continue;
     if(e.kind==K::SpellCast) {
       classfx::Projectile(renderer,e,burst.spellOrigin,burst.age);
@@ -405,8 +399,16 @@ void CombatEffects::Render(Renderer& renderer) const {
     if(e.kind==K::Hit || e.kind==K::HeavyHit) {
       classfx::Impact(renderer,e,burst.age);continue;
     }
-    if (e.kind==K::Mend) { classfx::Recovery(renderer,e,burst.age); continue; }
-    if (e.kind==K::Potion) { HealingPulse(renderer,e,burst.age); continue; }
+    if (e.kind==K::Mend) {
+      if(caster)castfx::Complete(renderer,e,burst.age,*caster);
+      else classfx::Recovery(renderer,e,burst.age);
+      continue;
+    }
+    if (e.kind==K::Potion) {
+      if(caster){if(caster->alive){auto attached=e;attached.position={caster->root.x,caster->root.z};attached.height=caster->root.y;HealingPulse(renderer,attached,burst.age);}}
+      else HealingPulse(renderer,e,burst.age);
+      continue;
+    }
     if (Dashing(e.kind)) { DashPulse(renderer,e,burst.age); continue; }
     const bool heavy=e.kind==K::HeavyHit,interrupt=e.kind==K::Interrupt,hurt=e.kind==K::Hurt;
     const float t=burst.age,fade=std::pow(Unit(1-t/burstLife),2.f);

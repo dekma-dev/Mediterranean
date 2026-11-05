@@ -15,6 +15,7 @@ void Check(bool ok,const char* reason){if(!ok)throw std::runtime_error(reason);}
 }
 int main(int argc,char** argv){try {
  using namespace DirectX;
+ const bool archeryOnly=argc>1&&std::string_view(argv[1])=="--archery-review";
  const auto& library=classart::Collection();std::size_t bytes=0,triangles=0;
  for(const auto& item:library)for(const auto& mesh:item){bytes+=mesh.vertices.size()*sizeof(visual::Vertex)+mesh.indices.size()*4;triangles+=mesh.indices.size()/3;}
  for(const auto& item:library)for(const auto& mesh:item) {
@@ -113,6 +114,7 @@ int main(int argc,char** argv){try {
  // the floor and the shield attached to its bracing forearm.
  for(unsigned cls=0;cls<3;++cls) {
   auto kit=CharacterOutfit::From(rpg::Inventory{},classes[cls]);kit.armor=true;kit.rewardWeapon=true;
+  if(archeryOnly&&cls!=1)continue;
   kit.shoulders=true;kit.belt=true;kit.gloves=true;kit.shield=cls==0;
   animation::State state;
   for(int tick=0;tick<132;++tick) {
@@ -129,6 +131,7 @@ int main(int argc,char** argv){try {
  }
  if(argc>1&&std::string_view(argv[1])=="--flight-review")return 0;
  for(unsigned cls=0;cls<3;++cls)for(int veteran=0;veteran<2;++veteran)for(int view=0;view<4;++view){
+  if(archeryOnly&&cls!=1)continue;
   auto kit=CharacterOutfit::From(rpg::Inventory{},classes[cls]);kit.armor=veteran;kit.rewardWeapon=veteran;kit.helm=view==1;kit.shoulders=true;kit.belt=true;kit.cloak=true;kit.gloves=true;kit.shield=view==2;
   animation::State state;for(int k=0;k<90;++k){state.Update(1.f/60,0,0,0,true,0);state.locomotion.Update(1.f/60,0,0,0,0,true,0,0,true);animation::ApplyAuthoredLocomotion(state,1.f/60,cls==0?playerclips::Equipment::Sword:cls==2?playerclips::Equipment::Staff:playerclips::Equipment::Bow);}
   renderer.BeginFrame();renderer.SetCamera({view==3?1.7f:-1.8f,1.6f,view==3?3.2f:-3.2f},{0,1.04f,0});
@@ -138,6 +141,7 @@ int main(int argc,char** argv){try {
   Check(renderer.Capture(path.wstring())&&renderer.EndFrame(false)&&renderer.ValidateDebugMessages(),"Native class equipment capture");
  }
  for(unsigned cls=0;cls<3;++cls)for(bool heavy:{false,true}) {
+  if(archeryOnly&&cls!=1)continue;
   auto kit=CharacterOutfit::From(rpg::Inventory{},classes[cls]);kit.armor=true;kit.rewardWeapon=true;kit.shoulders=true;kit.belt=true;kit.gloves=true;
   animation::AuthoredWeaponController controller;
   for(int tick=0;tick<150;++tick) {
@@ -158,6 +162,7 @@ int main(int argc,char** argv){try {
  // Capture at 20 Hz while updating at 60 Hz, including the supporting hand.
  for(unsigned cls=0;cls<3;++cls) {
   auto kit=CharacterOutfit::From(rpg::Inventory{},classes[cls]);kit.armor=true;kit.rewardWeapon=true;
+  if(archeryOnly&&cls!=1)continue;
   kit.shoulders=true;kit.belt=true;kit.gloves=true;kit.shield=false;
   animation::State state;animation::FootPlacement feet;rpg::Vec2 position{};feet.Reset(position,0);
   const auto equipment=cls==0?playerclips::Equipment::Sword:cls==1?playerclips::Equipment::Bow:playerclips::Equipment::Staff;
@@ -180,6 +185,7 @@ int main(int argc,char** argv){try {
    Check(renderer.Capture(path.wstring())&&renderer.EndFrame(false)&&renderer.ValidateDebugMessages(),"Carried weapon state transitions");
   }
  }
+ if(archeryOnly){std::cout<<"PASS: native archery draw/release, carry and flight review\n";return 0;}
  // Armed flight: the blade remains attached to the wrist and clear of the
  // torso while the free arm balances ascent/descent. Inspect at 30 Hz.
  for(int frame=0;frame<36;++frame) {

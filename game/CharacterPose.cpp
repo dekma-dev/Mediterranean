@@ -93,11 +93,14 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   swing*=1-burst;
   const float cast=animation::Unit(dynamics.cast)*(1-swing)*(1-hit)*(1-burst);
   CharacterPose pose;
+  // A relaxed carrying hand holds the bow alone. The arrow is nocked during
+  // the actual draw and stays absent through recovery and locomotion.
+  if(bow)pose.bowArrow=0;
   if(bow&&newStrike) {
     const auto& track=playerclips::Collection()[unsigned(heavy?playerclips::Clip::BowPowerRelease:playerclips::Clip::BowRelease)];
     const float p=dynamics.authoredStrikePhase;
     pose.bowDraw=stroke.weight*animation::SmoothStep(p/track.contact)*(1-animation::SmoothStep((p-track.contact)/.055f));
-    pose.bowArrow=p<=track.contact?1:animation::SmoothStep((p-.90f)/.10f);
+    pose.bowArrow=p<=track.contact?stroke.weight*animation::SmoothStep(p/.035f):0;
   }
   pose.handCast=cast;
   pose.headYaw=animation::Signed(dynamics.face.yaw/.62f)*.62f;
