@@ -98,7 +98,7 @@ visual::BodyPalette Pose(Asset asset,float time,float gait,float attack,float tr
  if(asset==Asset::Boar) {ApplyBeastCombat(palette,asset,attack,gesture);quadruped::Apply(palette,asset,gesture);ApplyBeastCollapse(palette,asset,gesture);}
  return palette;
 }
-static_assert(unsigned(visual::Material::Count)==18,"Update authored shader material sentinel with material layers");
+static_assert(unsigned(visual::Material::Count)==22,"Update authored shader material sentinel with material layers");
 static_assert(sizeof(visual::Vertex)==40,"Authored archive stores ten float32 values per vertex");
 namespace {
 void Require(bool condition,const char* message) {if(!condition) throw std::runtime_error(message);}

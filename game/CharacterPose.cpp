@@ -1,5 +1,6 @@
 #include "game/CharacterPose.h"
 #include "engine/PlayerClips.h"
+#include "game/CombatWeight.h"
 #include <algorithm>
 #include <cmath>
 
@@ -257,16 +258,19 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   if(newStrike && (dynamics.authoredEquipment==playerclips::Equipment::Sword || bow)) {
     const auto clip=bow?(heavy?playerclips::Clip::BowPowerRelease:playerclips::Clip::BowRelease):(heavy?playerclips::Clip::Overhead:playerclips::Clip::Slash);
     const float contact=playerclips::Collection()[unsigned(clip)].contact;
-    const float phase=dynamics.authoredStrikePhase;
-    const float load=animation::Gesture(phase,contact*.62f,std::max(.01f,contact));
-    const float release=animation::Gesture((phase-contact)/std::max(.01f,1-contact),.17f,.78f);
+    const auto motion=animation::AttackWeight(bow,heavy,dynamics.authoredStrikePhase,contact);
     const float weight=stroke.weight*(1-air)*(1-burst)*(1-hit);
-    if(bow){pose.upperPitch+=weight*(.035f*load-.055f*release);pose.upperYaw+=weight*(.035f*load-.06f*release);
-      pose.bodyForward+=weight*(.014f*load-.022f*release);}
-    else {pose.bodyLift-=weight*(heavy?.028f:.014f)*load;pose.bodyForward+=weight*((heavy?.045f:.026f)*release-.018f*load);
-      pose.upperPitch+=weight*(.06f*release-.035f*load);pose.upperRoll+=weight*.025f*release;}
+    pose.upperPitch+=motion.pitch*weight;pose.upperYaw+=motion.yaw*weight;pose.upperRoll+=motion.roll*weight;
+    pose.bodyLift+=motion.lift*weight;pose.bodyShift+=motion.side*weight;pose.bodyForward+=motion.forward*weight;
+    pose.pelvisRotation.x+=motion.pelvisPitch*weight;pose.pelvisRotation.y+=motion.pelvisYaw*weight;pose.pelvisRotation.z+=motion.pelvisRoll*weight;
   }
   std::array<XMFLOAT3,2> elbowPoles{};
+  if(newStrike){
+    const auto motion=dynamics.authoredAccent*(stroke.weight*(1-air)*(1-burst)*(1-hit));
+    pose.upperPitch+=motion.pitch;pose.upperYaw+=motion.yaw;pose.upperRoll+=motion.roll;
+    pose.bodyLift+=motion.lift;pose.bodyShift+=motion.side;pose.bodyForward+=motion.forward;
+    pose.pelvisRotation.x+=motion.pelvisPitch;pose.pelvisRotation.y+=motion.pelvisYaw;pose.pelvisRotation.z+=motion.pelvisRoll;
+  }
   for(int i=0;i<2;++i) {
     const XMFLOAT3 fallback{i==0?-.8f:.8f,-.2f,-1};
     auto pole=XMLoadFloat3(&fallback);
@@ -327,6 +331,8 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     pose.bodyLift=std::min(pose.bodyLift,
       target.y+std::sqrt(std::max(0.f,reach*reach-x*x-z*z))-(hip.y-pose.bodyLift));
   }
+  if(dynamics.pelvisStabilized&&std::isfinite(dynamics.pelvisLimit))
+    pose.bodyLift=std::min(pose.bodyLift,std::clamp(dynamics.pelvisLimit,-.45f,.30f));
   for (int i=0;i<2;++i) {
     const float side=i==0?-1.f:1.f;
     const XMFLOAT3 knee{std::sin(pose.pelvisRotation.y)*.35f,0,std::cos(pose.pelvisRotation.y)};

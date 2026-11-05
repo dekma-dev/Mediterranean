@@ -418,7 +418,10 @@ Geometry BuildMesh(Mesh mesh) {
         const float fold=std::cos(u*4*3.14159265f)*(.009f+t*.022f)*std::sin(t*1.5707963f);
         const float edge=std::abs(u);
         const float hem=guard?.035f*std::pow(t,10.f)*(1+std::cos(u*3*3.14159265f)):0;
-        const XMFLOAT3 p{u*(.22f+t*(guard?.11f:.14f)),-(guard?.88f:.82f)*t+hem,-.025f-.115f*t-fold-.035f*u*u};
+        // Keep the pinned seam against the shoulders, then drape outside the
+        // fitted doublet's upper back instead of cutting through its volume.
+        const float backClearance=guard?.040f*std::sin(t*3.14159265f):0;
+        const XMFLOAT3 p{u*(.22f+t*(guard?.11f:.14f)),-(guard?.88f:.82f)*t+hem,-.025f-.115f*t-fold-.035f*u*u-backClearance};
         const bool trim=column==0 || column==columns || row==rows;
         const float shade=1-.18f*t-.12f*edge;
         auto color=trim?XMFLOAT4{.66f,.48f,.22f,1}:XMFLOAT4{.13f*shade,.28f*shade,.39f*shade,1};
@@ -767,6 +770,30 @@ std::vector<std::uint8_t> BuildMaterialLayer(Material material,unsigned size) {
       value=.78f+.13f*broad+.07f*grain-.055f*creases+.025f*wear;
       height=.0008f*grain-.0014f*creases;
       roughness=.57f+.17f*broad+.08f*creases-.14f*wear;break;
+    }
+    case Material::ForgedSteel: case Material::RivetedMail: {
+      const float hammer=noise(u,v,10),fineHammer=noise(u,v,42);
+      const float abrasion=std::pow(.5f+.5f*std::sin(2*pi*(u*43+.045f*noise(u,v,8))),14.f);
+      const float oxidation=smooth((noise(u,v,8)-.57f)*5);
+      value=.84f+.11f*hammer+.04f*fineHammer-.12f*oxidation+.025f*abrasion;
+      height=.00022f*hammer+.00004f*fineHammer-.000035f*abrasion;
+      roughness=.43f+.16f*hammer+.15f*oxidation-.025f*abrasion;
+      if(material==Material::RivetedMail){value*=.9f;roughness+=.09f;}
+      break;
+    }
+    case Material::SaddleLeather: {
+      const float grain=noise(u,v,36),pore=smooth((.28f-grain)*8);
+      const float crease=smooth((.30f-noise(u,v,7))*7);
+      value=.79f+.13f*broad+.07f*grain-.09f*crease;
+      height=.00016f*grain-.00012f*pore-.0003f*crease;
+      roughness=.60f+.15f*broad+.10f*crease;break;
+    }
+    case Material::ArmingCloth: {
+      const float twill=std::sin(2*pi*(u*22-v*22));
+      const float weave=std::sin(2*pi*u*44)*std::sin(2*pi*v*44);
+      value=.83f+.10f*broad+.025f*fine+.025f*twill+.016f*weave;
+      height=.000025f*twill+.000018f*weave;
+      roughness=.88f+.08f*broad;break;
     }
     case Material::Skin:
       // Low-contrast pores avoid the plastic uniform sheen without baking

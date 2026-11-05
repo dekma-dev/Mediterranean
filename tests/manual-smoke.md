@@ -1,10 +1,40 @@
+## Four-class release and repeated-attack acceptance (2026-11-05)
+
+- Alternate Warrior Strike and Reverse cut while stationary, moving and turning; watch from both sides. The right arm/blade must cross in opposite directions with a stable contact time and smooth return, including buffered follow-ups, interruption and loading. Iron guard should sound physical; an absorbed hit should produce one short spatial metal contact, not a magical completion tone.
+- Repeat Scout Quick/Twin/Fanned/aimed shots and defensive evasion. Draw/release/target contact should remain distinct, repeated composites should vary, and evasion should sound like earth/gear movement. Check three or more consecutive attacks and cancellations; no preparation tail should restart itself.
+- Compare basic/heavy Mage fire, frost and arcane from normal camera distance. Check the short socket flash, differentiated flight heads and Thermal rupture's opposed fire/ice contact. Repeat beside enemies, walls and sloped ground: brighter spell bodies must not hide hostile danger borders. Compare protection absorption with Warrior's physical block.
+- On Priest, follow the gathered preparation streams, paired projectile tails and three continuous arches behind completed healing. Interrupt and move during preparation; completion must not appear or sound early. Check from front/side, with the character visible, at low and high refresh rates.
+- Listen to `build-combat-expression/four-class-repeated-attacks.wav`, then repeat actual rotations with music and enemies. Its four six-second groups are Warrior, Scout, Mage and Priest. This isolated sample demonstrates take variation; it does not establish full-battle mix, listening fatigue or reference parity.
+
+## Four-class signature acceptance (2026-11-05)
+
+- Use a level-ten Mage at the training dummies: compare Frost bloom, Falling star and Firestorm. The first fractures outward in ice, the second visibly descends from above, and the third produces ground fire columns. Cast against one and several targets: there must be one main spectacle/large impact sound, with smaller local contacts on additional victims. Check sloping ground, a wall, near/far cameras and enemy danger borders; none of these visuals may enlarge the actual damage area.
+- As Priest, cast Absolution and Sanctuary strike, earning Faith through ordinary hits before Sanctuary. Watch the scepter/free-hand prayer from both sides and its return to rest. Absolution returns paired light toward the caster; Sanctuary spreads a light fan with descending shafts. Compare ordinary offense and healing, interrupted preparation, Escape, movement, death and loading; no cancelled contact/heal sound may play.
+- Compare Warrior reverse/wide cuts and finishers: chest/pelvis load and recovery should follow the accepted action, without doubled grunts or sliding planted feet. As Scout compare basic, aimed, piercing and fanned shots; Fanned arrows must show a spread, with physical string transients rather than a magic tone. Repeat while turning and buffering the next attack.
+- Listen to `build-signature-combat/four-class-signatures.wav` (Warrior, Scout, Mage, Priest), then to repeated real rotations at normal volume. Technical headroom checks do not establish timbre, fatigue or reference parity. Strong spell lights remain unshadowed; check thin-wall spill. Source faces, icons and Blender models are outside this change.
+
+## Four-class weight, lighting and combination acceptance (2026-11-05)
+
+- Restart the rebuilt game. Cast Mage fire/frost/arcane and Priest offense/healing beside ground, a wall and armored enemies. Preparation and flight should cast small colored light; contact should briefly illuminate the nearby surface and fade. Open C/I during it: portraits/UI and frozen facial appearance must remain stable. Check corners for the known unshadowed-light leakage; avoid accepting excessive spill as final quality.
+- Compare Warrior basic/heavy swings and Scout aiming/release from front and side while stationary, walking and turning. Observe chest/pelvis load and settling, planted feet and attached hands/weapons. Interrupt, jump and open Escape during recovery: no body snap or retained offset should remain.
+- At the end of a basic attack, press a technique once. It should start after recovery, without a second press, early cooldown or early resource cost. Repeat while changing targets, leaving range, unequipping the bow, opening Escape and loading. Queued attacks must not redirect or bypass their normal gates. Healing, mobility and potions are not in this queue.
+- Listen to Quick/Twin/Fanned/Piercing shots separately; compare light and strong frost/arcane casts, and Radiance versus Rebuke. In a crowded pull, steps/preparation should yield to hits/warnings. Check for clicks when the voice pool is full and judge fatigue over repeated attacks. Current preview: `build-four-class-impact/four-class-combat.wav`.
+
+## Recorded audio acceptance (2026-11-05)
+
+- Rebuild and restart the current game. Character selection should play Fantasy Choir 1; the world should crossfade to piece 2 and actual combat to piece 3. Check a complete cadence/repeat (53/126/91 seconds), volume zero, return to roster and focus loss. The external launcher itself remains silent. No old percussion loop should play over the recorded combat track.
+- Compare five repeated aimed Scout shots, Mage fire casts, Priest attacks/healing and Warrior heavy swings. Listen for distinct bow transients, fire movement, organ/bell tails and three short human efforts. Verify the sword impact stays familiar. The preparation must fade on release/cancel; a cancelled heal must never produce the completion sound.
+- Walk and land on paving, sand/dirt, grass and timber. The first three have recorded/processed variations; timber remains modeled. Listen for excessive bass, clicks or repetitive takes. Pull a crowd and check enemy warnings remain audible without clipping or long tails swallowing releases.
+- Watch Mage fire, frost and arcane impacts separately: ice/arcane must not acquire an unrelated orange fire burst. Compare heavy Mage plumes and Priest descending light with basic attacks, from front/side/normal camera distance; silhouettes and danger borders must remain readable.
+- Auditions from accepted actions are exported by AudioTests into the active build directory: warrior-heavy.wav, scout-aimed.wav, mage-fire.wav and priest-rebuke.wav. These are technical review samples; assess timbre/fatigue in the actual game before marking listening acceptance complete.
+
 ## Four-class audio and combat opportunities (2026-11-05)
 
 - Restart the current Release launcher. Listen in character selection, enter the
   world, return to character selection, Alt-Tab and mute/unmute each channel.
   Menu/world themes should crossfade; world steps/combat/ambience must not leak
   into character selection or continue while unfocused. The external launcher
-  is silent. Judge the two original synthesized scores for fatigue over several loops.
+  is silent. Judge the three recorded orchestral/choral scores for fatigue over several loops.
 - On Scout, compare Quick shot, Aimed shot and Twin shot: draw, string release
   and spatial target contact should be separate. Cancel a heavy preparation;
   its sound should fade without a release/hit. Walk over paving, grass, earth

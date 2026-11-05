@@ -26,6 +26,8 @@ Texture2DArray surfaceNormal : register(t11);
 // x = world half extent, y = last texel-center world coordinate. A zero
 // extent selects the analytic reference path for regression diagnostics.
 cbuffer CloudField : register(b3) { float4 cloudField; };
+struct CombatLight { float4 positionRadius; float4 colorPower; };
+cbuffer CombatLights : register(b4) { float4 combatLightCount; CombatLight combatLights[4]; };
 SamplerState fontSampler : register(s2);
 SamplerState surfaceSampler : register(s0);
 SamplerComparisonState shadowSampler : register(s1);
@@ -126,7 +128,7 @@ VOut VSWorld(InstanceIn i) {
  o.n=normalize(mul(float4(i.n,0),normals).xyz);
  o.receiverPlane=i.surface.w<0?0:1;
  float4 receiver=position;
- bool authoredSkin=i.surface.x==18 && i.tint.w==9;
+ bool authoredSkin=i.surface.x==22 && i.tint.w==9;
  // The detailed cascade covers 20 m: a face is only a few shadow texels wide.
  // A local normal offset prevents curved skin/scalp self-shadow striping while
  // leaving the caster silhouette and every other world receiver unchanged.
@@ -135,15 +137,19 @@ VOut VSWorld(InstanceIn i) {
  // Millimetre cloth folds are smaller than the cascade filter footprint.
  // Keep their caster geometry, but receive shadows on the smooth outer shell
  // instead of extrapolating tiny fold triangles across neighbouring folds.
- bool tailoredCloth=i.surface.x==15 || (i.surface.x==18 && (i.tint.w==15 || i.tint.w==14));
+ bool tailoredCloth=i.surface.x==15 || i.surface.x==20 || (i.surface.x==22 && (i.tint.w==15 || i.tint.w==14 || i.tint.w==19 || i.tint.w==20));
  if(tailoredCloth) {receiver.xyz+=o.n*.012;o.receiverPlane=0;}
+ // The raised hero plates have small, curved triangles. Receiver-plane bias
+ // amplifies their individual slopes into visible diagonal self-shadow bands.
+ bool forgedPlate=i.surface.x==18 || i.surface.x==21 || (i.surface.x==22 && (i.tint.w==18 || i.tint.w==21));
+ if(forgedPlate) {receiver.xyz+=o.n*.020;o.receiverPlane=0;}
  o.tint=i.tint*i.paint; o.shadow=mul(receiver,shadowVP[0]);
  o.detailShadow=mul(receiver,shadowVP[1]); o.material=i.surface.x;
  // Authored vertices carry a validated native material ID in alpha.
  // The special instance material leaves ordinary tint/opacity unchanged.
- if (i.surface.x==18) {
+ if (i.surface.x==22) {
   o.material=i.tint.w;o.tint.a=abs(i.paint.a);
-  if(i.paint.a<0)o.tint.rgb=i.tint.rgb*(i.tint.w==15?i.paint.rgb:float3(1,1,1));
+  if(i.paint.a<0)o.tint.rgb=i.tint.rgb*((i.tint.w==15 || i.tint.w==20)?i.paint.rgb:float3(1,1,1));
  }
  // Metric object coordinates follow animated parts instead of sliding through
  // a world-space texture. Projection weights account for nonuniform scaling.
@@ -200,7 +206,7 @@ void SkinBody(inout InstanceIn i,uint4 joints,float4 weights) {
   n+=mul(float4(i.n,0),BodyMatrix(actor,joints[k],true)).xyz*weights[k];
  }
  i.p=p; i.n=normalize(n);
- if(i.surface.x!=18) {
+ if(i.surface.x!=22) {
   float4 style=bodyRows[actor*263+256+(uint)i.tint.w];
   i.tint=float4(style.rgb,1); i.surface.x=style.w;
  }
@@ -450,6 +456,7 @@ float Shadow(float4 widePosition,float4 detailPosition,float sunFacing,float rec
  [branch] if (weight<1) farValue=ShadowFilter(wide,wideGradient,sunFacing,0);
  return lerp(farValue,nearValue,weight);
 }
+)" R"(
 float4 PSMain(VOut i) : SV_TARGET {
  if (eyeAndHud.w>.5) {
   float4 result=color*i.tint;
@@ -468,7 +475,7 @@ float4 PSMain(VOut i) : SV_TARGET {
  }
  float3 geometric=normalize(i.n),n=geometric;
  float3 weights=pow(abs(normalize(i.tn)),4); weights/=max(dot(weights,1),.00001);
- float scale=i.material==1?1.4:i.material==3?.8:i.material==5?1.1:i.material==15?12:i.material==6 || i.material==12?3:(i.material==11 || i.material==14)?2: .6;
+ float scale=i.material==1?1.4:i.material==3?.8:i.material==5?1.1:(i.material==15 || i.material==20)?12:i.material==18?3:i.material==19?7:i.material==21?5:i.material==6 || i.material==12?3:(i.material==11 || i.material==14)?2: .6;
  float4 mx=materials.Sample(surfaceSampler,float3(i.tp.zy*scale,i.material));
  float4 my=materials.Sample(surfaceSampler,float3(i.tp.xz*scale,i.material));
  float4 mz=materials.Sample(surfaceSampler,float3(i.tp.xy*scale,i.material));
@@ -629,7 +636,7 @@ float4 PSMain(VOut i) : SV_TARGET {
  // A small transmitted-light term keeps the backs of opaque leaves readable.
  if (i.material==8) { hemisphere=max(hemisphere,.48); diffuse+=saturate(dot(-n,lightDir))*.32; }
  float3 base=pow(saturate(albedo),2.2);
- float metal=i.material==7?.8:i.material==13?.62:0;
+ float metal=i.material==18?.94:i.material==21?.88:i.material==7?.8:i.material==13?.62:0;
  float3 view=normalize(eyeAndHud.xyz-i.wp),halfVector=normalize(lightDir+view);
  // GGX microfacets: roughness controls highlight width, while masking keeps
  // grazing highlights bounded. Derivative variance damps distant sparkle.
@@ -656,7 +663,7 @@ float4 PSMain(VOut i) : SV_TARGET {
   float wrapped=saturate((dot(n,lightDir)+.28)/1.28)/1.28;
   diffuseLight=lerp(diffuse.xxx,wrapped.xxx,float3(.28,.16,.09));
  }
- float clothSheen=(i.material==6 || i.material==15)?.22*pow(1-nv,5):0;
+ float clothSheen=(i.material==6 || i.material==15 || i.material==20)?.22*pow(1-nv,5):0;
  diffuseWeight*=1-clothSheen;
  float3 result=base*diffuseWeight*(ambient*cavity+sunlight*diffuseLight*visibility);
  result+=specular*sunlight*diffuse*visibility*3.14159265;
@@ -668,6 +675,24 @@ float4 PSMain(VOut i) : SV_TARGET {
  float reflectedUp=saturate(reflect(-view,n).y*.5+.5);
  float3 environment=lerp(float3(.29,.23,.16),skyFill,lerp(reflectedUp,.5,roughness*roughness));
  result+=fresnel*environment*lerp(.38,.16,roughness)*cavity;
+ // Bounded local spell light, before atmospheric extinction and tone mapping.
+ // Face/head, skin, eyes and hair keep the frozen appearance. Portraits are
+ // explicitly isolated; effects do not change UI or the sun/shadow solution.
+ [branch] if(eyeAndHud.w==0 && i.bodyStyle<0xfffffffe && i.material!=0 && i.material!=9 && i.material!=12 && i.material!=10) {
+  [loop] for(uint j=0;j<(uint)combatLightCount.x;j++) {
+   float3 delta=combatLights[j].positionRadius.xyz-i.wp;
+   float d2=dot(delta,delta),radius=combatLights[j].positionRadius.w;
+   [branch] if(d2<radius*radius) {
+    float3 direction=delta*rsqrt(max(d2,.0001));
+    float nl=saturate(dot(n,direction)),edge=saturate(1-d2/(radius*radius));
+    float attenuation=edge*edge/(1+.30*d2);
+    float3 halfLight=normalize(direction+view+float3(0,.00001,0));
+    float shine=pow(saturate(dot(n,halfLight)),lerp(128,8,roughness));
+    float3 reflected=base*(1-metal)*nl+lerp(.035,base,metal)*shine*nl*(1.5-.5*roughness);
+    result+=reflected*combatLights[j].colorPower.rgb*combatLights[j].colorPower.w*attenuation;
+   }
+  }
+ }
  if (i.material==10) result=base*2.3;
  if (eyeAndHud.w<0) return float4(pow(max(0,result/(1+result)),1/2.2),1);
  // Extinction and in-scattered sky light mix before tone mapping, not in display RGB.

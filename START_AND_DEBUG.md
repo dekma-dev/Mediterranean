@@ -1,3 +1,11 @@
+Four-class release and repeated attacks (2026-11-05): restart build-ninja-release/MediterraneanLauncher.exe for play or build-local/Debug/RPGNative.exe for debugging. Compare Warrior Strike/Reverse cut and guard absorption; Scout repeated aimed/twin/fanned shots and evasion; Mage fire/frost/arcane releases and Thermal rupture; Priest offensive tails and completed-healing arches. Existing characters, spell timings and bindings remain compatible. See docs/four-class-combat-audio.md and the first checklist in tests/manual-smoke.md. New 24-second audition: build-combat-expression/four-class-repeated-attacks.wav (Warrior, Scout, Mage, Priest, six seconds each).
+
+Four-class signatures (2026-11-05): restart build-ninja-release/MediterraneanLauncher.exe for play or build-local/Debug/RPGNative.exe for debugging. At level 10 compare Mage Falling star / Frost bloom / Firestorm, Priest Absolution / Sanctuary strike, Scout Fanned arrows / Piercing shot and Warrior finishers. Build class reserve before signature/level-10 abilities; existing characters and bindings are preserved. The first checklist in tests/manual-smoke.md covers this pass. Audition: build-signature-combat/four-class-signatures.wav (Warrior, Scout, Mage, Priest).
+
+Four-class impact and cadence (2026-11-05): restart build-ninja-release/MediterraneanLauncher.exe for play, or build-local/Debug/RPGNative.exe for Visual Studio debugging. Spell phases now light nearby ground/armor; Warrior/Scout body weight, differentiated attack sounds and offensive technique buffering are active. See docs/four-class-combat-audio.md and the first checklist in tests/manual-smoke.md. New audition: build-four-class-impact/four-class-combat.wav.
+
+Audio recordings (2026-11-05): rebuild RPGNative and restart the executable. The 51 effect variations and three recorded scores are embedded automatically; no manual asset copying or external codec is required. See assets/audio/CREDITS.md and tests/manual-smoke.md. AudioTests exports short four-class auditions; RecordedAudioTests checks the actual compressed music decoder with muted output.
+
 ## Current four-class audio and combat (2026-11-05)
 
 Restart `build-ninja-release/MediterraneanLauncher.exe` for play. Visual Studio

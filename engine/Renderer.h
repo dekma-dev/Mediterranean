@@ -10,6 +10,7 @@
 #include "engine/HandSkinning.h"
 #include "engine/FontAtlas.h"
 #include "engine/StaticScene.h"
+#include "engine/TransientLights.h"
 #include <array>
 #include <functional>
 class Renderer {
@@ -34,6 +35,9 @@ public:
   void SetCamera(const DirectX::XMFLOAT3& eye, const DirectX::XMFLOAT3& target);
   void SetShadowFocus(const DirectX::XMFLOAT3& focus);
   void SetAtmosphereTime(double seconds);
+  void AddCombatLight(DirectX::XMFLOAT3 position,float radius,DirectX::XMFLOAT3 color,float power){combatLights_.Add(position,radius,color,power,eye_);}
+  unsigned CombatLightCount() const {return combatLights_.Count();}
+  void SetCombatLightingEnabled(bool value){combatLightingEnabled_=value;}
   // Compare the shared field with the original per-vertex integration.
   void SetCloudLightFieldEnabled(bool enabled) { cloudLightFieldEnabled_=enabled; }
   unsigned CloudLightUpdates() const { return cloudLightUpdates_; }
@@ -146,6 +150,9 @@ private:
   bool Check(HRESULT result, const wchar_t* operation);
   bool CreateTargets(int width, int height);
   bool CreatePipeline(const visual::BodyGeometry* previewBody);
+  visual::TransientLights combatLights_;
+  bool combatLightingEnabled_=true;
+  Microsoft::WRL::ComPtr<ID3D11Buffer> combatLightConstants_;
   bool FlushHud();
   bool CreateMaterials();
   bool CreateSurfaceMaterials();

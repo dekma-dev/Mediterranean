@@ -182,6 +182,10 @@ bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
  if (!Check(device_->CreateBuffer(&b,&data,indices_.GetAddressOf()),L"Create mesh indices")) return false;
  b={}; b.ByteWidth=sizeof(Constants); b.Usage=D3D11_USAGE_DEFAULT; b.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
  if (!Check(device_->CreateBuffer(&b,nullptr,constants_.GetAddressOf()),L"Create constants")) return false;
+ b.ByteWidth=sizeof(visual::TransientLightBlock);
+ const visual::TransientLightBlock emptyLights{};
+ D3D11_SUBRESOURCE_DATA lightData{};lightData.pSysMem=&emptyLights;
+ if(!Check(device_->CreateBuffer(&b,&lightData,combatLightConstants_.GetAddressOf()),L"Create combat light constants"))return false;
  b.ByteWidth=sizeof(XMFLOAT4);
  const XMFLOAT4 emptyField{};
  D3D11_SUBRESOURCE_DATA fieldData{}; fieldData.pSysMem=&emptyField;
@@ -335,6 +339,7 @@ bool Renderer::CreateMaterials() {
  return Check(device_->CreateSamplerState(&sampler,shadowSampler_.GetAddressOf()),L"Create shadow sampler");
 }
 void Renderer::BeginFrame() {
+ combatLights_.Reset();
  drawCalls_=0; frameFailed_=false; portrait_=false; skyPending_=true;
  cloudLightUpdates_=0;
  context_->OMSetBlendState(nullptr,nullptr,0xffffffff);
@@ -353,6 +358,7 @@ void Renderer::BeginFrame() {
  D3D11_VIEWPORT v{0,0,static_cast<float>(width_),static_cast<float>(height_),0,1};
  context_->RSSetViewports(1,&v); context_->RSSetState(rasterizer_.Get());
  context_->VSSetConstantBuffers(0,1,constants_.GetAddressOf()); context_->PSSetConstantBuffers(0,1,constants_.GetAddressOf());
+ context_->PSSetConstantBuffers(4,1,combatLightConstants_.GetAddressOf());
  // A launcher/roster can render a portrait before any world. Bind valid
  // resources even though portrait shaders bypass atmospheric lighting.
  context_->VSSetConstantBuffers(3,1,cloudLightConstants_.GetAddressOf());
@@ -721,6 +727,9 @@ bool Renderer::FlushWorld() {
     instanceScratch_[offsets[item.visibility]++]=item.instance;
  }
  // Shadow-only/fully culled scenes do not consume surface cloud lighting.
+ const auto combatLightBlock=portrait_ || !combatLightingEnabled_?visual::TransientLightBlock{}:combatLights_.Block();
+ context_->UpdateSubresource(combatLightConstants_.Get(),0,nullptr,&combatLightBlock,0,0);
+ context_->PSSetConstantBuffers(4,1,combatLightConstants_.GetAddressOf());
  if (!portrait_ && batchCounts[colorPass]) PrepareCloudLight();
  if (!instanceScratch_.empty()) {
   D3D11_MAPPED_SUBRESOURCE mapped{};

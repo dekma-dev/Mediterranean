@@ -12,7 +12,7 @@ constexpr unsigned musicSeconds=48;
 enum class Cue { Strike,Heavy,Enemy,Hit,HeavyHit,Hurt,Interrupt,Mend,Potion,Step,Jump,Land,Dash,Cast,Bow,Pistol,
   Holy,Fire,Thorn,Soul,Mind,Song,Rend,Ward,SpellHit,StepGrass,StepDirt,StepWood,LandGrass,LandDirt,LandWood,UiClick,ReserveReady,CastCancelled,EnemyPrepare,BossPrepare,
   PawGrass,PawDirt,PawStone,PawWood,HoofGrass,HoofDirt,HoofStone,HoofWood,WolfThreat,BoarThreat,WolfBite,BoarRush,
-  BowDraw,BowHeavy,ArrowImpact,FireGather,FireHeavy,FireImpact,FrostGather,FrostRelease,FrostImpact,ArcaneGather,ArcaneRelease,ArcaneImpact,HolyGather,HolyImpact,HolyMend,WarriorEffort,Count };
+  BowDraw,BowHeavy,ArrowImpact,FireGather,FireHeavy,FireImpact,FrostGather,FrostRelease,FrostImpact,ArcaneGather,ArcaneRelease,ArcaneImpact,HolyGather,HolyImpact,HolyMend,WarriorEffort,BowTwin,BowVolley,ArrowPierce,FrostShatter,ArcaneSurge,HolyJudgment,MeteorFall,MeteorImpact,FirestormImpact,HolySanctuary,BowDeadeye,WarriorFinisher,ShieldReady,ShieldBlock,ScoutEvasion,Count };
 bool IsStep(Cue cue);
 bool IsLanding(Cue cue);
 Cue GroundCue(const rpg::WorldMap& map,rpg::Vec2 position,bool landing=false);
@@ -24,7 +24,8 @@ Cue ReleaseCue(rpg::ClassId school,int ability,bool heavy);
 Cue ContactCue(rpg::ClassId school,int ability,bool heavy);
 bool IsPreparation(Cue cue);
 bool Preparing(const rpg::Simulation& state);
-std::vector<std::int16_t> Generate(Cue cue);
+std::vector<std::int16_t> Generate(Cue cue,unsigned variant=0);
+unsigned EffectVariants(Cue cue);
 std::vector<std::int16_t> GenerateMusic();
 std::vector<std::int16_t> GenerateMenuMusic();
 std::vector<std::int16_t> GenerateCombatLayer();
@@ -43,6 +44,8 @@ struct MusicIntensity {
   void Reset() {value=hold=0;}
 };
 float CueLevel(Cue cue);
+unsigned CuePriority(Cue cue);
+int SelectVoice(const std::array<unsigned,12>& priorities,unsigned incoming);
 float CuePitch(Cue cue,unsigned sequence);
 float MixGain(float previous,float peakLoad,float seconds);
 float MusicGain(float previous,float target,float seconds);
@@ -76,6 +79,7 @@ private:
   std::array<IXAudio2SourceVoice*,12> voices_{};
   std::array<float,12> voiceLevels_{},voicePeaks_{};
   std::array<float,12> preparationGain_{};
+  std::array<unsigned,12> voicePriorities_{};
   std::array<bool,12> preparation_{};
   std::array<rpg::Vec2,12> origins_{};
   std::array<bool,12> spatial_{};
@@ -83,6 +87,8 @@ private:
   std::array<float,size_t(sound::Cue::Count)> peaks_{};
   std::array<unsigned,size_t(sound::Cue::Count)> variations_{};
   std::array<std::vector<std::int16_t>,size_t(sound::Cue::Count)> samples_;
+  std::array<std::array<std::vector<std::int16_t>,2>,size_t(sound::Cue::Count)> effectVariants_;
+  bool recordedMusic_=false;
   std::vector<std::int16_t> score_;
   std::vector<std::int16_t> menuScore_;
   float menuBlend_=0;

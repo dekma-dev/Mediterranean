@@ -30,6 +30,7 @@ public:
   std::size_t TrailCount() const;
   static DirectX::XMFLOAT3 SpellTracePoint(DirectX::XMFLOAT3 origin,rpg::Vec2 destination,float progress,float arc=.16f,float targetHeight=1.25f);
   void Render(Renderer& renderer,const castfx::Attachments* caster=nullptr) const;
+  void Illuminate(Renderer& renderer,const rpg::Simulation& state,const castfx::Attachments& caster) const;
 private:
   struct Burst { rpg::CombatVisualEvent event; float age=1; unsigned seed=0; DirectX::XMFLOAT3 spellOrigin{}; };
   struct Sample { DirectX::XMFLOAT3 root,tip; float age=0; };

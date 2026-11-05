@@ -34,8 +34,10 @@ inline Fittings Build(const CharacterOutfit& outfit) {
  if(oldstyle::Focused(outfit.classId)) {
   const auto paint=oldstyle::Paint(outfit.classId,outfit.appearance);
   if(outfit.tunic)add(oldstyle::Mesh(outfit.classId,outfit.armor?1:0),0,0,0,{1,1,1},paint,S::Count);
-  if(outfit.shoulders)for(float side:{-1.f,1.f})
-    add(oldstyle::Mesh(outfit.classId,2),side*.335f,1.465f,0,{1,1,1},paint,S::Count);
+  if(outfit.shoulders)for(float side:{-1.f,1.f}) {
+    const float size=outfit.classId==rpg::ClassId::Warrior?(side>0?1.06f:.92f):1.f;
+    add(oldstyle::Mesh(outfit.classId,2),side*.335f,1.465f,0,{size,size,size},paint,S::Count);
+  }
   if(outfit.belt)add(classart::Mesh(classart::Part(unsigned(classart::Part::WarriorBelt)+oldstyle::Index(outfit.classId))),0,0,0,{1,1,1},{1,1,1,1},S::Count);
   return result;
  }

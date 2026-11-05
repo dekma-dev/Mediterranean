@@ -77,7 +77,7 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
         const float side=arm?1.f:-1.f;
         const float roll=side*.55f*std::clamp(std::atan2(std::max(0.f,side*XMVectorGetX(direction)),-XMVectorGetY(direction))-.18f,0.f,1.4f);
         const float pitch=-.25f*XMVectorGetZ(direction);
-        renderer.DrawMeshTransformed(fitting.mesh,XMMatrixRotationX(pitch)*XMMatrixRotationZ(roll)*
+        renderer.DrawMeshTransformed(fitting.mesh,XMMatrixScaling(fitting.scale.x,fitting.scale.y,fitting.scale.z)*XMMatrixRotationX(pitch)*XMMatrixRotationZ(roll)*
           XMMatrixTranslation(fitting.position.x,fitting.position.y-.95f,0)*torso*
           XMMatrixTranslation(pose.bodyShift,.95f+pose.bodyLift,pose.bodyForward)*actorTransform,fitting.color,fitting.material);
         continue;
@@ -101,7 +101,9 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       }
     }
     if (outfit.cloak) {
-      renderer.DrawCloak(upper({0,1.49f,-.19f}),yaw+pose.upperYaw,pose.upperPitch,pose.upperRoll,
+      // The guard cape already contains its rearward drape. Pin its seam to
+      // the fitted doublet instead of adding a second stand-off from the back.
+      renderer.DrawCloak(upper({0,1.49f,guard?-.105f:-.19f}),yaw+pose.upperYaw,pose.upperPitch,pose.upperRoll,
         dynamics.clothSide,dynamics.clothBack,guard,oldStyle?(guard?XMFLOAT4{.62f,.52f,.45f,1}:outfit.classId==rpg::ClassId::Scout?XMFLOAT4{.48f,.68f,.46f,1}:XMFLOAT4{.67f,.48f,.67f,1}):XMFLOAT4{1,1,1,1});
       if(!oldStyle)for (float side : {-1.f,1.f})
         part(M::Torso,side*.13f,1.49f,.015f,{.12f,.09f,.39f},{.12f,.24f,.36f,1},S::Cloth);

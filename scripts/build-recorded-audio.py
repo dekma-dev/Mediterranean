@@ -76,11 +76,34 @@ def speed(a, ratio):
 clips = {}
 bow = mono('battle_sound_effects/Bow.wav')
 fire = mono('fireball.wav')
+organ2 = mono('ChurchOrganEmulation-SFZ-20190924/samples/C2.wav')
+organ3 = mono('ChurchOrganEmulation-SFZ-20190924/samples/C3.wav')
+bell = mono('bell.wav')
+for name, duration, attack, decay, bell_gain in [('HolyGather',2.2,.32,1.3,0),('Holy',2.8,.045,1.9,.28),
+        ('HolyImpact',2.6,.015,2.4,.43),('HolyMend',3.4,.15,1.15,.13)]:
+    n = int(duration*22050)
+    t = np.arange(n)/22050
+    # D pedal + open fifth from sampled Aeolus organ ranks; not a live choir.
+    pedal = speed(organ2, 2**(2/12))[:n]
+    fifth = speed(organ3, 2**(9/12))[:n]
+    voice = .58*pedal + .22*fifth
+    voice *= np.minimum(1,t/attack)*np.exp(-t*decay)
+    b = speed(bell, .56)
+    voice[:min(len(b),n)] += b[:n]*bell_gain
+    # Reflections decay over the full tail, rather than cutting at cast release.
+    for delay, gain in [(.061,.28),(.113,.22),(.181,.16),(.293,.11),(.433,.07)]:
+        offset = int(delay*22050)
+        voice[offset:] += voice[:-offset].copy()*gain
+    for v, ratio in enumerate((1,.993,1.007)):
+        clips[name+str(v)] = finish(speed(voice,ratio), .65 if name=='HolyGather' else .73,duration)
 for v, ratio in enumerate((1, .96, 1.045)):
     clips['Bow'+str(v)] = finish(speed(bow, ratio), .67, 1)
     clips['BowHeavy'+str(v)] = finish(speed(bow, ratio*.84), .72, 1.3)
     for name, rate, peak in [('Fire', 1.13, .68), ('FireHeavy', .82, .76), ('FireImpact', .71, .73)]:
         clips[name+str(v)] = finish(speed(fire, ratio*rate), peak, 2.6)
+    charge = speed(fire,ratio*.9)[::-1].copy()[:int(1.6*22050)]
+    charge *= np.linspace(0,1,len(charge))**1.5
+    clips['FireGather'+str(v)] = finish(charge,.43,1.6)
     # Short voiced efforts, not the death/yell recordings in the same pack.
     clips['WarriorEffort'+str(v)] = finish(mono(f'yelling sounds/3grunt{v+3}.wav'), .62, .85)
     for surface, src in [('Step', 'Stone'), ('StepDirt', 'Sand'), ('StepGrass', 'Sand')]:
@@ -148,7 +171,6 @@ for source, name, target in [(1,'menu-choir',.14),(2,'world-choir',.12),(3,'comb
     a *= gain
     for seconds, leading in [(1.5,True),(3,False)]:
         n = min(int(seconds*rate), len(a)//4)
-        a[:n if leading else 0] if False else None
         if leading: a[:n] *= np.linspace(0,1,n)[:,None]
         else: a[-n:] *= np.linspace(1,0,n)[:,None]
     path = args.output/(name+'.wav')

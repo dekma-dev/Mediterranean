@@ -219,6 +219,6 @@ int main() {
     for (unsigned size=visual::materialSize;size;size/=2) textureBytes+=size*size*4;
   }
   for (unsigned size=terrainSurfaceSize;size;size/=2) textureBytes+=size*size*4;
-  Check(textureBytes<10*1024*1024,"Materials, ground weights and both shadow maps exceeded the 10 MiB budget.");
+  Check(textureBytes<11*1024*1024,"Materials, ground weights and both shadow maps exceeded the 11 MiB budget.");
   std::cout << "PASS: mesh topology, fixed-length poses, floor coverage, joined boundary and resource budgets. Mesh bytes: "<<bytes<<"; triangles: "<<triangles<<"\n";
 }

@@ -213,6 +213,22 @@ void DefensiveIdentity() {
   }
 }
 void BufferedAttacks() {
+  // Queue a technique during the final recovery of an accepted basic. It must
+  // retain its target, spend nothing early and revalidate range at execution.
+  for(auto id:{ClassId::Warrior,ClassId::Mage,ClassId::Scout,ClassId::Priest})for(int hz:{30,60,144,1000})for(bool leaveRange:{false,true}) {
+    Simulation s;Duel(s,id);auto& target=const_cast<Enemy&>(s.Enemies()[0]);target.windup=0;target.attackCooldown=10;
+    Command input;input.ability=0;s.Update(.001f,input);
+    for(int n=0;n<2000 && !s.CanBufferAttack(5);++n)s.Update(1.f/hz,{});
+    Check(s.Attacking() && s.CanBufferAttack(5),"Technique buffer never opened during basic recovery");
+    Check(!s.CanBufferAttack(2) && !s.CanBufferAttack(3) && !s.CanBufferAttack(4) && !s.CanBufferAttack(6),"Mobility, healing, potion or uncharged reserve entered offensive queue");
+    const int reserve=s.ClassResource();input.ability=5;input.queueAttack=true;s.Update(.001f,input);
+    Check(s.QueuedAttack()==5 && s.Cooldown(5)==0 && s.ClassResource()==reserve,"Queue spent cooldown or reserve before execution");
+    if(leaveRange){target.position=target.home={40,40};target.state=EnemyState::Idle;}
+    Tick(s,.24f,hz);
+    Check(s.QueuedAttack()==-1,"Technique did not leave buffer");
+    if(leaveRange)Check(s.Cooldown(5)==0,"Out-of-range buffered action spent cooldown");
+    else Check(s.Attacking() && s.AttackAbility()==5 && s.Cooldown(5)>0,"Buffered technique did not execute");
+  }
   for(int hz:{30,60,144,1000}) {
     Simulation s;Duel(s,ClassId::Warrior);
     auto& target=const_cast<Enemy&>(s.Enemies()[0]);target.windup=0;target.attackCooldown=10;

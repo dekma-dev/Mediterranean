@@ -16,6 +16,7 @@ void Check(bool ok,const char* reason){if(!ok)throw std::runtime_error(reason);}
 int main(int argc,char** argv){try {
  using namespace DirectX;
  const bool archeryOnly=argc>1&&std::string_view(argv[1])=="--archery-review";
+ const bool heroOnly=argc>1&&std::string_view(argv[1])=="--hero-review";
  const auto& library=classart::Collection();std::size_t bytes=0,triangles=0;
  for(const auto& item:library)for(const auto& mesh:item){bytes+=mesh.vertices.size()*sizeof(visual::Vertex)+mesh.indices.size()*4;triangles+=mesh.indices.size()/3;}
  for(const auto& item:library)for(const auto& mesh:item) {
@@ -61,16 +62,25 @@ int main(int argc,char** argv){try {
   Check(weights.size()==mesh.vertices.size(),"Upper garment palette alignment");
   // Front-facing rays across both armholes exposed open gaps even though
   // skin weights and all individual triangles were otherwise valid.
-  for(float side:{-1.f,1.f})for(float x:{.24f,.26f,.28f})for(float y:{1.46f,1.48f}) {
+  const auto coveredFront=[&](float x,float y,float front=0.04f) {
    bool closed=false;
    for(std::size_t j=0;j<mesh.indices.size()&&!closed;j+=3) {
     const auto a=mesh.vertices[mesh.indices[j]].position,b=mesh.vertices[mesh.indices[j+1]].position,c=mesh.vertices[mesh.indices[j+2]].position;
     const float ux=b.x-a.x,uy=b.y-a.y,vx=c.x-a.x,vy=c.y-a.y,den=ux*vy-uy*vx;
     if(std::abs(den)<1e-10f)continue;
-    const float dx=side*x-a.x,dy=y-a.y,s=(dx*vy-dy*vx)/den,t=(ux*dy-uy*dx)/den;
-    closed=s>=0&&t>=0&&s+t<=1 && a.z+s*(b.z-a.z)+t*(c.z-a.z)>.04f;
+    const float dx=x-a.x,dy=y-a.y,s=(dx*vy-dy*vx)/den,t=(ux*dy-uy*dx)/den;
+    closed=s>=0&&t>=0&&s+t<=1 && a.z+s*(b.z-a.z)+t*(c.z-a.z)>front;
    }
-   Check(closed,"Open sleeve/doublet armhole in equipment LOD");
+   return closed;
+  };
+  for(float side:{-1.f,1.f})for(float x:{.24f,.26f,.28f})for(float y:{1.46f,1.48f})
+   Check(coveredFront(side*x,y),"Open sleeve/doublet armhole in equipment LOD");
+  // These exposed shoulder/neck wedges were visible in the assembled Blender
+  // study even though the lower armhole checks passed. Preserve the neck hole,
+  // but require continuous clothing on both sides beneath it in both LODs.
+  if(part<2)for(float side:{-1.f,1.f}) {
+   for(float x:{.12f,.14f,.16f})Check(coveredFront(side*x,1.52f,0),"Open warrior neckline/shoulder junction");
+   for(float x:{.10f,.12f,.14f})Check(coveredFront(side*x,1.53f,0),"Open warrior upper yoke");
   }
   visual::BodyPalette palette{};
   for(unsigned bone=0;bone<visual::paletteBones;++bone) {
@@ -88,9 +98,25 @@ int main(int argc,char** argv){try {
   }
   Check(waist>5 && sleeve>40 && chest>10,"Missing fitted waist, sleeve or collar geometry");
  }
- Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),1200,1000,L"Old style character art",false),"Art review window");
- Renderer renderer;Check(renderer.Initialize(window.GetHandle(),1200,1000),"Art review renderer");
+ const unsigned width=heroOnly?1600:1200,height=heroOnly?1600:1000;
+ Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),width,height,L"Old style character art",false),"Art review window");
+ Renderer renderer;Check(renderer.Initialize(window.GetHandle(),width,height),"Art review renderer");
  const auto folder=std::filesystem::current_path()/"oldstyle-review";std::filesystem::create_directories(folder);
+ if(heroOnly) {
+  for(unsigned tier=0;tier<2;++tier)for(unsigned view=0;view<10;++view) {
+   auto kit=CharacterOutfit::From(rpg::Inventory{},rpg::ClassId::Warrior);
+   kit.armor=tier!=0;kit.rewardWeapon=tier!=0;kit.shoulders=true;kit.belt=true;kit.cloak=true;kit.gloves=true;
+   animation::State state;
+   for(int k=0;k<120;++k){state.Update(1.f/60,0,0,0,true,0);state.locomotion.Update(1.f/60,0,0,0,0,true,0,0,true);animation::ApplyAuthoredLocomotion(state,1.f/60,playerclips::Equipment::Sword);}
+   const float angle=XM_2PI*std::min(view,7u)/8;
+   renderer.BeginFrame();
+   renderer.SetCamera(view<8?XMFLOAT3{std::sin(angle)*2.7f,1.15f,-std::cos(angle)*2.7f}:view==8?XMFLOAT3{-.65f,1.4f,-1.20f}:XMFLOAT3{.9f,1.4f,.9f},view<8?XMFLOAT3{0,.98f,0}:XMFLOAT3{0,1.27f,0});
+   renderer.DrawMesh(visual::Mesh::Box,{0,-.04f,0},{8,.08f,8},{.22f,.225f,.22f,1},visual::Material::Plain);
+   DrawCharacter(renderer,{0,0},0,XM_PI,{.32f,.30f,.25f,1},0,0,kit,state.pose,1);
+   Check(renderer.Capture((folder/("hero-"+std::to_string(tier)+"-"+std::to_string(view)+".png")).wstring())&&renderer.EndFrame(false)&&renderer.ValidateDebugMessages(),"Native warrior inspection");
+  }
+  std::cout<<"PASS: one warrior, two equipment states, eight directions and close detail views\n";return 0;
+ }
  const rpg::ClassId classes[]={rpg::ClassId::Warrior,rpg::ClassId::Scout,rpg::ClassId::Mage};
  for(unsigned part=0;part<6;++part) {
   renderer.BeginFrame();renderer.SetCamera({-.85f,.95f,-1.65f},{0,.75f,0});

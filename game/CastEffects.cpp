@@ -105,7 +105,10 @@ void Prepare(Renderer& r,const rpg::Simulation& state,const Attachments& a){
   for(int n=0;n<6;++n){const float angle=n*tau/6+age*.4f;const auto p=Local(a,a.focus,std::cos(angle)*radius*1.4f,std::sin(angle)*radius*1.4f);
    Stream(r,a,p,a.focus,.045f,age*3,power,{1,.94f,.72f,.7f},6);}
   Stream(r,a,a.right,a.focus,.16f,age*3,power,{1,.83f,.46f,.65f});
-  if(state.HeavyAttack())Seal(r,a,.70f+power*.2f,0,{1,.83f,.4f,power*.26f});return;
+  if(state.HeavyAttack())Seal(r,a,.70f+power*.2f,0,{1,.83f,.4f,power*.26f});
+  for(int side:{-1,1}){const auto from=Local(a,a.root,side*.48f,.12f,0),to=Local(a,a.focus,side*.18f,.10f,0);
+   Stream(r,a,from,to,side*.25f,age*2,power,{1,.86f,.47f,.50f},10);}
+  return;
  }
  const bool mage=id==C::Mage,frost=mage && (ability==5 || ability==6 || ability==8 || ability==12),arcane=mage && (ability==10 || ability==13),thermal=mage && ability==14;
  const bool large=mage && (ability==8 || ability==9 || ability==11 || thermal);
@@ -123,7 +126,7 @@ void Prepare(Renderer& r,const rpg::Simulation& state,const Attachments& a){
   else if(mage && !arcane)r.DrawEffectSprite(Art::Flame,p,.07f*scale,.12f*scale,-angle*.12f,{1,.84f,.55f,tint.w*.85f},true);
   else r.DrawEffectSprite(Art::Arcane,p,.065f*scale,.065f*scale,angle,tint);
  }
- const float radius=(mage?.14f+.22f*power:.09f+.13f*power)*scale;
+ const float radius=(mage?.18f+.29f*power:.09f+.13f*power)*scale;
  if(frost){
   Panel(r,a,Art::Ice,a.focus,radius*.45f,radius*1.15f,age*.25f,{.60f,.85f,1,power*.9f});
   for(int n=0;n<6;++n){const float angle=n*tau/6+age*.45f;
@@ -226,7 +229,19 @@ void Complete(Renderer& r,const rpg::CombatVisualEvent& e,float age,const Attach
    const auto tip=Local(a,chest,side*(span+n*.11f),.22f+n*.13f+age*.16f,-.10f);
    r.DrawEffectStreak(base,tip,.025f,{1,.84f,.48f,fade*.62f});
    Panel(r,a,Art::Slash,Mix(base,tip,.65f),.10f,.27f,side*.65f,{1,.85f,.52f,fade*.55f});}
-  for(int n=0;n<5;++n)r.DrawEffectSprite(Art::Sparks,Local(a,a.root,std::cos(n*2.4f)*.42f,.20f+t*1.45f,std::sin(n*2.4f)*.42f),.055f,.18f,0,{1,.90f,.61f,fade*.78f});return;
+  for(int n=0;n<5;++n)r.DrawEffectSprite(Art::Sparks,Local(a,a.root,std::cos(n*2.4f)*.42f,.20f+t*1.45f,std::sin(n*2.4f)*.42f),.055f,.18f,0,{1,.90f,.61f,fade*.78f});
+  if(e.school==C::Priest){
+   // Open gold arches rise behind the shoulders, leaving the face/body clear.
+   const float rise=combat::Smooth(age/.18f);
+   for(int arch=0;arch<3;++arch)for(int n=0;n<16;++n){
+    const float span=.72f+arch*.16f,height=(1.85f+arch*.24f)*rise;
+    const auto at=[&](float u,float edge){const float dx=2*span,dy=std::cos(u*pi)*pi*height,length=std::hypot(dx,dy);
+     return Local(a,a.root,(2*u-1)*span-edge*dy/length,.28f+std::sin(u*pi)*height+edge*dx/length,-.24f-arch*.13f);};
+    const float u=n/16.f,v=(n+1)/16.f;
+    for(int layer=0;layer<2;++layer){const float width=layer?.009f:arch?.042f:.060f;
+     r.DrawEffectRibbon(at(u,-width),at(u,width),at(v,width),at(v,-width),layer?XMFLOAT4{1,.96f,.78f,fade*.70f}:XMFLOAT4{1,.78f,.29f,fade*.44f},std::sin(u*pi),std::sin(v*pi));}}
+  }
+  return;
  }
  if(e.school==C::Druid){
   for(int n=0;n<3;++n){const auto from=Local(a,a.root,std::sin(n*tau/3)*.50f,.08f,std::cos(n*tau/3)*.50f);Stream(r,a,from,chest,.22f,age*3+n,1,c);

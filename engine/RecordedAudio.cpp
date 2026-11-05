@@ -16,6 +16,8 @@ const char* Name(Cue cue){
  switch(cue){
  case Cue::Bow:return "Bow";case Cue::BowHeavy:return "BowHeavy";
  case Cue::Fire:return "Fire";case Cue::FireHeavy:return "FireHeavy";case Cue::FireImpact:return "FireImpact";
+ case Cue::FireGather:return "FireGather";
+ case Cue::Holy:return "Holy";case Cue::HolyGather:return "HolyGather";case Cue::HolyImpact:return "HolyImpact";case Cue::HolyMend:return "HolyMend";
  case Cue::WarriorEffort:return "WarriorEffort";
  case Cue::Step:return "Step";case Cue::StepGrass:return "StepGrass";case Cue::StepDirt:return "StepDirt";
  case Cue::Land:return "Land";case Cue::LandGrass:return "LandGrass";case Cue::LandDirt:return "LandDirt";

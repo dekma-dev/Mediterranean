@@ -34,7 +34,7 @@ std::vector<std::int16_t> Finish(std::vector<float> pcm,float ceiling){
 }
 }
 bool HasAcousticDesign(Cue c){return c==Cue::Bow || c==Cue::Fire || c==Cue::Holy || c==Cue::Mend || c==Cue::Cast ||
- c==Cue::Step || c==Cue::StepGrass || c==Cue::StepDirt || c==Cue::StepWood || IsLanding(c) || (c>=Cue::BowDraw && c<Cue::Count);}
+ c==Cue::Step || c==Cue::StepGrass || c==Cue::StepDirt || c==Cue::StepWood || IsLanding(c) || (c>=Cue::BowDraw && c<=Cue::WarriorEffort);}
 std::vector<std::int16_t> AcousticEffect(Cue cue){
  const bool holy=cue==Cue::Holy || cue==Cue::HolyGather || cue==Cue::HolyImpact || cue==Cue::HolyMend || cue==Cue::Mend;
  const bool fire=cue==Cue::Fire || cue==Cue::FireGather || cue==Cue::FireHeavy || cue==Cue::FireImpact;

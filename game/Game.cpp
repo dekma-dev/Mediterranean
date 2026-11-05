@@ -392,17 +392,20 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   const auto weaponForm=rpg::WeaponFor(simulation_.Class()).form;
   const bool hasWeapon=simulation_.Items().Worn(rpg::GearSlot::Weapon)!=rpg::Item::None;
   const bool staff=rpg::StaffWeapon(weaponForm);
+  const bool prayer=weaponForm==rpg::WeaponForm::Scepter;
   const bool bow=weaponForm==rpg::WeaponForm::Handbow;
   const bool blade=weaponForm==rpg::WeaponForm::Blade||weaponForm==rpg::WeaponForm::Mace||weaponForm==rpg::WeaponForm::Cleaver;
   const auto equipment=hasWeapon&&staff?playerclips::Equipment::Staff:
     hasWeapon&&blade?playerclips::Equipment::Sword:hasWeapon&&bow?playerclips::Equipment::Bow:playerclips::Equipment::None;
   if(simulation_.Health()>0) animation::ApplyAuthoredLocomotion(playerAnimation_,dt,equipment);
-  playerAnimation_.authoredWeapon.Update(dt,simulation_.AttackSeconds(),simulation_.HeavyAttack(),staff,
-    simulation_.Health()>0&&hasWeapon&&(staff||blade||bow)&&!simulation_.Dashing()&&!command.haltMovement,simulation_.AttackRate(),bow);
+  playerAnimation_.authoredWeapon.Update(dt,simulation_.AttackSeconds(),simulation_.HeavyAttack(),staff||prayer,
+    simulation_.Health()>0&&hasWeapon&&(staff||blade||bow||prayer)&&!simulation_.Dashing()&&!command.haltMovement,simulation_.AttackRate(),bow,
+    simulation_.AttackAbility(),simulation_.Class()==rpg::ClassId::Warrior?0:simulation_.Class()==rpg::ClassId::Scout?1:simulation_.Class()==rpg::ClassId::Mage?2:simulation_.Class()==rpg::ClassId::Priest?3:-1);
   playerAnimation_.pose.authoredStrike=playerAnimation_.authoredWeapon.frame;
   playerAnimation_.pose.authoredStrikeWeight=playerAnimation_.authoredWeapon.weight;
   playerAnimation_.pose.authoredStrikePhase=playerAnimation_.authoredWeapon.phase;
   playerAnimation_.pose.authoredStrikeHeavy=playerAnimation_.authoredWeapon.heavy;
+  playerAnimation_.pose.authoredAccent=playerAnimation_.authoredWeapon.accent;
   playerAnimation_.pose.authoredReady=playerAnimation_.authoredWeapon.ready;
   playerFeet_.Update(dt,simulation_.Player(),playerPose_.facing,simulation_.Grounded() && !simulation_.Dashing(),
     simulation_.Health()>0,playerAnimation_.pose);
@@ -683,6 +686,7 @@ void Game::Render(Renderer& renderer,bool showInterface) {
       shield && !(simulation_.Class()==rpg::ClassId::Scout && playerOutfit.weapon),playerOutfit.weapon,sockets.alive);
   }
   if(preparing)classfx::Prepare(renderer,simulation_,sockets);
+  effects_.Illuminate(renderer,simulation_,sockets);
   castfx::Discipline(renderer,simulation_,sockets,time_);
   sustained_.Render(renderer,simulation_,time_,playerPose_.facing);
   effects_.Render(renderer,&sockets);

@@ -129,6 +129,7 @@ struct CombatVisualEvent {
   int chain=0; // successful contact payoff, never speculative input
   float destinationHeight=1.25f; // relative to ground, captured from the committed target
   bool discipline=false; // accepted class opportunity, not speculative input
+  bool primary=true; // One main spectacle/sound per action; secondary victims retain local hits.
 };
 
 class Simulation {
@@ -197,7 +198,11 @@ public:
   void StopMovement() { courtChannel_=0;courtChannelSite_=-1;queuedAttack_=-1; queueRemaining_=0; recoveryCast_=0; movementVelocity_={}; movementDistance_=groundMovementDistance_=0; jumpBuffer_=0; dashRemaining_=dashTravelLeft_=0; dashTarget_=retreatThreat_=0; CancelAttack(); }
   int QueuedAttack() const { return queuedAttack_; }
   bool CanBufferAttack(int index) const {
-    if((index!=0 && index!=1 && index!=12) || (index==12 && !AdvancedClass(class_)) || health_<=0 || Dashing() || CastingRecovery() || !TargetActor() || TargetActor()->health<=0) return false;
+    const bool focused=class_==ClassId::Warrior || class_==ClassId::Scout || class_==ClassId::Mage || class_==ClassId::Priest;
+    if(!ValidSpell(index) || (index!=0 && index!=1 && !(focused && index>=5)) ||
+       (index>=8 && (!AdvancedClass(class_) || Level()<SpellLevel(index))) ||
+       ((index==6 || index==11) && !EmpoweredReady()) || health_<=0 || Dashing() || CastingRecovery() ||
+       !TargetActor() || TargetActor()->health<=0 || TargetActor()->state==EnemyState::Returning) return false;
     const float remaining=Attacking()?(combat::Duration(HeavyAttack())-attackAge_)/AttackRate():0;
     const float wait=std::max(remaining,cooldowns_[index]);return wait>0 && wait<=.22f;
   }

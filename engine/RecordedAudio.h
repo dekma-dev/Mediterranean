@@ -7,8 +7,14 @@
 
 namespace sound {
 enum class Cue;
+struct MusicFormat {
+ WAVEFORMATEX wfx{};
+ WORD wSamplesPerBlock=0,wNumCoef=0;
+ ADPCMCOEFSET aCoef[7]{};
+};
+static_assert(sizeof(MusicFormat)==50,"Packed Microsoft ADPCM format");
 struct WaveView {
- ADPCMWAVEFORMAT format{};
+ MusicFormat format{};
  const std::uint8_t* data=nullptr;
  std::uint32_t bytes=0,frames=0;
 };

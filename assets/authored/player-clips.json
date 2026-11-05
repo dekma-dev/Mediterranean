@@ -1,7 +1,7 @@
 {
   "format": "PCL3",
   "source": "51 editable Blender actions + six retained compatibility tracks; full pelvis and elbow transport",
-  "source_sha256": "f2f01b23f7d12c687fcd04ce30ede2f9bac7e9d6b067fcda1146ca0b7f47b601",
+  "source_sha256": "a744f4603a052b9bbd0948439046a16069c3a6a9acd2d7f0a4e3263098bea190",
   "editable_source": "player-motion-v8.blend",
   "clips": [
     {
@@ -379,7 +379,7 @@
       "landing": 0.0,
       "stance": 0.0,
       "source": "v8 full-body retarget",
-      "sha256": "0953d783c6473cd3ea7f932f56f0ff7a678e92f2ba3050be67b6fdd6b06e6c9b"
+      "sha256": "5c1a8c2938ec87ad88020b217c3202ef0dcff40a859207bcc5387f362f635f3d"
     },
     {
       "clip": "Bow_Draw_Release",
@@ -392,7 +392,7 @@
       "landing": 0.0,
       "stance": 0.0,
       "source": "v8 full-body retarget",
-      "sha256": "3ad3284084295cd9dd58c524dab76ec0594a7bfca6658bc5d96008976c2c3a05"
+      "sha256": "bc87f88f05ac70afdf7a3aae03a30e2d2267544fdb57fbd3b7fd663fd6d990cb"
     },
     {
       "clip": "Bow_Power_Release",
@@ -405,7 +405,7 @@
       "landing": 0.0,
       "stance": 0.0,
       "source": "v8 full-body retarget",
-      "sha256": "c16b5fa76778a030f48f6baa2e148173df5ef9deba20a07a0a57abf31d98cb5b"
+      "sha256": "4be9994434a92d1430375450d164a587622e585e00b7a9cc398ca02504146cb5"
     },
     {
       "clip": "Bow_Walk",
@@ -418,7 +418,7 @@
       "landing": 0.0,
       "stance": 0.66,
       "source": "v8 full-body retarget",
-      "sha256": "0c96f48fee26b2925d92ddccbfa557edbbc5e7f776ed5777f53724f2bb83a2b3"
+      "sha256": "4f4bac5b766dad62443f975a1ff554b42e551fa56b5c37179ff0f471e772be1f"
     },
     {
       "clip": "Bow_Run",
@@ -431,7 +431,7 @@
       "landing": 0.0,
       "stance": 0.39,
       "source": "v8 full-body retarget",
-      "sha256": "f2927caa3fcf5e4759e238656f5487f099043a23cfb3fe9b4735bd149889c1ae"
+      "sha256": "84cdd45a91eb4d0bee01bdc9e99921298bdbef445c87a4a47e25fb328247d4ba"
     },
     {
       "clip": "Sword_Carry",
@@ -470,7 +470,7 @@
       "landing": 0.0,
       "stance": 0.0,
       "source": "v8 full-body retarget",
-      "sha256": "51e8300bb332db162f6efba3b281469632eb4d360d5bc05c062313ea3cb7d209"
+      "sha256": "7f343a80f2a0fa32a149356bbdb106be1364be514efba3420fa46049b6373d84"
     },
     {
       "clip": "Sword_Walk_Backward",
@@ -639,7 +639,7 @@
       "landing": 0.0,
       "stance": 0.66,
       "source": "v8 full-body retarget",
-      "sha256": "4e9a3c237e978e80214be07b713043a4cff0b6707cbecf28fa29cbdd8604b4c4"
+      "sha256": "7ad6bfe3340533bfbd7d19a870ba36fe800944cb6aaab2169e2294cd43a8608a"
     },
     {
       "clip": "Bow_Walk_Left",
@@ -652,7 +652,7 @@
       "landing": 0.0,
       "stance": 0.66,
       "source": "v8 full-body retarget",
-      "sha256": "a2b7221336572676e01d6ce7fbcb51ae8e29a440a201fdf57498b47f7d475fb3"
+      "sha256": "cc9f0eb04248e4ddda7db69697e12d7b04e76efca988eaf1c57c7a1736a8c109"
     },
     {
       "clip": "Bow_Walk_Right",
@@ -665,7 +665,7 @@
       "landing": 0.0,
       "stance": 0.66,
       "source": "v8 full-body retarget",
-      "sha256": "8348fa25df1411b89ee8b172cd63209baadf3e7d292fd26e936a842263886d96"
+      "sha256": "5850783fb00bc823b2b088d0a931c4bd2836b14675234ed44d1b7bfcdf8a85f9"
     },
     {
       "clip": "Bow_Run_Backward",
@@ -678,7 +678,7 @@
       "landing": 0.0,
       "stance": 0.39,
       "source": "v8 full-body retarget",
-      "sha256": "318c6c4826077eea3b0cfbbf73ad715e25133d786b579d5e172404f1920868f0"
+      "sha256": "103a268c5fac4550b239d4899c821d69c9d3cfabf61fa042a04539c508643a86"
     },
     {
       "clip": "Bow_Run_Left",
@@ -691,7 +691,7 @@
       "landing": 0.0,
       "stance": 0.39,
       "source": "v8 full-body retarget",
-      "sha256": "9cfc228c91d153e8988088df5fe709797990052461de0890629eb02f98c01848"
+      "sha256": "5947c44d59e746cd0c5226a9d6375a1367b113f5855daa0f4bc9f0fe9ac44a29"
     },
     {
       "clip": "Bow_Run_Right",
@@ -704,7 +704,7 @@
       "landing": 0.0,
       "stance": 0.39,
       "source": "v8 full-body retarget",
-      "sha256": "10e81f3bdb4f7cb75e1aefe33729f2265a5e913a5b7cf06a8176a95bfe395937"
+      "sha256": "46c6964b6b8a8272aa95af87db760a26b4bf0e192d3f9e0a987ffbff88a9c886"
     },
     {
       "clip": "Sword_Jump",
@@ -735,7 +735,7 @@
     {
       "clip": "Bow_Jump",
       "frames": 175,
-      "duration": 2.9000000953674316,
+      "duration": 2.9,
       "loop": false,
       "load": 0.0,
       "contact": 0.0,
@@ -743,10 +743,10 @@
       "landing": 0.5057471264367815,
       "stance": 0.0,
       "source": "v8 full-body retarget",
-      "sha256": "d1467eeb77506f32450254ce5877eea42b4cd3f780b1489378cc094a0cf67abc"
+      "sha256": "5d99b63e55084756202daf301902a0e30f4727bd55c4667fd62c6f0e43944d9f"
     }
   ],
-  "sha256": "5dee992a0723dffca189f39ad014c7994ade1f8c3a567060eee07dc73532d0f2",
+  "sha256": "de9698a4915f1432856856d2fb3cd9470687dbafa0fdf0145872e6b6604c458a",
   "retarget": "Blender +X-left/-Y-forward/Z-up to native +X-right/+Z-forward/Y-up; shoulders/arm lengths fitted to native IK; world jump displacement removed; native contacts retained.",
   "frame_channels": 30,
   "revised_actions": [
@@ -792,6 +792,7 @@
     "Bow_Carry",
     "Bow_Guard",
     "Bow_Draw_Release",
-    "Bow_Power_Release"
+    "Bow_Power_Release",
+    "Bow_Jump"
   ]
 }

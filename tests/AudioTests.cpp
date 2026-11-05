@@ -1,4 +1,5 @@
 #include "engine/Audio.h"
+#include "engine/RecordedAudio.h"
 #include "tests/DashFixture.h"
 #include <algorithm>
 #include <cmath>
@@ -27,15 +28,27 @@ void FocusedCombatAudio(){
   {C::Scout,1,Q::BowDraw,Q::BowHeavy,Q::ArrowImpact,"scout-aimed.wav"},
   {C::Mage,1,Q::FireGather,Q::FireHeavy,Q::FireImpact,"mage-fire.wav"},
   {C::Mage,12,Q::FrostGather,Q::FrostRelease,Q::FrostImpact,"mage-frost.wav"},
-  {C::Mage,13,Q::ArcaneGather,Q::ArcaneRelease,Q::ArcaneImpact,"mage-arcane.wav"},
-  {C::Priest,1,Q::HolyGather,Q::Holy,Q::HolyImpact,"priest-rebuke.wav"}};
+  {C::Mage,13,Q::ArcaneGather,Q::ArcaneSurge,Q::ArcaneImpact,"mage-arcane.wav"},
+  {C::Scout,12,Q::BowDraw,Q::BowTwin,Q::ArrowImpact,"scout-twin.wav"},
+  {C::Scout,8,Q::BowDraw,Q::BowVolley,Q::ArrowImpact,"scout-fan.wav"},
+  {C::Scout,9,Q::BowDraw,Q::BowDeadeye,Q::ArrowPierce,"scout-piercing.wav"},
+  {C::Mage,9,Q::FireGather,Q::MeteorFall,Q::MeteorImpact,"mage-meteor.wav"},
+  {C::Mage,11,Q::FireGather,Q::FireHeavy,Q::FirestormImpact,"mage-firestorm.wav"},
+  {C::Mage,8,Q::FrostGather,Q::FrostShatter,Q::FrostImpact,"mage-bloom.wav"},
+  {C::Priest,1,Q::HolyGather,Q::HolyJudgment,Q::HolyImpact,"priest-rebuke.wav"},
+  {C::Priest,6,Q::HolyGather,Q::HolyJudgment,Q::HolySanctuary,"priest-sanctuary.wav"},
+  {C::Warrior,14,Q::Count,Q::WarriorFinisher,Q::HeavyHit,"warrior-crosscut.wav"}};
  for(const auto& test:cases)for(int hz:{30,60,144}){
   rpg::Simulation s;Require(s.Load("MEDITERRANEAN 3\n12 -3.8 50 0 3 90\n5 1 1 0\n4\n0 0 0 0\n"
    "100 -4 7 0 0 1 3 0 0\n101 4 9 0 0 1 3 0 0\n102 0 12 0 0 1 3 0 0\n"),"Focused audio fixture");
   auto save=s.Save();const auto at=save.find("PROFILE ");save.replace(at,save.find('\n',at)-at,"PROFILE "+std::to_string(int(test.id))+" \"Tester\" 7 1 3");Require(s.Load(save),"Focused audio class");
+  if(test.ability==6 || test.ability==11){
+   for(int attempt=0;attempt<8 && !s.EmpoweredReady();++attempt){rpg::Command prime;prime.selectActor=210;prime.ability=0;s.Update(.001f,prime);for(int n=0;n<240;++n)s.Update(.01f,{});}
+   Require(s.EmpoweredReady(),"Focused audio reserve fixture");
+  }
   struct Event{Q cue;float time;};std::vector<Event> heard;sound::Events events;
   rpg::Command input;input.selectActor=210;input.ability=test.ability;
-  s.Update(.001f,input);events.Update(s);Require(s.Attacking(),"Focused sound attack rejected");
+  s.Update(.001f,input);events.Update(s);Require(s.Attacking() && s.AttackAbility()==test.ability,"Focused sound attack rejected");
   for(unsigned n=0;n<events.count;++n)heard.push_back({events.cues[n],0});
   float time=0,released=-1;int prepares=Has(events,test.prepare),releases=0,contacts=0,efforts=0;
   while(s.Attacking()){
@@ -44,8 +57,9 @@ void FocusedCombatAudio(){
    if(Has(events,test.release)){released=time;Require(!sound::Preparing(s),"Release retained preparation state");}
    for(unsigned n=0;n<events.count;++n){heard.push_back({events.cues[n],time});if(events.cues[n]==test.contact)Require(events.spatial[n],"Focused hit lost target position");}
   }
+  if(prepares!=(test.id==C::Warrior?0:1) || releases!=1 || contacts!=1)std::cerr<<"Audio "<<int(test.id)<<'/'<<test.ability<<" hz "<<hz<<" phases "<<prepares<<'/'<<releases<<'/'<<contacts<<'\n';
   Require(prepares==(test.id==C::Warrior?0:1) && releases==1 && contacts==1,"Class attack must emit each phase exactly once");
-  Require(efforts==(test.id==C::Warrior?1:0),"Warrior effort leaked into another class");
+  Require(efforts==(test.id==C::Warrior && test.release!=Q::WarriorFinisher?1:0),"Warrior effort duplicated a finisher or leaked into another class");
   if(hz==60){
    std::vector<float> mix(sound::sampleRate*5);float peak=0;
    for(const auto& event:heard){const auto pcm=sound::Generate(event.cue);const auto start=std::size_t(event.time*sound::sampleRate);
@@ -59,7 +73,30 @@ void FocusedCombatAudio(){
  }
 }
 int main() {
+  {
+    using Q=sound::Cue;std::array<unsigned,12> pool{};
+    Require(sound::SelectVoice(pool,sound::CuePriority(Q::Bow))==0,"Idle voice selection");
+    pool.fill(sound::CuePriority(Q::HeavyHit));pool[4]=sound::CuePriority(Q::StepGrass);pool[9]=sound::CuePriority(Q::FireGather);
+    Require(sound::SelectVoice(pool,sound::CuePriority(Q::HolyJudgment))==4,"Spell release lost behind footsteps");
+    pool[4]=sound::CuePriority(Q::HolyJudgment);
+    Require(sound::SelectVoice(pool,sound::CuePriority(Q::ArrowImpact))==9,"Impact lost behind cast preparation");
+    pool.fill(sound::CuePriority(Q::HeavyHit));
+    Require(sound::SelectVoice(pool,sound::CuePriority(Q::StepGrass))==-1,"Footstep interrupted a hit");
+    Require(sound::SelectVoice(pool,sound::CuePriority(Q::HeavyHit))==-1,"Equal-priority sound restarted a hit");
+    Require(sound::SelectVoice(pool,sound::CuePriority(Q::BossPrepare))>=0,"Boss warning lost in dense combat");
+  }
   FocusedCombatAudio();
+  for(auto id:{rpg::ClassId::Warrior,rpg::ClassId::Mage}){
+    rpg::Simulation guard;Require(guard.CreateCharacter(id,"Guard"),"Guard audio character");
+    rpg::Command protect;protect.ability=3;guard.Update(.001f,protect);
+    auto& enemy=const_cast<rpg::Enemy&>(guard.Enemies()[0]);enemy.health=enemy.MaxHealth();enemy.state=rpg::EnemyState::Pursuing;
+    enemy.position=enemy.home={guard.Player().x,guard.Player().z+1.6f};enemy.facing=3.14159265f;enemy.windup=.01f;enemy.attackCooldown=0;
+    guard.Update(.02f,{});sound::Events blocked;blocked.Update(guard);
+    const auto expected=id==rpg::ClassId::Warrior?sound::Cue::ShieldBlock:sound::Cue::FrostImpact;
+    Require(Has(blocked,expected),"Absorption lost its class-specific contact sound");
+    for(unsigned n=0;n<blocked.count;++n)if(blocked.cues[n]==expected)Require(blocked.spatial[n],"Guard contact lost its world origin");
+    guard.Update(.01f,{});blocked.Update(guard);Require(!Has(blocked,expected),"Guard contact replayed without another hit");
+  }
   for(int hz:{30,60,144,1000}) for(bool boss:{false,true}) {
     rpg::Simulation fight;
     auto& enemies=const_cast<std::vector<rpg::Enemy>&>(fight.Enemies());
@@ -291,6 +328,31 @@ int main() {
   }
   Require(creatureBytes<=112*1024,"Creature cues exceeded their incremental PCM budget");
   Require(bytes<8*1024*1024,"Resident PCM exceeded the two-score/four-class 8 MiB budget");
+  size_t variationBytes=0;
+  for(unsigned i=0;i<unsigned(sound::Cue::Count);++i){
+    const auto cue=sound::Cue(i);const auto count=sound::EffectVariants(cue);
+    Require(count>=1 && count<=3,"Runtime variation cache bounds");
+    for(unsigned variant=1;variant<count;++variant){const auto pcm=sound::Generate(cue,variant);variationBytes+=pcm.size()*2;
+      Require(!pcm.empty() && pcm.front()==0 && std::abs(int(pcm.back()))<32,"Variation has an edge click");
+      for(unsigned earlier=0;earlier<variant;++earlier)Require(pcm!=sound::Generate(cue,earlier),"Composite repeats the same recording");
+    }
+  }
+  const auto recordedRuntimeBytes=bytes-(music.size()+menuMusic.size()+combatMusic.size())*2+variationBytes;
+  Require(recordedRuntimeBytes<6*1024*1024,"Recorded runtime PCM exceeded 6 MiB (music remains compressed)");
+  std::cout<<"Recorded runtime PCM bytes: "<<recordedRuntimeBytes<<"; extra variation bytes: "<<variationBytes<<'\n';
+  {
+    // Short repeated-attack audition using the same take cycling, cue level
+    // and pitch sequence as playback, with two seconds between cues.
+    const sound::Cue cues[]={sound::Cue::WarriorFinisher,sound::Cue::BowDeadeye,sound::Cue::MeteorImpact,sound::Cue::HolyJudgment};
+    std::vector<std::int16_t> audition(sound::sampleRate*24);
+    for(unsigned block=0;block<4;++block)for(unsigned repeat=0;repeat<3;++repeat){const auto cue=cues[block];
+      const auto pcm=sound::Generate(cue,repeat%sound::EffectVariants(cue));const float pitch=sound::CuePitch(cue,repeat);
+      const size_t start=(block*6+repeat*2)*sound::sampleRate;
+      for(size_t n=0;float(n)*pitch<pcm.size()-1 && n<sound::sampleRate*2;++n){const float at=float(n)*pitch;const auto k=size_t(at);
+        audition[start+n]=std::int16_t((pcm[k]+(pcm[k+1]-pcm[k])*(at-float(k)))*sound::CueLevel(cue)*.72f);}
+    }
+    WriteWave("four-class-repeated-attacks.wav",audition);
+  }
   WriteWave("dawnwatch-music.wav",music); WriteWave("effects-preview.wav",preview);
   const auto impact=sound::Generate(sound::Cue::HeavyHit);
   std::vector<std::int16_t> stereo(sound::sampleRate*7*2);
@@ -352,7 +414,7 @@ int main() {
   Require(health!=std::string::npos,"Healing fixture missing"); injured.replace(health,5," 20 ");
   Require(simulation.Load(injured),"Injured audio fixture rejected");
   simulation.Update(.01f,command); events.Update(simulation);
-  Require(events.count==1 && Has(events,sound::Cue::Ward),"Accepted defensive recovery must emit one sound");
+  Require(events.count==1 && Has(events,sound::Cue::ShieldReady),"Accepted defensive recovery must emit one physical shield sound");
   simulation.Update(.01f,command); events.Update(simulation);
   Require(events.count==0,"Cooldown rejection must not replay healing");
   {

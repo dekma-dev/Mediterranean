@@ -1524,6 +1524,7 @@
 {"Create skin weights", "Создание весов скелета"},
 {"Create mesh indices", "Создание индексов моделей"},
 {"Create constants", "Создание констант"},
+{"Create combat light constants", "Создание констант освещения заклинаний"},
 {"Create cloud field constants", "Создание констант облачного поля"},
 {"Create skin palettes", "Создание матриц скелета"},
 {"Create skin palette view", "Создание представления матриц скелета"},

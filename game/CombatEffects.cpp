@@ -287,6 +287,35 @@ bool CombatEffects::NeedsPose() const {
   return HasRecovery() || std::any_of(bursts_.begin(),bursts_.end(),[](const Burst& b){return b.event.actor==0 &&
     (b.event.kind==K::DisciplineReady || b.event.kind==K::DisciplineSpent) && b.age<BurstLife(b.event);});
 }
+void CombatEffects::Illuminate(Renderer& renderer,const rpg::Simulation& state,const castfx::Attachments& caster) const {
+ using C=rpg::ClassId;
+ if(!caster.alive || state.Health()<=0)return;
+ const auto tint=[](C school,int ability)->XMFLOAT3 {
+  if(school==C::Priest)return {1,.78f,.32f};
+  if(ability==5 || ability==6 || ability==8 || ability==12)return {.24f,.60f,1};
+  if(ability==10 || ability==13)return {.58f,.22f,1};
+  return {1,.25f,.055f};
+ };
+ const auto pulse=[](float age,float lifetime){return combat::Smooth(age/.018f)*std::pow(Unit(1-age/lifetime),2.f);};
+ if(state.Class()==C::Mage || state.Class()==C::Priest){
+  const bool recovery=state.CastingRecovery();
+  const float progress=recovery?state.RecoveryProgress():state.Attacking()?state.AttackSeconds()/combat::StrokeStart(state.HeavyAttack()):-1;
+  if(progress>=0 && progress<1){const float power=combat::Smooth(progress);
+   renderer.AddCombatLight(caster.focus,2.0f,tint(state.Class(),state.AttackAbility()),power*1.8f);}
+ }
+ for(const auto& b:bursts_){
+  const auto& e=b.event;if(b.age>=BurstLife(e) || (e.school!=C::Mage && e.school!=C::Priest))continue;
+  const float power=e.heavy?1.35f:1.f;const auto color=tint(e.school,e.ability);
+  if(e.kind==K::SpellCast && e.flight>0 && b.age<e.flight){
+   const auto position=spellvfx::ProjectilePosition(e,b.spellOrigin,Unit(b.age/e.flight));
+   renderer.AddCombatLight(position,2.3f*power,color,2.2f*power);
+  }else if(e.kind==K::Hit || e.kind==K::HeavyHit){
+   renderer.AddCombatLight({e.position.x,e.height,e.position.z},3.1f*power,color,6.f*power*pulse(b.age,.56f));
+  }else if(e.kind==K::Mend){
+   renderer.AddCombatLight({caster.root.x,caster.root.y+.9f,caster.root.z},3.2f,color,3.2f*pulse(b.age,.75f));
+  }
+ }
+}
 void CombatEffects::Render(Renderer& renderer,const castfx::Attachments* caster) const {
   // Warning contours are already submitted by Game. Contact geometry gets
   // the next budget, before weapon wakes and player cosmetics. Sort without

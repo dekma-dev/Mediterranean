@@ -1,9 +1,18 @@
 # Blender collection in the native renderer
 
+## One player warrior study (2026-11-05)
+
+The warrior now has revised fitted clothing, formed armor, articulated shoulder
+lames, mail, a leather harness and repaired wool. `player-hero-study.blend`
+opens the assembled character; `oldstyle-classes.blend` remains the editable
+garment source. Faces, body anatomy, motion and the original collection are
+preserved. See [the player study record](player-hero-revision.md) for sources,
+resource budgets, preservation and native review evidence.
+
 ## Grounded locomotion and full-body weapon motion (2026-11-05)
 
 The current editable motion source is `assets/authored/player-motion-v8.blend`.
-It revises 43 of the 51 retained actions, with the same 57 native track identities.
+It revises 44 of the 51 retained actions, with the same 57 native track identities.
 PCL3 now transports pelvis orientation/translation and elbow planes as well as
 the original wrist, foot, chest and weapon channels. The native retarget keeps
 toe contacts during heel rise, matches recovery to actor travel, and retains

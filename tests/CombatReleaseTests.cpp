@@ -1,6 +1,7 @@
 #include "game/Game.h"
 #include "game/ClassEffects.h"
 #include "game/SpellVfx.h"
+#include "game/CastEffects.h"
 #include "engine/Renderer.h"
 #include "platform/Win32Window.h"
 #include <wincodec.h>
@@ -9,6 +10,7 @@
 #include <stdexcept>
 #include <algorithm>
 #include <limits>
+#include <cstring>
 
 namespace {
 using namespace rpg;using namespace DirectX;using K=CombatVisualKind;
@@ -44,6 +46,43 @@ void TargetHeights(){
     if(e.kind==K::Hit){hit=true;Check(std::abs(e.height-expected)<.0001f,"Hit does not match target surface");}
    }}
   Check(release && hit,"Height regression did not exercise an actual spell/contact");
+ }
+}
+void Lighting(Renderer& r,const std::filesystem::path& out){
+ visual::TransientLights a,b;
+ for(int n=0;n<16;++n)a.Add({float(n%4),1,float(n/4)},2,{1,.4f,.1f},float(n%5+1),{});
+ for(int n=15;n>=0;--n)b.Add({float(n%4),1,float(n/4)},2,{1,.4f,.1f},float(n%5+1),{});
+ const auto ba=a.Block(),bb=b.Block();Check(a.Count()==4 && std::memcmp(&ba,&bb,sizeof(ba))==0,"Dense lights depend on order or exceed cap");
+ a.Reset();a.Add({NAN,0,0},2,{1,1,1},1,{});a.Add({},-1,{1,1,1},1,{});a.Add({},1,{0,0,0},1,{});
+ Check(a.Count()==0,"Invalid light entered pool");
+ const auto frame=[&](visual::Material material,bool enabled,bool portrait=false,bool distant=false){
+  r.SetCombatLightingEnabled(enabled);r.BeginFrame();Check(r.CombatLightCount()==0,"Light survived frame reset");r.SetCamera({3,2,-5},{0,1,0});
+  r.AddCombatLight(distant?XMFLOAT3{30,2,-2}:XMFLOAT3{0,2,-2},4,{1,.25f,.055f},7);
+  if(portrait)Check(r.BeginPortrait(0,0,1,1),"Light portrait");
+  r.DrawMesh(visual::Mesh::Box,{0,1,0},{1,1,1},{.55f,.48f,.38f,1},material);
+  if(portrait)Check(r.EndPortrait(),"End light portrait");
+  r.DrawHudRect(.02f,.02f,.18f,.08f,{.3f,.4f,.5f,1});
+ };
+ for(auto material:{visual::Material::Stone,visual::Material::Metal,visual::Material::Cloth,visual::Material::Skin,visual::Material::Hair,visual::Material::Plain}){
+  frame(material,false);Check(r.EndFrame(false),"Warm cloud/shadow caches");
+  const auto tag=std::to_string(int(material));frame(material,false);const auto unlit=Capture(r,out/("light-off-"+tag+".png"));const auto draws=r.LastDrawCalls();
+  frame(material,true);const auto lit=Capture(r,out/("light-on-"+tag+".png"));
+  Check(r.LastDrawCalls()==draws,"Local lighting added draw calls");
+  const bool frozen=material==visual::Material::Skin || material==visual::Material::Hair || material==visual::Material::Plain;
+  Check(frozen?unlit==lit:Difference(unlit,lit)>.1,"Light invisible on receiver or changed frozen face material");
+  for(unsigned y=15;y<45;++y)for(unsigned x=25;x<150;++x){const auto i=(y*r.Width()+x)*4;for(unsigned c=0;c<4;++c)Check(unlit[i+c]==lit[i+c],"Spell light tinted HUD");}
+  frame(material,true,false,true);Check(Capture(r,out/("light-far-"+tag+".png"))==unlit,"Light escaped radius");
+ }
+ frame(visual::Material::Metal,false,true);const auto portrait=Capture(r,out/"portrait-unlit.png");
+ frame(visual::Material::Metal,true,true);Check(Capture(r,out/"portrait-lit.png")==portrait,"World light leaked into portrait");
+ r.SetCombatLightingEnabled(true);
+ for(auto id:{ClassId::Mage,ClassId::Priest}){
+  auto state=Hero(id);auto caster=castfx::Preview({},{0,1,0},0);
+  CombatVisualEvent e;e.kind=K::HeavyHit;e.school=id;e.heavy=true;e.position={0,0};e.height=1;
+  CombatEffects fx;fx.Emit(e);fx.Advance(.04f);
+  r.BeginFrame();fx.Illuminate(r,state,caster);Check(r.CombatLightCount()==1 && r.EndFrame(false),"Contact light missing");
+  caster.alive=false;r.BeginFrame();fx.Illuminate(r,state,caster);Check(r.CombatLightCount()==0 && r.EndFrame(false),"Dead caster retained light");
+  caster.alive=true;Tick(fx,1,60);r.BeginFrame();fx.Illuminate(r,state,caster);Check(r.CombatLightCount()==0 && r.EndFrame(false),"Expired burst retained light");
  }
 }
 void Native(Renderer& r,const std::filesystem::path& out){
@@ -109,6 +148,10 @@ void World(Renderer& r,const std::filesystem::path& out){
   bool contact=false;for(int n=0;n<200 && !contact;++n){game.ExecuteCommand({},.01f);for(std::size_t i=0;i<game.State().VisualEventCount();++i){const auto k=game.State().VisualEvents()[i].kind;contact|=k==K::Hit || k==K::HeavyHit;}}
   Check(contact,"Released spell never reached target");game.ExecuteCommand({},.08f);
   r.BeginFrame();game.Render(r);Capture(r,out/("world-player-contact-"+std::to_string(int(id))+"-"+std::to_string(ability)+".png"));
+  if(id!=ClassId::Scout){Check(r.CombatLightCount()>0,"Real world contact failed to submit lighting");
+   r.SetCombatLightingEnabled(false);r.BeginFrame();game.Render(r);const auto unlit=Capture(r,out/("world-contact-unlit-"+std::to_string(int(id))+"-"+std::to_string(ability)+".png"));
+   r.SetCombatLightingEnabled(true);r.BeginFrame();game.Render(r);const auto lit=Capture(r,out/("world-contact-lit-"+std::to_string(int(id))+"-"+std::to_string(ability)+".png"));
+   Check(Difference(unlit,lit)>.001,"World spell light had no visible receivers");}
   for(int n=0;n<100;++n)game.ExecuteCommand({},.01f);
   Check(game.RestoreSnapshot(Hero(id).Save()),"Cancel fixture");cast={};cast.selectActor=100;cast.ability=1;game.ExecuteCommand(cast,.001f);
   cast={};cast.haltMovement=true;game.ExecuteCommand(cast,.001f);Check(game.Effects().BurstCount()==0,"Cancelled preparation emitted release");
@@ -119,6 +162,6 @@ int main(int argc,char** argv){try{
  Check(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"COM");TargetHeights();
  const auto out=argc>1?std::filesystem::path(argv[1]):std::filesystem::path("combat-release-review");std::filesystem::create_directories(out);
  Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),960,600,L"Combat release checks",false),"Window");
- Renderer r;Check(r.Initialize(window.GetHandle(),960,600),"Renderer");Native(r,out);World(r,out);
+ Renderer r;Check(r.Initialize(window.GetHandle(),960,600),"Renderer");Lighting(r,out);Native(r,out);World(r,out);
  Check(r.ValidateDebugMessages(),"DirectX release warnings");std::cout<<"PASS: native release sequence, equal-time geometry, bounded lifetime, actual boss contacts and render/load isolation.\n";
  }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

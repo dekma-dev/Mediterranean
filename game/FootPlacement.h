@@ -2,6 +2,7 @@
 #include "game/Animation.h"
 #include "game/WorldMap.h"
 #include "game/GaitTiming.h"
+#include "game/CharacterPose.h"
 
 namespace animation {
 // Heightfield presentation controller. Contacts are stored in world space and
@@ -17,9 +18,11 @@ public:
     }
     next_=0;firstStep_=true;
     support_=supportVelocity_=0;
+    hip_=hipVelocity_=0;hasHip_=false;
   }
   void Update(float dt,rpg::Vec2 position,float yaw,bool grounded,bool alive,Sample& sample) {
     sample.feetActive=false;
+    sample.pelvisStabilized=false;
     sample.support=0;
     if (!std::isfinite(dt) || dt<=0 || !std::isfinite(position.x) || !std::isfinite(position.z) || !std::isfinite(yaw)) return;
     dt=std::min(dt,.05f);
@@ -55,6 +58,19 @@ public:
     auto support=support_,supportVelocity=supportVelocity_;
     motion::Spring(support,supportVelocity,std::clamp((visible[0].y-visible[1].y)/.10f,-1.f,1.f),20.f,pending_);
     sample.support=support;
+    if(sample.authoredGait) {
+      const auto form=sample.authoredEquipment==playerclips::Equipment::Staff?rpg::WeaponForm::AstralStaff:
+        sample.authoredEquipment==playerclips::Equipment::Bow?rpg::WeaponForm::Handbow:rpg::WeaponForm::Blade;
+      const float limit=BuildCharacterPose(0,0,false,sample,form).bodyLift;
+      if(!hasHip_){hip_=limit;hipVelocity_=0;hasHip_=true;}
+      else {
+        motion::Spring(hip_,hipVelocity_,limit,18,dt);
+        // Reach is a hard constraint; rising back from compression has mass.
+        // A swing goal changing at a stop must not instantly lift the torso.
+        if(hip_>limit){hip_=limit;hipVelocity_=std::min(0.f,hipVelocity_);}
+      }
+      sample.pelvisLimit=hip_;sample.pelvisStabilized=true;
+    }
   }
   bool Planted(int side) const { return ready_ && !feet_[side].stepping; }
 private:
@@ -68,6 +84,8 @@ private:
   rpg::Vec2 previous_{};
   float heading_=0,pending_=0;
   float support_=0,supportVelocity_=0;
+  float hip_=0,hipVelocity_=0;
+  bool hasHip_=false;
   int next_=0;
   bool ready_=false;
   bool firstStep_=true;

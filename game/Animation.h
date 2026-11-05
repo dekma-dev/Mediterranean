@@ -19,6 +19,8 @@ struct Sample {
   float hitSide=0;
   std::array<Foot,2> feet{};
   bool feetActive=false;
+  bool pelvisStabilized=false;
+  float pelvisLimit=0; // Stateful contact recovery; never advanced by rendering.
   float lean=0;
   float dash=0,dashBrake=0,dashImpact=0,dashPhase=0,dashLoad=0;
   float cast=0;
@@ -44,6 +46,7 @@ struct Sample {
   float authoredStrikeWeight=0,authoredStrikePhase=0;
   float authoredReady=0;
   bool authoredStrikeHeavy=false;
+  CombatWeight authoredAccent{};
   facial::Pose face;
   ActionChannels action;
   bool retreat=false;

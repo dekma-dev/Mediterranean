@@ -121,6 +121,7 @@ void Simulation::EmitVisual(CombatVisualKind kind,Vec2 position,float height,flo
     if(kind==CombatVisualKind::CastStart)event.ability=Attacking()?attackAbility_:CastingRecovery()?3:-1;
     event.opening=attack && OpeningAttack();event.signature=attack && SignatureAttack();event.technique=attack && TechniqueAttack();event.heavy=attack && HeavyAttack();event.empowered=attack && attackEmpowered_;
     event.discipline=attack && attackConfluence_;
+    if(kind==CombatVisualKind::Hit || kind==CombatVisualKind::HeavyHit)event.primary=actor==attackTarget_;
     if(kind==CombatVisualKind::SpellCast) {
       for(const auto& enemy:Combatants()) if(enemy.id==attackTarget_) {event.destination=enemy.position;event.destinationHeight=enemy.ContactHeight();}
       if(sparring_ && trainer_.id==attackTarget_) event.destination=trainer_.position;
