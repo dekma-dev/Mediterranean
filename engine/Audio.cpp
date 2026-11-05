@@ -480,7 +480,10 @@ void Events::Update(const rpg::Simulation& state,const presentation::CreatureCon
     origin=event.position;
     placed=event.kind==K::BeastBite || event.kind==K::BeastCharge || event.kind==K::EnemyPrepare || event.kind==K::BossPrepare || event.kind==K::EnemySwing || event.kind==K::EnemyLance || event.kind==K::EnemyQuake || event.kind==K::EnemyTempest || event.kind==K::EnemyExecution || event.kind==K::Hit || event.kind==K::HeavyHit || event.kind==K::Interrupt;
     switch(event.kind) {
-    case K::Strike:add(event.school==rpg::ClassId::Demonologist?Cue::Rend:Cue::Strike);break;
+    case K::Strike:
+      add(event.school==rpg::ClassId::Demonologist?Cue::Rend:Cue::Strike);
+      if(event.school==rpg::ClassId::Warrior && ++warriorSwings%3==0)add(Cue::WarriorEffort);
+      break;
     case K::HeavyStrike:
       if(event.school==rpg::ClassId::Warrior && (event.ability==6 || event.ability==9 || event.ability==11 || event.ability==14))add(Cue::WarriorFinisher);
       else {add(event.school==rpg::ClassId::Warrior?Cue::Heavy:ClassReleaseCue(event.school));if(event.school==rpg::ClassId::Warrior)add(Cue::WarriorEffort);}break;
@@ -514,7 +517,8 @@ void Events::Update(const rpg::Simulation& state,const presentation::CreatureCon
     case K::BarrierHit:
       placed=true;
       add(event.actor!=0?Cue::Ward:event.school==rpg::ClassId::Warrior?Cue::ShieldBlock:
-        event.school==rpg::ClassId::Mage?Cue::FrostImpact:event.school==rpg::ClassId::Priest?Cue::HolyImpact:Cue::Ward);break;
+        event.school==rpg::ClassId::Mage?Cue::FrostImpact:event.school==rpg::ClassId::Priest?Cue::HolyImpact:
+        event.school==rpg::ClassId::Scout?Cue::ScoutEvasion:Cue::Ward);break;
     case K::Interrupt:add(Cue::Interrupt);break; case K::Mend:add(ClassRecoveryCue(event.school));break;
     case K::Potion:add(Cue::Potion);break;
     // Dash activation already has its authoritative one-shot cue below.
@@ -576,8 +580,10 @@ bool Audio::Initialize(bool muteOutput) {
   format.nBlockAlign=2; format.nAvgBytesPerSec=sound::sampleRate*2;
   for(size_t i=0;i<samples_.size();++i) samples_[i]=sound::Generate(sound::Cue(i));
   for(size_t i=0;i<samples_.size();++i){
+    envelopes_[i][0].Build(samples_[i]);
     for(unsigned v=1;v<sound::EffectVariants(sound::Cue(i));++v){
       effectVariants_[i][v-1]=sound::Generate(sound::Cue(i),v);
+      envelopes_[i][v].Build(effectVariants_[i][v-1]);
       for(auto value:effectVariants_[i][v-1])peaks_[i]=std::max(peaks_[i],std::abs(int(value))/32767.f);
     }
     for(auto value:samples_[i]) peaks_[i]=std::max(peaks_[i],std::abs(int(value))/32767.f);
@@ -613,7 +619,7 @@ bool Audio::Initialize(bool muteOutput) {
 }
 void Audio::ClearEffects() {
   for(auto* voice:voices_) if(voice) { voice->Stop(); voice->FlushSourceBuffers(); }
-  voiceLevels_.fill(0); voicePeaks_.fill(0); voicePriorities_.fill(0); spatial_.fill(false); effectGain_=.85f;
+  voiceLevels_.fill(0); voicePeaks_.fill(0); voicePriorities_.fill(0); spatial_.fill(false); voiceEnvelopes_.fill(nullptr); effectGain_=.85f;
 }
 void Audio::Suspend(bool value) {
   if(!engine_ || value==suspended_) return;
@@ -647,8 +653,9 @@ void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicV
   // Apply the voice changes as one XAudio2 operation set so a new effect never
   // starts with the preceding frame's louder sparse-mix gain.
   constexpr UINT32 mixOperation=1;
-  for(size_t v=0;v<voices_.size();++v){XAUDIO2_VOICE_STATE status{};voices_[v]->GetState(&status,XAUDIO2_VOICE_NOSAMPLESPLAYED);
-    if(!status.BuffersQueued)voicePriorities_[v]=0;}
+  for(size_t v=0;v<voices_.size();++v){XAUDIO2_VOICE_STATE status{};voices_[v]->GetState(&status);
+    if(!status.BuffersQueued)voicePriorities_[v]=0;
+    else if(voiceEnvelopes_[v])voicePriorities_[v]=sound::TailPriority(voicePriorities_[v],voiceEnvelopes_[v]->Peak(status.SamplesPlayed));}
   for(unsigned i=0;i<events_.count;++i) {
     const auto cue=events_.cues[i]; const auto index=size_t(cue);
     const unsigned priority=sound::CuePriority(cue);const int chosen=sound::SelectVoice(voicePriorities_,priority);
@@ -658,6 +665,10 @@ void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicV
     const unsigned variant=sequence%sound::EffectVariants(cue);
     const auto& alternative=effectVariants_[index][variant?variant-1:0];
     const auto& pcm=variant && !alternative.empty()?alternative:samples_[index];
+    XAUDIO2_VOICE_STATE previous{};voice->GetState(&previous);
+    // EOS resets SamplesPlayed. Only an idle, reset voice has an unambiguous
+    // per-buffer cursor; preempted voices use the conservative full-file peak.
+    voiceEnvelopes_[v]=!previous.BuffersQueued && previous.SamplesPlayed==0?&envelopes_[index][variant]:nullptr;
     voice->Stop();
     voice->FlushSourceBuffers();
     voiceLevels_[v]=voicePeaks_[v]=0;voicePriorities_[v]=0;
@@ -675,7 +686,7 @@ void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicV
   float peakLoad=0;
   std::array<float,12> levels{};
   for(size_t v=0;v<voices_.size();++v) {
-    XAUDIO2_VOICE_STATE status{}; voices_[v]->GetState(&status,XAUDIO2_VOICE_NOSAMPLESPLAYED);
+    XAUDIO2_VOICE_STATE status{}; voices_[v]->GetState(&status);
     if(!status.BuffersQueued) voiceLevels_[v]=voicePeaks_[v]=0;
     // A release or cancelled channel fades its preparation once; a later cast
     // cannot revive the previous tail. Physical impacts retain their full tail.
@@ -692,7 +703,8 @@ void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicV
     }
     // Mono and surround endpoints retain XAudio2's native routing; attenuation
     // still applies. Stereo gets equal-power pan, including already-playing tails.
-    peakLoad+=levels[v]*voicePeaks_[v];
+    const float peak=voiceEnvelopes_[v]?voiceEnvelopes_[v]->Peak(status.SamplesPlayed):voicePeaks_[v];
+    peakLoad+=levels[v]*peak;
   }
   effectGain_=sound::MixGain(effectGain_,peakLoad,seconds);
   for(size_t v=0;v<voices_.size();++v)

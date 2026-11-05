@@ -66,3 +66,22 @@ photorealistic facial reconstruction. The frozen face, eyes, scalp and facial
 shading still determine the character's facial appearance. The assembled
 Blender study approximates native lighting; DX11 captures are authoritative
 for the in-game result.
+
+## Validation completed 2026-11-06
+
+- Final Release `OldStyleArtTests` and `GeometryTests` pass, including the
+  complete equipment/carry/attack/jump captures. The new neckline checks cover
+  both equipment tiers and both LODs; the older mesh has open rays there.
+- Debug `HumanFaceTests`, `AttachmentLodTests`, `PlayerBodyTests`,
+  `AuthoredLocomotionTests` and `GeometryTests` pass. Debug `--hero-review` also
+  passes garment topology, weights, closure and native rendering checks.
+- The assembled Blender study reopens successfully with 30 posed pieces and
+  323,269 triangles. A neutral-light Blender preview and native front, side,
+  back and detail views were inspected during fitting revisions.
+- All six existing game/launcher outputs are rebuilt. Every game EXE passes
+  a hidden fixture-save smoke launch; the embedded KIT1, GWT2 and PCL3 hashes
+  match the current published exports exactly. Personal saves were not used.
+- The local review retains 284 unaltered current native captures and one
+  pre-revision comparison. `preservation.json`, `study-validation.json`,
+  `embedded-resources.json`, `runtime-verification.json` and the test logs are
+  in `.blender-local/hero-realism-20261105`.

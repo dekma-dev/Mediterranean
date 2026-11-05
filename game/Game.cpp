@@ -343,8 +343,13 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
     for (std::size_t i=0;i<simulation_.VisualEventCount();++i) {
       const auto& event=simulation_.VisualEvents()[i];
       if (event.actor==actor && (event.kind==rpg::CombatVisualKind::Hurt ||
-          event.kind==rpg::CombatVisualKind::Hit || event.kind==rpg::CombatVisualKind::HeavyHit))
-        state.ApplyImpact(std::clamp(event.elapsed,0.f,dt),std::sin(event.facing-facing));
+          event.kind==rpg::CombatVisualKind::Hit || event.kind==rpg::CombatVisualKind::HeavyHit)) {
+        const auto profile=event.kind==rpg::CombatVisualKind::Hurt?animation::ImpactProfile{}:
+          animation::ClassImpact(event.school,event.heavy || event.kind==rpg::CombatVisualKind::HeavyHit);
+        // Contacts carry the incoming attack direction. Rear hits bend forward;
+        // lateral contacts roll the body instead of always throwing it backward.
+        state.ApplyImpact(std::clamp(event.elapsed,0.f,dt),std::sin(event.facing-facing),profile,-std::cos(event.facing-facing));
+      }
     }
   };
   bool castStarted=false,dashImpact=false,dashFinished=false;
@@ -363,6 +368,12 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
     simulation_.Health()>0,playerPose_.attack,
     simulation_.LandingSpeed(),simulation_.LandingElapsed(),forwardAcceleration,castStarted);
   applyImpacts(playerAnimation_,0,simulation_.Health()>0,playerPose_.facing);
+  for(std::size_t i=0;i<dummyAnimations_.size();++i) {
+    const auto& dummy=simulation_.Dummies()[i]; auto& reaction=dummyAnimations_[i];
+    if(simulation_.Sparring() && dummy.id==210) {reaction.Reset();continue;}
+    reaction.Update(dt,0,0,0,true,0);
+    applyImpacts(reaction,dummy.id,true,DirectX::XM_PI);
+  }
   playerAnimation_.UpdateDash(dt,simulation_.Dashing(),simulation_.DashPhase(),dashImpact,simulation_.Health()>0,dashFinished,dashEndElapsed);
   playerAnimation_.pose.attackSeconds=simulation_.AttackSeconds();
   playerAnimation_.pose.retreat=simulation_.RetreatMobility();
@@ -506,7 +517,7 @@ void Game::UpdateFaces(float dt) {
     aim=facial::LookAt(target->position.x-player.x,rpg::WorldMap::Height(target->position)-simulation_.WorldHeight(),target->position.z-player.z,playerPose_.facing);
   playerFace_.Update(dt,aim,simulation_.Attacking()?.85f:target && target->health>0?.25f:
     std::max(playerAnimation_.pose.cast,playerAnimation_.pose.action.open)*.35f,
-    playerAnimation_.pose.hit,talking?.18f:0,alive);
+    playerAnimation_.FacialImpact(),talking?.18f:0,alive);
   playerAnimation_.pose.face=playerFace_.pose;
   const auto enemies=simulation_.Combatants();
   for(std::size_t i=0;i<enemyActors_.size();++i) {
@@ -515,7 +526,7 @@ void Game::UpdateFaces(float dt) {
     const float distance=std::hypot(enemy.position.x-player.x,enemy.position.z-player.z);
     const auto gaze=active && distance<8?facial::LookAt(player.x-enemy.position.x,simulation_.WorldHeight()-rpg::WorldMap::Height(enemy.position),
       player.z-enemy.position.z,enemyActors_[i].motion.facing):facial::Aim{};
-    enemyActors_[i].face.Update(dt,gaze,active && distance<8?.65f:0,enemyActors_[i].animation.pose.hit,0,active);
+    enemyActors_[i].face.Update(dt,gaze,active && distance<8?.65f:0,enemyActors_[i].animation.FacialImpact(),0,active);
     enemyActors_[i].animation.pose.face=enemyActors_[i].face.pose;
   }
   const auto npc=[&](facial::State& state,rpg::Vec2 position,float facing,bool interaction) {
@@ -542,6 +553,7 @@ void Game::ResetMotion() {
   sustained_.Reset();
   playerPose_.Reset(simulation_.Facing());
   playerAnimation_.Reset();
+  for(auto& reaction:dummyAnimations_)reaction.Reset();
   playerFace_.Reset(1); keeperFace_.Reset(3); merchantFace_.Reset(2);
   worldView_.ResetResidents();
   playerFeet_.Reset(simulation_.Player(),simulation_.Facing());
@@ -582,7 +594,13 @@ void Game::Render(Renderer& renderer,bool showInterface) {
   renderer.SetCamera({player.x+direction.x*cameraDistance,cameraHeight_+std::sin(cameraPitch_)*cameraDistance,
     player.z+direction.z*cameraDistance},{player.x,cameraHeight_,player.z});
   SustainedEffects::Warnings(renderer,simulation_);
-  worldView_.Draw(renderer,simulation_.Map(),time_,simulation_.Sparring(),merchantFace_.pose,keeperFace_.pose,simulation_.Player());
+  std::array<TrainingPropPose,3> training;
+  for(std::size_t i=0;i<training.size();++i) {
+    const auto& reaction=dummyAnimations_[i].pose;
+    // Rock the intact prop around its planted base, without deforming its mesh.
+    training[i]=TrainingPropPose::FromRecoil(animation::ForwardRecoil(reaction),reaction.hitSide);
+  }
+  worldView_.Draw(renderer,simulation_.Map(),time_,simulation_.Sparring(),merchantFace_.pose,keeperFace_.pose,simulation_.Player(),training);
   populationview::Embers(renderer,simulation_.Player(),time_);
   courtview::Draw(renderer,simulation_,time_);
   expeditionview::Draw(renderer,simulation_,time_);
@@ -608,10 +626,12 @@ void Game::Render(Renderer& renderer,bool showInterface) {
     const auto p=rpg::Simulation::FriendlyPosition(simulation_.FriendlyTarget());
     renderer.DrawEffectRing({p.x,rpg::WorldMap::Height(p)+.035f,p.z},.65f,{.35f,.85f,.4f,.65f});
   }
-  for(const auto& dummy:simulation_.Dummies()) if(!(simulation_.Sparring() && dummy.id==210)) {
+  for(std::size_t i=0;i<simulation_.Dummies().size();++i) {
+    const auto& dummy=simulation_.Dummies()[i];
+    if(simulation_.Sparring() && dummy.id==210)continue;
+    const float ground=rpg::WorldMap::Height(dummy.position);
     if(simulation_.TargetActor() && simulation_.TargetActor()->id==dummy.id)
-      renderer.DrawEffectRing({dummy.position.x,.035f,dummy.position.z},.65f,{.85f,.65f,.25f,.65f});
-    if(dummy.hitFlash>0) renderer.DrawEffectRing({dummy.position.x,1.3f,dummy.position.z},.35f,{1,.65f,.25f,dummy.hitFlash*3});
+      renderer.DrawEffectRing({dummy.position.x,ground+.035f,dummy.position.z},.65f,{.85f,.65f,.25f,.65f});
   }
   const auto playerOutfit=CharacterOutfit::From(simulation_.Items(),simulation_.Class(),simulation_.Look());
   DrawCharacter(renderer,player,y,playerPose_.facing,simulation_.HurtFlash()>0?XMFLOAT4{1,.48f,.35f,1}:

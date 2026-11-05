@@ -7,9 +7,9 @@
 inline authored::Gesture AuthoredActorGesture(const animation::Sample& sample) {
  const auto& a=sample.action;
  authored::Gesture result;
- result.pitch=a.pitch+sample.lean*.10f-sample.hit*.15f;
+ result.pitch=a.pitch+sample.lean*.10f-animation::ForwardRecoil(sample)*.15f;
  result.yaw=a.yaw+sample.hitSide*.07f;
- result.roll=a.roll+sample.bank*.10f+sample.hitSide*.12f;
+ result.roll=a.roll+sample.bank*.10f-sample.hitSide*.12f;
  result.hip=a.hip;
  result.leftLift=a.left.y*1.5f+a.left.z*.8f;
  result.rightLift=a.right.y*1.5f+a.right.z*.8f;

@@ -449,11 +449,11 @@ void Renderer::Draw(const XMMATRIX& world,const XMMATRIX& vp,const XMFLOAT4& col
  context_->UpdateSubresource(constants_.Get(),0,nullptr,&data,0,0);
  context_->OMSetDepthStencilState(hud?depthOff_.Get():depthOn_.Get(),0); context_->Draw(count,start);
 }
-void Renderer::DrawAuthoredAsset(authored::Asset asset,const XMFLOAT3& position,const XMFLOAT3& scale,float yaw,unsigned detail) {
+void Renderer::DrawAuthoredAsset(authored::Asset asset,const XMFLOAT3& position,const XMFLOAT3& scale,float yaw,unsigned detail,float pitch,float roll) {
  if(unsigned(asset)>=authored::assetCount || scale.x<=0 || scale.y<=0 || scale.z<=0) return;
  if(authored::Animated(authored::Slot(asset)) && bodyCount_>=visual::maxBodies) {error_=L"Authored actor palette budget exceeded.";frameFailed_=true;return;}
  const unsigned selected=authored::Slot(asset,detail>=3?0:std::min(detail,2u));
- DrawMesh(visual::Mesh(selected),position,scale,{1,1,1,1},visual::Material::Count,yaw);
+ DrawMesh(visual::Mesh(selected),position,scale,{1,1,1,1},visual::Material::Count,yaw,pitch,visual::ShadowMode::Cast,roll);
  world_[selected].back().reserved=detail<3?1:0;world_[selected].back().body=255;
  if(authored::Animated(selected)) {
   auto& gpu=bodyPalettes_[bodyCount_];gpu={};bodyActors_[bodyCount_]=0;

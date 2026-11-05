@@ -30,6 +30,16 @@ Simulation Hero(ClassId id){
  auto save=s.Save();const auto at=save.find("PROFILE ");save.replace(at,save.find('\n',at)-at,"PROFILE "+std::to_string(int(id))+" \"Tester\" 7 0 3");Check(s.Load(save) && s.Level()==10,"Level-ten fixture");return s;
 }
 void Motion(){
+ for(int ability:{8,11,14}){
+  animation::AuthoredWeaponController wide;wide.Update(.001f,combat::Contact(true),true,false,true,1,false,ability,0);
+  const auto expected=playerclips::Sample(playerclips::Clip::Slash,playerclips::Collection()[unsigned(playerclips::Clip::Slash)].contact);
+  Check(Distance(wide.frame.weapon,expected.weapon)<.0001f,"Wide cut still uses overhead weapon direction");
+ }
+ {
+  animation::AuthoredWeaponController bow;bow.Update(.001f,.40f,true,false,true,1,true,1,1);
+  const auto raw=playerclips::Sample(playerclips::Clip::BowPowerRelease,bow.phase);
+  Check(bow.frame.hands[0].z<raw.hands[0].z-.02f,"Bow release has no string-hand follow-through");
+ }
  const float contact=playerclips::Collection()[unsigned(playerclips::Clip::Slash)].contact;
  Check(std::abs(animation::ReturnCutPhase(contact,contact)-contact)<.00001f,"Backhand moved contact key");
  float prior=1;
@@ -67,6 +77,11 @@ void Motion(){
  }
 }
 void Native(Renderer& r,const std::filesystem::path& out){
+ for(int ability:{8,12,14})for(int ordinal=0;ordinal<3;++ordinal){
+  Check(spellvfx::ArrowProgress(ability,ordinal,.24f,.24f)==1,"Volley missed accepted arrival time");
+  float prior=-1;for(int n=0;n<=240;++n){const auto p=spellvfx::ArrowProgress(ability,ordinal,n*.001f,.24f);Check(p>=prior,"Arrow moved backward");prior=p;}
+ }
+ Check(spellvfx::ArrowProgress(12,1,.04f,.24f)<0 && spellvfx::ArrowProgress(12,0,.04f,.24f)>0,"Twin arrows still launch simultaneously");
  const float ground=WorldMap::Height({});
  const auto begin=[&]{r.BeginFrame();r.SetCamera({5,ground+5,-7},{0,ground+1,0});r.DrawMesh(visual::Mesh::Terrain,{},{1,1,1},{.25f,.24f,.23f,1},visual::Material::Stone);};
  for(auto school:{ClassId::Mage,ClassId::Priest})for(int ability:school==ClassId::Mage?std::vector<int>{8,9,11,14}:std::vector<int>{5,6}){

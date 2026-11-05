@@ -55,9 +55,9 @@ struct BeastLocomotion {
    motion::Spring(gesture.supportPitch,pitchVelocity,ground.supportPitch,18.f,dt);
    motion::Spring(gesture.supportRoll,rollVelocity,ground.supportRoll,18.f,dt);
    motion::Spring(gesture.supportLift,liftVelocity,ground.supportLift,18.f,dt);
-   gesture.pitch=std::clamp(-animation.hit*.13f+animation.lean*.06f,-.20f,.20f);
+   gesture.pitch=std::clamp(-::animation::ForwardRecoil(animation)*.13f+animation.lean*.06f,-.20f,.20f);
    gesture.yaw=animation.hitSide*.065f;
-   gesture.roll=std::clamp(animation.bank*.08f+animation.hitSide*.10f,-.16f,.16f);
+   gesture.roll=std::clamp(animation.bank*.08f-animation.hitSide*.10f,-.16f,.16f);
    gesture.hip=-animation.hit*.022f;
    gesture.jaw=std::clamp(jaw,0.f,1.f);
    // Deterministic, per-actor idle beats yield immediately to accepted combat.

@@ -47,7 +47,8 @@ std::vector<std::int16_t> AcousticEffect(Cue cue){
  const bool step=IsStep(cue),land=IsLanding(cue);
  const float duration=holy?(healing?2.6f:2.1f):fire?(cue==Cue::FireHeavy || impact?1.7f:1.15f):frost || arcane?1.35f:step?.32f:land?.55f:cue==Cue::BowDraw?.64f:cue==Cue::WarriorEffort?.56f:.65f;
  std::vector<float> pcm(std::size_t(duration*sampleRate));Noise random{0x36af91u+unsigned(cue)*1741};Low body,airflow,slow;
- Mode chest(160,90),wood(240,90),bowBody(380,130),ice1(1733,19),ice2(2917,31),ice3(4211,55);
+ Mode chest(160,90),wood(240,90),bowBody(380,130),ice1(1033,95),ice2(2039,130),ice3(3471,220);
+ Mode limb(190,38),fiber(530,85),leather(1160,150),pressure(226,100),rift(547,180);
  Mode vowel1(620,110),vowel2(1120,145),vowel3(2450,260),grunt1(520,130),grunt2(1250,220);
  const std::size_t stringLength=std::size_t(sampleRate/(cue==Cue::BowHeavy?105.f:145.f));std::vector<float> string(stringLength);for(auto& x:string)x=random.Next()*.8f;
  std::size_t stringHead=0;float phase=0,crack=0;
@@ -59,11 +60,21 @@ std::vector<std::int16_t> AcousticEffect(Cue cue){
    x=.45f*pluck+.40f*wood.Sample(pluck)+.26f*bowBody.Sample(pluck);
    x+=.33f*high*Env(t,.0018f,100)+.22f*mid*Env(t-.022f,.014f,18);
   }else if(cue==Cue::BowDraw){
-   const float flex=std::pow(std::sin(pi*std::min(t/.55f,1.f)),2.f);
-   x=flex*(.65f*wood.Sample(mid)+.20f*mid)+.12f*high*Env(t-.12f,.01f,28)+.17f*wood.Sample(noise)*Env(t-.40f,.002f,30);
+   // Increasing strain and irregular fiber slips: wood/leather under tension,
+   // not a pitched charge-up. Excitation stops before the release transient.
+   const float load=Smooth(t/.18f)*(1-Smooth((t-.46f)/.14f));
+   phase+=(34+92*Smooth(t/.50f)+breath*90)/sampleRate;
+   const bool slip=phase>=1;if(slip)phase-=1;
+   const float stress=(slip?(.30f+.30f*std::abs(noise)):0)+mid*.12f;
+   x=(limb.Sample(stress)*.75f+fiber.Sample(stress)*.50f+leather.Sample(stress)*.17f)*load;
+   x+=mid*.13f*load+high*.055f*(Env(t-.08f,.006f,40)+Env(t-.32f,.004f,46));
   }else if(cue==Cue::ArrowImpact){
-   x=.75f*chest.Sample(noise)*Env(t,.001f,35)+.35f*mid*Env(t,.001f,45)+.18f*high*Env(t-.013f,.002f,75);
-   x+=.20f*wood.Sample(noise)*Env(t-.025f,.003f,18);
+   // Short broad contact, compressed body and a shaft settling in the target.
+   const float bite=Env(t,.0012f,125),bodyHit=Env(t,.003f,30);
+   x=.72f*mid*bite+.28f*high*Env(t-.003f,.001f,160)+1.15f*low*bodyHit;
+   x+=chest.Sample(noise*bodyHit)*.55f+wood.Sample(noise*bite)*.32f;
+   x+=.15f*std::sin(tau*(137*t-48*t*t))*Env(t-.009f,.004f,25);
+   x+=.11f*mid*Env(t-.043f,.008f,24);
   }else if(fire){
    const float envelope=gather?Smooth(t/.27f)*std::exp(-t*3.5f):Env(t,impact?.004f:.018f,impact?3.8f:5.5f);
    const float turbulence=.62f+.38f*std::sin(t*31+breath*20)*std::sin(t*47+breath*31);
@@ -72,14 +83,25 @@ std::vector<std::int16_t> AcousticEffect(Cue cue){
    x+=.34f*chest.Sample(noise)*Env(t,.006f,impact?8.f:14.f);
    if(cue==Cue::FireHeavy || impact)x+=.17f*std::sin(tau*(67*t-13*t*t))*Env(t,.009f,8);
   }else if(frost){
-   const float excitation=(noise> .989f?noise*10:noise*.08f)*Env(t,gather?.12f:.002f,gather?3.f:7.f);
-   x=.45f*(ice1.Sample(excitation)+.60f*ice2.Sample(excitation)+.25f*ice3.Sample(excitation));
-   x+=.29f*high*Env(t,gather?.18f:.015f,4.5f)+.65f*low*Env(t,.012f,9);
+   // Broad, damped fracture modes and granular splinters replace the narrow
+   // bell resonances. Preparation grows; contact opens with a pressure crack.
+   const float shell=gather?Smooth(t/.28f)*std::exp(-t*3.2f):Env(t,.003f,6.f);
+   if(random.Next()>(gather?.9965f:.991f))crack=.35f+.65f*std::abs(noise);else crack*=.92f;
+   const float fracture=(noise*.22f+crack*high*2.7f)*shell;
+   x=.55f*ice1.Sample(fracture)+.46f*ice2.Sample(fracture)+.24f*ice3.Sample(fracture);
+   x+=high*crack*shell*.36f+mid*Env(t,gather?.20f:.006f,4.5f)*.32f;
+   x+=low*Env(t,gather?.18f:.009f,7.f)*(impact?1.5f:.95f);
+   if(!gather)x+=mid*Env(t,.002f,65)*.70f;
   }else if(arcane){
-   const float envelope=Env(t,gather?.16f:.012f,3.7f);
-   x=(.70f*low+.22f*mid)*envelope;
-   x+=.24f*(ice1.Sample(noise)+ice2.Sample(noise)*.4f)*envelope;
-   x+=.07f*(std::sin(tau*73.42f*t)+.45f*std::sin(tau*109.8f*t))*envelope;
+   // Low moving pressure, rough rift turbulence and an unpitched front. The
+   // noisy sub body has no stable two-note interval or notification whistle.
+   const float envelope=gather?Smooth(t/.26f)*std::exp(-t*2.8f):Env(t,.006f,4.4f);
+   phase+=(gather?58+38*Smooth(t/.6f):92-39*Smooth(t/.7f))/sampleRate;
+   const float surge=.64f+.36f*std::sin(t*29+breath*35)*std::sin(t*43+breath*16);
+   const float turbulence=std::tanh(low*3.8f+mid*.55f)*surge;
+   x=(turbulence*.54f+pressure.Sample(noise)*.24f+rift.Sample(mid)*.15f)*envelope;
+   x+=std::sin(tau*phase+breath*4)*(.055f+.11f*std::abs(mid))*envelope;
+   if(!gather)x+=(mid*.56f+high*.12f)*Env(t,.002f,impact?38.f:52.f);
   }else if(holy){
    // Glottal excitation and fixed vowel formants give a choral body rather
    // than an ascending notification triad. No intelligible sampled voice.

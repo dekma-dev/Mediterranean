@@ -39,7 +39,8 @@ float Roll(Renderer& r,XMFLOAT3 a,XMFLOAT3 b){
 // A release plane faces along the accepted trajectory, not the camera. It
 // remains attached to the sampled launch socket even when selection changes.
 void Release(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float age){
- const float fade=Envelope(age,.14f,.008f);if(fade<=0)return;
+ if(age>=.18f)return;
+ const float fade=Envelope(age,.14f,.008f);
  const float sx=std::sin(e.facing),cx=std::cos(e.facing);
  const auto local=[&](float x,float y,float z=0.f){return Add(origin,{cx*x+sx*z,y,-sx*x+cx*z});};
  const bool physical=e.school==C::Scout;
@@ -193,6 +194,20 @@ void Contact(Renderer& r,const rpg::CombatVisualEvent& e,float age){
    const auto tip=Add(p,{std::cos(angle)*reach,std::sin(angle)*reach,std::sin(angle*2+e.facing)*reach*.55f});
    r.DrawEffectStreak(p,tip,.035f*power,color);}
   if(e.heavy){
+   if(e.primary){
+    // A textured pressure skirt expands through volume rather than laying
+    // another bright circle on the floor. Gaps retain the target silhouette.
+    const float pressure=Envelope(age,.42f,.016f);
+    const auto color=element==Element::Frost?XMFLOAT4{.49f,.76f,.9f,pressure*.30f}:
+      element==Element::Arcane?XMFLOAT4{.66f,.40f,.94f,pressure*.32f}:XMFLOAT4{1,.63f,.29f,pressure*.34f};
+    for(int n=0;n<12;++n){
+     const auto at=[&](float u,bool top){const float a=(n+u)*tau/12+e.facing;
+      const float radius=(.20f+age*4.8f)*power*(top?.48f:1.f);
+      const float y=top?.28f+age*.7f:-.24f-age*.7f;
+      return Add(p,{std::cos(a)*radius,y,std::sin(a)*radius});};
+     r.DrawEffectSurface(element==Element::Arcane?Art::Arcane:Art::Smoke,at(.08f,false),at(.08f,true),at(.92f,true),at(.92f,false),color);
+    }
+   }
    const float bloom=Envelope(age,.64f,.045f);
    for(unsigned n=0;n<4;++n){
     const float a=n*tau/4+e.facing,spread=(.16f+age*1.25f)*power;
@@ -226,6 +241,21 @@ void Contact(Renderer& r,const rpg::CombatVisualEvent& e,float age){
    r.DrawEffectSurface(Art::Slash,plane(x-.10f*size,lower),plane(x-.10f*size,upper),
     plane(x+.10f*size,upper),plane(x+.10f*size,lower),{1,.91f,.64f,alpha});
   }
+  if(e.heavy && e.primary) {
+   // Open gold/ivory vanes around the contact form a volume from side views,
+   // where the original single-plane descending curtains become edge-on.
+   const float opening=combat::Smooth(age/.20f),glow=Envelope(age,.72f,.025f);
+   for(int n=0;n<6;++n) {
+    const float a=e.facing+n*tau/6,radial=(.26f+opening*.66f)*size;
+    const float y=-.18f+age*.62f,span=(.30f+opening*.36f)*size;
+    const XMFLOAT3 base=Add(p,{std::sin(a)*radial,y,std::cos(a)*radial});
+    const XMFLOAT3 up=Add(base,{std::sin(a)*.24f*size,span,std::cos(a)*.24f*size});
+    const XMFLOAT3 edge{std::cos(a)*.12f*size,0,-std::sin(a)*.12f*size};
+    r.DrawEffectSurface(Art::Slash,Add(base,{-edge.x,0,-edge.z}),Add(up,{-edge.x*.28f,0,-edge.z*.28f}),
+      Add(up,{edge.x*.28f,0,edge.z*.28f}),Add(base,edge),{1,.86f,.43f,glow*.44f});
+    r.DrawEffectStreak(base,up,.014f*size,{1,.97f,.79f,glow*.65f});
+   }
+  }
   r.DrawEffectSprite(Art::Sparks,p,.65f*size,.65f*size,0,{1,.96f,.83f,flash*.8f});return;
  }
  const float flash=Envelope(age,.18f,.008f),fade=Envelope(age,.32f);
@@ -258,6 +288,11 @@ void Contact(Renderer& r,const rpg::CombatVisualEvent& e,float age){
   r.DrawEffectSprite(holy?Art::Seal:Art::Arcane,p,(.25f+age*.7f)*power,(.25f+age*.7f)*power,age*.8f,c);
  }
 }
+float ArrowProgress(int ability,int ordinal,float age,float flight){
+ if(!std::isfinite(age) || !std::isfinite(flight) || flight<=0 || ordinal<0)return -1;
+ const float delay=std::min(flight*.45f,ability==12?ordinal*.063f:ability==14?ordinal*.035f:0.f);
+ return age<delay?-1:Unit((age-delay)/(flight-delay));
+}
 void Flight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float age){
  if((e.school!=C::Mage && e.school!=C::Scout && e.school!=C::Priest) || !std::isfinite(age) || !std::isfinite(e.flight) || e.flight<=0 || age<0 || age>=e.flight+.16f)return;
  Release(r,e,origin,age);
@@ -270,13 +305,14 @@ void Flight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float ag
   const float arrowFade=1-combat::Smooth(after/.025f);if(arrowFade<=0)return;
   const int count=e.ability==8?5:e.ability==12?2:e.ability==14?3:1;
   for(int n=0;n<count;++n){
-   const float spread=(n-(count-1)*.5f)*(e.ability==8?.38f:.24f)*std::sin(t*pi);
-   const XMFLOAT3 offset{cx*spread,.03f*std::abs(n-(count-1)*.5f)*std::sin(t*pi),-sx*spread};
-   const auto tip=Add(head,offset),tail=Add(point(t-.45f/length),offset);
+   const float u=ArrowProgress(e.ability,n,age,e.flight);if(u<0)continue;
+   const float spread=(n-(count-1)*.5f)*(e.ability==8?.38f:.24f)*std::sin(u*pi);
+   const XMFLOAT3 offset{cx*spread,.03f*std::abs(n-(count-1)*.5f)*std::sin(u*pi),-sx*spread};
+   const auto tip=Add(point(u),offset),tail=Add(point(std::max(0.f,u-.45f/length)),offset);
    r.DrawEffectStreak(tail,tip,.012f,{.86f,.78f,.57f,arrowFade});
-   const auto fin=Add(point(t-.35f/length),offset);
+   const auto fin=Add(point(std::max(0.f,u-.35f/length)),offset);
    for(float side:{-1.f,1.f})r.DrawEffectStreak(Add(tail,{cx*side*.045f,.02f,-sx*side*.045f}),fin,.012f,{.55f,.74f,.63f,arrowFade*.8f});
-   if(e.heavy || count>1)r.DrawEffectStreak(Add(point(t-.8f/length),offset),tip,.022f,{.63f,.82f,.73f,arrowFade*.22f});
+   if(e.heavy || count>1)r.DrawEffectStreak(Add(point(std::max(0.f,u-.8f/length)),offset),tip,.022f,{.63f,.82f,.73f,arrowFade*.22f});
   }
   if(e.ability==13)r.DrawEffectSprite(Art::Sparks,head,.075f,.075f,age*5,{.65f,.75f,.28f,arrowFade*.5f});
   return;
@@ -297,6 +333,19 @@ void Flight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float ag
   r.DrawEffectStreak(point(tail),head,.075f*power,{1,.84f,.40f,fade*.55f});
   r.DrawEffectStreak(point(tail),head,.022f*power,{1,.97f,.82f,fade*.85f});
   r.DrawEffectSprite(Art::Seal,head,.32f*power,.32f*power,age*2,{1,.88f,.48f,front*.7f});
+  if(e.heavy){
+   // A tapering reliquary lance has volume from side and overhead cameras.
+   // Its point stays at the accepted projectile head throughout the flight.
+   const auto previous=point(std::max(0.f,t-.3f));
+   const XMFLOAT3 axis{head.x-previous.x,head.y-previous.y,head.z-previous.z};
+   const float norm=std::sqrt(axis.x*axis.x+axis.y*axis.y+axis.z*axis.z);
+   const XMFLOAT3 direction=norm>.0001f?XMFLOAT3{axis.x/norm,axis.y/norm,axis.z/norm}:XMFLOAT3{sx,0,cx};
+   const auto back=Add(head,{-direction.x*.95f*power,-direction.y*.95f*power,-direction.z*.95f*power});
+   for(int n=0;n<4;++n){const float a=n*pi*.5f;
+    const XMFLOAT3 wing{cx*std::cos(a)*.25f*power,std::sin(a)*.25f*power,-sx*std::cos(a)*.25f*power};
+    r.DrawEffectSurface(Art::Slash,back,Add(back,wing),head,Add(back,{-wing.x,-wing.y,-wing.z}),{1,.91f,.60f,front*.46f});
+   }
+  }
   for(int side:{-1,1})for(int n=0;n<6;++n){const float u=float(n)/6,v=float(n+1)/6;
    const auto swept=[&](float a){const float back=a*.75f*power,wing=side*std::sin(a*pi)*.32f*power;
     return Add(head,{cx*wing-sx*back,.08f*std::sin(a*pi),-sx*wing-cx*back});};

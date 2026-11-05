@@ -3,6 +3,126 @@
 Scope: Warrior, Mage, Scout and Priest; 2026-11-05. Existing spell icons,
 inventory layouts, saved characters and Blender model sources are preserved.
 
+## Target response and material sound follow-up (2026-11-06)
+
+Accepted contacts now drive class-specific body recoil: quick, restrained arrow
+impulses; heavier sword settling; slower magical pressure; and measured sacred
+impacts. Light/heavy profiles have different strengths and peak times, from
+38 to 100 ms. Front, rear and side directions reach the final humanoid and
+creature body transforms. Simultaneous contacts preserve the outgoing response
+at the exact contact instant before applying the next profile. Incoming player
+damage retains its original strength/timing. This is presentation, not added
+stun, knockback, hit-stop, damage or attack-speed changes.
+Side-recoil roll signs were corrected for authored humanoids, creatures and
+posts so they lean with the incoming force rather than toward its source.
+Facial pain retains the original contact envelope on a separate channel; class
+body weights/timing do not change the frozen facial presentation.
+
+All three training posts now receive the same accepted-contact response. Their
+intact meshes tilt by at most 0.045 radians about the base; this is a small rigid
+prop response, not a new skeletal dummy rig. Loading and entering sparring clear
+the response. Posts are drawn outside the retained village cache, so toggling
+sparring no longer rebuilds that cache. Selection rings use terrain height; the
+generic orange dummy hit ring has been removed in favor of the actual spell
+contact. Heavy primary Priest impacts gain six open gold/ivory vanes, giving
+side views volume without adding another full area effect to secondary victims.
+
+Remaining modeled audio has been revised in place: increasing wood/fiber strain
+for the bow draw, a short broad arrow bite with shaft settling, damped granular
+ice fracture, and low turbulent arcane pressure instead of narrow ringing tones.
+Recorded bow releases, sword contacts, human efforts, Priest organ/bell samples
+and music remain intact. The sample durations and resident PCM budget are
+unchanged. No downloads or new third-party assets are involved. The isolated
+33-second audition `build-class-impact/bow-frost-arcane-before-after.wav` contains
+three groups: aimed bow, frost, arcane; each plays five seconds before and five
+seconds after, separated by half-second gaps. It is not a live XAudio2 recording
+or a substitute for listening with music, enemies and repeated rotations.
+
+The animation suite also exposed a takeoff bug: the grounded, smoothed pelvis
+limit vanished immediately when foot contacts released. The departure pose now
+carries and releases this limit with the existing 120 ms foot transition. Root
+jump physics and source clips are unchanged. An outdated raw-hand-offset test
+was replaced by checks of the final wrist and sword tip, which include PCL3's
+separate chest/pelvis motion instead of requiring all motion in one channel.
+In the repeat-jump regression, the worst 1 ms pelvis change fell from 0.107602 m
+to 0.00010732 m; the worst wrist change is now 0.000542555 m. These measurements
+cover the test's rates and repeat delays, not every possible gameplay pose.
+
+Validation: AudioTests, RecordedAudioTests, ActorPresentationTests, AnimationTests,
+TrainingTests, ShadowTests, ClassEffectsTests, SignaturePresentationTests,
+CombatReleaseTests and CastingEffectsTests pass in Release and Debug. After
+the final facial-channel separation, actor checks pass again in both builds;
+the complete animation suite was rebuilt and rerun in both. Its 2,808 takeoff
+probes now copy the uninterrupted walking prefix instead of replaying it for
+each probe. The observed maxima are identical; runtime fell from about 84 to
+8 seconds in Release and 713 to 56 seconds in Debug. This optimizes tests, not
+the game's frame rate. Both final executables pass isolated startup/render
+smoke launches. Dedicated evidence lives under `build-class-impact`, including
+`release-verified-tests.log`, individual `debug-<Suite>.log`,
+`release-linear-animation-tests.log`, `debug-linear-animation-tests.log`,
+`release-final-smoke.png.log` and `debug-final-smoke.png.log`.
+The final PCM total remains 6,189,330 bytes. Native Priest captures were inspected;
+full-battle listening, subjective impact quality and reference fidelity remain
+manual acceptance work.
+
+## Combat presence follow-up (2026-11-06)
+
+Quiet recorded tails previously held the mix at their full-file peak, reducing
+the next attack as though every preceding onset were still playing. The mixer
+now caches a suffix-maximum envelope for every PCM take, including later peaks.
+It reads the native playback cursor and retains one block of interpolation
+history. An interrupted/reused voice with an ambiguous cursor keeps the old
+full-peak bound until completion. The bound remains conservative during a game
+thread stall, uses the existing gain attack/recovery, and does no PCM analysis
+during playback. Metadata adds 42,440 bytes; PCM remains 6,189,330 bytes.
+Once a tail's remaining peak falls below 2.5%, it yields its voice to a new
+release/contact while retaining priority over footsteps/UI ticks. Loud bodies
+and later recorded transients retain their original priority.
+This follows the documented [XAudio2 cursor and end-of-stream behavior](https://learn.microsoft.com/en-us/windows/win32/api/xaudio2/ns-xaudio2-xaudio2_voice_state).
+
+Warrior wide techniques (abilities 8, 11 and 14) now sample the existing cross-body
+slash at their own accepted heavy-contact time instead of sharing the overhead
+chop. One in three ordinary accepted swings adds an existing human effort take;
+heavy-attack efforts retain their previous cadence. Scout release has a backward
+string-hand/elbow follow-through with an extended bow arm, layered under the
+existing nock/grip solve. Twin/Crossfire arrows launch at short offsets and all
+reach the original accepted contact time. This is cosmetic sequencing: it does
+not add damage ticks, change attack speed or author new Blender animations.
+
+Heavy primary Mage contacts gain a textured expanding pressure skirt with gaps
+around the target. Priest heavy projectiles gain a tapered world-oriented gold
+lance, keeping their point at the accepted flight head. The socket ignition's
+180 ms body no longer disappears at the older 140 ms seal cutoff. Scout evasion
+contacts now use their physical evasion cue rather than the generic ward sound.
+
+The local training sheet `build-video-review/pass1-c-01.jpg` was checked again
+for actor/effect readability; this was a targeted still review, not a complete
+video or listening analysis. Reference material includes Blizzard's
+[class-specific casting animation discussion](https://news.blizzard.com/en-us/article/20946579/patch-7-3-new-combat-animations-its-magic)
+and the official [Allods Priest class revision](https://allods.ru/news.php?article=5956).
+No new downloads, icons, source models or frozen facial channels are part of
+this runtime change.
+
+`build-combat-presence/four-class-tail-mix.wav` compares identical overlapping
+PCM through the old and new mix: Warrior, Scout, Mage, Priest, eight seconds per
+class (four seconds old, four seconds new). It deliberately stresses overlapping
+tails; it is not a full gameplay recording or an assertion of reference parity.
+Listen to actual rotations with music and hostile warnings before accepting the
+subjective balance. Unshadowed spell-light leakage remains open.
+
+Validation: six affected suites pass in Ninja Release and Visual Studio Debug:
+AudioTests, SignaturePresentationTests, CombatReleaseTests, ClassEffectsTests,
+CastingEffectsTests and AuthoredLocomotionTests. AudioTests was rerun in both
+after the final quiet-tail priority change. Coverage includes bounds for every
+PCM take and its future transients, crowded mix headroom, real Scout evasion,
+wide-cut contact orientation, string-hand follow-through, staggered arrows and
+unchanged arrival time, planted feet, cancellation and native effect budgets.
+Mage contact, Priest flight and Warrior follow-through captures were inspected.
+Both game/launcher configurations build; final Release and Debug RPGNative
+executables pass isolated startup/device/resize/world/UI capture smoke launches.
+Dedicated logs and the audio comparison are in `build-combat-presence`.
+These are focused checks, not full-suite, listening or production-art acceptance.
+
 ## Release expression and repeated attacks
 
 The next runtime pass makes ordinary casts more readable as well as the large

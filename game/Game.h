@@ -44,6 +44,7 @@ public:
   const motion::Actor& EnemyPose(std::size_t index) const { return enemyActors_.at(index).motion; }
   const animation::Sample& PlayerAnimation() const { return playerAnimation_.pose; }
   const animation::Sample& EnemyAnimation(std::size_t index) const { return enemyActors_.at(index).animation.pose; }
+  const animation::Sample& DummyAnimation(std::size_t index) const { return dummyAnimations_.at(index).pose; }
   float CameraRange() const { return cameraBoom_.distance; }
   float CameraYaw() const { return cameraYaw_; }
   float CameraPitch() const { return cameraPitch_; }
@@ -71,6 +72,7 @@ private:
   motion::Actor playerPose_;
   std::vector<presentation::Actor> enemyActors_;
   animation::State playerAnimation_;
+  std::array<animation::State,3> dummyAnimations_{};
   facial::State playerFace_,keeperFace_,merchantFace_;
   animation::FootPlacement playerFeet_;
   CombatEffects effects_;

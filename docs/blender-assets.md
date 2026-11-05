@@ -8,6 +8,9 @@ opens the assembled character; `oldstyle-classes.blend` remains the editable
 garment source. Faces, body anatomy, motion and the original collection are
 preserved. See [the player study record](player-hero-revision.md) for sources,
 resource budgets, preservation and native review evidence.
+Release and Debug checks pass; all six game outputs embed the current exports
+and pass fixture-save smoke launches. Authoring/review scripts remain local
+and ignored by Git.
 
 ## Grounded locomotion and full-body weapon motion (2026-11-05)
 

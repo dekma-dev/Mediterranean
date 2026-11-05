@@ -10,7 +10,7 @@
 #include <cmath>
 
 namespace {
-void DrawScenery(Renderer& r,const rpg::WorldMap& map,bool sparring) {
+void DrawScenery(Renderer& r,const rpg::WorldMap& map) {
   using DirectX::XMFLOAT3;
   using DirectX::XMFLOAT4;
   using M=visual::Mesh;
@@ -137,10 +137,6 @@ void DrawScenery(Renderer& r,const rpg::WorldMap& map,bool sparring) {
     {dockMax.x-dockMin.x,.12f,.4f},timber,S::Wood);
   for (float z : {dockMin.z+.2f,dockMax.z-.2f}) for (float x : {dockMin.x+.25f,dockMax.x-.25f})
     r.DrawMesh(M::Trunk,{x,.55f,z},{.34f,1.1f,.34f},timber,S::Wood);
-  for (float z : {-2.f,1.f,4.f}) {
-    if (sparring && z==rpg::WorldMap::trainingPost.z) continue;
-    r.DrawAuthoredAsset(authored::Asset::TrainingDummy,{12,0,z},{1,1,1},DirectX::XM_PI);
-  }
   for (float x : {-4.f,4.f}) {
     r.DrawAuthoredAsset(authored::Asset::Signpost,{x,0,-3},{1,1.15f,1},DirectX::XM_PI);
   }
@@ -191,11 +187,16 @@ void WorldView::UpdateResidents(float dt,rpg::Vec2 player,bool alive,bool talkin
     residents_[i].Update(dt,aim,0,0,speaking?.5f:alive && distance<3?.12f:0);
   }
 }
-void WorldView::Draw(Renderer& r,const rpg::WorldMap& map,float time,bool sparring,facial::Pose merchantFace,facial::Pose keeperFace,rpg::Vec2 observer) {
-  // The map is immutable between Game::Initialize calls. Sparring temporarily
-  // replaces one authored dummy with an animated opponent.
-  if (sparring!=sparring_) { scenery_.Invalidate(); sparring_=sparring; }
-  r.DrawStaticScene(scenery_,[&] { DrawScenery(r,map,sparring); });
+void WorldView::Draw(Renderer& r,const rpg::WorldMap& map,float time,bool sparring,facial::Pose merchantFace,facial::Pose keeperFace,rpg::Vec2 observer,const std::array<TrainingPropPose,3>& training) {
+  // Reactive training props stay outside the immutable cache. Sparring no
+  // longer rebuilds the entire village just to hide its first training post.
+  r.DrawStaticScene(scenery_,[&] { DrawScenery(r,map); });
+  for(unsigned i=0;i<training.size();++i) {
+    if(sparring && i==0)continue;
+    const rpg::Vec2 position{12,-2.f+i*3.f};
+    r.DrawAuthoredAsset(authored::Asset::TrainingDummy,{position.x,map.Height(position),position.z},
+      {1,1,1},DirectX::XM_PI,3,training[i].pitch,training[i].roll);
+  }
   // Ambient actors update outside rendering; repeated views cannot advance AI.
   if(wildlifePreview_) for(unsigned i=0;i<wildlife_.Animals().size();++i) {
     const auto& a=wildlife_.Animals()[i];

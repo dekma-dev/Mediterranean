@@ -74,6 +74,48 @@ void FocusedCombatAudio(){
 }
 int main() {
   {
+    const auto energy=[](const std::vector<std::int16_t>& pcm,float begin,float end) {
+      double sum=0;const auto first=std::size_t(begin*sound::sampleRate),last=std::min(pcm.size(),std::size_t(end*sound::sampleRate));
+      for(auto n=first;n<last;++n)sum+=double(pcm[n])*pcm[n];
+      return sum/std::max(std::size_t(1),last-first);
+    };
+    const auto draw=sound::Generate(sound::Cue::BowDraw),arrow=sound::Generate(sound::Cue::ArrowImpact);
+    Require(energy(draw,.15f,.45f)>energy(draw,0,.04f)*4 && energy(draw,.61f,.64f)<energy(draw,.15f,.45f)*.01,
+      "Bow tension needs a growing body and a clean release edge");
+    Require(energy(arrow,0,.08f)>energy(arrow,.2f,.5f)*12,"Arrow contact lost its short physical onset");
+    for(const auto pair:{std::pair{sound::Cue::FrostGather,sound::Cue::FrostImpact},std::pair{sound::Cue::ArcaneGather,sound::Cue::ArcaneImpact}}) {
+      const auto gather=sound::Generate(pair.first),impact=sound::Generate(pair.second);
+      Require(energy(impact,0,.04f)>energy(gather,0,.04f)*4,"Magic impact and preparation have the same onset");
+      Require(energy(impact,.10f,.30f)>100,"Elemental contact lost its audible body");
+    }
+  }
+  {
+    size_t envelopeBytes=0;
+    for(unsigned cue=0;cue<unsigned(sound::Cue::Count);++cue)for(unsigned v=0;v<sound::EffectVariants(sound::Cue(cue));++v){
+      const auto pcm=sound::Generate(sound::Cue(cue),v);sound::EffectEnvelope envelope;envelope.Build(pcm);
+      envelopeBytes+=envelope.remaining.size()*sizeof(float);
+      float future=0;
+      for(size_t n=pcm.size();n>0;--n){future=std::max(future,std::abs(int(pcm[n-1]))/32767.f);
+        Require(envelope.Peak(n-1)+.000001f>=future,"Tail bound lost a later transient");}
+      float prior=envelope.Peak(0);
+      for(size_t n=0;n<pcm.size()+1024;n+=113){const auto peak=envelope.Peak(n);
+        Require(peak<=prior+.000001f,"Tail peak increased after a stall");prior=peak;}
+      Require(envelope.Peak(pcm.size()+1024)==0,"Finished effect retained peak pressure");
+    }
+    Require(envelopeBytes<64*1024,"Tail metadata exceeded 64 KiB");
+    std::cout<<"Suffix envelope bytes: "<<envelopeBytes<<'\n';
+    // A loud onset followed by a quiet tail must no longer suppress the next
+    // contact as though that onset were still playing. Keep the peak ceiling.
+    std::vector<std::int16_t> tail(sound::sampleRate,600);tail[10]=26000;
+    sound::EffectEnvelope e;e.Build(tail);
+    const float oldLoad=e.Peak(0)*6+.7f,newLoad=e.Peak(sound::sampleRate/2)*6+.7f;
+    const float before=sound::MixGain(.85f,oldLoad,1.f/60),after=sound::MixGain(.85f,newLoad,1.f/60);
+    Require(after>before*3 && after*newLoad<=.701f,"Quiet tails still bury the next impact");
+    std::array<unsigned,12> tails;tails.fill(sound::TailPriority(4,e.Peak(sound::sampleRate/2)));
+    Require(sound::SelectVoice(tails,3)>=0 && sound::SelectVoice(tails,1)<0,"Quiet tail blocks attacks or yields to footsteps");
+    Require(sound::TailPriority(5,.5f)==5 && sound::TailPriority(5,NAN)==5,"Loud or invalid warning lost priority");
+  }
+  {
     using Q=sound::Cue;std::array<unsigned,12> pool{};
     Require(sound::SelectVoice(pool,sound::CuePriority(Q::Bow))==0,"Idle voice selection");
     pool.fill(sound::CuePriority(Q::HeavyHit));pool[4]=sound::CuePriority(Q::StepGrass);pool[9]=sound::CuePriority(Q::FireGather);
@@ -86,13 +128,13 @@ int main() {
     Require(sound::SelectVoice(pool,sound::CuePriority(Q::BossPrepare))>=0,"Boss warning lost in dense combat");
   }
   FocusedCombatAudio();
-  for(auto id:{rpg::ClassId::Warrior,rpg::ClassId::Mage}){
+  for(auto id:{rpg::ClassId::Warrior,rpg::ClassId::Mage,rpg::ClassId::Scout}){
     rpg::Simulation guard;Require(guard.CreateCharacter(id,"Guard"),"Guard audio character");
     rpg::Command protect;protect.ability=3;guard.Update(.001f,protect);
     auto& enemy=const_cast<rpg::Enemy&>(guard.Enemies()[0]);enemy.health=enemy.MaxHealth();enemy.state=rpg::EnemyState::Pursuing;
     enemy.position=enemy.home={guard.Player().x,guard.Player().z+1.6f};enemy.facing=3.14159265f;enemy.windup=.01f;enemy.attackCooldown=0;
     guard.Update(.02f,{});sound::Events blocked;blocked.Update(guard);
-    const auto expected=id==rpg::ClassId::Warrior?sound::Cue::ShieldBlock:sound::Cue::FrostImpact;
+    const auto expected=id==rpg::ClassId::Warrior?sound::Cue::ShieldBlock:id==rpg::ClassId::Mage?sound::Cue::FrostImpact:sound::Cue::ScoutEvasion;
     Require(Has(blocked,expected),"Absorption lost its class-specific contact sound");
     for(unsigned n=0;n<blocked.count;++n)if(blocked.cues[n]==expected)Require(blocked.spatial[n],"Guard contact lost its world origin");
     guard.Update(.01f,{});blocked.Update(guard);Require(!Has(blocked,expected),"Guard contact replayed without another hit");
@@ -395,6 +437,24 @@ int main() {
     mixed[frame]=std::int16_t(signal*gain*32767);
   }
   WriteWave("combat-mix-preview.wav",mixed);
+  {
+    // Four class groups, each with the old peak mix for four seconds followed
+    // by the same overlapping PCM through the tail-aware mix for four seconds.
+    const sound::Cue cues[]={sound::Cue::WarriorFinisher,sound::Cue::BowDeadeye,sound::Cue::MeteorImpact,sound::Cue::HolyJudgment};
+    std::vector<std::int16_t> comparison(sound::sampleRate*32);
+    for(unsigned group=0;group<4;++group){const auto pcm=sound::Generate(cues[group]);sound::EffectEnvelope e;e.Build(pcm);
+      for(unsigned pass=0;pass<2;++pass){float gain=.85f;double energy=0;
+        for(size_t n=0;n<sound::sampleRate*4;++n){float sum=0,load=0;
+          for(unsigned hit=0;hit<6;++hit){const auto start=size_t((.2f+hit*.31f)*sound::sampleRate);if(n<start || n-start>=pcm.size())continue;
+            const auto cursor=n-start;sum+=pcm[cursor]/32767.f;load+=e.Peak(pass?cursor:0);}
+          gain=sound::MixGain(gain,load,1.f/sound::sampleRate);
+          Require(std::abs(sum*gain)<.701f,"Tail-aware repeated mix clips");energy+=sum*gain*sum*gain;
+          comparison[(group*8+pass*4)*sound::sampleRate+n]=std::int16_t(sum*gain*32767);}
+        std::cout<<"Class tail audition "<<group<<" pass "<<pass<<" energy "<<energy<<'\n';
+      }
+    }
+    WriteWave("four-class-tail-mix.wav",comparison);
+  }
 
   rpg::Simulation simulation; sound::Events events; rpg::Command command;
   {

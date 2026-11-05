@@ -1,5 +1,6 @@
 #include "game/ActorPresentation.h"
 #include "game/Game.h"
+#include "game/AuthoredActorMotion.h"
 #include "engine/Renderer.h"
 #include "platform/Win32Window.h"
 #include <filesystem>
@@ -13,6 +14,30 @@ rpg::Enemy Creature(rpg::EnemyKind kind,rpg::EntityId id=400) {
  rpg::Enemy e;e.id=id;e.kind=kind;e.position=e.home={0,-10};e.health=e.MaxHealth();return e;
 }
 void Binding() {
+ for(auto school:{rpg::ClassId::Warrior,rpg::ClassId::Scout,rpg::ClassId::Mage,rpg::ClassId::Priest})for(bool heavy:{false,true}) {
+   animation::State legacy,body;
+   for(int tick=0;tick<180;++tick) {
+     legacy.Update(.01f,0,0,0,true,0);body.Update(.01f,0,0,0,true,0);
+     if(tick==1 || tick==4 || tick==39) {
+       legacy.ApplyImpact(.003f);body.ApplyImpact(.003f,.4f,animation::ClassImpact(school,heavy),-.6f);
+     }
+     Check(std::abs(body.FacialImpact()-legacy.pose.hit)<.000001f,"Class body recoil changed the frozen facial response");
+   }
+   body.Reset();Check(body.FacialImpact()==0,"Loaded actor retained its facial impact");
+ }
+ for(float side:{-1.f,1.f}) {
+   animation::Sample hit;hit.hit=1;hit.hitSide=side;hit.directedHit=true;
+   const auto g=AuthoredActorGesture(hit);
+   const auto post=TrainingPropPose::FromRecoil(0,side);
+   const auto up=DirectX::XMVectorSet(0,1,0,0);
+   const auto lateral=[&](float roll) {return DirectX::XMVectorGetX(DirectX::XMVector3TransformNormal(up,DirectX::XMMatrixRotationZ(roll)));};
+   Check(lateral(g.roll)*side>.05f && lateral(post.roll)*side>.02f,"Side impact bends an authored actor/post toward the attacker");
+   for(auto kind:{rpg::EnemyKind::Wolf,rpg::EnemyKind::Boar}) {
+     auto e=Creature(kind);presentation::BeastLocomotion beast;beast.Reset();motion::MovementSample movement;
+     beast.Update(.01f,e,movement,hit,1,true);
+     Check(lateral(beast.gesture.roll)*side>.05f,"Side impact rolls a creature toward the attacker");
+   }
+ }
  auto wolf=Creature(rpg::EnemyKind::Wolf),boar=Creature(rpg::EnemyKind::Boar,401);
  auto trainer=Creature(rpg::EnemyKind::Trainer,200);
  std::vector<rpg::Enemy> enemies{wolf,boar};std::vector<presentation::Actor> actors;

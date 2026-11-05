@@ -17,6 +17,8 @@ struct Foot { float x=0,y=.17f,z=0,yaw=0,pitch=0; };
 struct Sample {
   float breath=0,sway=0,air=0,rise=0,landing=0,hit=0,travel=0;
   float hitSide=0;
+  float hitForward=0;
+  bool directedHit=false;
   std::array<Foot,2> feet{};
   bool feetActive=false;
   bool pelvisStabilized=false;
@@ -33,6 +35,8 @@ struct Sample {
   float support=0,clothSide=0,clothBack=0;
   std::array<Foot,2> departureFeet{};
   float departure=0,departureSupport=0;
+  float departurePelvisLimit=0;
+  bool departurePelvisStabilized=false;
   MotionChannels motion;
   // Player-only authored gait. World foot anchors remain authoritative.
   playerclips::Frame authoredMotion{};
@@ -51,6 +55,17 @@ struct Sample {
   ActionChannels action;
   bool retreat=false;
 };
+inline float ForwardRecoil(const Sample& sample) { return sample.directedHit?Signed(sample.hitForward):Unit(sample.hit); }
+struct ImpactProfile { float strength=1,peak=.055f,sidePeak=.065f; };
+inline ImpactProfile ClassImpact(rpg::ClassId school,bool heavy) {
+  switch(school) {
+    case rpg::ClassId::Scout: return heavy?ImpactProfile{.70f,.045f,.050f}:ImpactProfile{.48f,.038f,.045f};
+    case rpg::ClassId::Mage: return heavy?ImpactProfile{1,.100f,.110f}:ImpactProfile{.75f,.070f,.080f};
+    case rpg::ClassId::Priest: return heavy?ImpactProfile{.90f,.090f,.100f}:ImpactProfile{.65f,.060f,.070f};
+    case rpg::ClassId::Warrior: return heavy?ImpactProfile{1,.085f,.090f}:ImpactProfile{};
+    default: return {};
+  }
+}
 inline Sample Idle(float time,float offset=0) {
   const float seconds=std::isfinite(time)?std::remainder(time,motion::tau*2/1.8f):0;
   const float phase=seconds*1.8f+(std::isfinite(offset)?std::remainder(offset,motion::tau*2):0);
@@ -102,6 +117,9 @@ struct State {
   float runBlend=0,runVelocity=0,authoredAge=0;
   float landingAge=2,landingStrength=0,hitAge=2,hitCarry=0;
   float lateralCarry=0,lateralImpulse=0;
+  float forwardCarry=0,forwardImpulse=1;
+  float facialHitCarry=0;
+  ImpactProfile hitProfile;
   float restWeight=1;
   float castAge=2,leanVelocity=0,riseVelocity=0,travelVelocity=0;
   float bankVelocity=0;
@@ -112,11 +130,17 @@ struct State {
   bool dashCollision=false;
   void Reset(float offset=0) { *this=State{}; phase=std::isfinite(offset)?std::remainder(offset,motion::tau):0; }
   float RecoilAt(float age) const {
-    return age>1?0:std::max(hitCarry*std::exp(-24*age),Pulse(age,.055f));
+    return age>1?0:std::max(hitCarry*std::exp(-24*age),hitProfile.strength*Pulse(age,hitProfile.peak));
   }
+  // Preserve the frozen facial response while body impact profiles evolve.
+  float FacialImpactAt(float age) const {
+    return age>1?0:std::max(facialHitCarry*std::exp(-24*age),Pulse(age,.055f));
+  }
+  float FacialImpact() const { return FacialImpactAt(hitAge); }
   void RefreshRecoil() {
     pose.hit=RecoilAt(hitAge);
     pose.hitSide=LateralAt(hitAge);
+    pose.hitForward=ForwardAt(hitAge); pose.directedHit=true;
     const float rest=restWeight*(1-pose.hit);
     pose.breath=std::sin(phase)*rest; pose.sway=std::sin(phase*.5f)*rest;
   }
@@ -125,12 +149,21 @@ struct State {
   // frame boundary, so two hits in one frame preserve the same recoil as two
   // separate updates. The event stream remains owned by the simulation.
   float LateralAt(float age) const {
-    return age>1?0:Signed(lateralCarry*std::exp(-24*age)+lateralImpulse*Pulse(age,.065f));
+    return age>1?0:Signed(lateralCarry*std::exp(-24*age)+lateralImpulse*hitProfile.strength*Pulse(age,hitProfile.sidePeak));
   }
-  void ApplyImpact(float elapsed,float side=0) {
+  float ForwardAt(float age) const {
+    return age>1?0:Signed(forwardCarry*std::exp(-24*age)+forwardImpulse*hitProfile.strength*Pulse(age,hitProfile.peak));
+  }
+  void ApplyImpact(float elapsed,float side=0,ImpactProfile profile={},float forward=1) {
     if (!std::isfinite(elapsed) || elapsed<0) return;
-    lateralCarry=LateralAt(std::max(0.f,hitAge-elapsed));lateralImpulse=Signed(side);
-    hitCarry=RecoilAt(std::max(0.f,hitAge-elapsed)); hitAge=elapsed;
+    const float age=std::max(0.f,hitAge-elapsed);
+    lateralCarry=LateralAt(age); forwardCarry=ForwardAt(age); hitCarry=RecoilAt(age);
+    facialHitCarry=FacialImpactAt(age);
+    lateralImpulse=Signed(side); forwardImpulse=Signed(forward);
+    hitProfile.strength=Unit(profile.strength);
+    hitProfile.peak=std::isfinite(profile.peak)?std::clamp(profile.peak,.025f,.14f):.055f;
+    hitProfile.sidePeak=std::isfinite(profile.sidePeak)?std::clamp(profile.sidePeak,.025f,.14f):.065f;
+    hitAge=elapsed;
     RefreshRecoil();
   }
   void CancelDash() {
@@ -170,6 +203,8 @@ struct State {
       departureLanding=pose.landing;
       departureLandingSeconds=pose.landingSeconds;
       pose.departureFeet=pose.feet; pose.departureSupport=pose.support;
+      pose.departurePelvisLimit=pose.pelvisLimit;
+      pose.departurePelvisStabilized=pose.pelvisStabilized;
     }
     flightAge=std::min(1.f,flightAge+dt);
     wasAirborne=!onGround;

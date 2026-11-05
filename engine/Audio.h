@@ -1,6 +1,7 @@
 #pragma once
 #include "game/Simulation.h"
 #include "game/CreatureContacts.h"
+#include "engine/EffectEnvelope.h"
 #include <xaudio2.h>
 #include <array>
 #include <cstdint>
@@ -57,6 +58,7 @@ struct Events {
   std::array<rpg::Vec2,24> origins{};
   std::array<bool,24> spatial{};
   float stepDistance=0;
+  unsigned warriorSwings=0;
   void Reset() { *this={}; }
   void Update(const rpg::Simulation& state,const presentation::CreatureContacts* contacts=nullptr);
 };
@@ -83,11 +85,13 @@ private:
   std::array<bool,12> preparation_{};
   std::array<rpg::Vec2,12> origins_{};
   std::array<bool,12> spatial_{};
+  std::array<const sound::EffectEnvelope*,12> voiceEnvelopes_{};
   unsigned outputChannels_=0;
   std::array<float,size_t(sound::Cue::Count)> peaks_{};
   std::array<unsigned,size_t(sound::Cue::Count)> variations_{};
   std::array<std::vector<std::int16_t>,size_t(sound::Cue::Count)> samples_;
   std::array<std::array<std::vector<std::int16_t>,2>,size_t(sound::Cue::Count)> effectVariants_;
+  std::array<std::array<sound::EffectEnvelope,3>,size_t(sound::Cue::Count)> envelopes_;
   bool recordedMusic_=false;
   std::vector<std::int16_t> score_;
   std::vector<std::int16_t> menuScore_;

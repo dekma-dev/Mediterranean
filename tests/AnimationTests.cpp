@@ -119,6 +119,76 @@ void ClipLibraryRegressions() {
   }
   std::cout<<"PASS: 11 locomotion clips, continuous keys/loops, directional blending, equal-distance stride, stop/reset\n";
 }
+void ClassContactRegressions() {
+  using C=rpg::ClassId;
+  for(C school:{C::Warrior,C::Scout,C::Mage,C::Priest})for(bool heavy:{false,true}) {
+    const auto profile=animation::ClassImpact(school,heavy);
+    float reference=-1;
+    for(int hz:{22,30,60,144,1000}) {
+      animation::State front,rear,side;
+      front.ApplyImpact(0,0,profile,1);rear.ApplyImpact(0,0,profile,-1);side.ApplyImpact(0,1,profile,0);
+      for(float t=0;t<.11f-1e-7f;) {const float dt=std::min(1.f/hz,.11f-t);
+        for(auto* state:{&front,&rear,&side})state->Update(dt,0,0,0,true,0);t+=dt;}
+      Require(front.pose.hitForward>0 && rear.pose.hitForward<0 && side.pose.hitForward==0,
+        "Front/rear/side contacts lost incoming force direction");
+      Require(side.pose.hitSide>0 && std::abs(front.pose.hitForward+rear.pose.hitForward)<.00001f,
+        "Mirrored impacts must produce mirrored body response");
+      const auto a=BuildCharacterPose(0,0,false,front.pose),b=BuildCharacterPose(0,0,false,rear.pose);
+      Require(a.upperPitch<b.upperPitch,"Rear contacts still bend the torso backward");
+      if(reference>=0)Require(std::abs(front.pose.hit-reference)<.0001f,"Class reaction depends on frame rate");
+      reference=front.pose.hit;
+      const float carried=rear.pose.hitForward;
+      rear.ApplyImpact(0,0,animation::ClassImpact(C::Scout,false),1);
+      Require(std::abs(rear.pose.hitForward-carried)<.00001f,"New class contact snapped the outgoing recoil");
+      rear.Update(.01f,0,0,0,false,0);
+      Require(rear.pose.hit==0 && rear.pose.hitForward==0,"Death kept a class impact alive");
+    }
+  }
+  // Two contacts can arrive in one update. Different weights and opposite
+  // directions must produce the same visible result at equal world time.
+  float reference=2;
+  for(int hz:{22,30,60,144,1000}) {
+    animation::State state;
+    for(float t=0;t<.13f-1e-7f;) {
+      const float end=std::min(.13f,t+1.f/hz);state.Update(end-t,0,0,0,true,0);
+      if(t<.017f && end>=.017f)state.ApplyImpact(end-.017f,.4f,animation::ClassImpact(C::Mage,true),1);
+      if(t<.041f && end>=.041f)state.ApplyImpact(end-.041f,-.6f,animation::ClassImpact(C::Scout,false),-1);
+      t=end;
+    }
+    if(reference!=2)Require(std::abs(state.pose.hitForward-reference)<.0001f,"Mixed contacts depend on event batching");
+    reference=state.pose.hitForward;
+  }
+  const char* fixture="MEDITERRANEAN 3\n12 -3.8 140 0 3 90\n5 1 1 0\n4\n0 0 0 0\n"
+    "100 -4 7 0 0 1 3 0 0\n101 4 9 0 0 1 3 0 0\n102 0 12 0 0 1 3 0 0\n";
+  for(C school:{C::Warrior,C::Scout,C::Mage,C::Priest})for(int ability:{0,1})for(int hz:{30,60,144}) {
+    Game game;Require(game.RestoreSnapshot(fixture),"Dummy reaction fixture");
+    auto save=game.State().Save();const auto at=save.find("PROFILE ");
+    save.replace(at,save.find('\n',at)-at,"PROFILE "+std::to_string(int(school))+" \"Tester\" 7 1 3");
+    Require(game.RestoreSnapshot(save),"Dummy reaction class fixture");
+    rpg::Command command;command.selectActor=210;command.ability=ability;
+    game.ExecuteCommand(command,.001f);
+    float time=0,contact=-1;animation::ImpactProfile profile;
+    for(int n=0;n<hz*3 && contact<0;++n) {
+      game.ExecuteCommand({},1.f/hz);time+=1.f/hz;
+      for(std::size_t e=0;e<game.State().VisualEventCount();++e) {
+        const auto& event=game.State().VisualEvents()[e];
+        if(event.actor==210 && (event.kind==rpg::CombatVisualKind::Hit || event.kind==rpg::CombatVisualKind::HeavyHit)) {
+          contact=time-event.elapsed;
+          profile=animation::ClassImpact(event.school,event.heavy || event.kind==rpg::CombatVisualKind::HeavyHit);
+        }
+      }
+      if(contact<0)Require(game.DummyAnimation(0).hit==0,"Dummy reacted before accepted contact");
+    }
+    Require(contact>=0,"Class attack must hit the selected dummy");
+    const float end=contact+.12f;
+    for(;time<end-1e-7f;) {const float dt=std::min(1.f/hz,end-time);game.ExecuteCommand({},dt);time+=dt;}
+    Require(std::abs(game.DummyAnimation(0).hit-profile.strength*animation::Pulse(.12f,profile.peak))<.0002f,
+      "Dummy ignored class profile or actual contact age");
+    Require(game.DummyAnimation(1).hit==0,"A single-target hit rocked another dummy");
+    Require(game.RestoreSnapshot(game.State().Save()) && game.DummyAnimation(0).hit==0,"Loaded dummy retained a stale reaction");
+  }
+  std::cout<<"PASS: directional four-class contacts, mixed impact batching and live dummy timing/reset\n";
+}
 void ContactAndWeaponRegressions() {
   bool passed=true;
   const auto check=[&](bool value,const char* message) {
@@ -181,16 +251,17 @@ void LocomotionContinuityRegressions() {
   float ankleStep=0,handStep=0,hipStep=0,bootTurn=0,shoulderTurn=0;
   // Exercise many points in the real contact cycle, including sprinting and
   // camera-facing side/back steps. A single favourable stride misses the pop.
-  for (int hz : {30,60,144}) for (bool sprint : {false,true}) for (int direction=0;direction<4;++direction)
+  for (int hz : {30,60,144}) for (bool sprint : {false,true}) for (int direction=0;direction<4;++direction) {
+    Game walking; walking.Initialize();
+    rpg::Command command; command.sprint=sprint; command.steerFacing=true;
+    const rpg::Vec2 directions[]={{0,1},{1,0},{0,-1},{0,0}};
+    command.movement=directions[direction];
     for (int frames=1;frames<=hz*3/2;++frames) {
-      Game game; game.Initialize();
-      rpg::Command command; command.sprint=sprint; command.steerFacing=true;
-      const rpg::Vec2 directions[]={{0,1},{1,0},{0,-1},{0,0}};
-      command.movement=directions[direction];
-      for (int i=0;i<frames;++i) {
-        command.facingYaw=direction==3?i*1.5f/hz:0;
-        game.ExecuteCommand(command,1.f/hz);
-      }
+      command.jump=false;command.facingYaw=direction==3?(frames-1)*1.5f/hz:0;
+      walking.ExecuteCommand(command,1.f/hz);
+      // Retain every original probe, but reuse its identical walking prefix.
+      // A copy isolates the jump from the next probe's uninterrupted gait.
+      Game game=walking;
       Require(game.PlayerAnimation().feetActive,"Takeoff fixture must begin with ground contacts");
       const auto before=BuildCharacterPose(0,game.PlayerPose().gait,false,game.PlayerAnimation());
       command.jump=true; game.ExecuteCommand(command,.001f);
@@ -204,6 +275,7 @@ void LocomotionContinuityRegressions() {
         bootTurn=std::max(bootTurn,std::abs(motion::AngleDelta(before.footYaw[side],after.footYaw[side])));
       }
     }
+  }
   float idleStep=0,clothAcceleration=0;
   animation::State cloth;
   auto previousIdle=animation::Idle(0);
@@ -254,7 +326,15 @@ void TransitionRegressions() {
     "Transient impact events must not enter the save format or replay on load.");
   check(std::abs(game.EnemyAnimation(0).hit-split.EnemyAnimation(0).hit)<.0001f,
     "A longer frame must preserve recoil at the actual second contact, matching split updates.");
-  game.ExecuteCommand({},.05f);
+  float secondAge=-1;
+  for(std::size_t i=0;i<game.State().VisualEventCount();++i) {
+    const auto& event=game.State().VisualEvents()[i];
+    if(event.actor==game.State().Enemies()[0].id && event.kind==rpg::CombatVisualKind::HeavyHit)secondAge=event.elapsed;
+  }
+  Require(secondAge>=0,"Second heavy contact must expose its sub-frame age");
+  for(float left=animation::ClassImpact(rpg::ClassId::Warrior,true).peak-secondAge;left>1e-7f;) {
+    const float dt=std::min(.05f,left);game.ExecuteCommand({},dt);left-=dt;
+  }
   check(game.EnemyAnimation(0).hit>.98f,"The second impact must reach its own recoil peak.");
   game.ExecuteCommand(strike,.01f);
   check(!game.State().Enemies()[0].damagedThisUpdate,"A rejected cooldown command must not emit a damage event.");
@@ -306,6 +386,7 @@ void TransitionRegressions() {
 }
 }
 int main() {
+  ClassContactRegressions();
   {
     const auto bytes=playerclips::EmbeddedBytes();
     Require(playerclips::Decode(bytes).size()==unsigned(playerclips::Clip::Count),"All Blender player action and gait clips must be embedded");
@@ -319,8 +400,20 @@ int main() {
       const auto& track=playerclips::Collection()[unsigned(clip)];
       Require(std::abs(playerclips::AttackPhase(clip,combat::Contact(heavy),combat::StrokeStart(heavy),combat::Contact(heavy),combat::Duration(heavy))-track.contact)<1e-6f,
         "Blender contact must follow the authoritative combat clock");
-      Require(Distance(playerclips::Sample(clip,track.load).hands[1],playerclips::Sample(clip,track.contact).hands[1])>.10f,
-        "Imported weapon hand must travel through the strike");
+      const auto posed=[&](float phase) {
+        animation::Sample s;s.authoredGait=true;s.authoredEquipment=playerclips::Equipment::Sword;
+        s.authoredStrike=playerclips::Sample(clip,phase);s.authoredStrikeWeight=1;
+        s.authoredStrikeHeavy=heavy;s.authoredStrikePhase=phase;
+        return BuildCharacterPose(0,0,false,s);
+      };
+      // PCL3 carries chest/pelvis rotation separately from local hand offsets.
+      // Check the actual retargeted wrist and tip, not one additive channel.
+      const auto load=posed(track.load),contact=posed(track.contact);
+      std::cout<<"Imported strike "<<heavy<<": wrist "<<Distance(load.arms[1].end,contact.arms[1].end)
+        <<", tip "<<Distance(load.WeaponPoint(.96f),contact.WeaponPoint(.96f))<<'\n';
+      Require(Distance(load.arms[1].end,contact.arms[1].end)>.10f &&
+        Distance(load.WeaponPoint(.96f),contact.WeaponPoint(.96f))>.40f,
+        "Retargeted weapon and wrist must travel through the strike");
     }
     Require(Distance(playerclips::Sample(playerclips::Clip::Jump,.3f).feet[0],playerclips::Sample(playerclips::Clip::Jump,.6f).feet[0])>.01f,
       "Imported jump must contain articulated foot motion");

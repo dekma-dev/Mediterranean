@@ -39,6 +39,24 @@ struct AuthoredWeaponController {
       const float start=contact*.40f,end=contact+(heavy?.95f:.75f);
       phase=playerclips::AttackPhase(clip,clock,start,contact,end);
       auto target=playerclips::Sample(clip,phase);
+      if(style==0 && (ability==8 || ability==11 || ability==14)) {
+        // Wide techniques cross the body instead of reusing the overhead chop.
+        // Re-time the imported slash to this action's authoritative contact.
+        const auto sweep=playerclips::Sample(playerclips::Clip::Slash,
+          playerclips::AttackPhase(playerclips::Clip::Slash,clock,start,contact,end));
+        target.hands[1]=sweep.hands[1];target.elbows[1]=sweep.elbows[1];target.weapon=sweep.weapon;
+        target.torso.y=sweep.torso.y;target.pelvis.y=sweep.pelvis.y;
+      }
+      if(style==1) {
+        const float strike=playerclips::Collection()[unsigned(clip)].contact;
+        const float after=(phase-strike)/(1-strike);
+        const float follow=after<.20f?combat::Smooth(after/.20f):1-combat::Smooth((after-.20f)/.80f);
+        // The string hand follows back past the cheek as the bow arm stays
+        // extended, then both settle. The existing nock solve owns the draw.
+        target.hands[0].z-=.085f*follow;target.hands[0].x-=.025f*follow;
+        target.hands[0].y+=.025f*follow;target.elbows[0].z-=.08f*follow;
+        target.hands[1].z+=.018f*follow;
+      }
       if(style==0 && ability==12) {
         // The backhand actually crosses in the opposite direction. Keep the
         // lower-body load/accent clock forward and reverse only the weapon arm.

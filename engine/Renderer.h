@@ -86,7 +86,7 @@ public:
   void SetAttachmentLodEnabled(bool enabled) { attachmentLodEnabled_=enabled; }
   // detail=3 chooses a camera-dependent LOD; 0..2 force a review level.
   void DrawAuthoredAsset(authored::Asset asset,const DirectX::XMFLOAT3& position,
-    const DirectX::XMFLOAT3& scale={1,1,1},float yaw=0,unsigned detail=3);
+    const DirectX::XMFLOAT3& scale={1,1,1},float yaw=0,unsigned detail=3,float pitch=0,float roll=0);
   void DrawAnimatedAsset(authored::Asset asset,const DirectX::XMFLOAT3& position,float yaw,
     float time,float gait=0,float attack=0,float travel=0,unsigned detail=3,
     const DirectX::XMFLOAT4& tint={1,1,1,1},authored::Gesture gesture={});

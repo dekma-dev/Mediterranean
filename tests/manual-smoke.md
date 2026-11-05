@@ -1,3 +1,18 @@
+## Four-class target response and material sound (2026-11-06)
+
+- At the three training posts, alternate basic/heavy attacks on Warrior, Scout, Mage and Priest. Watch from front, rear and side: the selected post should rock slightly in the incoming direction, with a short arrow reaction and slower heavy magic/sword response. A single-target hit must not rock neighboring posts. Area hits may affect each actually hit target. Enter/exit sparring, save/load, die and return to the roster; no old reaction may replay.
+- Compare attacks on humanoids, wolves and boars. Side hits should roll/twist the body; front and rear hits should bend in opposite directions. Feet, world position, enemy windups, damage and cooldowns remain authoritative. Repeated/overlapping hits must not snap the torso or hold it frozen. Inspect at low/high refresh.
+- Play `build-class-impact/bow-frost-arcane-before-after.wav`: aimed bow, frost, arcane, eleven seconds per group (five seconds before, gap, five seconds after, gap). Then listen in game with music/enemies: wood strain, arrow contact, brittle ice and low arcane pressure should be distinct, without ringing notification tones or drowned-out warnings. This isolated audition cannot establish full-game mix or subjective sound quality.
+- View a heavy Priest contact from both sides: gold/ivory vanes should open around the victim and settle without hiding its silhouette. Check secondary area targets, danger borders, near/far cameras and repeated casts.
+- Jump again immediately after landing and while leaving a long running stride. The torso and weapon must carry the departing crouch and ease out, without an instant upward pose pop. Jump trajectory and landed foot timing must remain unchanged.
+
+## Four-class combat presence (2026-11-06)
+
+- Repeat Warrior normal/reverse cuts and wide techniques 8/11/14. Wide strikes must cross the body instead of chopping vertically, with unchanged contact timing. Compare front/side views, turning, interruption and buffered follow-ups. Every third ordinary release adds a short human effort; invalid/cancelled preparations must not produce it.
+- On Scout, watch the string hand move backward after release while the bow arm stays extended. Check nock attachment through preparation, Twin/Crossfire launch offsets and unchanged accepted arrival/health loss. Repeat at 30/high refresh. Evading a hit should sound like physical movement, not a magic ward.
+- Compare heavy Mage impacts and Priest projectiles from near, far, low and overhead views. The expanding Mage pressure skirt should retain the target silhouette; the Priest lance point must reach the selected target with the actual contact. Check danger boundaries and several simultaneous impacts; added cosmetics must not hide hostile timing or enlarge damage areas.
+- Play `build-combat-presence/four-class-tail-mix.wav`: Warrior, Scout, Mage and Priest, eight seconds per group, old mix first and new mix second. Then repeat real rotations with music and enemy warnings. Quiet tails should allow the next attack to remain clear without clipping or obvious gain pumping. Test a crowded pull that preempts voices, Alt-Tab, mute/unmute, death, load and return to roster; old sounds must not replay. The comparison is isolated PCM, not a full gameplay capture.
+
 ## Four-class release and repeated-attack acceptance (2026-11-05)
 
 - Alternate Warrior Strike and Reverse cut while stationary, moving and turning; watch from both sides. The right arm/blade must cross in opposite directions with a stable contact time and smooth return, including buffered follow-ups, interruption and loading. Iron guard should sound physical; an absorbed hit should produce one short spatial metal contact, not a magical completion tone.

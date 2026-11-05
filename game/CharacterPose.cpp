@@ -148,7 +148,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   pose.bodyLift+=jumpClip.hip*authoredAir;
   if(authoredLanding)pose.bodyLift+=(landClip.hip+.14f)*landing;
   pose.bodyLift-=dash*.09f+brake*.055f+dashImpact*.04f+animation::Unit(dynamics.dashLoad)*.035f;
-  pose.upperPitch=travel*.09f+animation::Signed(dynamics.lean)*.10f+landing*.12f+air*std::max(0.f,rise)*.06f-hit*.12f+sway*.015f*(1-air);
+  pose.upperPitch=travel*.09f+animation::Signed(dynamics.lean)*.10f+landing*.12f+air*std::max(0.f,rise)*.06f-animation::ForwardRecoil(dynamics)*.12f+sway*.015f*(1-air);
   pose.upperPitch+=jumpClip.torso.x*authoredAir;
   pose.upperPitch+=(dash*.42f-brake*.16f-dashImpact*.14f)*driveSign;
   pose.upperPitch-=cast*.08f;
@@ -333,6 +333,13 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   }
   if(dynamics.pelvisStabilized&&std::isfinite(dynamics.pelvisLimit))
     pose.bodyLift=std::min(pose.bodyLift,std::clamp(dynamics.pelvisLimit,-.45f,.30f));
+  // Release the planted pelvis constraint with the departing foot arrangement.
+  // Dropping it in one frame pops the body upward during a repeat jump or a
+  // takeoff from a long stride. This affects the pose, never the ballistic root.
+  if(departure>0 && dynamics.departurePelvisStabilized && std::isfinite(dynamics.departurePelvisLimit)) {
+    const float carried=std::min(pose.bodyLift,std::clamp(dynamics.departurePelvisLimit,-.45f,.30f));
+    pose.bodyLift+=(carried-pose.bodyLift)*departure;
+  }
   for (int i=0;i<2;++i) {
     const float side=i==0?-1.f:1.f;
     const XMFLOAT3 knee{std::sin(pose.pelvisRotation.y)*.35f,0,std::cos(pose.pelvisRotation.y)};

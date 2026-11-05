@@ -478,8 +478,8 @@ int main() {
       const auto result=render(retained,L"static-village-reused.png");
       Check(MaximumDifference(reference,result)==0,"Retained village must match a fresh build after time, camera and sparring changes.");
       if (view==0) { normalInstances=retained.StaticInstances(); normalBytes=retained.StaticBytes(); }
-      Check(normalInstances>1000 && retained.StaticInstances()==normalInstances-(sparring?1:0),
-        "Sparring must replace exactly one authored training-dummy instance.");
+      Check(normalInstances>1000 && retained.StaticInstances()==normalInstances,
+        "Reactive dummies must not invalidate or change the retained village cache.");
       Check(retained.StaticBytes()==normalBytes,"Sparring and camera changes must not grow cache storage.");
     }
     retained.Reset();
