@@ -1,6 +1,7 @@
 #include "game/Game.h"
 #include "game/Localization.h"
 #include "game/CombatHud.h"
+#include "game/CombatText.h"
 #include "game/ClassEffects.h"
 #include "engine/Renderer.h"
 #include "platform/Win32Window.h"
@@ -10,6 +11,31 @@
 
 namespace {
 void Check(bool value,const char* message) { if(!value) throw std::runtime_error(message); }
+void CombatTextChecks() {
+  rpg::CombatFeedback feedback{{1,2},rpg::FeedbackKind::Damage,72,.3f,9};
+  const auto before=ui::ReadCombatText(feedback);
+  std::vector<rpg::CombatFeedback> rows{feedback,feedback};rows[0].sequence=8;
+  rows.erase(rows.begin());const auto after=ui::ReadCombatText(rows[0]);
+  Check(before.x==after.x && before.y==after.y && before.opacity==after.opacity,"Expiring a neighbour moved an existing combat number");
+  Check(before.text=="72" && before.opacity==1,"Combat text changed accepted damage or lost its readable hold");
+  feedback.age=0;Check(ui::ReadCombatText(feedback).opacity==0,"Combat number must start without an opaque pop");
+  feedback.age=1.49f;Check(ui::ReadCombatText(feedback).opacity<.01f,"Combat number vanished without a tail fade");
+  feedback.age=1.5f;Check(ui::ReadCombatText(feedback).opacity==0,"Expired combat number remained visible");
+  for(float hz:{30.f,60.f,144.f}) {
+    feedback.age=0;for(int i=0;i<int(hz);++i)feedback.age+=1/hz;
+    const auto view=ui::ReadCombatText(feedback);
+    Check(std::abs(view.y-(-14-72*(1-std::exp(-1.3f))))<.001f,"Combat number motion depends on frame rate");
+  }
+  feedback.age=.3f;feedback.kind=rpg::FeedbackKind::Hurt;const auto hurt=ui::ReadCombatText(feedback);
+  feedback.kind=rpg::FeedbackKind::Heal;const auto heal=ui::ReadCombatText(feedback);
+  Check(hurt.text=="-72" && heal.text=="+72" && hurt.x<before.x && heal.x>before.x,"Incoming damage and healing share the outgoing number channel");
+  rpg::Simulation state;state.CreateCharacter(rpg::ClassId::Mage,"Feedback");
+  for(auto& actor:const_cast<std::vector<rpg::Enemy>&>(state.Enemies())){actor.position=actor.home={state.Player().x,state.Player().z+1.8f};actor.attackCooldown=100;}
+  rpg::Command command;command.selectActor=100;command.ability=0;
+  state.Update(.01f,command);bool hit=false;
+  for(int n=0;n<300 && !hit;++n){state.Update(.01f,{});for(const auto& entry:state.Feedback())if(entry.kind==rpg::FeedbackKind::Damage){hit=true;Check(entry.sequence>0,"Actual accepted hit did not receive stable presentation identity");}}
+  Check(hit,"Combat number integration fixture never hit its target");
+}
 void PlateChecks() {
  ui::WorldPlates plates;
  // A dense pull, deliberately submitted in reverse importance/order.
@@ -73,6 +99,34 @@ void CastChecks() {
  mage.Update(.01f,ward);
  Check(mage.Barrier()>0 && ui::ReadPlayerCast(mage).ability==-1,"An instant mage ward must not acquire a fabricated preparation time");
 }
+void CastReceiptChecks() {
+ for(auto id:{rpg::ClassId::Mage,rpg::ClassId::Scout,rpg::ClassId::Priest})for(float hz:{30.f,60.f,144.f}) {
+  rpg::Simulation state;state.CreateCharacter(id,"Tester");
+  for(auto& actor:const_cast<std::vector<rpg::Enemy>&>(state.Enemies())) {
+   actor.position=actor.home={state.Player().x,state.Player().z+1.8f};actor.attackCooldown=100;
+  }
+  ui::CastReceipt receipt;rpg::Command attack;attack.selectActor=100;attack.ability=1;
+  state.Update(.001f,attack);receipt.Update(.001f,state);
+  Check(receipt.pending==1 && receipt.Opacity()==0,"Preparation must not show a release receipt");
+  bool emitted=false;
+  for(int n=0;n<int(hz*4) && !emitted;++n){state.Update(1/hz,{});receipt.Update(1/hz,state);emitted=receipt.ability==1;}
+  Check(emitted && !receipt.interrupted && receipt.Opacity()>0,"Real projectile release lost its receipt");
+  // Cancelling follow-through cannot retroactively label a successful cast interrupted.
+  state.StopMovement();receipt.Update(.001f,state);
+  Check(!receipt.interrupted,"Post-release movement changed a successful cast into an interruption");
+  for(int n=0;n<int(hz*5);++n){state.Update(1/hz,{});receipt.Update(1/hz,state);}
+  Check(receipt.Opacity()==0 && receipt.ability<0,"Release receipt never expired");
+  state.Update(.001f,attack);receipt.Update(.001f,state);Check(receipt.pending==1,"Interruption fixture failed");
+  state.StopMovement();receipt.Update(.001f,state);
+  Check(receipt.interrupted && receipt.ability==1 && receipt.Opacity()>0,"Interrupted preparation vanished without feedback");
+  state.Update(1/hz,{});receipt.Update(1/hz,state);
+  Check(receipt.interrupted,"Subsequent quiet frame rewrote interruption");
+  receipt.Reset();Check(receipt.Opacity()==0 && receipt.pending<0,"Load/reset retained a cast receipt");
+ }
+ rpg::Simulation mage;mage.CreateCharacter(rpg::ClassId::Mage,"Tester");ui::CastReceipt receipt;
+ rpg::Command ward;ward.ability=3;mage.Update(.01f,ward);receipt.Update(.01f,mage);
+ Check(receipt.Opacity()==0,"Instant protection pretended to finish a cast");
+}
 void WorldPickChecks(Renderer& renderer) {
  rpg::Simulation state;
  auto& actors=const_cast<std::vector<rpg::Enemy>&>(state.Enemies());actors.resize(2);
@@ -113,7 +167,8 @@ void PreparationChecks(Renderer& renderer) {
 
 int main(int argc,char** argv) {
  try {
-  PlateChecks();CastChecks();
+  CombatTextChecks();
+  PlateChecks();CastChecks();CastReceiptChecks();
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
   CoInitializeEx(nullptr,COINIT_MULTITHREADED);
   const auto output=std::filesystem::path(argc>1?argv[1]:"combat-hud-review");
@@ -170,6 +225,13 @@ int main(int argc,char** argv) {
    for(int frame=0;frame<3;++frame) game.ExecuteCommand({},.04f);
    renderer.BeginFrame();game.Render(renderer);
    Check(renderer.Capture((output/("preparation-"+std::to_string(int(id))+".png")).wstring()) && renderer.EndFrame(false),"Class preparation screenshot");
+   for(int tick=0;tick<500 && state.Feedback().empty();++tick)game.ExecuteCommand({},.01f);
+   for(int tick=0;tick<14;++tick)game.ExecuteCommand({},.01f);
+   Check(!state.Feedback().empty(),"Live combat-number capture has no accepted contact");
+   const auto unchanged=state.Save();
+   renderer.BeginFrame();game.Render(renderer);
+   Check(renderer.Capture((output/("contact-text-"+std::to_string(int(id))+".png")).wstring()) && renderer.EndFrame(false),"Live contact number screenshot");
+   Check(state.Save()==unchanged,"Combat numbers advanced simulation during rendering");
   }
   Check(renderer.ValidateDebugMessages(),"HUD DirectX debug messages");
   std::cout<<"PASS: three-class native combat HUD review, two resolutions, read-only rendering.\n";

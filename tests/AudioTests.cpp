@@ -74,6 +74,21 @@ void FocusedCombatAudio(){
 }
 int main() {
   {
+    sound::Audition audition;sound::Events events;
+    audition.Reset();audition.preparing=true;audition.Add(sound::Cue::FireGather);
+    Require(events.Preview(audition) && events.count==1 && events.cues[0]==sound::Cue::FireGather,"New stage generation must reset old voices and accept preparation");
+    Require(!events.Preview(audition) && events.count==0,"Stage frame replay duplicated a cue");
+    audition.ClearFrame();audition.preparing=false;audition.Add(sound::Cue::FireHeavy);
+    Require(!events.Preview(audition) && events.count==1 && events.cues[0]==sound::Cue::FireHeavy,"Stage release missing");
+    audition.Reset();Require(events.Preview(audition) && events.count==0,"Stage cancellation retained an effect");
+    for(int n=0;n<99;++n)audition.Add(sound::Cue::UiClick);
+    events.Preview(audition);Require(events.count==4,"Stage queue is not bounded");
+    audition.ClearFrame();events.Preview(audition);Require(events.count==0,"Cleared audition replayed stale clicks");
+    // Muted playback still consumes the event stream; unmuting cannot replay it.
+    audition.Add(sound::Cue::HolyJudgment);events.Preview(audition);events.Preview(audition);
+    Require(events.count==0,"Consumed muted audition replayed on later sampling");
+  }
+  {
     const auto energy=[](const std::vector<std::int16_t>& pcm,float begin,float end) {
       double sum=0;const auto first=std::size_t(begin*sound::sampleRate),last=std::min(pcm.size(),std::size_t(end*sound::sampleRate));
       for(auto n=first;n<last;++n)sum+=double(pcm[n])*pcm[n];
@@ -569,8 +584,14 @@ int main() {
       device.Update(simulation,1,0,0); device.Suspend(true); device.Suspend(true);
       device.Suspend(false); device.Update(simulation,2,0,0);
       for(int frame=0;frame<90;++frame)device.Update(simulation,3,0,0,1.f/60,0,nullptr,true);
+      sound::Audition audition;audition.Reset();audition.preparing=true;audition.Add(sound::Cue::HolyGather);
+      device.Update(simulation,3,.35f,.7f,.05f,0,nullptr,true,&audition);
+      audition.ClearFrame();audition.preparing=false;audition.Add(sound::Cue::HolyJudgment);
+      device.Update(simulation,3,.35f,.7f,.05f,0,nullptr,true,&audition);
+      for(int frame=0;frame<20;++frame){audition.ClearFrame();device.Update(simulation,3,.35f,.7f,.05f,0,nullptr,true,&audition);}
+      audition.Reset();device.Update(simulation,3,.35f,.7f,.05f,0,nullptr,true,&audition);
       for(int frame=0;frame<90;++frame)device.Update(simulation,4,0,0,1.f/60,0,nullptr,false);
-      std::cout<<"Muted XAudio2 device startup, suspend/resume and cleanup exercised.\n";
+      std::cout<<"Muted XAudio2 device startup, stage preparation/release/cancel, suspend/resume and cleanup exercised.\n";
     } else std::cout<<"No audio endpoint available; silent initialization fallback exercised.\n";
   }
   std::cout<<"PASS: deterministic PCM, headroom, bounded memory, accepted event cues, landing/dash/footsteps; resident bytes "<<bytes<<". Tests remain muted.\n";

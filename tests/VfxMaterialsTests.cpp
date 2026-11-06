@@ -59,6 +59,24 @@ void Rendering(Renderer& r,const std::filesystem::path& out){
  Check(r.ValidateDebugMessages(),"VFX depth/blend/SRV state hazard");
 }
 void Lifetimes(Renderer& r,const std::filesystem::path& out){
+ {
+  CombatVisualEvent e;e.kind=K::SpellCast;e.school=ClassId::Mage;e.ability=13;e.heavy=true;e.flight=.4f;
+  e.destination={0,0};e.destinationHeight=1.2f;const XMFLOAT3 origin{0,1.2f,-3};
+  Pixels reference;
+  for(int hz:{30,60,144}) {
+   CombatEffects effects;effects.Emit(e,&origin);float time=0;
+   while(time<.21f-1e-6f){const float dt=std::min(1.f/hz,.21f-time);effects.Advance(dt);time+=dt;}
+   r.BeginFrame();r.SetCamera({2,2.1f,-4},{0,1,-1});effects.Render(r);
+   Check(r.EffectVertices()>200 && r.EffectVertices()<900,"Prism flight lost its volume or exceeded the bounded trail budget");
+   const auto pixels=Capture(r,out/("prism-flight-"+std::to_string(hz)+".png"));
+   if(hz==30)reference=pixels;else Check(Difference(reference,pixels)<.03,"Prism flight depends on frame rate");
+  }
+  auto orb=e;orb.ability=10;
+  r.BeginFrame();r.SetCamera({2,2.1f,-4},{0,1,-1});spellvfx::Flight(r,orb,origin,.21f);
+  Check(Difference(reference,Capture(r,out/"arcane-orb-comparison.png"))>.02,"Prism still shares the generic arcane orb silhouette");
+  const auto endpoint=spellvfx::ProjectilePosition(e,origin,1);
+  Check(std::abs(endpoint.x-e.destination.x)<.0001f && std::abs(endpoint.z-e.destination.z)<.0001f,"Prism changed the accepted destination");
+ }
  {CombatVisualEvent e;e.kind=K::SpellCast;e.school=ClassId::Mage;e.ability=11;e.heavy=true;e.flight=.75f;e.destination={0,0};
   CombatEffects fx;const XMFLOAT3 origin{0,1,-3};fx.Emit(e,&origin);for(int i=0;i<13;++i)fx.Advance(.05f);
   r.BeginFrame();r.SetCamera({1.5f,2.3f,-4},{0,1,0});fx.Render(r);

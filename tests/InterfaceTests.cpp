@@ -15,6 +15,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <sstream>
 
 void Require(bool value,const char* message) { if (!value) { std::cerr<<message<<'\n'; std::exit(1); } }
@@ -67,6 +68,8 @@ std::string Fixture(const char* name) {
   std::ifstream input(std::string(RPG_TEST_FIXTURES)+"/"+name); std::ostringstream data; data<<input.rdbuf();
   Require(bool(input),"Missing test fixture."); return data.str();
 }
+// Keep full game fixtures off the default 1 MiB thread stack: Debug builds
+// retain many scoped locals while nested input/render checks create another game.
 void RelativeMouseRegressions() {
   MouseMotion motion; RAWMOUSE packet{};
   packet.lLastX=3; packet.lLastY=-2;
@@ -109,7 +112,7 @@ void RelativeMouseRegressions() {
   frame.focused=true; input.Update(frame);
   Require(!input.Pressed(VK_RBUTTON) && input.MouseX()==0,"Focus return with RMB held must not start a capture");
 
-  Game game; game.Initialize(); input=Input{}; frame=Input::Frame{};
+  auto gameStorage=std::make_unique<Game>(); Game& game=*gameStorage; game.Initialize(); input=Input{}; frame=Input::Frame{};
   frame.focused=true; frame.client={600,300}; frame.screen=frame.client; frame.relativeMouse=true;
   const auto step=[&]() { input.Update(frame); game.Update(.05,input,0); };
   step(); frame.down[VK_RBUTTON]=true; step();
@@ -141,7 +144,7 @@ void RelativeMouseRegressions() {
 void InterruptedInputRegressions(Win32Window& window,Renderer& renderer) {
   // The real message-pump order: latch native interruptions, cancel gestures,
   // sample input, update, render. No system focus or desktop input is changed.
-  Game game; Input input; Input::Frame frame;
+  auto gameStorage=std::make_unique<Game>(); Game& game=*gameStorage; Input input; Input::Frame frame;
   frame.focused=true; frame.client={1000,563}; frame.screen=frame.client;
   const auto step=[&]() {
     if (window.ConsumeInputCancellation()) { game.CancelUiGesture(); input.CancelGestures(); }
@@ -303,7 +306,7 @@ int main() {
   }
   Require(ui::Interface::BindingLabel(10)=="Ctrl+1" && ui::Interface::BindingLabel(19)=="Ctrl+0","Modifier labels must match keys");
   for(int modifier:{VK_CONTROL,VK_LCONTROL,VK_RCONTROL}) {
-    Game keyboard,expected;Require(keyboard.RestoreSnapshot(test::dashFixture) && expected.RestoreSnapshot(test::dashFixture),"Modifier fixture");
+    auto keyboardStorage=std::make_unique<Game>(),expectedStorage=std::make_unique<Game>(); Game& keyboard=*keyboardStorage; Game& expected=*expectedStorage;Require(keyboard.RestoreSnapshot(test::dashFixture) && expected.RestoreSnapshot(test::dashFixture),"Modifier fixture");
     Input input;Input::Frame frame;frame.focused=true;input.Update(frame);
     keyboard.Update(.01,input,0);expected.ExecuteCommand({},.01f);
     rpg::Command select;select.nextTarget=true;keyboard.ExecuteCommand(select);expected.ExecuteCommand(select);
@@ -324,7 +327,7 @@ int main() {
   screen.Escape(); screen.Toggle(ui::Panel::Character);
   Require(screen.panel==ui::Panel::None && screen.characterOpen,"Menu Character must reveal an already open character window.");
   for (auto panel : {ui::Panel::Menu,ui::Panel::Inventory,ui::Panel::Character,ui::Panel::Map,ui::Panel::Journal,ui::Panel::Build}) {
-    Game game; game.Initialize(); Require(game.RestoreSnapshot(Fixture("combat-preview.save")),"Combat fixture must load.");
+    auto gameStorage=std::make_unique<Game>(); Game& game=*gameStorage; game.Initialize(); Require(game.RestoreSnapshot(Fixture("combat-preview.save")),"Combat fixture must load.");
     game.OpenPanel(panel); const float before=game.State().Health(); const Input idle;
     for (int frame=0;frame<20;++frame) game.Update(.05,idle,0);
     Require(game.State().Health()<before,"Enemy windup/damage must continue while a menu or panel is open.");
@@ -445,7 +448,7 @@ int main() {
   }
   Require(renderer.Resize(1280,720),"Restore size after quest captures");
   {
-    Game game; game.Initialize();
+    auto gameStorage=std::make_unique<Game>(); Game& game=*gameStorage; game.Initialize();
     Input input; Input::Frame frame; frame.focused=true; frame.client={600,300}; frame.screen=frame.client;
     const auto step=[&]() {
       input.Update(frame); game.Update(.01,input,0);
@@ -483,7 +486,7 @@ int main() {
     auto snapshot=Fixture("combat-preview.save");
     const auto health=snapshot.find("5.2 100"); Require(health!=std::string::npos,"Expected combat health field.");
     snapshot.replace(health,7,"5.2 0");
-    Game game; Require(game.RestoreSnapshot(snapshot),"Defeated windup fixture must load.");
+    auto gameStorage=std::make_unique<Game>(); Game& game=*gameStorage; Require(game.RestoreSnapshot(snapshot),"Defeated windup fixture must load.");
     Require(game.EnemyPose(0).attack==0,"A defeated save must load with a neutral enemy attack pose.");
     renderer.BeginFrame(); game.Render(renderer,false);
     Require(renderer.EndFrame(false),"Defeated windup render failed.");
@@ -496,7 +499,7 @@ int main() {
     Require(renderer.Triangles()-renderer.CloudLightUpdates()==triangles,"A defeated save must not render an obsolete attack warning cone.");
   }
   {
-    Game game; game.Initialize(); rpg::Command jump; jump.jump=true; game.ExecuteCommand(jump,.05f);
+    auto gameStorage=std::make_unique<Game>(); Game& game=*gameStorage; game.Initialize(); rpg::Command jump; jump.jump=true; game.ExecuteCommand(jump,.05f);
     game.OpenPanel(ui::Panel::Character); game.ShowPanel(ui::Panel::Inventory);
     const auto pose=game.PlayerAnimation(); const auto snapshot=game.State().Save();
     for (int i=0;i<3;++i) {
@@ -507,7 +510,7 @@ int main() {
       "Rendering the world and equipment preview must not advance animation or simulation.");
   }
   {
-    Game game; Require(game.RestoreSnapshot(Fixture("veteran-preview.save")),"Fullscreen drag fixture must load.");
+    auto gameStorage=std::make_unique<Game>(); Game& game=*gameStorage; Require(game.RestoreSnapshot(Fixture("veteran-preview.save")),"Fullscreen drag fixture must load.");
     game.OpenPanel(ui::Panel::Character); game.ShowPanel(ui::Panel::Inventory);
     Input input; Input::Frame frame; frame.focused=true; frame.client={1068,274}; frame.screen=frame.client;
     const auto step=[&]() {
@@ -530,7 +533,7 @@ int main() {
     auto lowHealth=Fixture("combat-preview.save");
     const auto health=lowHealth.find("5.2 100"); Require(health!=std::string::npos,"Expected combat health field.");
     lowHealth.replace(health,7,"5.2 1");
-    Game game; Require(game.RestoreSnapshot(lowHealth),"Low-health combat fixture must load.");
+    auto gameStorage=std::make_unique<Game>(); Game& game=*gameStorage; Require(game.RestoreSnapshot(lowHealth),"Low-health combat fixture must load.");
     game.OpenPanel(panel); Input input; Input::Frame frame; frame.focused=true;
     input.Update(frame);
     for (int i=0;i<20;++i) game.Update(.05,input,0);
@@ -559,7 +562,7 @@ int main() {
     Require(input.Pressed('E'),"A fresh press after focus restoration must work.");
   }
   {
-    Game game; game.Initialize(); game.OpenPanel(ui::Panel::Inventory);
+    auto gameStorage=std::make_unique<Game>(); Game& game=*gameStorage; game.Initialize(); game.OpenPanel(ui::Panel::Inventory);
     Input input; Input::Frame frame; frame.focused=true; frame.client={1068,274}; frame.screen=frame.client;
     const auto step=[&]() {
       input.Update(frame); game.Update(.05,input,0);
@@ -576,7 +579,7 @@ int main() {
     Require(game.State().Player().x>.01f,"A fresh right-button gesture begun over the world must still orbit.");
   }
   {
-    Game game; game.Initialize(); game.OpenPanel(ui::Panel::Character);
+    auto gameStorage=std::make_unique<Game>(); Game& game=*gameStorage; game.Initialize(); game.OpenPanel(ui::Panel::Character);
     Input input; Input::Frame frame; frame.focused=true; frame.client={40,210}; frame.screen=frame.client;
     input.Update(frame); game.Update(.01,input,0);
     renderer.BeginFrame(); game.Render(renderer); Require(renderer.EndFrame(false),"Pre-load layout render failed.");
@@ -586,7 +589,7 @@ int main() {
       "Loading must invalidate old gear hit regions before input is routed.");
   }
   {
-    Game game;game.Initialize();game.OpenPanel(ui::Panel::Inventory);
+    auto gameStorage=std::make_unique<Game>(); Game& game=*gameStorage;game.Initialize();game.OpenPanel(ui::Panel::Inventory);
     Input input;Input::Frame frame;frame.focused=true;frame.client={1216,237};
     const auto draw=[&]() {renderer.BeginFrame();game.Render(renderer);Require(renderer.EndFrame(false),"Load notice regression render");};
     const auto step=[&]() {input.Update(frame);game.Update(.01,input,0);draw();};
@@ -596,7 +599,7 @@ int main() {
     Require(game.WantsMouseLook(),"Loaded character retained the previous inventory notification and its input blocker");
   }
   {
-    Game game; game.Initialize(); Input input; Input::Frame frame;
+    auto gameStorage=std::make_unique<Game>(); Game& game=*gameStorage; game.Initialize(); Input input; Input::Frame frame;
     frame.focused=true; frame.client={802,568}; frame.screen=frame.client;
     const auto step=[&]() {
       input.Update(frame); game.Update(.05,input,0);
@@ -611,7 +614,7 @@ int main() {
     Require(game.State().Player().z>before.z,"Clicking Return to game must restore movement on the same frame");
   }
   {
-    Game game; game.Initialize(); Input input; Input::Frame frame;
+    auto gameStorage=std::make_unique<Game>(); Game& game=*gameStorage; game.Initialize(); Input input; Input::Frame frame;
     frame.focused=true; frame.client={1170,94}; frame.screen=frame.client;
     const auto step=[&]() {
       input.Update(frame); game.Update(.05,input,0);
@@ -627,7 +630,7 @@ int main() {
     Require(std::abs(game.State().Player().x)<.0001f,"Returning with RMB still held must not resume a cancelled orbit.");
   }
   {
-    Game game; Require(game.RestoreSnapshot(Fixture("quartermaster-preview.save")),"Quartermaster fixture must load.");
+    auto gameStorage=std::make_unique<Game>(); Game& game=*gameStorage; Require(game.RestoreSnapshot(Fixture("quartermaster-preview.save")),"Quartermaster fixture must load.");
     Input input; Input::Frame frame; frame.focused=true; frame.client={900,293}; frame.screen=frame.client;
     const auto step=[&]() {
       input.Update(frame); game.Update(.05,input,0);
@@ -660,7 +663,7 @@ int main() {
   }
   {
     Require(renderer.Resize(1280,720),"Build input test resolution");
-    Game game; Require(game.RestoreSnapshot(Fixture("veteran-preview.save")),"Build input fixture");
+    auto gameStorage=std::make_unique<Game>(); Game& game=*gameStorage; Require(game.RestoreSnapshot(Fixture("veteran-preview.save")),"Build input fixture");
     Input input; Input::Frame frame; frame.focused=true; frame.client={680,380}; frame.screen=frame.client;
     const auto step=[&]() {
       input.Update(frame); game.Update(.01,input,0);
@@ -1137,7 +1140,7 @@ int main() {
   }
   {
     Require(renderer.Resize(1280,720),"Build input test resolution");
-    Game game; Require(game.RestoreSnapshot(Fixture("veteran-preview.save")),"Build input fixture");
+    auto gameStorage=std::make_unique<Game>(); Game& game=*gameStorage; Require(game.RestoreSnapshot(Fixture("veteran-preview.save")),"Build input fixture");
     Input input; Input::Frame frame; frame.focused=true; frame.client={680,380}; frame.screen=frame.client;
     const auto step=[&]() {
       input.Update(frame); game.Update(.01,input,0);
@@ -1206,7 +1209,7 @@ int main() {
   Require(renderer.ValidateDebugMessages(),"DirectX reported an screen validation issue.");
   {
     Require(renderer.Resize(1280,720),"Build input test resolution");
-    Game game; Require(game.RestoreSnapshot(Fixture("veteran-preview.save")),"Build input fixture");
+    auto gameStorage=std::make_unique<Game>(); Game& game=*gameStorage; Require(game.RestoreSnapshot(Fixture("veteran-preview.save")),"Build input fixture");
     Input input; Input::Frame frame; frame.focused=true; frame.client={680,380}; frame.screen=frame.client;
     const auto step=[&]() {
       input.Update(frame); game.Update(.01,input,0);
@@ -1305,7 +1308,7 @@ int main() {
   }
   {
     Require(renderer.Resize(1280,720),"Audio menu input resolution");
-    Game game;game.OpenPanel(ui::Panel::Menu);
+    auto gameStorage=std::make_unique<Game>(); Game& game=*gameStorage;game.OpenPanel(ui::Panel::Menu);
     Input input;Input::Frame frame;frame.focused=true;
     const auto step=[&]() {
       input.Update(frame);game.Update(.01,input,0);

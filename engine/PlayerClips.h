@@ -40,6 +40,9 @@ bool Looping(Clip clip);
 Frame Blend(const Frame& a,const Frame& b,float weight);
 Frame Locomotion(const std::array<float,4>& weights,float run,float phase,Equipment equipment=Equipment::None);
 float SwingHeight(const std::array<float,4>& weights,float run,int side,float phase);
+// Progress along the authored ankle path, fitted between live release/contact.
+// Keeps the early heel recovery and late extension instead of a generic arc.
+float SwingProgress(const std::array<float,4>& weights,float run,int side,float phase);
 float AttackPhase(Clip clip,float seconds,float start,float contact,float end);
 float FlightPhase(float progress);
 }

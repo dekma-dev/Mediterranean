@@ -72,6 +72,19 @@ void MageContact(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 p,float ag
   for(int n=0;n<2;++n){const float radius=(.15f+age*(n?.75f:1.4f))*size;
    r.DrawEffectSprite(Art::Arcane,p,radius,radius,age*(n?-2.f:2.8f)+n*pi,{.85f,.72f,1,fade*(n?.28f:.65f)});}
   r.DrawEffectSprite(Art::Seal,p,(.25f+age*.8f)*size,(.25f+age*.8f)*size,-age*.7f,{.8f,.58f,1,fade*.48f});
+  if(e.ability==13) {
+   // The mobile prism fractures into three offset planes. The central gap
+   // keeps the struck actor visible; this is distinct from the interrupt orb.
+   for(int n=0;n<3;++n) {
+    const float angle=e.facing+n*tau/3+age*.65f,opening=combat::Smooth(age/.22f);
+    const XMFLOAT3 side{std::cos(angle),0,-std::sin(angle)};
+    const auto at=[&](float x,float y){return Add(p,{side.x*(x+opening*.40f)*size,y*size,side.z*(x+opening*.40f)*size});};
+    const auto a=at(-.16f,-.35f),b=at(-.22f,.35f),c=at(.16f,.62f),d=at(.22f,-.22f);
+    r.DrawEffectSurface(Art::Arcane,a,b,c,d,{.51f,.37f,1,fade*.38f});
+    r.DrawEffectStreak(a,b,.012f,{.78f,.88f,1,fade*.72f});
+    r.DrawEffectStreak(b,c,.012f,{.89f,.76f,1,fade*.78f});
+   }
+  }
  }else{
   const unsigned seed=e.actor*37u+unsigned(std::max(e.ability,0))*71u;
   for(unsigned n=0;n<6;++n){
@@ -354,6 +367,34 @@ void Flight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float ag
   return;
  }
  const auto element=School(e.ability);const bool frost=element==Element::Frost,arcane=element==Element::Arcane,mixed=element==Element::Thermal;
+ if(e.ability==13) {
+  // A refracting core with three braided light trails, sampled directly from
+  // accepted flight time. No extra hits, homing, target changes or new textures.
+  const float visible=1-combat::Smooth(after/.12f),tail=std::max(0.f,t-2.8f/length);
+  for(int strand=0;strand<3;++strand) {
+   const auto at=[&](float u){const float phase=u*length*5-age*4+strand*tau/3;
+    const float width=.14f*std::sin(Unit((u-tail)/std::max(.0001f,t-tail))*pi);
+    return Add(point(u),{cx*std::sin(phase)*width,std::cos(phase)*width,-sx*std::sin(phase)*width});};
+   for(int n=0;n<12 && t>tail+.00001f;++n) {
+    const float u=tail+(t-tail)*n/12,v=tail+(t-tail)*(n+1)/12;
+    const auto a=at(u),b=at(v);const float taper=(n+1)/12.f;
+    r.DrawEffectStreak(a,b,.047f,{.50f,.26f,1,visible*taper*.28f});
+    r.DrawEffectStreak(a,b,.011f,{.82f,.83f,1,visible*taper*.82f});
+   }
+  }
+  const float core=1-combat::Smooth(after/.025f);
+  for(int n=0;n<3;++n) {
+   const float angle=n*tau/3+age*3;
+   const XMFLOAT3 side{cx*std::cos(angle)*.23f,std::sin(angle)*.23f,-sx*std::cos(angle)*.23f};
+   const auto front=Add(head,{sx*.26f,0,cx*.26f}),back=Add(head,{-sx*.32f,0,-cx*.32f});
+   const auto a=Add(head,side),b=Add(head,{-side.x,-side.y,-side.z});
+   r.DrawEffectSurface(Art::Arcane,back,a,front,b,{.69f,.53f,1,core*.48f});
+   r.DrawEffectStreak(back,a,.013f,{.83f,.89f,1,core*.8f});
+   r.DrawEffectStreak(a,front,.013f,{.92f,.83f,1,core*.9f});
+  }
+  r.DrawEffectSprite(Art::Sparks,head,.22f,.22f,age*2,{.86f,.86f,1,core*.7f});
+  return;
+ }
  const auto tint=[&](bool ice,float alpha)->XMFLOAT4{return ice?XMFLOAT4{.40f,.76f,1,alpha}:arcane?XMFLOAT4{.70f,.38f,1,alpha}:XMFLOAT4{1,.43f,.09f,alpha};};
  // Fixed world length: a nearby projectile is no longer a tiny dot while a
  // distant shot stretches into a several-metre stripe. Advect and drain its

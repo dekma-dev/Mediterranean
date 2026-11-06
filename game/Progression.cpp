@@ -108,7 +108,7 @@ void Simulation::LearnTalent(int index) {
 
 void Simulation::Emit(FeedbackKind kind,Vec2 position,int amount) {
   if (feedback_.size()==24) feedback_.erase(feedback_.begin());
-  feedback_.push_back({position,kind,amount,0});
+  feedback_.push_back({position,kind,amount,0,++feedbackSequence_});
 }
 
 void Simulation::EmitVisual(CombatVisualKind kind,Vec2 position,float height,float facing,EntityId actor,float elapsed) {

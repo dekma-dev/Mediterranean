@@ -468,6 +468,18 @@ Cue ContactCue(rpg::ClassId school,int ability,bool heavy){
  if(school==rpg::ClassId::Mage){if(ability==9)return Cue::MeteorImpact;if(ability==11)return Cue::FirestormImpact;const auto element=rpg::ClassDiscipline::Element(ability);return element==2?Cue::FrostImpact:element==4?Cue::ArcaneImpact:Cue::FireImpact;}
  return rpg::DescribeClass(school).range>3 && school!=rpg::ClassId::Engineer?Cue::SpellHit:heavy?Cue::HeavyHit:Cue::Hit;
 }
+bool Events::Preview(const Audition& audition) {
+  count=0;
+  const bool reset=auditionRevision!=audition.revision;
+  if(reset || auditionSequence!=audition.sequence) {
+    for(unsigned i=0;i<std::min<unsigned>(audition.count,unsigned(audition.cues.size()));++i)
+      if(unsigned(audition.cues[i])<unsigned(Cue::Count)) {
+        origins[count]={};spatial[count]=false;cues[count++]=audition.cues[i];
+      }
+  }
+  auditionRevision=audition.revision;auditionSequence=audition.sequence;
+  return reset;
+}
 void Events::Update(const rpg::Simulation& state,const presentation::CreatureContacts* contacts) {
   count=0;
   rpg::Vec2 origin{};bool placed=false;
@@ -628,7 +640,7 @@ void Audio::Suspend(bool value) {
   if(value) { engine_->StopEngine(); ClearEffects(); events_.Reset(); intensity_.Reset();musicGain_=0;music_->SetVolume(0);menuMusic_->SetVolume(0);combatMusic_->SetVolume(0);generation_=~0u; }
   else engine_->StartEngine();
 }
-void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds,float cameraYaw,const presentation::CreatureContacts* contacts,bool menu) {
+void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds,float cameraYaw,const presentation::CreatureContacts* contacts,bool menu,const sound::Audition* audition) {
   if(!music_ || suspended_) return;
   musicGain_=sound::MusicGain(musicGain_,musicVolume,seconds);
   const float dt=std::isfinite(seconds)?std::clamp(seconds,0.f,.1f):0;
@@ -647,8 +659,10 @@ void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicV
   ambientMix_.Update(state.Player(),intensity_.value,seconds);
   for(size_t i=0;i<ambience_.size();++i)
     ambience_[i]->SetVolume(menu?0:std::clamp(effectsVolume,0.f,1.f)*.35f*ambientMix_.levels[i]);
-  if(menu){ClearEffects();return;}
-  events_.Update(state,contacts);
+  if(menu) {
+    if(!audition){ClearEffects();return;}
+    if(events_.Preview(*audition))ClearEffects();
+  } else events_.Update(state,contacts);
   if(effectsVolume<=0) { ClearEffects(); return; }
   // Apply the voice changes as one XAudio2 operation set so a new effect never
   // starts with the preceding frame's louder sparse-mix gain.
@@ -690,7 +704,7 @@ void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicV
     if(!status.BuffersQueued) voiceLevels_[v]=voicePeaks_[v]=0;
     // A release or cancelled channel fades its preparation once; a later cast
     // cannot revive the previous tail. Physical impacts retain their full tail.
-    if(preparation_[v] && (!sound::Preparing(state) || preparationGain_[v]<1)) {
+    if(preparation_[v] && (!(menu?audition->preparing:sound::Preparing(state)) || preparationGain_[v]<1)) {
       preparationGain_[v]*=std::exp(-dt/.035f);
       if(preparationGain_[v]<.005f){voices_[v]->Stop();voices_[v]->FlushSourceBuffers();voiceLevels_[v]=voicePeaks_[v]=0;}
     }

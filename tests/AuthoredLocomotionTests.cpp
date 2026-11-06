@@ -60,6 +60,69 @@ struct Walker {
     feet.Update(dt,position,0,true,true,state.pose);
   }
 };
+void NaturalGaitChecks(){
+  float compression=0,palmAgreement=1,footWidth=0;
+  double footSum=0,handSum=0,product=0;unsigned count=0;
+  for(float speed:{1.4f,6.f}){
+    Walker walk;
+    for(int tick=0;tick<2400;++tick){
+      walk.Update(.001f,speed,1,0);
+      if(tick<1200)continue;
+      const auto pose=BuildCharacterPose(0,0,false,walk.state.pose);
+      for(unsigned side=0;side<2;++side){
+        const auto hand=BuildHandPose(pose,side,false,false,0);
+        const auto frame=XMLoadFloat4x4(&hand.frame);
+        const auto forearm=XMVector3Normalize(XMLoadFloat3(&pose.arms[side].end)-XMLoadFloat3(&pose.arms[side].joint));
+        palmAgreement=std::min(palmAgreement,XMVectorGetX(XMVector3Dot(frame.r[1],forearm)));
+        Check(Distance(hand.Point({0,-.055f,-.043f}),pose.arms[side].end)<.00001f,"Free running wrist lost its forearm attachment");
+      }
+      if(speed>5){
+        compression=std::max(compression,-pose.bodyLift);
+        footWidth=std::max(footWidth,std::abs(pose.legs[1].end.x-pose.legs[0].end.x));
+        const float foot=pose.legs[0].end.z,hand=pose.arms[0].end.z;
+        footSum+=foot;handSum+=hand;product+=foot*hand;++count;
+      }
+    }
+  }
+  const double covariance=product/count-(footSum/count)*(handSum/count);
+  std::cout<<"Natural gait: compression "<<compression<<", running width "<<footWidth<<", wrist alignment "<<palmAgreement<<", arm/leg covariance "<<covariance<<'\n';
+  Check(palmAgreement>.99f,"Free hand reflected the backswing and folded at the wrist");
+  Check(compression<.095f,"Steady run collapsed into a persistent crouch");
+  Check(footWidth<.31f,"Forward running retained the wide standing stance");
+  Check(covariance<-.002,"Running arm failed to oppose its same-side leg");
+}
+void RecoveryTimingChecks(){
+  const std::array<float,4> forward={1,0,0,0};
+  float deviation=0;
+  for(int side=0;side<2;++side){
+    Check(playerclips::SwingProgress(forward,1,side,0)==0&&playerclips::SwingProgress(forward,1,side,1)==1,"Source recovery must retain live release and contact anchors");
+    for(int frame=1;frame<100;++frame){
+      const float t=frame/100.f,p=playerclips::SwingProgress(forward,1,side,t);
+      Check(std::isfinite(p)&&p>=-.12f&&p<=1.12f,"Source recovery progress escaped its bounded path");
+      deviation=std::max(deviation,std::abs(p-t*t*(3-2*t)));
+    }
+  }
+  Check(deviation>.06f,"Native recovery discarded the authored heel fold and extension timing");
+  animation::Sample airborne;airborne.authoredGait=true;airborne.air=1;airborne.flightPhase=.5f;
+  airborne.departureFeet[0].z=.225f;airborne.departureFeet[1].z=-.225f;
+  const auto leftLead=BuildCharacterPose(0,0,false,airborne);
+  airborne.departureFeet[0].z=-.225f;airborne.departureFeet[1].z=.225f;
+  const auto rightLead=BuildCharacterPose(0,0,false,airborne);
+  Check(leftLead.legs[0].end.z-rightLead.legs[0].end.z>.20f&&rightLead.legs[1].end.z-leftLead.legs[1].end.z>.20f,
+    "Running jump forgot which leg led the departing stride");
+  for(int hz:{30,60,144}){
+    Game game;game.Initialize();float previous=-1;bool seen=false;
+    for(int frame=0;frame<hz;++frame){
+      rpg::Command command;command.jump=frame==0;command.movement={0,1};game.ExecuteCommand(command,1.f/hz);
+      if(!game.State().Grounded()){
+        const float phase=game.PlayerAnimation().flightPhase;
+        Check(phase>=0&&phase<=1&&phase>=previous,"Ballistic animation reversed or lost its flight phase");
+        previous=phase;seen=true;
+      }
+    }
+    Check(seen&&previous>.9f,"Flight animation did not progress from takeoff to pre-contact extension");
+  }
+}
 void ContactsAndTransitions(){
   float worstSlip=0,worstJump=0;playerclips::Frame reference;
   for(int hz:{30,60,144,1000}){
@@ -313,7 +376,11 @@ void EquippedFlightChecks(){
       for(unsigned side=0;side<2;++side) {
         Check(Distance(BuildHandPose(pose,side,true,shield,0).Point({0,-.055f,-.043f}),pose.arms[side].end)<.0001f,"Equipped flight detached the wrist");
         Check(std::abs(Distance(pose.arms[side].joint,pose.arms[side].end)-CharacterPose::forearm)<.0001f,"Equipped flight stretched the forearm");
-        if(initialized)worstHand=std::max(worstHand,Distance(previous.arms[side].end,pose.arms[side].end));
+        if(initialized){
+          const float step=Distance(previous.arms[side].end,pose.arms[side].end);
+          if(step>.012f)std::cout<<"Flight wrist step "<<step<<", equipment "<<unsigned(equipment)<<", side "<<side<<", tick "<<tick<<'\n';
+          worstHand=std::max(worstHand,step);
+        }
       }
       const float tip=equipment==E::Sword?.96f:equipment==E::Staff?-.72f:-.64f;
       Check(pose.WeaponPoint(tip).y+height>.04f,"Equipped flight or landing pierced floor");
@@ -395,5 +462,5 @@ int main(int argc,char** argv){try{
   if(argc==2&&std::string_view(argv[1])=="--capture-only") {Captures();return 0;}
   if(argc==2&&std::string_view(argv[1])=="--flight-only") {LibraryChecks();EquippedFlightChecks();return 0;}
   if(argc==2&&std::string_view(argv[1])=="--bow-only") {LibraryChecks();BowMotionChecks();WeaponCarryChecks();EquippedFlightChecks();std::cout<<"PASS: archery draw, release, carry and flight\n";return 0;}
-  LibraryChecks();GroundedMotionChecks();ContactsAndTransitions();WeaponMotionChecks();BowMotionChecks();WeaponCarryChecks();EquippedFlightChecks();Captures();std::cout<<"PASS: imported gait loops, directional weapon carry, equipped jumps, combat guards, contacts, transition continuity, gameplay isolation and native comparison\n";}
+  LibraryChecks();GroundedMotionChecks();NaturalGaitChecks();RecoveryTimingChecks();ContactsAndTransitions();WeaponMotionChecks();BowMotionChecks();WeaponCarryChecks();EquippedFlightChecks();Captures();std::cout<<"PASS: imported gait loops, directional weapon carry, equipped jumps, combat guards, contacts, transition continuity, gameplay isolation and native comparison\n";}
 catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

@@ -530,7 +530,7 @@ void Engine::Tick(double deltaSeconds) {
   game_->Update(deltaSeconds, input_, window_->ConsumeWheel());
   if(audio_) {
     audio_->Suspend(false);
-    audio_->Update(game_->State(),game_->AudioGeneration(),game_->MusicVolume(),game_->EffectsVolume(),float(deltaSeconds),game_->CameraYaw(),&game_->CreatureSteps(),game_->ChoosingCharacter());
+    audio_->Update(game_->State(),game_->AudioGeneration(),game_->MusicVolume(),game_->EffectsVolume(),float(deltaSeconds),game_->CameraYaw(),&game_->CreatureSteps(),game_->ChoosingCharacter(),game_->ChoosingCharacter()?&game_->Selection().PreviewAudio():nullptr);
   }
   const bool fullscreenRequest=game_->TakeFullscreenRequest();
   if (input_.Pressed(VK_F11) || fullscreenRequest) {

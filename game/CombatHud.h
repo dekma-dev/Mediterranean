@@ -31,6 +31,38 @@ inline PlayerCastView ReadPlayerCast(const rpg::Simulation& state) {
     std::max(0.f,(release-state.AttackSeconds())/state.AttackRate())};
 }
 
+// A short receipt after a real release/cancellation, never a fabricated cast.
+// Driven by simulation updates so repeated renders cannot advance its lifetime.
+struct CastReceipt {
+  int ability=-1,pending=-1;
+  float age=1;
+  bool interrupted=false;
+  rpg::ClassId school=rpg::ClassId::Warrior;
+  void Reset() { *this={}; }
+  float Opacity() const {
+    const float duration=interrupted?.48f:.28f;
+    return ability<0?0:1-std::clamp(age/duration,0.f,1.f);
+  }
+  void Update(float dt,const rpg::Simulation& state) {
+    if(!std::isfinite(dt) || dt<=0 || dt>.25f || state.Health()<=0) {Reset();return;}
+    if(school!=state.Class())Reset();school=state.Class();age+=dt;
+    const auto cast=ReadPlayerCast(state);bool released=false;int action=-1;float elapsed=0;
+    for(std::size_t n=0;n<state.VisualEventCount();++n) {
+      const auto& e=state.VisualEvents()[n];if(e.actor!=0)continue;
+      if((e.kind==rpg::CombatVisualKind::SpellCast && state.ClassInfo().range>3 && rpg::ValidSpell(e.ability)) ||
+         (e.kind==rpg::CombatVisualKind::Mend && pending==3)) {
+        released=true;action=e.kind==rpg::CombatVisualKind::Mend?3:e.ability;elapsed=std::clamp(e.elapsed,0.f,dt);
+      }
+    }
+    if(cast.ability>=0) {pending=cast.ability;ability=-1;return;}
+    if(released) {ability=action;interrupted=false;age=elapsed;}
+    else if(pending>=0) {ability=pending;interrupted=true;age=0;}
+    // Cancel events after a completed release must not paint a successful shot
+    // red when movement merely ends its follow-through.
+    pending=-1;if(Opacity()<=0)ability=-1;
+  }
+};
+
 struct WorldPlate {
   rpg::EntityId id=0;
   float anchorX=0,anchorY=0,width=128,height=30,distance=0;

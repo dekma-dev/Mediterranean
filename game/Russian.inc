@@ -1,4 +1,11 @@
 // Player-facing Russian catalog. English strings remain stable simulation/save identifiers.
+{"Equipped outfit", "Текущее"},
+{"Equipment preview", "Примерка снаряжения"},
+{"Travel outfit", "Походное"},
+{"Veteran outfit", "Ветеранское"},
+{"Outfit preview only; equipment is earned in the world.", "Примерка. Снаряжение добывается в игре."},
+{"Class showcase", "Демонстрация"},
+{"Stop showcase", "Остановить"},
 {"Initialize surface decoder", "Инициализация декодера текстур поверхности"},
 {"Create surface decoder", "Создание декодера текстур поверхности"},
 {"Create detailed surface array", "Создание массива детальных текстур поверхности"},
@@ -1916,4 +1923,8 @@
 {"Active", "Активно"},
 
 {"Benediction", "Благословение"},
+{"Drag to rotate / Wheel to zoom", "Зажмите ЛКМ для поворота / Колесо — приближение"},
+{"Select an art to see it in motion", "Выберите умение для демонстрации"},
+{"Released", "Выпущено"},
+{"Interrupted", "Прервано"},
 {"Complete Greater heal and restore missing health. For six seconds, your next Radiance or Rebuke hit adds 25% basic damage and grants an 18-point ward. Interrupted healing grants nothing.", "Завершите «Великое исцеление» и восстановите недостающее здоровье. В течение 6 с следующее попадание «Сияния» или «Возмездия» получает +25% базового урона и даёт защиту на 18 ед. Прерванное лечение ничего не даёт."},

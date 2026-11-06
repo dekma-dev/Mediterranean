@@ -170,6 +170,22 @@ void Render(const std::filesystem::path& root,const std::string& veteran) {
   Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),1280,720,L"Character selection test",false),"Hidden window");
   Renderer renderer;Check(renderer.Initialize(window.GetHandle(),1280,720),"Renderer initialization");
   {
+    renderer.BeginFrame();renderer.DrawHudRect(0,0,1,1,{.02f,.03f,.04f,1});
+    renderer.SetCamera({0,3,-8},{0,1,0});DirectX::XMFLOAT2 before,after;
+    Check(renderer.Project({0,1,0},before),"Portrait camera baseline");
+    Check(renderer.BeginPortrait(.25f,.1f,.5f,.7f),"Ordinary portrait begin");
+    renderer.DrawEffectGlow({0,1,0},.3f,{1,.5f,.1f,1});
+    Check(renderer.EffectVertices()==0 && renderer.EndPortrait(),"Ordinary portrait unexpectedly accepted particles");
+    Check(renderer.BeginPortrait(.25f,.1f,.5f,.7f,0,true),"Effect portrait begin");
+    renderer.DrawEffectSprite(Renderer::EffectArt::Flame,{0,1,0},.3f,.5f,0,{1,.7f,.4f,1},true);
+    Check(renderer.EffectVertices()>0 && renderer.EndPortrait(),"Opt-in portrait lost its particles");
+    const auto submitted=renderer.EffectVertices();
+    Check(renderer.Project({0,1,0},after) && std::abs(before.x-after.x)+std::abs(before.y-after.y)<.00001f,"Portrait did not restore world projection");
+    Check(renderer.BeginPortrait(.7f,.2f,.15f,.3f),"Subsequent portrait begin");
+    renderer.DrawEffectGlow({0,1,0},.3f,{1,.5f,.1f,1});
+    Check(renderer.EffectVertices()==submitted && renderer.EndPortrait() && renderer.EndFrame(false),"Effect opt-in leaked to a later portrait");
+  }
+  {
     const auto folder=root/("return-roster-"+std::to_string(GetTickCount64()));
     std::filesystem::create_directories(folder);
     const auto base=folder/"patrol.save",mageFile=folder/("hero-"+std::to_string(int(rpg::ClassId::Mage))+".save");
@@ -226,11 +242,19 @@ void Render(const std::filesystem::path& root,const std::string& veteran) {
     const auto untouched=game.Selection().Hero().Save();
     d.Click(game,Control::Arts);
     Check(game.Selection().CallingScreen()==Selection::CallingView::Arts && !game.Selection().Enabled(Control::Branch0),"Art view exposes hidden branch controls");
-    for(int art=0;art<7;++art) {
+    for(int art=0;art<game.Selection().PreviewArtCount();++art) {
       d.Click(game,Control(int(Control::Art0)+art));
       Check(game.Selection().PreviewAbility()==Selection::previewArts[art] && game.Selection().PreviewAction()>=0,"Art click previews wrong ability");
       // Slow caster signature clips can outlast four seconds at their class rate.
-      for(int step=0;step<900 && game.Selection().PreviewAction()>=0;++step) d.Step(game);
+      float peakWeight=0;std::size_t peakBursts=0;
+      for(int step=0;step<900 && game.Selection().PreviewAction()>=0;++step) {
+        d.Step(game);peakWeight=std::max(peakWeight,game.Selection().PreviewBody().authoredStrikeWeight);
+        peakBursts=std::max(peakBursts,game.Selection().PreviewEffectCount());
+      }
+      const auto id=game.Selection().SelectedClass();const int ability=Selection::previewArts[art];
+      if((id==rpg::ClassId::Warrior || id==rpg::ClassId::Scout || id==rpg::ClassId::Mage || id==rpg::ClassId::Priest) && ability!=2 && ability!=3)
+        Check(peakWeight>.25f,"Character audition bypassed the runtime weapon controller");
+      if(ability!=2)Check(peakBursts>0,"Character audition failed to emit its release/completion");
       Check(game.Selection().PreviewAction()<0,"Art preview never settles");
       Check(game.Selection().Hero().Save()==untouched,"Art preview mutates hero");
       Check(game.State().Save()==frozenWorld,"Art preview mutates world");
@@ -240,6 +264,33 @@ void Render(const std::filesystem::path& root,const std::string& veteran) {
     for(int branch=0;branch<3;++branch) {
       d.Click(game,Control(int(Control::Branch0)+branch));
       Check(game.Selection().CallingBranch()==branch,"Talent path selection failed");
+    }
+  }
+  for(auto id:{rpg::ClassId::Warrior,rpg::ClassId::Mage,rpg::ClassId::Scout,rpg::ClassId::Priest}) {
+    d.Click(game,Control(int(Control::Class0)+int(id)));d.Click(game,Control::Arts);d.Click(game,Control::Art1);
+    const auto initial=game.Selection().Hero().Save();
+    const float rate=rpg::ClassAttackRate(id,true);
+    const int prepareTicks=int(combat::StrokeStart(true)/rate*.70f*60);
+    for(int n=0;n<prepareTicks;++n)d.Step(game);
+    renderer.BeginFrame();game.Render(renderer);
+    Check(renderer.Capture((root/("stage-prepare-"+std::to_string(int(id))+".png")).wstring()) && renderer.EndFrame(false),"Stage preparation capture");
+    if(id==rpg::ClassId::Mage || id==rpg::ClassId::Priest)Check(renderer.EffectVertices()>0,"Stage preparation has no rendered effects");
+    while(game.Selection().PreviewEffectCount()==0 && game.Selection().PreviewAction()>=0)d.Step(game);
+    for(int n=0;n<4;++n)d.Step(game);
+    auto copied=game.Selection();const auto activeEffects=game.Selection().PreviewEffectCount();
+    copied.Refresh();Check(copied.PreviewEffectCount()==0 && game.Selection().PreviewEffectCount()==activeEffects,
+      "Copied selection shares mutable preview effects");
+    renderer.BeginFrame();game.Render(renderer);
+    Check(renderer.Capture((root/("stage-release-"+std::to_string(int(id))+".png")).wstring()) && renderer.EndFrame(false),"Stage release capture");
+    Check(renderer.EffectVertices()>0 && renderer.EffectVertices()<=Renderer::maxEffectVertices,"Stage release missing/over budget");
+    Check(initial==game.Selection().Hero().Save() && frozenWorld==game.State().Save(),"Stage effects changed a profile/world");
+    d.frame.focused=false;d.Step(game);
+    Check(game.Selection().PreviewEffectCount()==0 && game.Selection().PreviewAction()<0,"Focus loss retained a stage effect");
+    d.frame.focused=true;d.Step(game);
+    for(int dress=0;dress<3;++dress) {
+      d.Click(game,Control(int(Control::Dress0)+dress));
+      renderer.BeginFrame();game.Render(renderer);
+      Check(renderer.Capture((root/("wardrobe-"+std::to_string(int(id))+"-"+std::to_string(dress)+".png")).wstring()) && renderer.EndFrame(false),"Wardrobe native capture");
     }
   }
   d.Click(game,Control::Class5);
@@ -403,10 +454,83 @@ void RussianNames(const std::filesystem::path& root) {
   Check(s.CreateCharacter(rpg::ClassId::Mage,twenty) && copy.Load(s.Save()) && copy.Save()==s.Save(),"20 Cyrillic letters do not round-trip");
   Check(!rpg::ValidCharacterName(twenty+"я") && !rpg::ValidCharacterName("Я\xff") && !rpg::ValidCharacterName("Я1"),"Malformed/long names accepted");
 }
+void StageInteraction(const std::filesystem::path& root) {
+  for(const auto size:{std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
+    Game game;game.Initialize();game.ChooseCharacter(root/("stage-input-"+std::to_string(size.first)+"-"+std::to_string(GetTickCount64()))/"patrol.save");
+    Driver d;d.frame.width=size.first;d.frame.height=size.second;d.Step(game);d.Click(game,Control::Create);
+    d.Click(game,Control::Class5);d.Click(game,Control::Next);d.Key(game,'A');d.Key(game,VK_RETURN);
+    const auto draft=game.Selection().Hero().Save(),world=game.State().Save();
+    const ui::Layout layout(float(size.first),float(size.second));
+    const auto point=[&](float x,float y){d.frame.client={LONG(layout.x+x*layout.scale),LONG(layout.y+y*layout.scale)};};
+    point(620,360);d.frame.down[VK_LBUTTON]=true;d.Step(game);point(700,360);d.Step(game);
+    Check(game.Selection().Rotating() && game.Selection().Yaw()>.8f,"Stage drag lost scaled movement");
+    // Releasing over Create must never publish a profile from a stage drag.
+    d.Point(Control::Confirm);d.frame.down[VK_LBUTTON]=false;d.Step(game);
+    Check(game.Selection().Screen()==Selection::Page::Customize && !std::filesystem::exists(game.Selection().SaveFile()),"Stage release activated a UI button");
+    point(620,360);d.input.Update(d.frame);game.Update(1./60,d.input,3);
+    for(int n=0;n<60;++n)d.Step(game);
+    Check(game.Selection().PreviewZoom()>.5f && game.Selection().PreviewZoom()<.6f,"Wheel did not use bounded smooth stage zoom");
+    const auto zoom=game.Selection().PreviewZoom();d.Point(Control::Name);d.input.Update(d.frame);game.Update(1./60,d.input,10);
+    for(int n=0;n<30;++n)d.Step(game);
+    Check(std::abs(game.Selection().PreviewZoom()-zoom)<.002f,"Scrolling a control changed the stage camera");
+    point(620,360);d.frame.down[VK_LBUTTON]=true;d.Step(game);d.frame.focused=false;d.Step(game);
+    const float yaw=game.Selection().Yaw();point(900,360);d.frame.focused=true;d.Step(game);
+    Check(!game.Selection().Rotating() && game.Selection().Yaw()==yaw,"Focus restoration replayed a drag");
+    d.frame.down[VK_LBUTTON]=false;d.Step(game);
+    point(620,360);d.frame.down[VK_LBUTTON]=true;d.Step(game);d.frame.width+=32;d.Step(game);
+    Check(!game.Selection().Rotating(),"Resize retained an old stage gesture");
+    d.frame.down[VK_LBUTTON]=false;d.Step(game);d.Click(game,Control::ResetView);
+    Check(game.Selection().Yaw()==0 && !game.Selection().Closeup(),"Stage reset did not restore the view");
+    Check(game.Selection().Hero().Save()==draft && game.State().Save()==world,"Camera navigation changed durable game state");
+  }
+}
+void WardrobeAndShowcase(const std::filesystem::path& root) {
+  for(auto id:{rpg::ClassId::Warrior,rpg::ClassId::Mage,rpg::ClassId::Scout,rpg::ClassId::Priest})for(int hz:{30,60,144}) {
+    auto gameStorage=std::make_unique<Game>();auto& game=*gameStorage;game.Initialize();
+    game.ChooseCharacter(root/("wardrobe-"+std::to_string(int(id))+"-"+std::to_string(hz)+"-"+std::to_string(GetTickCount64()))/"patrol.save");
+    Driver d;d.Step(game);d.Click(game,Control::Create);d.Click(game,Control(int(Control::Class0)+int(id)));
+    const auto original=game.Selection().Hero().Save(),world=game.State().Save();
+    d.Click(game,Control::Dress2);const auto veteran=game.Selection().PreviewOutfit();
+    Check(veteran.armor && veteran.rewardWeapon && veteran.cloak && veteran.shoulders && veteran.gloves,"Veteran wardrobe omitted real equipment pieces");
+    Check(veteran.shield==(id==rpg::ClassId::Warrior),"Wardrobe lost class-specific offhand rules");
+    d.Click(game,Control::Dress1);const auto travel=game.Selection().PreviewOutfit();
+    Check(!travel.armor && !travel.rewardWeapon && !travel.cloak && !travel.shoulders && travel.weapon,"Travel outfit is not a separate real equipment view");
+    d.Click(game,Control::Dress0);
+    Check(game.Selection().PreviewOutfit().armor==CharacterOutfit::From(game.Selection().Hero().Items()).armor,"Equipped wardrobe failed to restore actual gear");
+    d.Click(game,Control::Arts);d.Click(game,Control::Art1);
+    sound::Events audio;unsigned release=0,preparation=0,effort=0;
+    const auto collect=[&](){
+      audio.Preview(game.Selection().PreviewAudio());
+      for(unsigned n=0;n<audio.count;++n){const auto cue=audio.cues[n];
+        preparation+=sound::IsPreparation(cue);effort+=cue==sound::Cue::WarriorEffort;
+        release+=cue==(id==rpg::ClassId::Warrior?sound::Cue::Heavy:sound::ReleaseCue(id,1,true));
+        Check(!audio.spatial[n],"Menu audition inherited a world-space sound source");
+      }
+      audio.Preview(game.Selection().PreviewAudio());Check(audio.count==0,"Repeated audio sampling replayed a stage event");
+    };
+    collect();
+    for(int n=0;n<hz*8 && game.Selection().PreviewAction()>=0;++n){d.input.Update(d.frame);game.Update(1./hz,d.input,0);collect();}
+    Check(release==1 && preparation==(id==rpg::ClassId::Warrior?0u:1u) && effort==(id==rpg::ClassId::Warrior?1u:0u),"Audition phases are duplicated, silent or class-incorrect");
+    d.Click(game,Control::Showcase);Check(game.Selection().Showcasing(),"Showcase toggle did not start");
+    std::array<bool,4> seen{};constexpr int arts[]={0,1,5,6};
+    for(int n=0;n<hz*22;++n){d.input.Update(d.frame);game.Update(1./hz,d.input,0);for(int k=0;k<4;++k)seen[k]|=game.Selection().PreviewAbility()==arts[k];}
+    Check(std::all_of(seen.begin(),seen.end(),[](bool value){return value;}),"Showcase did not demonstrate the full class sequence");
+    d.Click(game,Control::Art0);Check(!game.Selection().Showcasing(),"Manual art selection did not stop automatic cycling");
+    d.Click(game,Control::Showcase);game.SuspendInput();
+    Check(!game.Selection().Showcasing() && game.Selection().PreviewAction()<0 && game.Selection().PreviewAudio().count==0,
+      "Native suspension without an unfocused Update retained preview playback");
+    d.Click(game,Control::Showcase);d.frame.focused=false;d.Step(game);
+    Check(!game.Selection().Showcasing() && !game.Selection().PreviewAudio().preparing && game.Selection().PreviewAudio().count==0,"Focus loss left a queued demonstration or charge sound");
+    d.frame.focused=true;d.Step(game);d.Click(game,Control::Dress2);
+    Check(game.Selection().Hero().Save()==original && game.State().Save()==world,"Wardrobe/showcase modified durable state");
+    d.Click(game,Control::Next);d.Key(game,'A');d.Key(game,VK_RETURN);d.Click(game,Control::Confirm);
+    Check(game.Selection().State()==Selection::Status::Saved && !game.Selection().Hero().RewardWeaponEquipped(),"Veteran preview granted gear to the new character");
+  }
+}
 }
 int main() {
   const auto root=std::filesystem::current_path()/"character-selection-check";std::filesystem::create_directories(root);
   const auto veteran=Read(std::filesystem::path(RPG_TEST_FIXTURES)/"veteran-preview.save");
-  ReportedRegressions(root);StorageTransactions(root);Flow(root,veteran);ClassSlots(root);CreationSafety(root);AppearancePersistence();RussianNames(root);Render(root,veteran);
+  ReportedRegressions(root);StorageTransactions(root);Flow(root,veteran);ClassSlots(root);CreationSafety(root);AppearancePersistence();RussianNames(root);StageInteraction(root);WardrobeAndShowcase(root);Render(root,veteran);
   std::cout<<"PASS: character metadata, frozen world, input isolation, saved/new/error/repaired states, changed saves, resize/focus, hidden DX11 captures\n";
 }

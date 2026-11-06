@@ -54,6 +54,7 @@ struct Sample {
   facial::Pose face;
   ActionChannels action;
   bool retreat=false;
+  float flightPhase=-1; // Actual ballistic progress; -1 keeps preview fallback.
 };
 inline float ForwardRecoil(const Sample& sample) { return sample.directedHit?Signed(sample.hitForward):Unit(sample.hit); }
 struct ImpactProfile { float strength=1,peak=.055f,sidePeak=.065f; };
@@ -198,6 +199,9 @@ struct State {
     velocity=std::isfinite(velocity)?std::clamp(velocity,-20.f,20.f):0;
     travel=std::isfinite(travel)?std::max(0.f,travel):0;
     const bool onGround=height<=0 && velocity<=0;
+    // Filtered rise is useful for secondary sway, but reverses/delays source
+    // playback near takeoff/apex. Joint timing follows actual flight velocity.
+    pose.flightPhase=onGround?1.f:Unit((1-velocity/motion::jumpSpeed)*.5f);
     if (!onGround && !wasAirborne) {
       flightAge=0; hasDeparture=pose.feetActive;
       departureLanding=pose.landing;

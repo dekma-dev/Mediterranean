@@ -706,7 +706,7 @@ float4 PSMain(VOut i) : SV_TARGET {
 struct EffectOut { float4 p : SV_POSITION; float3 uv : TEXCOORD0; float4 tint : COLOR; float fog : TEXCOORD1; float viewDepth : TEXCOORD2; };
 EffectOut VSEffect(VIn i) {
  EffectOut o; o.p=mul(float4(i.p,1),wvp); o.uv=i.n; o.tint=i.tint;
- o.fog=AirTransmission(eyeAndHud.xyz,i.p);o.viewDepth=o.p.w; return o;
+ o.fog=eyeAndHud.w<0?1:AirTransmission(eyeAndHud.xyz,i.p);o.viewDepth=o.p.w; return o;
 }
 float4 PSEffect(EffectOut i) : SV_TARGET {
  if(i.uv.z>=7.5) {
@@ -716,9 +716,9 @@ float4 PSEffect(EffectOut i) : SV_TARGET {
   float4 texel=effectArtwork.Sample(fontSampler,uv);
   float border=smoothstep(0,.055,min(min(local.x,1-local.x),min(local.y,1-local.y)));
   float z=effectSceneDepth.Load(int3((int2)i.p.xy,0));
-  // Matches the world projection's 0.1 / 280 m clip planes. Portraits never
-  // submit particles and retain their separate projection/depth lifecycle.
-  float sceneDistance=28.0/max(.0001,280.0-z*279.9);
+  // Match the active projection, including the opt-in 0.1 / 20 m stage.
+  float farPlane=eyeAndHud.w<0?20.0:280.0;
+  float sceneDistance=(.1*farPlane)/max(.0001,farPlane-z*(farPlane-.1));
   float soft=saturate((sceneDistance-i.viewDepth)/(tile==1 || tile==2?.24:.065));
   return float4(texel.rgb*i.tint.rgb,saturate(texel.a*i.tint.a)*border*soft*i.fog);
  }

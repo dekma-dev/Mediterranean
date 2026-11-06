@@ -13,6 +13,7 @@ struct CharacterPose {
   DirectX::XMFLOAT3 pelvisRotation{};
   float headYaw=0,headPitch=0;
   float handCast=0;
+  float freeHandCurl=.32f;
   float staffGripWeight=0;
   float bowDraw=0,bowArrow=1;
   std::array<LimbPose,2> arms,legs; // Left, right in character space.

@@ -123,6 +123,30 @@ float SwingHeight(const std::array<float,4>& weights,float run,int side,float ph
  const float edge=std::clamp(std::min(t,1-t)*10.f,0.f,1.f);
  return std::clamp(h,0.f,.29f)*edge*edge*(3-2*edge);
 }
+float SwingProgress(const std::array<float,4>& weights,float run,int side,float phase){
+ if(side<0||side>1||!std::isfinite(phase))return 0;
+ const float t=std::clamp(phase,0.f,1.f),base=t*t*(3-2*t);
+ if(t==0||t==1)return t;
+ run=std::clamp(std::isfinite(run)?run:0.f,0.f,1.f);
+ float deviation=0,total=0;
+ for(unsigned d=0;d<4;++d)for(unsigned pace=0;pace<2;++pace){
+  const float w=std::clamp(std::isfinite(weights[d])?weights[d]:0.f,0.f,1.f)*(pace?run:1-run);
+  if(w<.00001f)continue;
+  const auto clip=Clip(unsigned(Clip::WalkForward)+pace*4+d);
+  const auto& track=Collection()[unsigned(clip)];
+  const float begin=track.stance-side*.5f,end=1-side*.5f;
+  const auto a=Sample(clip,begin).feet[side],b=Sample(clip,end).feet[side],f=Sample(clip,begin+(end-begin)*t).feet[side];
+  const float x=b.x-a.x,z=b.z-a.z,length=x*x+z*z;
+  if(length>.0025f){
+   const float along=((f.x-a.x)*x+(f.z-a.z)*z)/length;
+   deviation+=(std::clamp(along,-.12f,1.12f)-base)*w;
+  }
+  total+=w;
+ }
+ // Ease only the endpoint correction; the middle retains source acceleration.
+ const float edge=std::clamp(std::min(t,1-t)*10.f,0.f,1.f);
+ return base+deviation/std::max(1.f,total)*edge*edge*(3-2*edge);
+}
 float AttackPhase(Clip clip,float seconds,float start,float contact,float end){
  if(!std::isfinite(seconds)||seconds<0)return 0;
  Check(std::isfinite(end)&&start>0&&contact>start&&end>contact,"Invalid player attack retiming");

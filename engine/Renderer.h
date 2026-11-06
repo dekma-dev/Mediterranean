@@ -126,7 +126,7 @@ public:
   bool ValidateDebugMessages();
   int Width() const { return width_; }
   int Height() const { return height_; }
-  bool BeginPortrait(float x,float y,float width,float height,float closeup=0);
+  bool BeginPortrait(float x,float y,float width,float height,float closeup=0,bool effects=false);
   bool EndPortrait();
   UINT DrawCalls() const { return drawCalls_ + static_cast<UINT>((hud_.size()+16379)/16380) + UINT(!effects_.empty())+UINT(!cloudSprites_.empty())+UINT(!groundMarks_.empty()); }
   void DrawHudRect(float x, float y, float width, float height, const DirectX::XMFLOAT4& color);
@@ -215,7 +215,7 @@ private:
   Microsoft::WRL::ComPtr<ID3D11DepthStencilState> effectDepth_;
   Microsoft::WRL::ComPtr<ID3D11VertexShader> effectVertexShader_;
   Microsoft::WRL::ComPtr<ID3D11PixelShader> effectPixelShader_;
-  bool portrait_ = false,frameFailed_ = false,skyPending_ = false;
+  bool portrait_ = false,portraitEffects_ = false,frameFailed_ = false,skyPending_ = false;
   D3D11_VIEWPORT portraitViewport_{};
   DirectX::XMFLOAT4X4 savedCamera_{};
   DirectX::XMFLOAT3 savedEye_{};

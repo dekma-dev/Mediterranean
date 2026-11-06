@@ -19,6 +19,7 @@ public:
     next_=0;firstStep_=true;
     support_=supportVelocity_=0;
     hip_=hipVelocity_=0;hasHip_=false;
+    phaseReady_=false;
   }
   void Update(float dt,rpg::Vec2 position,float yaw,bool grounded,bool alive,Sample& sample) {
     sample.feetActive=false;
@@ -26,10 +27,19 @@ public:
     sample.support=0;
     if (!std::isfinite(dt) || dt<=0 || !std::isfinite(position.x) || !std::isfinite(position.z) || !std::isfinite(yaw)) return;
     dt=std::min(dt,.05f);
-    if (!ready_ || !grounded || !alive || std::hypot(position.x-previous_.x,position.z-previous_.z)>.85f) {
-      Reset(position,yaw);
-      if (!grounded || !alive) { ready_=false; return; }
+    if(!alive){Reset(position,yaw);ready_=false;return;}
+    if(!grounded){
+      // Release support immediately, but retain the departing gait phase while
+      // the airborne layer blends in. Resetting it changed the arms by almost
+      // half a cycle on the very first airborne frame.
+      if(sample.authoredGait&&phaseReady_)Retime(sample,phase_);
+      previous_=position;heading_=yaw;ready_=false;return;
     }
+    if(!ready_){
+      const bool retained=phaseReady_;const float phase=phase_;
+      Reset(position,yaw);
+      phaseReady_=retained;phase_=phase;
+    } else if(std::hypot(position.x-previous_.x,position.z-previous_.z)>.85f)Reset(position,yaw);
     const rpg::Vec2 start=previous_,velocity{(position.x-start.x)/dt,(position.z-start.z)/dt};
     const float startYaw=heading_,turn=motion::AngleDelta(startYaw,yaw);
     // Fixed contact decisions avoid different left/right step ordering at
@@ -59,6 +69,24 @@ public:
     motion::Spring(support,supportVelocity,std::clamp((visible[0].y-visible[1].y)/.10f,-1.f,1.f),20.f,pending_);
     sample.support=support;
     if(sample.authoredGait) {
+      // Contacts determine the phase seen by the shoulders and hands. The
+      // old distance clock and contact controller drifted apart, so a hand
+      // could accompany the same-side leg even in a steady forward run.
+      const float speed=std::hypot(velocity.x,velocity.z);
+      if(speed>.1f) {
+        auto left=feet_[0];
+        if(left.stepping&&pending_>0)AdvanceSwing(left,0,pending_,position,yaw,velocity,sample);
+        const auto timing=TravelGait(speed);
+        const float duty=.62f+(.24f-.62f)*Unit(sample.runBlend);
+        const auto neutral=Neutral(position,yaw,0);
+        const float behind=((neutral.x-left.goal.x)*velocity.x+(neutral.z-left.goal.z)*velocity.z)/speed;
+        const float desired=left.stepping?duty+(1-duty)*left.age/left.duration:
+          duty*Unit((behind+.58f*timing.reach)/(1.58f*timing.reach));
+        if(!phaseReady_){phase_=sample.authoredPhase;phaseReady_=true;}
+        const float error=std::remainder(desired-phase_,1.f);
+        phase_=std::remainder(phase_+std::clamp(error,-4.f*dt,4.f*dt),1.f);
+      }
+      if(phaseReady_)Retime(sample,phase_);
       const auto form=sample.authoredEquipment==playerclips::Equipment::Staff?rpg::WeaponForm::AstralStaff:
         sample.authoredEquipment==playerclips::Equipment::Bow?rpg::WeaponForm::Handbow:rpg::WeaponForm::Blade;
       const float limit=BuildCharacterPose(0,0,false,sample,form).bodyLift;
@@ -74,6 +102,20 @@ public:
   }
   bool Planted(int side) const { return ready_ && !feet_[side].stepping; }
 private:
+  static void Retime(Sample& sample,float phase){
+    const auto old=playerclips::Locomotion(sample.gaitWeights,sample.runBlend,sample.authoredPhase,sample.authoredEquipment);
+    auto corrected=playerclips::Locomotion(sample.gaitWeights,sample.runBlend,phase,sample.authoredEquipment);
+    // Keep the additive start/stop deviation; replace only the looping layer.
+    corrected.hip+=sample.authoredMotion.hip-old.hip;
+    corrected.torso.x+=sample.authoredMotion.torso.x-old.torso.x;
+    corrected.torso.z+=sample.authoredMotion.torso.z-old.torso.z;
+    for(unsigned i=0;i<2;++i){
+      corrected.hands[i].x+=sample.authoredMotion.hands[i].x-old.hands[i].x;
+      corrected.hands[i].y+=sample.authoredMotion.hands[i].y-old.hands[i].y;
+      corrected.hands[i].z+=sample.authoredMotion.hands[i].z-old.hands[i].z;
+    }
+    sample.authoredPhase=phase;sample.authoredMotion=corrected;
+  }
   struct Step {
     Foot point,from,goal;
     rpg::Vec2 root{},velocity{};
@@ -86,19 +128,22 @@ private:
   float support_=0,supportVelocity_=0;
   float hip_=0,hipVelocity_=0;
   bool hasHip_=false;
+  float phase_=0;
+  bool phaseReady_=false;
   int next_=0;
   bool ready_=false;
   bool firstStep_=true;
-  static Foot Neutral(rpg::Vec2 position,float yaw,int side) {
-    const float offset=side==0?-.18f:.18f;
+  static Foot Neutral(rpg::Vec2 position,float yaw,int side,float width=.18f) {
+    const float offset=side==0?-width:width;
     const float x=position.x+std::cos(yaw)*offset,z=position.z-std::sin(yaw)*offset;
     return {x,rpg::WorldMap::Height({x,z})+.17f,z,yaw};
   }
   static void AdvanceSwing(Step& foot,int i,float dt,rpg::Vec2 position,float yaw,rpg::Vec2 velocity,const Sample& sample) {
     foot.age=std::min(foot.duration,foot.age+dt);
-    auto desired=Neutral(position,yaw,i);
+    const float width=.18f-.055f*Unit(sample.runBlend)*Unit(sample.gaitWeights[0]);
+    auto desired=Neutral(position,yaw,i,width);
     const float speed=std::hypot(velocity.x,velocity.z);
-    const float lead=.82f*TravelGait(speed).reach/std::max(speed,.7f);
+    const float lead=.58f*TravelGait(speed).reach/std::max(speed,.7f);
     desired.x+=velocity.x*lead;
     desired.z+=velocity.z*lead;
     // Feed forward actor travel; otherwise a 24 Hz position filter lands the
@@ -114,8 +159,12 @@ private:
     // a fixed takeoff and a moving goal left the foot far behind the body.
     // Matching -actor velocity at both relative endpoints gives stationary
     // world-space takeoff/contact, with retraction before the landing.
-    const float u=t*t*(3-2*t);
-    const float tangent=foot.duration*(-(2*t*t*t-3*t*t+t)+.22f*std::sin(t*motion::tau)*std::sin(t*motion::tau*.5f));
+    const float u=sample.authoredGait?playerclips::SwingProgress(sample.gaitWeights,sample.runBlend,i,t):t*t*(3-2*t);
+    // Endpoint velocity compensation belongs near release and touchdown.
+    // Applying a stride-long tangent throughout recovery swept the ankle far
+    // behind its reach sphere and drove the pelvis into a permanent crouch.
+    const float tangent=foot.duration*t*(1-t)*
+      (-std::exp(-t/.075f)+std::exp(-(1-t)/.075f));
     float height=foot.lift*16*t*t*(1-t)*(1-t);
     if(sample.authoredGait) {
       float amount=0;for(float w:sample.gaitWeights)amount+=Unit(w);
@@ -156,7 +205,8 @@ private:
       const int i=(next_+order)%2;
       auto& foot=feet_[i];
       if (foot.stepping) continue;
-      const auto neutral=Neutral(position,yaw,i);
+      const float width=.18f-.055f*Unit(sample.runBlend)*Unit(sample.gaitWeights[0]);
+      const auto neutral=Neutral(position,yaw,i,width);
       const float error=std::hypot(foot.goal.x-neutral.x,foot.goal.z-neutral.z);
       const float angle=std::abs(motion::AngleDelta(foot.point.yaw,yaw));
       const auto timing=TravelGait(speed);
@@ -173,7 +223,7 @@ private:
         foot.goal=neutral;
         // Land closer to the centre of mass; heel rise supplies the longer
         // rear part of support instead of overstriding and squatting at contact.
-        const float lead=.82f*timing.reach/std::max(speed,.7f);
+        const float lead=.58f*timing.reach/std::max(speed,.7f);
         foot.goal.x+=velocity.x*lead; foot.goal.z+=velocity.z*lead;
         next_=1-i;
         firstStep_=false;

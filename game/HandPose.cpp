@@ -53,16 +53,22 @@ HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool 
     const auto rightLocal=pose.UpperDirection({1,0,0}),upLocal=pose.UpperDirection({0,1,0}),forwardLocal=pose.UpperDirection({0,0,1});
     const auto right=XMLoadFloat3(&rightLocal),up=XMLoadFloat3(&upLocal),forward=XMLoadFloat3(&forwardLocal);
     const float reach=animation::SmoothStep(cast)*(side?.45f:1.f);
-    // A hanging hand and upright casting palm can be almost 180 degrees
-    // apart. Shortest-arc quaternion blending switches sides at that seam.
-    // Lift through the forward hemisphere using a bounded elevation instead;
-    // the elbow plane cannot introduce a second, independent wrist twist.
+    // Keep the wrist in the forearm's actual sagittal plane. acos(vertical)
+    // lost the sign of forward reach: a backswing was reflected forwards,
+    // folding the wrist and turning both running palms towards the sky.
     const float vertical=XMVectorGetX(XMVector3Dot(forearm,up));
-    const float elevation=std::acos(std::clamp(vertical,-.995f,.995f))*(1-reach);
+    const float sagittal=XMVectorGetX(XMVector3Dot(forearm,forward));
+    float angle=std::atan2(sagittal,vertical);
+    if(angle<0)angle+=XM_2PI;
+    const float elevation=angle*(1-reach);
     const float lateral=std::clamp(XMVectorGetX(XMVector3Dot(forearm,right))*(1-reach),-.98f,.98f);
     const float radial=std::sqrt(1-lateral*lateral);
     const auto fingerAxis=right*lateral+(up*std::cos(elevation)+forward*std::sin(elevation))*radial;
-    const auto across=XMVector3Normalize(right-fingerAxis*XMVector3Dot(right,fingerAxis));
+    // Relaxed palms face the body, with the thumb forward. Only a deliberate
+    // casting gesture supinates and opens them towards the target.
+    const auto palmReference=right*((side?-1.f:1.f)*(1-reach))+forward*reach;
+    const auto palm=XMVector3Normalize(palmReference-fingerAxis*XMVector3Dot(palmReference,fingerAxis));
+    const auto across=XMVector3Normalize(XMVector3Cross(fingerAxis,palm));
     frame={across,fingerAxis,XMVector3Cross(across,fingerAxis),XMVectorSet(0,0,0,1)};
     // The wrist is fixed to the solved arm even while the casting palm turns.
     const auto wrist=XMVector3TransformNormal(XMVectorSet(0,-.055f,-.043f,0),frame);
@@ -84,8 +90,9 @@ HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool 
   }
   HandPose result;
   XMStoreFloat4x4(&result.frame,frame);
-  result.curl=side?weapon?1.f:.32f*(1-animation::SmoothStep(cast)):
-    shield?1.f:staffGrip+(1-staffGrip)*.32f*(1-animation::SmoothStep(cast));
+  const float relaxed=std::clamp(pose.freeHandCurl,.2f,.85f)*(1-animation::SmoothStep(cast));
+  result.curl=side?weapon?1.f:relaxed:
+    shield?1.f:staffGrip+(1-staffGrip)*relaxed;
   if(!side && weapon && !shield)result.curl=std::max(result.curl,.85f*pose.bowDraw);
   constexpr float lengths[4][3]={{.041f,.026f,.021f},{.045f,.028f,.023f},{.042f,.026f,.022f},{.033f,.022f,.019f}};
   // Free palms face forward when casting: thumbs point toward the body's

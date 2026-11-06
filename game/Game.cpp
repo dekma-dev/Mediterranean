@@ -15,6 +15,7 @@
 #include "game/TerrainSurface.h"
 #include "game/ExpeditionView.h"
 #include "game/PopulationView.h"
+#include "game/CombatText.h"
 #include <algorithm>
 #include <cmath>
 #include <sstream>
@@ -82,7 +83,7 @@ void Game::Update(double seconds,const Input& input,float wheel) {
     inputBarrier_=false;return;
   }
   if(choosingCharacter_) {
-    const auto action=selection_.Update(dt,input);
+    const auto action=selection_.Update(dt,input,wheel);
     if(action==ui::CharacterSelection::Action::Quit) quitRequested_=true;
     if(action==ui::CharacterSelection::Action::Enter) {
       if(!RestoreSnapshot(selection_.Snapshot())) return;
@@ -711,23 +712,20 @@ void Game::Render(Renderer& renderer,bool showInterface) {
   sustained_.Render(renderer,simulation_,time_,playerPose_.facing);
   effects_.Render(renderer,&sockets);
   const bool drawInterface=showInterface && (hudVisible_ || interface_.HasPanels() || simulation_.Health()<=0);
+  const ui::Layout textLayout(float(renderer.Width()),float(renderer.Height()));
   for (std::size_t i=0;drawInterface && i<simulation_.Feedback().size();++i) {
     const auto& feedback=simulation_.Feedback()[i];
+    const auto view=ui::ReadCombatText(feedback);if(view.opacity<=0)continue;
     DirectX::XMFLOAT2 screen;
-    if (!renderer.Project({feedback.position.x,rpg::WorldMap::Height(feedback.position)+2.5f+feedback.age*.8f+float(i%3)*.25f,feedback.position.z},screen)) continue;
-    if (screen.x<.04f || screen.x>.84f || screen.y<.23f || screen.y>.68f) continue;
-    XMFLOAT4 color{1,.85f,.35f,1}; std::string text;
-    switch (feedback.kind) {
-    case rpg::FeedbackKind::Damage: text=std::to_string(feedback.amount); break;
-    case rpg::FeedbackKind::Hurt: text="-"+std::to_string(feedback.amount); color={1,.35f,.3f,1}; break;
-    case rpg::FeedbackKind::Heal: text="HEAL "+std::to_string(feedback.amount); color={.4f,1,.6f,1}; break;
-    case rpg::FeedbackKind::Experience: text="XP "+std::to_string(feedback.amount); color={.65f,.7f,1,1}; break;
-    case rpg::FeedbackKind::LevelUp: text="LEVEL "+std::to_string(feedback.amount)+" / N: BUILD"; break;
-    case rpg::FeedbackKind::Miss: text="MISSED"; color={.8f,.8f,.8f,1}; break;
-    case rpg::FeedbackKind::Interrupt: text="INTERRUPTED"; color={.4f,.85f,1,1}; break;
-    case rpg::FeedbackKind::Absorb: text="ABSORB "+std::to_string(feedback.amount);color={.73f,.85f,1,1};break;
-    }
-    renderer.DrawText(screen.x,screen.y,text,color,2);
+    if (!renderer.Project({feedback.position.x,rpg::WorldMap::Height(feedback.position)+2.25f,feedback.position.z},screen)) continue;
+    const float size=view.size*textLayout.scale;
+    const float width=renderer.TextWidth(view.text,size);
+    screen.x+=(view.x*textLayout.scale-width*.5f)/renderer.Width();screen.y+=view.y*textLayout.scale/renderer.Height();
+    if(screen.x<.015f || screen.x+width/renderer.Width()>.985f || screen.y<.045f || screen.y>.80f)continue;
+    const float edge=std::max(1.f,textLayout.scale);
+    for(const auto offset:{DirectX::XMFLOAT2{-edge,0},DirectX::XMFLOAT2{edge,0},DirectX::XMFLOAT2{0,-edge},DirectX::XMFLOAT2{0,edge}})
+      renderer.DrawText(screen.x+offset.x/renderer.Width(),screen.y+offset.y/renderer.Height(),view.text,{.025f,.018f,.012f,view.opacity*.9f},size);
+    renderer.DrawText(screen.x,screen.y,view.text,{view.color[0],view.color[1],view.color[2],view.opacity},size);
   }
   if (drawInterface) interface_.Render(renderer,simulation_,time_,debugOverlay_,cameraYaw_);
 }

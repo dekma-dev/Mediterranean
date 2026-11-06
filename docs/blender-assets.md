@@ -1,5 +1,30 @@
 # Blender collection in the native renderer
 
+## Source recovery and articulated arms (2026-11-06, v10)
+
+The current editable motion source is `assets/authored/player-motion-v10.blend`.
+Thirty-two gait actions now use shoulder/elbow articulation and revised ankle
+recovery. Native playback retains the source's horizontal recovery timing,
+advances jumps from actual flight velocity and preserves the departing leading
+leg. Twenty-five other native records remain byte-identical to v9. Faces,
+geometry and the original collection are preserved. See
+[the v10 record](player-recovery-motion-v10.md) for scope and local comparison.
+The six selected motion/art suites pass in Release and Debug. All six game
+outputs pass fixture-save smoke launches and contain the current exported clips.
+
+## Player gait and flight review (2026-11-06)
+
+The preceding editable motion source is `assets/authored/player-motion-v9.blend`.
+Thirty-eight of the existing 51 actions have revised gait and flight poses.
+Native integration corrects mirrored free wrists, excessive recovery reach,
+upper-body/contact phase drift and the takeoff phase reset. Source toe/heel
+pivots are corrected; faces, model geometry and the original collection remain
+unchanged. The PCL3 archive retains all 57 identities and nineteen untouched
+records. See [the motion review](player-motion-review-20261106.md) for the user's
+reference footage, changes, measurements and local before/after review.
+Six selected animation/art suites pass in both Release and Debug; all six game
+outputs pass fixture-save smoke launches and embed the current exported clips.
+
 ## One player warrior study (2026-11-05)
 
 The warrior now has revised fitted clothing, formed armor, articulated shoulder
@@ -14,7 +39,7 @@ and ignored by Git.
 
 ## Grounded locomotion and full-body weapon motion (2026-11-05)
 
-The current editable motion source is `assets/authored/player-motion-v8.blend`.
+The preceding editable motion source is `assets/authored/player-motion-v8.blend`.
 It revises 44 of the 51 retained actions, with the same 57 native track identities.
 PCL3 now transports pelvis orientation/translation and elbow planes as well as
 the original wrist, foot, chest and weapon channels. The native retarget keeps

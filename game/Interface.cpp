@@ -524,201 +524,165 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  const auto page=selection.Screen();const bool roster=page==Page::Roster,customize=page==Page::Customize;
  const bool valid=!roster || selection.State()!=Status::Unreadable,saved=selection.State()==Status::Saved;
  const auto& hero=selection.Hero();const auto& info=hero.ClassInfo();
- localization::playerName=std::string(hero.Nickname())==hero.ClassInfo().title?"":hero.Nickname();
+ localization::playerName=std::string(hero.Nickname())==info.title?"":hero.Nickname();
  renderer.DrawHudRect(0,0,1,1,{.017f,.016f,.014f,1});
  c.Art({0,0,1280,720},Renderer::UiArt::Hall);
- c.Gradient({0,0,1280,132},{.015f,.012f,.01f,.9f},{.015f,.012f,.01f,0});
- c.Gradient({0,628,1280,92},{.015f,.012f,.01f,0},{.015f,.012f,.01f,.94f});
- // Candle warmth on the stone stays behind the model and the readable panels.
- for(int side=0;side<2;++side) {
-   const float strength=.022f+.007f*std::sin(selection.Time()*1.7f+side);
-   for(int ring=5;ring>0;--ring)
-     c.Oval(393+side*413.f,356,ring*17.f,ring*26.f,{.68f,.40f,.17f,strength/5});
- }
- // Sparse warm dust catches the hall light without competing with the live hero.
+ c.Gradient({0,0,1280,138},{.015f,.018f,.023f,.84f},{.015f,.018f,.023f,0});
+ c.Gradient({0,588,1280,132},{.015f,.018f,.023f,0},{.015f,.018f,.023f,.92f});
+ // Keep the stage open. Only text rails receive a translucent scrim.
+ c.Gradient({22,156,302,438},{.018f,.025f,.028f,.84f},{.018f,.025f,.028f,.30f});
+ c.Gradient({996,94,262,518},{.018f,.025f,.028f,.70f},{.018f,.025f,.028f,.38f});
+ c.Skin({4,4,1272,712},20,{.85f,.87f,.86f,1},false);
+ for(int side=0;side<2;++side) for(int ring=5;ring>0;--ring)
+   c.Oval(393+side*413.f,356,ring*17.f,ring*26.f,{.68f,.40f,.17f,(.022f+.007f*std::sin(selection.Time()*1.7f+side))/5});
  for(int i=0;i<18;++i) {
-   const float t=selection.Time(),x=320+std::fmod(i*91.f+t*(2+i%3),470.f);
-   const float y=150+std::fmod(i*61.f-t*7+6000.f,430.f);
-   const float a=.09f+.08f*std::sin(t*.8f+i);
-   c.Oval(x,y,1.1f,1.1f,{.95f,.76f,.43f,a});
+   const float t=selection.Time(),x=328+std::fmod(i*91.f+t*(2+i%3),630.f),y=150+std::fmod(i*61.f-t*7+6000.f,430.f);
+   c.Oval(x,y,1.1f,1.1f,{.95f,.76f,.43f,.09f+.08f*std::sin(t*.8f+i)});
  }
- c.Text(66,35,"MEDITERRANEAN",34,{.86f,.79f,.64f,1});
- c.Text(68,80,"T H E   D A W N W A T C H   C H R O N I C L E",11,ink);
- c.Text(842,46,roster?"YOUR CHARACTERS":customize?"GIVE YOUR HERO AN IDENTITY":"CHOOSE YOUR CALLING",customize?17.f:20.f,ink);
- c.Text(842,79,roster?"Dawnwatch  /  Local campaign":customize?"CREATE  /  II. Appearance & name":"CREATE  /  I. Class & talents",13,gold);
- c.Window({64,144,222,480});c.Banner({74,133,202,36},roster?"The company":"The eleven callings",16);
- c.Window({814,140,400,510});c.Banner({852,129,324,36},roster?"Hero's chronicle":customize?"A name for the ages":"Choose a path",19);
+ c.Text(34,30,"MEDITERRANEAN",28,{.86f,.79f,.64f,1});
+ c.Text(36,67,"T H E   D A W N W A T C H   C H R O N I C L E",10,muted);
+ c.Center(360,28,570,roster?"YOUR CHARACTERS":customize?"GIVE YOUR HERO AN IDENTITY":"CHOOSE YOUR CALLING",22,ink);
+ c.Center(360,58,570,roster?"Dawnwatch  /  Local campaign":customize?"II  /  Identity":"I  /  Calling",13,gold);
+ c.Center(1004,74,244,customize?"Appearance":roster?"The company":"The eleven callings",16,ink);
  if(valid) {
-  if(selection.PreviewZoom()<.5f) for(int ring=5;ring>0;--ring)
-    c.Oval(558,548,ring*15.f,ring*2.8f,{.015f,.012f,.01f,.07f*(1-selection.PreviewZoom()*2)});
-  const auto p=c.P(326,112);
-  if(renderer.BeginPortrait(p.x,p.y,464*c.layout.scale/renderer.Width(),490*c.layout.scale/renderer.Height(),selection.PreviewZoom())) {
-   auto pose=animation::Idle(selection.Time());
-   pose.action=selection.PreviewPose();
-   if(selection.PreviewAction()>=0 && selection.PreviewAbility()!=2 && selection.PreviewAbility()!=3 && !animation::RangedClass(hero.Class())) {
-    pose.attackSeconds=selection.PreviewAction();pose.heavyAttack=selection.PreviewAbility()!=0 && selection.PreviewAbility()!=7;
+   const auto stage=CharacterSelection::StageBounds();const auto p=c.P(stage.x,stage.y);
+   if(selection.PreviewZoom()<.5f) for(int ring=5;ring>0;--ring)
+     c.Oval(651,590,ring*17.f,ring*3.f,{.015f,.012f,.01f,.07f*(1-selection.PreviewZoom()*2)});
+   if(renderer.BeginPortrait(p.x,p.y,stage.w*c.layout.scale/renderer.Width(),stage.h*c.layout.scale/renderer.Height(),selection.PreviewZoom(),true)) {
+     DrawCharacter(renderer,{0,0},0,selection.Yaw(),{info.color[0],info.color[1],info.color[2],1},0,0,
+       selection.PreviewOutfit(),selection.PreviewBody());
+     selection.RenderEffects(renderer);renderer.EndPortrait();
    }
-   if(selection.PreviewAction()>=0 && selection.PreviewAbility()==2) {
-    pose.dashPhase=std::clamp(selection.PreviewAction()/.34f,0.f,1.f);
-    pose.dash=motion::DashSpeed(pose.dashPhase);pose.dashBrake=animation::DashBrake(pose.dashPhase)*(1-animation::SmoothStep((selection.PreviewAction()-.34f)/.16f));
-    pose.retreat=hero.RetreatMobility();
-   }
-   if(selection.PreviewAction()>=0 && selection.PreviewAbility()==3 && hero.Class()==rpg::ClassId::Warrior)
-    pose.cast=animation::Gesture(selection.PreviewAction(),.18f,.72f);
-   DrawCharacter(renderer,{0,0},0,selection.Yaw(),{info.color[0],info.color[1],info.color[2],1},0,0,
-     CharacterOutfit::From(hero.Items(),hero.Class(),hero.Look()),pose);
-   renderer.EndPortrait();
-  }
- } else c.Center(326,353,464,"Character unavailable",22,muted);
- c.Center(326,565,464,roster && !saved?"An unclaimed calling":hero.Nickname(),22,ink);
- c.Center(438,613,144,"Rotate character",13,muted);
- if(selection.PreviewAbility()>=0) c.Center(326,593,464,hero.Spell(selection.PreviewAbility()).name,13,gold);
+ } else c.Center(326,353,650,"Character unavailable",22,muted);
  const auto button=[&](C control,const char* label) {
-  const auto a=CharacterSelection::Bounds(control);
-  const bool enabled=selection.Enabled(control),focused=selection.Focus()==control;
-  const bool primary=control==C::Enter || control==C::Next || control==C::Confirm || control==C::Create;
-  c.Button(a,enabled,focused,primary);
-  const float highlight=selection.Highlight(control);
-  if(enabled) c.Gradient({a.x+5,a.y+4,a.w-10,a.h-8},{.96f,.72f,.36f,.14f*highlight},{.6f,.36f,.12f,.03f*highlight});
-  const float depression=selection.Pressed(control)?1.5f:0;
-  c.Center(a.x+7,a.y+(a.h-18)*.5f-1+depression,a.w-14,label,primary?19.f:15.f,enabled?ink:muted);
-  if(focused && enabled) c.Line(a.x+8,a.y+a.h-7,a.x+a.w-8,a.y+a.h-7,1,gold);
+   const auto a=CharacterSelection::Bounds(control);const bool enabled=selection.Enabled(control),focused=selection.Focus()==control;
+   const bool primary=control==C::Enter || control==C::Next || control==C::Confirm || control==C::Create;
+   c.Button(a,enabled,focused,primary);
+   if(enabled)c.Gradient({a.x+5,a.y+4,a.w-10,a.h-8},{.96f,.72f,.36f,.16f*selection.Highlight(control)},{.6f,.36f,.12f,.025f*selection.Highlight(control)});
+   c.Center(a.x+7,a.y+(a.h-17)*.5f-1+(selection.Pressed(control)?1.5f:0),a.w-14,label,primary?18.f:14.f,enabled?ink:muted);
  };
+ if(valid) {
+   c.Center(412,82,452,"Equipment preview",12,muted);
+   for(int i=0;i<3;++i) {
+     const auto control=C(int(C::Dress0)+i);const auto r=CharacterSelection::Bounds(control);
+     button(control,i==0?"Equipped outfit":i==1?"Travel outfit":"Veteran outfit");
+     if(int(selection.PreviewDress())==i)c.Line(r.x+8,r.y+r.h-4,r.x+r.w-8,r.y+r.h-4,2,gold);
+   }
+   if(selection.PreviewDress()!=CharacterSelection::Dress::Equipped) {
+     c.Gradient({412,132,452,20},{.018f,.025f,.028f,.82f},{.018f,.025f,.028f,.62f});
+     c.Center(380,134,540,"Outfit preview only; equipment is earned in the world.",11,gold);
+   }
+ }
+ // The bottom rail is shared by all three pages; hit rectangles never drift.
+ c.Art({14,640,1252,64},Renderer::UiArt::Frame,{.27f,.28f,.72f,.71f},{.52f,.66f,.70f,.86f});
+ c.Line(26,640,1254,640,1,{.68f,.58f,.36f,.8f});
+ c.Center(524,610,254,roster && !saved?"An unclaimed calling":hero.Nickname(),18,ink);
  button(C::Left,"<");button(C::Right,">");
- button(C::Closeup,selection.Closeup()?"Full figure":"Face close-up");
- button(C::Pose,"Try next art");button(C::ResetView,"Reset view");
- if(!roster) {
-  for(int step=0;step<2;++step) {
-   const Rect tab{330+232.f*step,104,224,30};
-   c.Frame(tab,dark,(customize?1:0)==step?gold:border);
-   c.Center(tab.x,tab.y+7,tab.w,step?"II  /  Identity":"I  /  Calling",13,(customize?1:0)==step?ink:muted);
-  }
- }
+ button(C::Closeup,selection.Closeup()?"Full figure":"Face close-up");button(C::Pose,"Try next art");button(C::ResetView,"Reset view");
+ button(C::Showcase,selection.Showcasing()?"Stop showcase":"Class showcase");
+ c.Center(340,704,610,"Drag to rotate / Wheel to zoom",10,muted);
+ if(selection.PreviewAction()>=0)c.Center(352,584,600,hero.Spell(selection.PreviewAbility()).name,13,gold);
  if(roster) {
-  const auto card=CharacterSelection::Bounds(C::Hero);c.Frame(card,dark,valid?gold:border);
-  if(valid) {
-   ClassSigil(c,{857,207,52,52},hero.Class());
-   const std::string name=saved?hero.Nickname():info.name;
-   const float nameSize=std::min(22.f,22.f*248.f/std::max(1.f,c.Width(name,22)));
-   c.Text(925,202,name,nameSize,ink);
-   c.Text(925,240,saved?"Level "+std::to_string(hero.Level()):"Empty class slot",17,gold);
-   c.Text(925,270,saved?hero.ClassName():"Create a hero to begin",14,muted);
-   c.Text(842,334,saved?"SAVED JOURNEY":"A NEW CHRONICLE",12,gold);
-   c.Wrap(842,361,350,saved?"Continue this hero's expedition, equipment, talents and quest progress.":
-     "Create a character: choose a class, customize your appearance and give your hero a name.",16,ink,3);
-   c.Wrap(842,430,350,selection.Changed()?"Save changed. Review the hero before entering.":info.role,13,gold,2);
-  } else {
-   c.Text(861,211,"Unable to read this character",19,ink);c.Text(861,252,"The saved file has been kept.",15,muted);
-   c.Wrap(842,348,350,"Restore this class's save in the saves folder, then select Refresh. You can create a hero in another empty class slot.",16,ink,5);
-  }
-  button(C::Create,"Create character");button(C::Enter,"Enter World");button(C::Refresh,"Refresh [R]");button(C::Quit,"Exit game");
- } else {
-  ClassSigil(c,{842,181,46,46},hero.Class());c.Text(900,182,info.name,22,ink);c.Text(900,213,info.role,12,gold);
-  if(!customize) {
-   using View=CharacterSelection::CallingView;
-   const auto view=selection.CallingScreen();
-   for(int tab=0;tab<3;++tab) {
-    const auto control=C(int(C::Overview)+tab);const auto r=CharacterSelection::Bounds(control);
-    button(control,tab==0?"Overview":tab==1?"Battle arts":"Talent paths");
-    if(int(view)==tab) c.Line(r.x+6,r.y+r.h-4,r.x+r.w-6,r.y+r.h-4,2,gold);
-   }
-   if(view==View::Overview) {
-    const char* labels[]={"VITALITY","ARMOR","REACH"};
-    const std::string values[]={std::to_string(int(hero.MaxHealth())),Number(hero.DamageReduction()),Number(info.range)+" m"};
-    c.Inset({842,291,350,65});
-    for(int stat=0;stat<3;++stat) {
-      const Rect r{842+119.f*stat,291,112,65};
-      if(stat) c.Line(r.x-4,302,r.x-4,345,1,{.32f,.29f,.23f,.7f});
-      c.Center(r.x,r.y+10,r.w,labels[stat],10,gold);c.Center(r.x,r.y+29,r.w,values[stat],23,ink);
-    }
-    c.Text(842,376,"Calling: "+std::string(info.name),14,gold);
-    c.Wrap(842,399,350,info.identity,16,ink,3);
-    c.Inset({842,458,350,61});
-    c.Text(855,469,hero.CombatStyleInfo().resource,15,gold);
-    c.Wrap(855,490,324,hero.CombatStyleInfo().payoff,12,ink,2);
-   } else if(view==View::Arts) {
-    const int selected=rpg::ValidSpell(selection.PreviewAbility())?selection.PreviewAbility():0;
-    for(int i=0;i<7;++i) {
-      const int ability=CharacterSelection::previewArts[i];const auto control=C(int(C::Art0)+i);
-      const auto r=CharacterSelection::Bounds(control);const bool chosen=selected==ability;
-      c.Button(r,true,selection.Focus()==control || selection.Hover()==control,chosen);
-      AbilityArtwork(c,{r.x+5,r.y+5,r.w-10,r.h-10},ability,hero.Class());
-      c.Text(r.x+4,r.y+3,hero.Spell(ability).key,10,ink);
-      if(chosen) c.Line(r.x+4,r.y+r.h-3,r.x+r.w-4,r.y+r.h-3,2,gold);
-    }
-    c.Text(842,338,"Select an art / pose preview only",11,muted);
-    const auto spell=hero.Spell(selected);
-    c.Inset({842,357,350,162});
-    AbilityArtwork(c,{854,368,40,40},selected,hero.Class());
-    c.Text(904,369,spell.name,std::min(19.f,19.f*274/std::max(1.f,c.Width(spell.name,19))),ink);
-    c.Wrap(904,393,274,spell.targeting,10,gold,2);
-    c.Wrap(854,421,326,spell.description,13,ink,4);
-    c.Line(854,490,1180,490,1,border);
-    c.Text(854,499,"CD "+Number(hero.AbilityCooldown(selected))+" s",11,gold);
-    c.Text(967,499,spell.range>0?"Range "+Number(spell.range)+" m":"Self",11,gold);
-    c.Text(1083,499,"Key "+std::string(spell.key),11,gold);
+   if(valid) {
+     ClassSigil(c,{34,184,52,52},hero.Class());c.FitText(98,186,216,saved?hero.Nickname():info.name,22,ink);
+     c.Text(98,216,saved?"Level "+std::to_string(hero.Level()):"Empty class slot",15,gold);
+     c.FitText(34,258,280,info.role,14,muted);
+     c.Line(34,294,314,294,1,border);
+     c.Text(34,326,saved?"SAVED JOURNEY":"A NEW CHRONICLE",12,gold);
+     c.Wrap(34,355,280,saved?"Continue this hero's expedition, equipment, talents and quest progress.":
+       "Create a character: choose a class, customize your appearance and give your hero a name.",16,ink,5);
+     if(selection.Changed())c.Wrap(34,462,280,"Save changed. Review the hero before entering.",13,gold,3);
    } else {
-    const int branch=selection.CallingBranch();
-    for(int i=0;i<3;++i) {
-      const auto control=C(int(C::Branch0)+i);const auto r=CharacterSelection::Bounds(control);
-      c.Button(r,true,selection.Focus()==control || selection.Hover()==control,i==branch);
-      c.Center(r.x,r.y+8,r.w,info.branches[i],std::min(13.f,13.f*(r.w-10)/std::max(1.f,c.Width(info.branches[i],13))),i==branch?ink:muted);
-    }
-    for(int row=0;row<6;++row) {
-      const auto talent=hero.TalentDefinition(row*3+branch);const Rect r{842,322+32.f*row,350,30};
-      c.Frame(r,dark,border);c.Center(r.x+3,r.y+8,39,"Lv "+std::to_string(talent.level),10,gold);
-      c.Text(r.x+49,r.y+2,talent.name,std::min(14.f,14.f*290/std::max(1.f,c.Width(talent.name,14))),ink);
-      c.Text(r.x+49,r.y+17,talent.effect,std::min(11.f,11.f*290/std::max(1.f,c.Width(talent.effect,11))),muted);
-    }
+     c.Wrap(34,195,280,"Unable to read this character",21,ink,2);
+     c.Text(34,262,"The saved file has been kept.",14,gold);
+     c.Wrap(34,328,280,"Restore this class's save in the saves folder, then select Refresh. You can create a hero in another empty class slot.",15,ink,7);
    }
-   button(C::Next,selection.ClassSlot(int(selection.SelectedClass())).status==Status::New?"Appearance & name":"Class slot occupied");
-  } else {
-   c.Text(842,241,"HERO'S NAME",11,gold);const auto a=CharacterSelection::Bounds(C::Name);
-   c.Frame(a,dark,selection.Focus()==C::Name?gold:border);
-   std::string name=selection.DraftName().empty()?"Enter a name":selection.DraftName();
-   if(selection.Focus()==C::Name && std::fmod(selection.Time(),1.f)<.55f) name+="|";
-   const float nameSize=std::min(17.f,17.f*(a.w-20)/std::max(1.f,c.Width(name,17)));
-   c.Text(a.x+10,a.y+10,name,nameSize,selection.DraftName().empty()?muted:ink);
-   c.Text(842,308,"1-20 letters; spaces, apostrophe, hyphen. Ctrl+A clears.",10,muted);
-   const auto& look=hero.Look();
-   const auto choice=[&](float y,const char* title,const auto& palette,int selected,C first,C left,C right) {
-    c.Text(842,y-18,title,11,gold);c.Text(1010,y-18,palette[selected].name,11,ink);
-    for(int index=0;index<rpg::Appearance::count;++index) {
-     const auto control=C(int(first)+index);const auto a=CharacterSelection::Bounds(control);const auto& swatch=palette[index];
-     c.Button(a,true,selection.Hover()==control || selection.Focus()==control,index==selected);
-     c.RectFill({a.x+7,a.y+6,a.w-14,a.h-12},swatch.r==0?Color{info.color[0],info.color[1],info.color[2],1}:Color{swatch.r,swatch.g,swatch.b,1});
-     c.Gradient({a.x+7,a.y+6,a.w-14,a.h-12},{1,.94f,.83f,.12f},{0,0,0,.40f});
-     if(index==selected) c.Line(a.x+6,a.y+a.h-3,a.x+a.w-6,a.y+a.h-3,2,gold);
-    }
-    button(left,"<");button(right,">");
-   };
-   choice(348,"COMPLEXION",rpg::skinTones,look.skin,C::Skin0,C::SkinLeft,C::SkinRight);
-   choice(406,"HAIR COLOR",rpg::hairColors,look.hair,C::Hair0,C::HairLeft,C::HairRight);
-   choice(464,"TUNIC DYE",rpg::tunicDyes,look.dye,C::Dye0,C::DyeLeft,C::DyeRight);
-   button(C::Confirm,"Create character");
-  }
-  button(C::Back,"< Back");button(C::Cancel,"Cancel");
+   button(C::Create,"Create character");button(C::Enter,"Enter World");button(C::Refresh,"Refresh [R]");button(C::Quit,"Exit game");
+ } else {
+   ClassSigil(c,{34,170,50,50},hero.Class());c.Text(98,175,info.name,23,ink);c.FitText(98,204,216,info.role,12,gold);
+   if(!customize) {
+     using View=CharacterSelection::CallingView;const auto view=selection.CallingScreen();
+     for(int tab=0;tab<3;++tab) {
+       const auto control=C(int(C::Overview)+tab);const auto r=CharacterSelection::Bounds(control);
+       button(control,tab==0?"Overview":tab==1?"Battle arts":"Talent paths");
+       if(int(view)==tab)c.Line(r.x+6,r.y+r.h-4,r.x+r.w-6,r.y+r.h-4,2,gold);
+     }
+     if(view==View::Overview) {
+       c.Wrap(34,286,280,info.identity,17,ink,5);
+       c.Line(34,402,314,402,1,border);
+       const char* labels[]={"VITALITY","ARMOR","REACH"};
+       const std::string values[]={std::to_string(int(hero.MaxHealth())),Number(hero.DamageReduction()),Number(info.range)+" m"};
+       for(int stat=0;stat<3;++stat){const float x=34+94.f*stat;c.Center(x,420,90,labels[stat],10,gold);c.Center(x,439,90,values[stat],21,ink);}
+       c.Text(34,487,hero.CombatStyleInfo().resource,15,gold);c.Wrap(34,512,280,hero.CombatStyleInfo().payoff,13,ink,4);
+     } else if(view==View::Arts) {
+       const int selected=rpg::ValidSpell(selection.PreviewAbility())?selection.PreviewAbility():0;
+       for(int i=0;i<selection.PreviewArtCount();++i) {
+         const int ability=CharacterSelection::previewArts[i];const auto control=C(int(C::Art0)+i);const auto r=CharacterSelection::Bounds(control);
+         c.Button(r,true,selection.Focus()==control || selection.Hover()==control,selected==ability);
+         AbilityArtwork(c,{r.x+3,r.y+3,r.w-6,r.h-6},ability,hero.Class());
+         c.Text(r.x+3,r.y+3,std::to_string(rpg::SpellLevel(ability)),10,ink);
+       }
+       const float lift=selection.PreviewArtCount()>7?44.f:0.f;
+       c.Text(34,334+lift,"Select an art to see it in motion",11,muted);const auto spell=hero.Spell(selected);
+       AbilityArtwork(c,{34,361+lift,44,44},selected,hero.Class());c.FitText(88,362+lift,226,spell.name,19,ink);
+       c.Wrap(88,389+lift,226,spell.targeting,10,gold,2);c.Wrap(34,425+lift,280,spell.description,13,ink,selection.PreviewArtCount()>7?5:7);
+       c.Line(34,561,314,561,1,border);c.Text(34,573,"CD "+Number(hero.AbilityCooldown(selected))+" s",11,gold);
+       c.Text(174,573,spell.range>0?"Range "+Number(spell.range)+" m":"Self",11,gold);
+     } else {
+       const int branch=selection.CallingBranch();
+       for(int i=0;i<3;++i){const auto control=C(int(C::Branch0)+i);const auto r=CharacterSelection::Bounds(control);
+         c.Button(r,true,selection.Focus()==control || selection.Hover()==control,i==branch);c.Center(r.x+4,r.y+8,r.w-8,info.branches[i],12,i==branch?ink:muted);}
+       for(int row=0;row<6;++row){const auto talent=hero.TalentDefinition(row*3+branch);const Rect r{34,324+44.f*row,280,42};
+         c.Inset(r);c.Center(r.x,r.y+14,34,"Lv "+std::to_string(talent.level),10,gold);
+         c.FitText(r.x+42,r.y+5,232,talent.name,14,ink);c.FitText(r.x+42,r.y+24,232,talent.effect,10,muted);}
+     }
+     button(C::Next,selection.ClassSlot(int(selection.SelectedClass())).status==Status::New?"Appearance & name":"Class slot occupied");
+   } else {
+     c.Text(34,284,"HERO'S NAME",12,gold);const auto a=CharacterSelection::Bounds(C::Name);
+     c.Button(a,true,selection.Focus()==C::Name);std::string name=selection.DraftName().empty()?"Enter a name":selection.DraftName();
+     if(selection.Focus()==C::Name && std::fmod(selection.Time(),1.f)<.55f)name+="|";
+     c.FitText(a.x+10,a.y+10,a.w-20,name,18,selection.DraftName().empty()?muted:ink);
+     c.Wrap(34,370,280,"1-20 letters; spaces, apostrophe, hyphen. Ctrl+A clears.",12,muted,3);
+     c.Wrap(34,466,280,info.identity,15,ink,5);
+     const auto& look=hero.Look();
+     const auto choice=[&](float y,const char* title,const auto& palette,int chosen,C first,C left,C right) {
+       c.Text(1008,y-28,title,13,gold);c.Line(1008,y-8,1250,y-8,1,{.42f,.48f,.47f,.65f});
+       for(int index=0;index<rpg::Appearance::count;++index){const auto control=C(int(first)+index);const auto r=CharacterSelection::Bounds(control);const auto& swatch=palette[index];
+         c.Button(r,true,selection.Hover()==control || selection.Focus()==control,index==chosen);
+         c.RectFill({r.x+5,r.y+5,r.w-10,r.h-10},swatch.r==0?Color{info.color[0],info.color[1],info.color[2],1}:Color{swatch.r,swatch.g,swatch.b,1});
+         c.Gradient({r.x+5,r.y+5,r.w-10,r.h-10},{1,.94f,.83f,.15f},{0,0,0,.3f});
+         if(index==chosen)c.Line(r.x+4,r.y+r.h-3,r.x+r.w-4,r.y+r.h-3,2,gold);
+       }
+       button(left,"<");button(right,">");c.Center(1040,y+36,174,palette[chosen].name,12,ink);
+     };
+     choice(284,"COMPLEXION",rpg::skinTones,look.skin,C::Skin0,C::SkinLeft,C::SkinRight);
+     choice(366,"HAIR COLOR",rpg::hairColors,look.hair,C::Hair0,C::HairLeft,C::HairRight);
+     choice(448,"TUNIC DYE",rpg::tunicDyes,look.dye,C::Dye0,C::DyeLeft,C::DyeRight);
+     c.Wrap(1008,534,242,"Back to change your class",12,muted,2);button(C::Confirm,"Create character");
+   }
+   button(C::Back,"< Back");button(C::Cancel,"Cancel");
  }
- for(int i=0;i<int(rpg::ClassId::Count);++i) {
-  const auto control=C(int(C::Class0)+i);const auto a=CharacterSelection::Bounds(control);const bool selected=int(selection.SelectedClass())==i;
-  const auto& slot=selection.ClassSlot(i);
-  const float warmth=selection.Highlight(control);
-  c.Inset(a,warmth,selected);
-  if(selection.Focus()==control) c.Line(a.x+7,a.y+a.h-3,a.x+a.w-7,a.y+a.h-3,1,gold);
-  ClassSigil(c,{a.x+4,a.y+4,25,25},rpg::ClassId(i));
-  if(roster && slot.status==Status::Saved) {
-   const float size=std::min(12.f,12.f*139.f/std::max(1.f,c.Width(slot.name,12)));
-   c.Text(a.x+34,a.y+3,slot.name,size,ink);
-   c.Text(a.x+34,a.y+18,std::string(rpg::classes[i].name)+"  /  Lv. "+std::to_string(slot.level),10,gold);
-  } else {
-   c.Text(a.x+34,a.y+3,rpg::classes[i].name,13,selected?ink:muted);
-   c.Text(a.x+34,a.y+18,slot.status==Status::New?"Empty slot":slot.status==Status::Saved?"Already recruited":"Save unavailable",9,muted);
-  }
+ if(!customize)for(int i=0;i<int(rpg::ClassId::Count);++i) {
+   const auto control=C(int(C::Class0)+i);const auto a=CharacterSelection::Bounds(control);
+   const bool chosen=int(selection.SelectedClass())==i;const auto& slot=selection.ClassSlot(i);
+   const float glow=chosen?1.f:selection.Highlight(control);
+   c.Gradient(a,{.30f,.39f,.40f,.12f+.22f*glow},{.035f,.055f,.06f,.22f+.28f*glow});
+   c.Line(a.x,a.y+a.h,a.x+a.w,a.y+a.h,1,chosen?gold:Color{.36f,.43f,.43f,.5f});
+   if(chosen)c.Line(a.x+2,a.y+7,a.x+2,a.y+a.h-7,2,gold);
+   ClassSigil(c,{a.x+a.w-40,a.y+2,38,38},rpg::ClassId(i));
+   if(roster && slot.status==Status::Saved){
+     c.FitText(a.x+12,a.y+5,182,slot.name,15,ink);
+     c.FitText(a.x+12,a.y+24,182,std::string(rpg::classes[i].name)+"  /  Lv. "+std::to_string(slot.level),10,gold);
+   } else {
+     c.FitText(a.x+12,a.y+6,182,rpg::classes[i].name,16,chosen?ink:muted);
+     if(slot.status!=Status::New)c.Text(a.x+12,a.y+26,slot.status==Status::Saved?"Already recruited":"Save unavailable",9,muted);
+   }
  }
- c.Text(84,594,customize?"Back to change your class":"One hero per class",11,muted);
- if(!selection.Notice().empty()) c.Wrap(842,650,350,selection.Notice(),12,gold,3);
- c.Text(72,699,"Tab  Select     Enter  Confirm     Arrow keys  Rotate     F11  Display",11,muted);
- if(selection.PageAge()<.24f) c.RectFill({822,168,384,466},{.025f,.026f,.028f,.24f*std::pow(1-selection.PageAge()/.24f,2.f)});
+ if(!selection.Notice().empty()){
+   c.Gradient({340,150,620,62},{.02f,.025f,.03f,.92f},{.02f,.025f,.03f,.72f});
+   c.Wrap(356,162,588,selection.Notice(),14,gold,2);
+ }
+ if(selection.PageAge()<.20f)c.RectFill({22,156,302,438},{.018f,.025f,.028f,.30f*std::pow(1-selection.PageAge()/.20f,2.f)});
 }
 
 void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bool debug,float cameraYaw) {
@@ -1106,14 +1070,19 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.FitText(486,500,313,s.ConfluenceCast()?"CONFLUENCE / MOBILE CAST":std::string(rpg::DisciplineName(s.Class()))+" / "+Seconds(s.DisciplineSeconds())+"s",11,{.70f,.86f,1,1});
  }else if(s.EvasionSeconds()>0) c.Center(505,505,270,"EVASION / "+Seconds(s.EvasionSeconds())+"s",12,classAccent);
  const auto cast=ReadPlayerCast(s);
- if(cast.ability>=0) {
+ const float receipt=castReceipt_.Opacity();
+ if(cast.ability>=0 || receipt>0) {
+   const int ability=cast.ability>=0?cast.ability:castReceipt_.ability;
+   const bool preparing=cast.ability>=0;
    c.Skin({475,534,330,21},8);
-   const Color castColor=cast.ability==3?Color{.55f,.64f,.35f,1}:classAccent;
-   c.Gradient({480,538,320*cast.progress,13},castColor,{castColor.x*.35f,castColor.y*.35f,castColor.z*.35f,1});
-   c.Line(480+320*cast.progress,537,480+320*cast.progress,552,1.5f,{1,.89f,.62f,.9f});
-   c.FitText(486,538,238,s.Spell(cast.ability).name,11,ink);
-   c.Center(740,538,57,Seconds(cast.remaining)+"s",11,ink);
-   regions_.push_back({{475,534,330,21},{},false});
+   const Color castColor=!preparing?(castReceipt_.interrupted?Color{.72f,.19f,.12f,receipt}:Color{1,.82f,.41f,receipt}):
+     ability==3?Color{.55f,.64f,.35f,1}:classAccent;
+   c.Gradient({480,538,320*(preparing?cast.progress:1),13},castColor,{castColor.x*.35f,castColor.y*.35f,castColor.z*.35f,castColor.w});
+   if(preparing)c.Line(480+320*cast.progress,537,480+320*cast.progress,552,1.5f,{1,.89f,.62f,.9f});
+   c.Button({445,530,28,28});AbilityArtwork(c,{448,533,22,22},ability,s.Class());
+   c.FitText(486,538,preparing?238.f:174.f,s.Spell(ability).name,11,ink);
+   c.Center(preparing?740.f:668.f,538,preparing?57.f:129.f,preparing?Seconds(cast.remaining)+"s":castReceipt_.interrupted?"Interrupted":"Released",11,ink);
+   regions_.push_back({{445,530,360,28},{},false});
  }
  // Navigation sits above the two spell rows, separate from cast feedback.
  if (panel==Panel::None) {

@@ -110,7 +110,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   const auto attackClip=newStrike?dynamics.authoredStrike:authoredAttack?playerclips::Sample(selectedClip,
     playerclips::AttackPhase(selectedClip,carried?dynamics.carriedAttackSeconds:dynamics.attackSeconds,combat::StrokeStart(heavy),combat::Contact(heavy),combat::Duration(heavy))):playerclips::Frame{};
   const float authoredAir=air*(1-animation::Unit(dynamics.departure))*(1-burst);
-  const float flight=animation::Unit((1-rise)*.5f);
+  const float flight=dynamics.flightPhase>=0?animation::Unit(dynamics.flightPhase):animation::Unit((1-rise)*.5f);
   auto jumpClip=authoredAir>0?playerclips::Sample(dynamics.authoredGait?playerclips::Clip::Jump:playerclips::Clip::LegacyJump,
     dynamics.authoredGait?playerclips::FlightPhase(flight):.23f+.53f*flight):playerclips::Frame{};
   if(dynamics.authoredGait&&authoredAir>0)jumpClip=playerclips::Blend(jumpClip,
@@ -142,6 +142,9 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     pose.bowArrow=p<=track.contact?stroke.weight*animation::SmoothStep(p/.035f):0;
   }
   pose.handCast=cast;
+  // A running hand is loosely closed, rather than the flat, splayed palm of
+  // a casting gesture. Occupied grips remain controlled by their equipment.
+  pose.freeHandCurl=.32f+.46f*animation::Unit(dynamics.runBlend)*travel+.10f*air;
   pose.headYaw=animation::Signed(dynamics.face.yaw/.62f)*.62f;
   pose.headPitch=animation::Signed(dynamics.face.pitch/.245f)*.245f;
   pose.bodyLift=gait*gait*.015f*(1-air)+breath*.006f*(1-air)-landing*.14f;
@@ -314,6 +317,15 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     if(authoredAir>0) {
       const auto delta=jumpClip.feet[i];const XMFLOAT3 authored{side*.18f+delta.x,.17f+delta.y,delta.z};
       target={target.x+(authored.x-target.x)*authoredAir,target.y+(authored.y-target.y)*authoredAir,target.z+(authored.z-target.z)*authoredAir};
+      if(dynamics.flightPhase>=0){
+        // A moving takeoff keeps its leading leg. The old fixed tuck brought
+        // both legs together regardless of the stride that launched the jump.
+        // Fade back to the authored landing extension before ground contact.
+        const float lead=animation::Signed((dynamics.departureFeet[0].z-dynamics.departureFeet[1].z)/.45f);
+        const float leg=i==0?1.f:-1.f,envelope=std::sin(flight*motion::tau*.5f)*authoredAir;
+        target.z+=leg*lead*.12f*envelope;
+        target.y=std::max(.17f,target.y+leg*(lead*.075f-std::abs(lead)*.025f)*envelope);
+      }
     }
     if (contactWeight>0) {
       target={target.x+(contacts[i].x-target.x)*contactWeight,

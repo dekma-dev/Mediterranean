@@ -811,7 +811,7 @@ bool Renderer::FlushWorld() {
 }
 void Renderer::EffectQuad(XMFLOAT3 a,XMFLOAT3 b,XMFLOAT3 c,XMFLOAT3 d,XMFLOAT4 color,float startAlpha,float endAlpha,float radial) {
  // Cosmetic saturation drops the newest quad, never grows an unbounded queue.
- if (portrait_ || color.w<=0 || EffectVertices()+6>maxEffectVertices) return;
+ if ((portrait_ && !portraitEffects_) || color.w<=0 || EffectVertices()+6>maxEffectVertices) return;
  const XMFLOAT4 first{color.x,color.y,color.z,color.w*std::clamp(startAlpha,0.f,1.f)};
  const XMFLOAT4 last{color.x,color.y,color.z,color.w*std::clamp(endAlpha,0.f,1.f)};
  const Vertex va{a,{0,0,radial},first},vb{b,{0,1,radial},first},vc{c,{1,1,radial},last},vd{d,{1,0,radial},last};
@@ -861,7 +861,7 @@ void Renderer::DrawEffectSurface(EffectArt art,XMFLOAT3 a,XMFLOAT3 b,XMFLOAT3 c,
  EffectQuad(a,b,c,d,color,1,1,8.f+int(art));
 }
 void Renderer::DrawEffectSprite(EffectArt art,XMFLOAT3 center,float width,float height,float rotation,XMFLOAT4 tint,bool cloud) {
- if(portrait_ || !effectAtlas_ || int(art)<0 || int(art)>7 || !std::isfinite(width) || !std::isfinite(height) ||
+ if((portrait_ && !portraitEffects_) || !effectAtlas_ || int(art)<0 || int(art)>7 || !std::isfinite(width) || !std::isfinite(height) ||
     !std::isfinite(rotation) || !std::isfinite(center.x) || !std::isfinite(center.y) || !std::isfinite(center.z) ||
     width<=0 || height<=0 || tint.w<=0 || EffectVertices()+6>maxEffectVertices || (cloud && cloudSprites_.size()>=96))return;
  XMFLOAT4 clip;XMStoreFloat4(&clip,XMVector4Transform(XMVectorSet(center.x,center.y,center.z,1),XMLoadFloat4x4(&viewProjection_)));
@@ -902,7 +902,7 @@ bool Renderer::FlushEffects() {
   if(!Check(context_->Map(hudVertices_.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&mapped),L"Upload combat effects"))return false;
   std::memcpy(mapped.pData,vertices.data(),count*sizeof(Vertex));context_->Unmap(hudVertices_.Get(),0);
   Constants data{};data.atmosphere.x=atmospherePhase_;XMStoreFloat4x4(&data.wvp,XMMatrixTranspose(XMLoadFloat4x4(&viewProjection_)));
-  data.eyeAndHud={eye_.x,eye_.y,eye_.z,0};context_->UpdateSubresource(constants_.Get(),0,nullptr,&data,0,0);
+  data.eyeAndHud={eye_.x,eye_.y,eye_.z,portrait_?-1.f:0.f};context_->UpdateSubresource(constants_.Get(),0,nullptr,&data,0,0);
   context_->IASetVertexBuffers(0,1,hudVertices_.GetAddressOf(),&stride,&offset);
   context_->IASetInputLayout(layout_.Get());context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
   context_->VSSetShader(effectVertexShader_.Get(),nullptr,0);context_->PSSetShader(effectPixelShader_.Get(),nullptr,0);
@@ -1010,10 +1010,11 @@ bool Renderer::FlushHud() {
  }
  hud_.clear(); return true;
 }
-bool Renderer::BeginPortrait(float x,float y,float width,float height,float closeup) {
+bool Renderer::BeginPortrait(float x,float y,float width,float height,float closeup,bool effects) {
  if (!FlushHud()) { frameFailed_=true; return false; }
- savedCamera_=viewProjection_; savedEye_=eye_; portrait_=true;
+ savedCamera_=viewProjection_; savedEye_=eye_; portrait_=true;portraitEffects_=effects;
  portraitViewport_={x*width_,y*height_,width*width_,height*height_,0,1};
+ context_->RSSetViewports(1,&portraitViewport_);
  closeup=std::clamp(closeup,0.f,1.f);
  eye_={0,1.1f+.58f*closeup,4.5f-3.15f*closeup};
  const auto view=XMMatrixLookAtLH(XMLoadFloat3(&eye_),XMVectorSet(0,1.05f+.63f*closeup,0,1),XMVectorSet(0,1,0,0));
@@ -1022,8 +1023,8 @@ bool Renderer::BeginPortrait(float x,float y,float width,float height,float clos
  return true;
 }
 bool Renderer::EndPortrait() {
- const bool success=FlushWorld(); frameFailed_=frameFailed_ || !success;
- portrait_=false; viewProjection_=savedCamera_; eye_=savedEye_;
+ const bool success=FlushWorld() && FlushEffects(); frameFailed_=frameFailed_ || !success;
+ portrait_=portraitEffects_=false; viewProjection_=savedCamera_; eye_=savedEye_;
  D3D11_VIEWPORT viewport{0,0,float(width_),float(height_),0,1}; context_->RSSetViewports(1,&viewport);
  return success;
 }

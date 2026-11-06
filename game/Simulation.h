@@ -101,6 +101,8 @@ struct CombatFeedback {
   FeedbackKind kind;
   int amount = 0;
   float age = 0;
+  // Presentation identity survives older feedback expiring; never persisted.
+  std::uint64_t sequence=0;
 };
 
 // An encounter rehearsal never contributes to campaign rewards or save progress.
@@ -474,6 +476,7 @@ private:
   AnchorQuest anchorQuest_ = AnchorQuest::Locked;
   float channelRemaining_ = 0, hurtFlash_ = 0;
   std::vector<CombatFeedback> feedback_;
+  std::uint64_t feedbackSequence_=0;
   std::array<CombatVisualEvent,16> visualEvents_{};
   std::size_t visualEventCount_ = 0;
   std::string message_ = "Approach the gold beacon and press E to accept the patrol.";

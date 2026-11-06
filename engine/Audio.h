@@ -52,6 +52,15 @@ float MixGain(float previous,float peakLoad,float seconds);
 float MusicGain(float previous,float target,float seconds);
 struct Placement { float gain=1,left=.70710678f,right=.70710678f; };
 Placement Place(rpg::Vec2 offset,float cameraYaw);
+// Presentation-only cues from the character stage. Never writes world events.
+struct Audition {
+  std::array<Cue,4> cues{};
+  unsigned count=0,revision=0,sequence=0;
+  bool preparing=false;
+  void ClearFrame() { count=0; }
+  void Reset() { ++revision;count=0;preparing=false; }
+  void Add(Cue cue) { if(count<cues.size()) {cues[count++]=cue;++sequence;} }
+};
 // Pure event collection, independent of the audio device and playback.
 struct Events {
   std::array<Cue,24> cues{}; unsigned count=0;
@@ -59,8 +68,10 @@ struct Events {
   std::array<bool,24> spatial{};
   float stepDistance=0;
   unsigned warriorSwings=0;
+  unsigned auditionRevision=~0u,auditionSequence=~0u;
   void Reset() { *this={}; }
   void Update(const rpg::Simulation& state,const presentation::CreatureContacts* contacts=nullptr);
+  bool Preview(const Audition& audition);
 };
 }
 class Audio {
@@ -68,7 +79,7 @@ public:
   ~Audio();
   bool Initialize(bool muteOutput=false);
   void Suspend(bool value);
-  void Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds=1.f/60,float cameraYaw=0,const presentation::CreatureContacts* contacts=nullptr,bool menu=false);
+  void Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds=1.f/60,float cameraYaw=0,const presentation::CreatureContacts* contacts=nullptr,bool menu=false,const sound::Audition* audition=nullptr);
 private:
   IXAudio2* engine_=nullptr;
   IXAudio2MasteringVoice* master_=nullptr;

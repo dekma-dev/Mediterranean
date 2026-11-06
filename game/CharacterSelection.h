@@ -2,7 +2,11 @@
 #include "game/Interface.h"
 #include "engine/Input.h"
 #include "game/ActionClips.h"
+#include "game/CharacterView.h"
+#include "game/CombatEffects.h"
+#include "engine/Audio.h"
 #include <filesystem>
+#include <memory>
 
 namespace ui {
 // A new profile is published only by Confirm, using an exclusive file move.
@@ -12,20 +16,23 @@ public:
   enum class Status { New, Saved, Unreadable };
   enum class Page { Roster, Class, Customize };
   enum class CallingView { Overview, Arts, Talents };
+  enum class Dress { Equipped, Travel, Veteran };
   enum class Control { Hero, Enter, Refresh, Quit, Left, Right, Name,
     Class0,Class1,Class2,Class3,Class4,Class5,Class6,Class7,Class8,Class9,Class10,
     Create,Next,Back,Cancel,Confirm,SkinLeft,SkinRight,HairLeft,HairRight,DyeLeft,DyeRight,
     Skin0,Skin1,Skin2,Skin3,Skin4,Hair0,Hair1,Hair2,Hair3,Hair4,Dye0,Dye1,Dye2,Dye3,Dye4,
-    Closeup,Pose,ResetView,Overview,Arts,Talents,Art0,Art1,Art2,Art3,Art4,Art5,Art6,Branch0,Branch1,Branch2,None };
+    Closeup,Pose,ResetView,Overview,Arts,Talents,Art0,Art1,Art2,Art3,Art4,Art5,Art6,Art7,Art8,Art9,Art10,Art11,Art12,Art13,Branch0,Branch1,Branch2,Dress0,Dress1,Dress2,Showcase,None };
   enum class Action { None, Enter, Quit };
   struct Slot { Status status=Status::New; std::string name; int level=1; };
   void Open(const std::filesystem::path& file,rpg::ClassId selected=rpg::ClassId::Warrior);
   void Refresh();
   const std::filesystem::path& SaveFile() const { return file_; }
   rpg::ClassId SelectedClass() const { return class_; }
-  Action Update(float seconds,const Input& input);
-  void CancelGesture() { pressed_=Control::None; }
+  Action Update(float seconds,const Input& input,float wheel=0);
+  void CancelGesture() { pressed_=Control::None; rotating_=false; }
+  void SuspendPreview() { CancelGesture();ResetPreview(); }
   static Rect Bounds(Control control);
+  static Rect StageBounds() { return {326,70,650,550}; }
   bool Enabled(Control control) const;
   const rpg::Simulation& Hero() const { return hero_; }
   const std::string& Snapshot() const { return snapshot_; }
@@ -33,7 +40,8 @@ public:
   Page Screen() const { return page_; }
   CallingView CallingScreen() const { return callingView_; }
   int CallingBranch() const { return branch_; }
-  static constexpr std::array<int,7> previewArts{0,1,2,3,5,6,7};
+  static constexpr std::array<int,14> previewArts{0,1,2,3,5,6,7,12,13,14,8,9,10,11};
+  int PreviewArtCount() const { return rpg::AdvancedClass(class_)?14:7; }
   const Slot& ClassSlot(int index) const { return slots_.at(index); }
   Control Focus() const { return focus_; }
   Control Hover() const { return hover_; }
@@ -47,6 +55,14 @@ public:
   float PreviewAction() const { return actionTime_; }
   int PreviewAbility() const { return previewAbility_; }
   const animation::ActionChannels& PreviewPose() const { return previewController_.pose; }
+  animation::Sample PreviewBody() const;
+  CharacterOutfit PreviewOutfit() const;
+  Dress PreviewDress() const { return dress_; }
+  bool Showcasing() const { return showcase_; }
+  const sound::Audition& PreviewAudio() const { return audition_; }
+  void RenderEffects(Renderer& renderer) const;
+  bool Rotating() const { return rotating_; }
+  std::size_t PreviewEffectCount() const { return effects_.value?effects_->BurstCount()+effects_->TrailCount():0; }
   const std::string& DraftName() const { return draftName_; }
   const std::string& Notice() const { return notice_; }
   bool Changed() const { return changed_; }
@@ -66,9 +82,32 @@ private:
   float time_=0,yaw_=0,width_=0,height_=0;
   bool changed_=false;
   bool closeup_=false;
+  bool rotating_=false,released_=false;
+  Dress dress_=Dress::Equipped;
+  bool showcase_=false;
+  int showcaseStep_=0;
+  float showcaseRest_=0;
+  sound::Audition audition_;
+  float dragX_=0,zoomGoal_=0;
   float zoom_=0,actionTime_=-1;
   int previewAbility_=-1;
   animation::ActionController previewController_;
+  animation::AuthoredWeaponController previewWeapon_;
+  // Do not add a second large fixed VFX pool to every stack-allocated Game.
+  // Copies own their audition state; an unopened roster allocates nothing.
+  struct PreviewEffects {
+    std::unique_ptr<CombatEffects> value;
+    PreviewEffects()=default;
+    PreviewEffects(const PreviewEffects& other):value(other.value?std::make_unique<CombatEffects>(*other.value):nullptr) {}
+    PreviewEffects& operator=(const PreviewEffects& other) {
+      if(this!=&other)value=other.value?std::make_unique<CombatEffects>(*other.value):nullptr;
+      return *this;
+    }
+    PreviewEffects(PreviewEffects&&)=default;
+    PreviewEffects& operator=(PreviewEffects&&)=default;
+    CombatEffects* operator->() { if(!value)value=std::make_unique<CombatEffects>();return value.get(); }
+    const CombatEffects* operator->() const { return value.get(); }
+  } effects_;
   float pageAge_=0;
   std::array<float,int(Control::None)+1> highlights_{};
   std::filesystem::path Path(rpg::ClassId id) const;
@@ -76,6 +115,10 @@ private:
   void PreviewDraft();
   void SetPage(Page page,Control focus);
   void CreateProfile();
+  void StartPreview(int ability);
+  void ResetPreview();
+  float PreviewRate() const;
+  bool PreviewHeavy() const { return previewAbility_!=0 && previewAbility_!=7 && previewAbility_!=12; }
   Action Activate(Control control);
 };
 void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selection);

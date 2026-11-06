@@ -26,7 +26,7 @@ void Panel(Renderer& r,const Attachments& a,Art art,XMFLOAT3 p,float width,float
 void Seal(Renderer& r,const Attachments& a,float radius,float phase,XMFLOAT4 tint){
  // A ground projection follows terrain, never an airborne root's altitude.
  const auto at=[&](float x,float z){const float c=std::cos(phase),s=std::sin(phase);
-  const rpg::Vec2 p{a.root.x+(c*x-s*z)*radius,a.root.z+(s*x+c*z)*radius};return XMFLOAT3{p.x,rpg::WorldMap::Height(p)+.045f,p.z};};
+  const rpg::Vec2 p{a.root.x+(c*x-s*z)*radius,a.root.z+(s*x+c*z)*radius};return XMFLOAT3{p.x,(a.terrain?rpg::WorldMap::Height(p):a.root.y)+.045f,p.z};};
  r.DrawEffectSurface(Art::Seal,at(-1,-1),at(-1,1),at(1,1),at(1,-1),tint);
 }
 void Stream(Renderer& r,const Attachments& a,XMFLOAT3 from,XMFLOAT3 to,float bend,float phase,float opacity,XMFLOAT4 color,int segments=12){
@@ -41,8 +41,8 @@ void Orbit(Renderer& r,const Attachments& a,float radius,float height,float phas
   r.DrawEffectRibbon(at(u,-width),at(u,width),at(v,width),at(v,-width),color,std::sin(u*pi),std::sin(v*pi));}
 }
 XMFLOAT4 RecoveryColor(C id,float alpha){return id==C::Mage?XMFLOAT4{.40f,.76f,1,alpha}:classfx::Color(id,alpha);}
-void RecoveryCharge(Renderer& r,const rpg::Simulation& state,const Attachments& a,float progress){
- const auto id=state.Class();const float power=combat::Smooth(progress),alpha=power*.72f;
+void RecoveryCharge(Renderer& r,C id,const Attachments& a,float progress){
+ const float power=combat::Smooth(progress),alpha=power*.72f;
  auto c=RecoveryColor(id,alpha);const auto chest=Local(a,a.root,0,1.03f,.20f);
  if(id==C::Engineer){
   for(int n=0;n<5;++n){const float phase=std::fmod(progress*3+n*.2f,1.f),angle=n*2.4f;
@@ -80,13 +80,17 @@ void Prepare(Renderer& r,const rpg::Simulation& state,const Attachments& a){
  if(!Valid(a) || state.Health()<=0)return;
  const bool recovery=state.CastingRecovery();
  if(!recovery && (!state.Attacking() || state.ClassInfo().range<=3))return;
- const float progress=recovery?state.RecoveryProgress():state.AttackSeconds()/combat::StrokeStart(state.HeavyAttack());
+ PrepareAction(r,state.Class(),state.AttackAbility(),state.HeavyAttack(),state.AttackSeconds(),state.AttackRate(),recovery,state.RecoveryProgress(),a);
+}
+void PrepareAction(Renderer& r,C id,int ability,bool heavy,float seconds,float rate,bool recovery,float recoveryProgress,const Attachments& a){
+ if(!Valid(a) || !std::isfinite(rate) || rate<=0)return;
+ const float progress=recovery?recoveryProgress:seconds/combat::StrokeStart(heavy);
  if(!std::isfinite(progress) || progress<=0 || progress>=1)return;
- if(recovery){RecoveryCharge(r,state,a,progress);return;}
- const auto id=state.Class();const int ability=state.AttackAbility();const float power=combat::Smooth(progress);
- const float age=state.AttackSeconds()/state.AttackRate();
+ if(recovery){RecoveryCharge(r,id,a,progress);return;}
+ const float power=combat::Smooth(progress);
+ const float age=seconds/rate;
  if(id==C::Scout || id==C::Engineer){
-  if(!state.HeavyAttack())return;
+  if(!heavy)return;
   const float span=.18f-.12f*power;const XMFLOAT4 c{.72f,.86f,.73f,power*.68f};
   for(float side:{-1.f,1.f}){
    r.DrawEffectStreak(Local(a,a.focus,side*span,-.075f),Local(a,a.focus,side*span,.075f),.009f,c);
@@ -105,7 +109,7 @@ void Prepare(Renderer& r,const rpg::Simulation& state,const Attachments& a){
   for(int n=0;n<6;++n){const float angle=n*tau/6+age*.4f;const auto p=Local(a,a.focus,std::cos(angle)*radius*1.4f,std::sin(angle)*radius*1.4f);
    Stream(r,a,p,a.focus,.045f,age*3,power,{1,.94f,.72f,.7f},6);}
   Stream(r,a,a.right,a.focus,.16f,age*3,power,{1,.83f,.46f,.65f});
-  if(state.HeavyAttack())Seal(r,a,.70f+power*.2f,0,{1,.83f,.4f,power*.26f});
+  if(heavy)Seal(r,a,.70f+power*.2f,0,{1,.83f,.4f,power*.26f});
   for(int side:{-1,1}){const auto from=Local(a,a.root,side*.48f,.12f,0),to=Local(a,a.focus,side*.18f,.10f,0);
    Stream(r,a,from,to,side*.25f,age*2,power,{1,.86f,.47f,.50f},10);}
   return;

@@ -31,7 +31,7 @@ public:
   void OpenPanel(ui::Panel panel) { interface_.SetOnly(panel); }
   void ShowPanel(ui::Panel panel) { interface_.Show(panel); }
   void CancelUiGesture() {
-    selection_.CancelGesture();
+    selection_.SuspendPreview();
     interface_.CancelDrag(); interface_.CancelBuildConfirmation(); interface_.InvalidateHitRegions(); CancelOrbit();
   }
   void SuspendInput() { CancelUiGesture(); creatureSteps_.Reset(); simulation_.StopMovement(); effects_.CancelDash(); playerAnimation_.CancelDash();
