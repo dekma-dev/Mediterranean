@@ -57,8 +57,29 @@ struct Sample {
   ActionChannels action;
   bool retreat=false;
   float flightPhase=-1; // Actual ballistic progress; -1 keeps preview fallback.
+  float flightArms=-1,armLandingSeconds=-1; // Independent contact/recovery blend.
+  float armContactWeight=1,armDepartureBlend=0;
+  playerclips::Frame armContact{},armDeparture{};
   float extendedFall=0; // Blend to falling only after ordinary jump descent.
 };
+// The outgoing arm frame survives early contact and a second takeoff during
+// recovery. Both blend endpoints therefore describe the last visible pose.
+inline playerclips::Frame AuthoredArmFrame(const Sample& pose) {
+  using C=playerclips::Clip;using E=playerclips::Equipment;
+  const C jump=pose.authoredEquipment==E::Staff?C::StaffJump:pose.authoredEquipment==E::Bow?C::BowJump:
+    pose.authoredEquipment==E::Sword?C::SwordJump:C::Jump;
+  if(pose.armLandingSeconds>=0&&pose.armLandingSeconds<.42f) {
+    const auto& track=playerclips::Collection()[unsigned(pose.authoredEquipment==E::None?C::Land:C::Jump)];
+    const float contact=pose.authoredEquipment==E::None?track.contact:track.landing;
+    const auto landing=playerclips::Sample(pose.authoredEquipment==E::None?C::Land:jump,
+      contact+(1-contact)*pose.armLandingSeconds/.42f);
+    return playerclips::Blend(pose.armContact,landing,SmoothStep(pose.armLandingSeconds/.10f));
+  }
+  auto airborne=playerclips::Sample(jump,playerclips::FlightPhase(pose.flightPhase));
+  if(pose.authoredEquipment==E::None)airborne=playerclips::Blend(airborne,
+    playerclips::Sample(C::Fall,.5f),Unit(pose.extendedFall));
+  return playerclips::Blend(airborne,pose.armDeparture,pose.armDepartureBlend);
+}
 inline float ForwardRecoil(const Sample& sample) { return sample.directedHit?Signed(sample.hitForward):Unit(sample.hit); }
 struct ImpactProfile { float strength=1,peak=.055f,sidePeak=.065f; };
 inline ImpactProfile ClassImpact(rpg::ClassId school,bool heavy) {
@@ -128,7 +149,8 @@ struct State {
   float castAge=2,leanVelocity=0,riseVelocity=0,travelVelocity=0;
   float bankVelocity=0;
   float clothSideVelocity=0,clothBackVelocity=0;
-  float flightAge=1,departureLanding=0,departureLandingSeconds=-1;
+  float flightAge=1,departureLanding=0,departureLandingSeconds=-1,armRecoveryAge=1;
+  float departureArmWeight=0;
   bool wasAirborne=false,hasDeparture=false;
   float dashImpactAge=2,dashCarry=0,brakeCarry=0;
   bool dashCollision=false;
@@ -204,9 +226,9 @@ struct State {
     const bool onGround=height<=0 && velocity<=0;
     // Filtered rise is useful for secondary sway, but reverses/delays source
     // playback near takeoff/apex. Joint timing follows actual flight velocity.
-    pose.flightPhase=onGround?1.f:Unit((1-velocity/motion::jumpSpeed)*.5f);
-    pose.extendedFall=onGround?0.f:SmoothStep((-velocity/motion::jumpSpeed-1.f)/.8f);
     if (!onGround && !wasAirborne) {
+      departureArmWeight=Unit(pose.flightArms);
+      pose.armDeparture=AuthoredArmFrame(pose);
       flightAge=0; hasDeparture=pose.feetActive;
       departureLanding=pose.landing;
       departureLandingSeconds=pose.landingSeconds;
@@ -215,7 +237,27 @@ struct State {
       pose.departurePelvisLimit=pose.pelvisLimit;
       pose.departurePelvisStabilized=pose.pelvisStabilized;
     }
+    if(onGround&&wasAirborne) {
+      armRecoveryAge=std::isfinite(landingElapsed)?std::clamp(landingElapsed,0.f,dt):0;
+      pose.armContact=AuthoredArmFrame(pose);
+      pose.armContactWeight=Unit(pose.flightArms);
+    }
+    else armRecoveryAge=std::min(1.f,armRecoveryAge+dt);
+    if(!onGround)armRecoveryAge=1;
     flightAge=std::min(1.f,flightAge+dt);
+    // Hands retain their airborne carry until contact, then follow the
+    // landing action. The foot-height mask otherwise retracts both arms
+    // into idle during the last few centimetres of descent.
+    // A carried load takes longer to follow the takeoff than the free arms.
+    // Keep the hand and weapon on the same blend, preserving the grip.
+    const float armDuration=pose.authoredEquipment==playerclips::Equipment::None?.22f:.30f;
+    const float armProgress=SmoothStep(flightAge/armDuration);
+    pose.flightArms=onGround?pose.armContactWeight*(1-SmoothStep(armRecoveryAge/.42f)):
+      armProgress+(1-armProgress)*departureArmWeight;
+    pose.armDepartureBlend=onGround||pose.flightArms<=0?0:(1-armProgress)*departureArmWeight/pose.flightArms;
+    pose.armLandingSeconds=onGround&&armRecoveryAge<.42f?armRecoveryAge:-1;
+    pose.flightPhase=onGround?1.f:Unit((1-velocity/motion::jumpSpeed)*.5f);
+    pose.extendedFall=onGround?0.f:SmoothStep((-velocity/motion::jumpSpeed-1.f)/.8f);
     wasAirborne=!onGround;
     if (onGround) { hasDeparture=false; departureLanding=0; }
     // Carry the departing foot arrangement briefly into flight. Both contacts

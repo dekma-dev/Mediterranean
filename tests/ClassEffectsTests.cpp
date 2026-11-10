@@ -10,6 +10,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <cmath>
+#include <limits>
 
 namespace {
 using namespace rpg;
@@ -68,6 +69,57 @@ void Stage(Renderer& r,ClassId id,bool release,bool restore=false) {
   const auto& c=hero.ClassInfo().color;
   DrawCharacter(r,{-1.25f,0},0,1.5707963f,{c[0],c[1],c[2],1},0,0,CharacterOutfit::From(hero.Items(),id),pose,1);
   DrawCharacter(r,{1.25f,0},0,-1.5707963f,{.43f,.29f,.24f,1},0,0,{}, {},2);
+}
+void DefensiveContacts(Renderer& r,const std::filesystem::path& root) {
+  std::vector<Pixels> schools;
+  for(auto id:{ClassId::Warrior,ClassId::Mage,ClassId::Scout,ClassId::Priest}) {
+    CombatVisualEvent event{K::BarrierHit,{0,0},1.2f,0,0};event.school=id;event.evaded=id==ClassId::Scout;
+    Pixels reference,visibleReference;
+    const auto relativeDifference=[](const Pixels& a,const Pixels& b) {
+      double error=0,signal=0;
+      for(std::size_t i=0;i<a.size();++i)if(i%4!=3 && std::max(a[i],b[i])>8) {
+        error+=std::abs(int(a[i])-int(b[i]));signal+=std::max(a[i],b[i]);
+      }
+      return signal>0?error/signal:0.;
+    };
+    for(int view=0;view<4;++view) {
+      event.facing=view*1.5707963f;
+      const auto begin=[&]{r.BeginFrame();r.SetCamera({-std::sin(event.facing)*4,1.8f,-std::cos(event.facing)*4},{0,1.2f,0});};
+      // Rotate the world-space sky too, then remove that view's empty baseline.
+      // Otherwise this check measures changing clouds rather than hit geometry.
+      begin();const auto base=Capture(r,root/("defense-base-"+std::to_string(int(id))+"-"+std::to_string(view)+".png"));
+      begin();
+      classfx::BarrierContact(r,event,.10f);
+      Check(r.EffectVertices()>0 && r.EffectVertices()<=300,"Defensive contact geometry budget");
+      const auto pixels=Capture(r,root/("defense-"+std::to_string(int(id))+"-"+std::to_string(view)+".png"));
+      Pixels visible(pixels.size());for(std::size_t i=0;i<pixels.size();++i)visible[i]=static_cast<unsigned char>(std::abs(int(pixels[i])-int(base[i])));
+      if(view==0){reference=pixels;visibleReference=visible;}
+      else Check(relativeDifference(visibleReference,visible)<.08,"Defensive contact changed shape under joint camera/attack rotation");
+    }
+    r.BeginFrame();r.SetCamera({0,1.8f,-4},{0,1.2f,0});
+    const auto empty=Capture(r,root/("defense-empty-"+std::to_string(int(id))+".png"));
+    Check(VisiblePixels(reference,empty)>100,"Defensive class contact is invisible");
+    if(id==ClassId::Scout) {
+      event.evaded=false;event.facing=0;r.BeginFrame();r.SetCamera({0,1.8f,-4},{0,1.2f,0});
+      classfx::BarrierContact(r,event,.10f);const auto ward=Capture(r,root/"scout-absorbed-contact.png");
+      Check(VisiblePixels(ward,empty)>100 && VisiblePixels(ward,reference)>100,"Scout ward impact is indistinguishable from actual evasion");
+    }
+    for(const auto& previous:schools)Check(relativeDifference(visibleReference,previous)>.20,"Defensive classes share the same contact");
+    schools.push_back(visibleReference);
+    for(float age:{-.01f,.38f,.5f,std::numeric_limits<float>::quiet_NaN()}) {
+      r.BeginFrame();classfx::BarrierContact(r,event,age);Check(r.EffectVertices()==0,"Expired/invalid defensive contact survived");Check(r.EndFrame(false),"Contact end");
+    }
+    event.facing=std::numeric_limits<float>::infinity();
+    r.BeginFrame();classfx::BarrierContact(r,event,.10f);Check(r.EffectVertices()==0,"Invalid contact direction reached renderer");Check(r.EndFrame(false),"Contact invalid end");
+  }
+  r.BeginFrame();r.SetCamera({0,3,-7},{0,1,0});
+  for(int n=0;n<8;++n) {
+    CombatVisualEvent event{K::BarrierHit,{(n%4-1.5f)*1.1f,float(n/4)},1.2f,float(n),0};
+    event.school=std::array<ClassId,4>{ClassId::Warrior,ClassId::Mage,ClassId::Scout,ClassId::Priest}[n%4];
+    classfx::BarrierContact(r,event,.08f+n*.015f);
+  }
+  Check(r.EffectVertices()<2400,"Crowded defensive contacts consume the main spectacle budget");
+  Capture(r,root/"defense-crowd.png");
 }
 void Captures(Renderer& r,const std::filesystem::path& root) {
   unsigned maxVertices=0;
@@ -236,7 +288,7 @@ int main() {
     Check(r.EffectVertices()>0 && r.EffectVertices()<5000,"Opening impact exceeded bounded geometry");
     Capture(r,root/(std::to_string(id)+"-opening.png"));
   }
-  Captures(r,root);Recoveries(r,root);LiveStates(r,root);SchoolHues(r,root);SlopeEffects(r,root);
+  DefensiveContacts(r,root);Captures(r,root);Recoveries(r,root);LiveStates(r,root);SchoolHues(r,root);SlopeEffects(r,root);
   Check(sizeof(CombatEffects)<=16384,"Class effects exceeded the fixed CPU budget");
   Check(r.ValidateDebugMessages(),"D3D validation errors");
   std::cout<<"PASS: 11 class impacts, empowered layers, timed projectiles, live states, cancellation and GPU captures\n";

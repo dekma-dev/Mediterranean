@@ -177,9 +177,17 @@ private:
   }
   static float AuthoredDuty(const Sample& sample) {
     const auto& tracks=playerclips::Collection();
-    const float walk=tracks[unsigned(playerclips::Clip::WalkForward)].stance;
-    const float run=tracks[unsigned(playerclips::Clip::RunForward)].stance;
-    return walk+(run-walk)*Unit(sample.runBlend);
+    float duty=0,total=0;const float run=Unit(sample.runBlend);
+    for(unsigned d=0;d<4;++d){
+      const float w=Unit(sample.gaitWeights[d]);
+      const float walkDuty=tracks[unsigned(playerclips::Clip::WalkForward)+d].stance;
+      const float runDuty=tracks[unsigned(playerclips::Clip::RunForward)+d].stance;
+      duty+=w*(walkDuty+(runDuty-walkDuty)*run);total+=w;
+    }
+    return total>.0001f?duty/total:tracks[unsigned(playerclips::Clip::WalkForward)].stance;
+  }
+  static float AuthoredContactLead(const Sample& sample) {
+    return .35f-.04f*Unit(sample.runBlend)*Unit(sample.gaitWeights[0]);
   }
   void AdvanceSwing(Step& foot,int i,float dt,rpg::Vec2 position,float yaw,rpg::Vec2 velocity,const Sample& sample) {
     foot.age=std::min(foot.duration,foot.age+dt);
@@ -192,7 +200,7 @@ private:
     foot.velocity.z=motion::Ease(foot.velocity.z,velocity.z,18,dt);
     const float speed=std::hypot(foot.velocity.x,foot.velocity.z);
     const auto timing=TravelGait(speed);
-    const float lead=sample.authoredGait?timing.period*AuthoredDuty(sample)*.35f:
+    const float lead=sample.authoredGait?timing.period*AuthoredDuty(sample)*AuthoredContactLead(sample):
       ContactLead(sample)*timing.reach/std::max(speed,.7f);
     desired.x+=foot.velocity.x*lead;
     desired.z+=foot.velocity.z*lead;
@@ -360,8 +368,8 @@ private:
         foot.stepping=true;foot.from=foot.point;foot.root=position;foot.velocity=velocity;
         foot.sourcePhase=q;foot.age=0;foot.duration=std::max(.04f,(1-q)*timing.period);foot.lift=.1f;
         foot.goal=neutral;
-        foot.goal.x+=velocity.x*timing.period*duty*.35f;
-        foot.goal.z+=velocity.z*timing.period*duty*.35f;
+        foot.goal.x+=velocity.x*timing.period*duty*AuthoredContactLead(sample);
+        foot.goal.z+=velocity.z*timing.period*duty*AuthoredContactLead(sample);
       }
       const float progress=Unit((q-foot.sourcePhase)/std::max(.001f,1-foot.sourcePhase));
       // AdvanceSwing adds dt. Permit the pre-increment age to be negative so

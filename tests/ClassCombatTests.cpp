@@ -201,13 +201,16 @@ void DefensiveIdentity() {
   }
   for(int hz:{30,60,144}) for(auto id:{ClassId::Warrior,ClassId::Scout,ClassId::Mage,ClassId::Priest}) {
     Simulation s;Duel(s,id);const float health=s.Health();Command guard;guard.ability=3;s.Update(.001f,guard);
-    Tick(s,.7f,hz);
+    std::vector<CombatVisualEvent> defenseEvents;Tick(s,.7f,hz,&defenseEvents);
     if(id==ClassId::Priest) Check(!s.CastingRecovery() && s.Health()<health,"Enemy damage must interrupt healing before completion");
     else Check(s.Health()==health,"Class defense must prevent the first attack");
     if(id==ClassId::Warrior) Check(s.ClassResource()==1,"Blocking must generate Rage");
     if(id==ClassId::Mage) Check(s.Enemies()[0].snared>1.8f,"Frost ward must slow the attacker");
     if(id==ClassId::Scout) {
       Check(s.EvasionSeconds()==0 && s.Barrier()==0,"Scout evasion is consumed by one hit, not a barrier");
+      bool evaded=false;
+      for(const auto& event:defenseEvents)if(event.kind==CombatVisualKind::BarrierHit)evaded=event.evaded;
+      Check(evaded,"Confirmed evasion has no distinct presentation receipt");
       Tick(s,2.5f,hz);Check(s.Health()<health,"Evasion cannot suppress later hits");
     }
   }

@@ -31,6 +31,16 @@ void LibraryChecks(){
     const auto& track=clips[unsigned(clip)];const auto native=animation::TravelGait(track.speed);
     Check(track.speed>5.f&&std::abs(track.duration-native.period)<1e-5f&&
       std::abs(track.duration*track.speed-native.stride)<1e-5f,"Authored run stride disagrees with native travel distance");
+    // Local reach clamps used to bake a narrow pelvis trough at toe-off.
+    // Check acceleration over the whole loop, including its seam, so a
+    // continuous position curve cannot hide a sharp body/shoulder jolt.
+    const auto count=track.frames.size()-1;const double dt=track.duration/count;
+    double squaredAcceleration=0;
+    for(std::size_t i=0;i<count;++i){
+      const double a=(track.frames[(i+1)%count].hip-2*double(track.frames[i].hip)+track.frames[(i+count-1)%count].hip)/(dt*dt);
+      squaredAcceleration+=a*a;
+    }
+    Check(std::sqrt(squaredAcceleration/count)<50,"Authored pelvis contains an abrupt support-release jolt");
   }
   for(unsigned i=4;i<12;++i){
     const auto clip=playerclips::Clip(i);
@@ -89,7 +99,43 @@ struct Walker {
     feet.Update(dt,position,0,true,true,state.pose);
   }
 };
+void FlightCarryBlendChecks(){
+  // Changing the outgoing carry must retain half its effect halfway into
+  // flight. A second fade before the flight blend reduced this to a quarter
+  // and pulled the hands down through an unrelated neutral pose.
+  const auto displacement=[](float air){
+    animation::Sample sample;sample.authoredGait=true;sample.authoredBlend=1;
+    sample.gaitWeights[0]=1;sample.air=air;sample.flightPhase=.45f;
+    sample.authoredMotion.hands[0]={-.035f,.10f,.08f};
+    const auto a=BuildCharacterPose(0,0,false,sample);
+    sample.authoredMotion.hands[0].z+=.02f;
+    const auto b=BuildCharacterPose(0,0,false,sample);
+    return Distance(a.arms[0].end,b.arms[0].end);
+  };
+  const float ground=displacement(0),half=displacement(.5f);
+  Check(ground>.019f&&half>ground*.45f&&half<ground*.55f,"Flight attenuated the outgoing hand carry twice");
+  Check(displacement(1)<1e-6f,"Full flight retained an outgoing carry offset");
+  std::cout<<"Flight carry: midpoint retains "<<half/ground<<" of outgoing hand displacement\n";
+  animation::State state;animation::FootPlacement feet;rpg::Vec2 position{};feet.Reset(position,0);
+  CharacterPose previous;float fastest=0;bool wasFlying=false;
+  for(int tick=0;tick<3000;++tick){
+    constexpr float dt=.001f;const float t=tick*dt,flight=t-1.2f;
+    const bool flying=flight>0&&flight<2*motion::jumpSpeed/motion::gravity;
+    const float height=flying?motion::jumpSpeed*flight-.5f*motion::gravity*flight*flight:0;
+    const float velocity=flying?motion::jumpSpeed-motion::gravity*flight:0;
+    position.z+=3*dt;
+    state.Update(dt,height,velocity,3*dt,true,0,wasFlying&&!flying?motion::jumpSpeed:0);
+    state.locomotion.Update(dt,flying?0:3*dt,1,0,0,!flying,velocity,height,true);
+    animation::ApplyAuthoredLocomotion(state,dt);feet.Update(dt,position,0,!flying,true,state.pose);
+    const auto pose=BuildCharacterPose(0,0,false,state.pose);
+    if(t>1.2f&&t<2.5f)for(unsigned side=0;side<2;++side)fastest=std::max(fastest,Distance(pose.arms[side].end,previous.arms[side].end));
+    previous=pose;wasFlying=flying;
+  }
+  std::cout<<"Moving jump: maximum hand change per ms "<<fastest<<" m\n";
+  Check(fastest<.006f,"Moving jump retracts arms abruptly before landing");
+}
 void NaturalGaitChecks(){
+  FlightCarryBlendChecks();
   float compression=0,palmAgreement=1,footWidth=0,highestHip=-1;
   double footSum=0,handSum=0,product=0,hipSum=0;unsigned count=0;
   for(float speed:{1.4f,6.f}){
@@ -165,6 +211,24 @@ void AuthoredLegChecks(){
   std::cout<<"Authored legs: recovery pitch "<<livePitch<<", ankle height "<<liveHeight<<'\n';
 }
 void ContinuousCycleChecks(){
+  // Directional source support must survive retargeting. Forward running has
+  // a longer push than sideways/backward travel; reusing its duty everywhere
+  // keeps those feet planted beyond the authored release.
+  for(unsigned direction=0;direction<4;++direction){
+    Walker directional;const float forward=direction==0?1.f:direction==1?-1.f:0.f;
+    const float right=direction==2?-1.f:direction==3?1.f:0.f;
+    const float duty=playerclips::Collection()[unsigned(playerclips::Clip::RunForward)+direction].stance;
+    for(int tick=0;tick<960;++tick){
+      directional.Update(1.f/240,6,forward,right);
+      if(tick<480)continue;
+      for(int side=0;side<2;++side){
+        const float p=directional.state.pose.authoredPhase+side*.5f;
+        const float q=p-std::floor(p);
+        if(directional.feet.Planted(side))Check(q<duty+.009f,"Directional support outlasted its authored release");
+        if(q>.02f&&q<duty-.02f)Check(directional.feet.Planted(side),"Directional support released before accepting body weight");
+      }
+    }
+  }
   for(int hz:{30,60,144})for(float speed:{1.4f,6.f}){
     Walker walker;float previous=0,minRate=10,maxRate=0;bool planted[2]={true,true};
     std::array<std::vector<float>,2> contacts;
@@ -218,8 +282,10 @@ void RecoveryTimingChecks(){
   const auto leftLead=BuildCharacterPose(0,0,false,airborne);
   airborne.departureFeet[0].z=-.225f;airborne.departureFeet[1].z=.225f;
   const auto rightLead=BuildCharacterPose(0,0,false,airborne);
-  Check(leftLead.legs[0].end.z-rightLead.legs[0].end.z>.20f&&rightLead.legs[1].end.z-leftLead.legs[1].end.z>.20f,
-    "Running jump forgot which leg led the departing stride");
+  const float leftSeparation=leftLead.legs[0].end.z-rightLead.legs[0].end.z;
+  const float rightSeparation=rightLead.legs[1].end.z-leftLead.legs[1].end.z;
+  Check(leftSeparation>.10f&&leftSeparation<.18f&&rightSeparation>.10f&&rightSeparation<.18f,
+    "Running jump must retain a compact leading leg without a cycling pose");
   for(int hz:{30,60,144}){
     Game game;game.Initialize();float previous=-1;bool seen=false;
     for(int frame=0;frame<hz;++frame){
@@ -400,6 +466,41 @@ void WeaponMotionChecks(){
     Check(peak>.95f&&recovery,"Live player did not play its full authored attack/recovery");
     Check(game.PlayerAnimation().authoredStrikeWeight==0,"Live authored recovery did not settle");
     game.SuspendInput();Check(game.PlayerAnimation().authoredStrikeWeight==0,"Focus loss retained v2 attack");
+  }
+}
+void LoadedArmRunningChecks(){
+  // A carried weapon must have a genuine shoulder/elbow arc, without the
+  // high-frequency wrist acceleration caused by the old world-locked grip.
+  for(auto equipment:{playerclips::Equipment::Sword,playerclips::Equipment::Staff,playerclips::Equipment::Bow}){
+    animation::State state;animation::FootPlacement feet;rpg::Vec2 position{};feet.Reset(position,0);
+    const auto form=equipment==playerclips::Equipment::Sword?rpg::WeaponForm::Blade:
+      equipment==playerclips::Equipment::Staff?rpg::WeaponForm::AstralStaff:rpg::WeaponForm::Handbow;
+    constexpr float dt=1.f/120;XMFLOAT3 before{},previous{},firstRelative{};
+    double accelerationSquared=0;unsigned samples=0;float excursion=0,minimumFlex=4;
+    for(int tick=0;tick<720;++tick){
+      position.z+=6*dt;state.Update(dt,0,0,6*dt,true,0);
+      state.locomotion.Update(dt,6*dt,1,0,0,true,0,0,true);
+      animation::ApplyAuthoredLocomotion(state,dt,equipment);feet.Update(dt,position,0,true,true,state.pose);
+      const auto pose=BuildCharacterPose(0,0,false,state.pose,form);const auto& arm=pose.arms[1];
+      const auto wrist=XMLoadFloat3(&arm.end),root=XMLoadFloat3(&arm.root),joint=XMLoadFloat3(&arm.joint);
+      XMFLOAT3 relative;XMStoreFloat3(&relative,wrist-root);
+      if(tick==240)firstRelative=relative;
+      if(tick>240){
+        excursion=std::max(excursion,Distance(relative,firstRelative));
+        const auto upper=XMVector3Normalize(joint-root),lower=XMVector3Normalize(wrist-joint);
+        minimumFlex=std::min(minimumFlex,std::acos(std::clamp(XMVectorGetX(XMVector3Dot(upper,lower)),-1.f,1.f)));
+        // Isolate arm motion from the unchanged planted-leg pelvis response.
+        const auto acceleration=(XMLoadFloat3(&relative)-2*XMLoadFloat3(&previous)+XMLoadFloat3(&before))/(dt*dt);
+        accelerationSquared+=XMVectorGetX(XMVector3LengthSq(acceleration));++samples;
+        Check(Distance(BuildHandPose(pose,1,true,false,0).Point({0,0,0}),pose.WeaponPoint(0))<.0001f,"Running weapon detached from palm");
+      }
+      before=previous;previous=relative;
+    }
+    const float rms=float(std::sqrt(accelerationSquared/samples));
+    std::cout<<"Loaded run "<<unsigned(equipment)<<": shoulder-relative wrist acceleration RMS "<<rms<<" m/s2; relative arc "<<excursion<<" m; minimum elbow flex "<<minimumFlex<<" rad\n";
+    Check(rms<30,"Loaded running wrist has abrupt acceleration instead of a continuous carrying arc");
+    Check(excursion>.06f,"Loaded arm was frozen to hide its motion");
+    Check(minimumFlex>.40f,"Loaded elbow locked near full extension during running");
   }
 }
 void GroundedMotionChecks(){
@@ -612,7 +713,7 @@ int main(int argc,char** argv){try{
   if(argc==2&&std::string_view(argv[1])=="--capture-only") {Captures();return 0;}
   if(argc==2&&std::string_view(argv[1])=="--flight-only") {LibraryChecks();EquippedFlightChecks();return 0;}
   if(argc==2&&std::string_view(argv[1])=="--bow-only") {LibraryChecks();BowMotionChecks();WeaponCarryChecks();EquippedFlightChecks();std::cout<<"PASS: archery draw, release, carry and flight\n";return 0;}
-  LibraryChecks();GroundedMotionChecks();NaturalGaitChecks();AuthoredLegChecks();ContinuousCycleChecks();LateralClearanceChecks();RecoveryTimingChecks();FlightClockChecks();ContactsAndTransitions();WeaponMotionChecks();BowMotionChecks();WeaponCarryChecks();EquippedFlightChecks();
+  LibraryChecks();GroundedMotionChecks();NaturalGaitChecks();AuthoredLegChecks();ContinuousCycleChecks();LateralClearanceChecks();RecoveryTimingChecks();FlightClockChecks();ContactsAndTransitions();WeaponMotionChecks();LoadedArmRunningChecks();BowMotionChecks();WeaponCarryChecks();EquippedFlightChecks();
   if(!(argc==2&&std::string_view(argv[1])=="--motion-only"))Captures();
   std::cout<<"PASS: imported gait loops, directional weapon carry, equipped jumps, combat guards, contacts, transition continuity, gameplay isolation and native comparison\n";}
 catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

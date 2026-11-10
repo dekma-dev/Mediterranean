@@ -132,6 +132,7 @@ struct CombatVisualEvent {
   float destinationHeight=1.25f; // relative to ground, captured from the committed target
   bool discipline=false; // accepted class opportunity, not speculative input
   bool primary=true; // One main spectacle/sound per action; secondary victims retain local hits.
+  bool evaded=false; // Confirmed evasion, distinct from an absorbed defensive hit.
 };
 
 class Simulation {

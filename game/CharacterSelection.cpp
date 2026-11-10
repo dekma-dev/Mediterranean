@@ -5,6 +5,7 @@
 #include "engine/Renderer.h"
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 
 namespace ui {
 namespace {
@@ -14,40 +15,113 @@ CharacterSelection::Status ReadProfile(const std::filesystem::path& path,rpg::Cl
   snapshot.clear();std::string content;const auto read=profile::Read(path,content);
   if(read==profile::ReadResult::Missing) return S::New;
   rpg::Simulation candidate;
-  if(read!=profile::ReadResult::Ready || !candidate.Load(content) || candidate.Class()!=id) return S::Unreadable;
+  if(read!=profile::ReadResult::Ready || !candidate.Load(content) || (rpg::ValidClass(id) && candidate.Class()!=id)) return S::Unreadable;
   hero=std::move(candidate);snapshot=std::move(content);return S::Saved;
 }
 }
 std::filesystem::path CharacterSelection::Path(rpg::ClassId id) const {
   return id==rpg::ClassId::Warrior?base_:base_.parent_path()/("hero-"+std::to_string(int(id))+".save");
 }
+std::filesystem::path CharacterSelection::AdditionalPath(int slot) const {
+  return base_.parent_path()/(base_.stem().wstring()+L"-character-"+std::to_wstring(slot)+L".save");
+}
+std::filesystem::path CharacterSelection::AvailablePath() const {
+  std::string ignored;
+  auto path=Path(class_);
+  if(profile::Read(path,ignored)==profile::ReadResult::Missing)return path;
+  for(int slot=1;slot<=maxProfiles;++slot) {
+    path=AdditionalPath(slot);
+    if(profile::Read(path,ignored)==profile::ReadResult::Missing)return path;
+  }
+  return {};
+}
+int CharacterSelection::SelectedProfile() const {
+  for(int i=0;i<ProfileCount();++i)if(profiles_[i].file==file_)return i;
+  return -1;
+}
+void CharacterSelection::RevealProfile() {
+  const int index=SelectedProfile();if(index>=0)profileOffset_=index/profilesPerPage*profilesPerPage;
+}
+void CharacterSelection::SelectProfile(int index) {
+  if(index<0 || index>=ProfileCount())return;
+  const auto outgoing=PreviewStage();const bool hadFigure=status_==Status::Saved;
+  file_=profiles_[index].file;class_=rpg::ValidClass(profiles_[index].school)?profiles_[index].school:rpg::ClassId::Warrior;
+  Refresh(false);RevealProfile();focus_=status_==Status::Saved?Control::Enter:Control::Refresh;
+  if(hadFigure && status_==Status::Saved){previousStage_=outgoing;previousStage_.effects=false;stageAge_=0;}
+}
+void CharacterSelection::ApplyLook(rpg::Appearance look) {
+  if(look.skin==look_.skin && look.hair==look_.hair && look.dye==look_.dye)return;
+  if(lookHistorySize_==lookHistory_.size()) {
+    std::move(lookHistory_.begin()+1,lookHistory_.end(),lookHistory_.begin());--lookHistorySize_;
+  }
+  lookHistory_[lookHistorySize_++]=look_;look_=look;PreviewDraft();audition_.Add(sound::Cue::UiClick);
+}
 void CharacterSelection::SetPage(Page page,Control focus) {
   stageAge_=1;
+  pinnedTalent_=-1;
   if(page==Page::Roster)dress_=Dress::Equipped;
   page_=page;focus_=focus;hover_=Control::None;pageAge_=0;highlights_.fill(0);CancelGesture();ResetPreview();
   if(page==Page::Customize)nameEditor_.Place(draftName_,rpg::NameLength(draftName_));
 }
 void CharacterSelection::ReadSlots() {
+  profiles_.clear();
+  const auto inspect=[&](const std::filesystem::path& path,rpg::ClassId expected) {
+    Profile entry;entry.file=path;entry.school=expected;std::string content;
+    const auto read=profile::Read(path,content);
+    if(read==profile::ReadResult::Missing){entry.status=Status::New;return entry;}
+    if(read==profile::ReadResult::Ready) {
+      rpg::Simulation hero;
+      if(hero.Load(content) && (!rpg::ValidClass(expected) || hero.Class()==expected))
+        {entry.status=Status::Saved;entry.name=hero.Nickname();entry.school=hero.Class();entry.level=hero.Level();}
+    }
+    return entry;
+  };
   for(int i=0;i<int(slots_.size());++i) {
-    rpg::Simulation hero;std::string snapshot;auto& slot=slots_[i];
-    slot.status=ReadProfile(Path(rpg::ClassId(i)),rpg::ClassId(i),hero,snapshot);
-    slot.name=slot.status==Status::Saved?hero.Nickname():"";slot.level=hero.Level();
+    auto entry=inspect(Path(rpg::ClassId(i)),rpg::ClassId(i));auto& slot=slots_[i];
+    slot={entry.status,entry.name,entry.level};
+    if(entry.status!=Status::New)profiles_.push_back(std::move(entry));
   }
+  for(int slot=1;slot<=maxProfiles;++slot) {
+    const auto path=AdditionalPath(slot);std::error_code error;
+    if(!std::filesystem::exists(path,error))continue;
+    auto entry=inspect(path,rpg::ClassId::Count);
+    if(entry.status!=Status::New)profiles_.push_back(std::move(entry));
+  }
+  profileOffset_=std::min(profileOffset_,std::max(0,(ProfileCount()-1)/profilesPerPage)*profilesPerPage);
 }
-void CharacterSelection::Open(const std::filesystem::path& file,rpg::ClassId selected) {
+void CharacterSelection::Open(const std::filesystem::path& file,rpg::ClassId selected,const std::filesystem::path& preferred) {
   base_=file;file_=file;class_=int(selected)>=0 && selected<rpg::ClassId::Count?selected:rpg::ClassId::Warrior;
   draftName_.clear();look_={};notice_.clear();
   nameEditor_={};measuredName_.clear();nameAdvances_.fill(0);
   dress_=Dress::Equipped;
+  draftFile_.clear();lookHistorySize_=0;profileOffset_=0;
+  appearanceSeed_=static_cast<unsigned>(std::chrono::steady_clock::now().time_since_epoch().count());
   callingView_=CallingView::Overview;branch_=0;
+  file_=preferred.empty()?Path(class_):preferred;
   time_=yaw_=width_=height_=zoom_=zoomGoal_=0;closeup_=false;ResetPreview();SetPage(Page::Roster,Control::Enter);Refresh();
+  if(preferred.empty() && status_==Status::New && !profiles_.empty()) {
+    const auto ready=std::find_if(profiles_.begin(),profiles_.end(),[](const Profile& entry){return entry.status==Status::Saved;});
+    SelectProfile(ready==profiles_.end()?0:int(ready-profiles_.begin()));stageAge_=1;
+  }
   focus_=status_==Status::Saved?Control::Enter:status_==Status::New?Control::Create:Control::Refresh;
 }
-void CharacterSelection::Refresh() {
+void CharacterSelection::Refresh(bool rescan) {
   stageAge_=1;
-  CancelGesture();ResetPreview();changed_=false;notice_.clear();ReadSlots();file_=Path(class_);
+  CancelGesture();ResetPreview();changed_=false;notice_.clear();if(rescan)ReadSlots();
   hero_=rpg::Simulation{};hero_.CreateCharacter(class_,rpg::DescribeClass(class_).title);
-  status_=ReadProfile(file_,class_,hero_,snapshot_);
+  auto expected=rpg::ClassId::Count;
+  for(int id=0;id<int(rpg::ClassId::Count);++id)if(file_==Path(rpg::ClassId(id))){expected=rpg::ClassId(id);break;}
+  status_=ReadProfile(file_,expected,hero_,snapshot_);
+  if(status_==Status::Saved)class_=hero_.Class();
+  if(!rescan) {
+    // Selection validates the clicked file, not every other campaign again.
+    // Opening, explicit Refresh, creation and entry still rescan the roster.
+    if(status_==Status::New)status_=Status::Unreadable;
+    const int index=SelectedProfile();
+    if(index>=0){auto& entry=profiles_[index];entry.status=status_;entry.name=status_==Status::Saved?hero_.Nickname():"";
+      if(status_==Status::Saved){entry.school=class_;entry.level=hero_.Level();}}
+  }
+  RevealProfile();
 }
 void CharacterSelection::PreviewDraft() {
   auto name=draftName_;while(!name.empty() && name.back()==' ') name.pop_back();
@@ -61,7 +135,18 @@ void CharacterSelection::PickName(float x,bool extend) {
   }
   nameEditor_.Place(draftName_,position,extend);
 }
+int CharacterSelection::InspectedTalent() const {
+  if(page_!=Page::Class || callingView_!=CallingView::Talents)return -1;
+  const auto hint=Hint();
+  if(hint>=Control::Talent0 && hint<=Control::Talent5)return (int(hint)-int(Control::Talent0))*3+branch_;
+  return pinnedTalent_;
+}
 Rect CharacterSelection::Bounds(Control control) {
+  if(control>=Control::Profile0 && control<=Control::Profile7)return {1004,112+56.f*(int(control)-int(Control::Profile0)),244,52};
+  if(control>=Control::Talent0 && control<=Control::Talent5) {
+    const int row=int(control)-int(Control::Talent0);
+    return {row==1?57.f:row==2?239.f:148.f,326+64.f*(row<=2?std::min(row,1):row-1),52,42};
+  }
   if(control>=Control::Dress0 && control<=Control::Dress2) return {472+42.f*(int(control)-int(Control::Dress0)),608,38,38};
   if(control>=Control::Overview && control<=Control::Talents) return {34+94.f*(int(control)-int(Control::Overview)),236,90,30};
   if(control>=Control::Art0 && control<=Control::Art13) {
@@ -70,10 +155,12 @@ Rect CharacterSelection::Bounds(Control control) {
   if(control>=Control::Branch0 && control<=Control::Branch2) return {34+94.f*(int(control)-int(Control::Branch0)),280,90,30};
   if(control>=Control::Skin0 && control<=Control::Dye4) {
     const int n=int(control)-int(Control::Skin0);
-    return {1047+33.f*(n%5),284+100.f*(n/5),30,30};
+    return {1047+33.f*(n%5),240+86.f*(n/5),30,22};
   }
   if(control>=Control::Class0 && control<=Control::Class10) return {1004,112+44.f*(int(control)-int(Control::Class0)),244,42};
   switch(control) {
+  case Control::PreviousProfiles:return {1004,578,38,32};case Control::NextProfiles:return {1210,578,38,32};
+  case Control::RandomAppearance:return {332,650,44,44};case Control::UndoAppearance:return {384,650,44,44};
   case Control::Name:return {34,316,280,40};
   case Control::Hero:return {34,182,280,128};
   case Control::Create:return {34,526,280,44};
@@ -88,14 +175,20 @@ Rect CharacterSelection::Bounds(Control control) {
   case Control::Showcase:return {704,608,38,38};
   case Control::Replay:return {34,604,136,32};
   case Control::Stop:return {178,604,136,32};
-  case Control::SkinLeft:return {1158,244,28,32};case Control::SkinRight:return {1222,244,28,32};
-  case Control::HairLeft:return {1158,344,28,32};case Control::HairRight:return {1222,344,28,32};
-  case Control::DyeLeft:return {1158,444,28,32};case Control::DyeRight:return {1222,444,28,32};
+  case Control::SkinLeft:return {1150,202,32,32};case Control::SkinRight:return {1220,202,32,32};
+  case Control::HairLeft:return {1150,288,32,32};case Control::HairRight:return {1220,288,32,32};
+  case Control::DyeLeft:return {1150,374,32,32};case Control::DyeRight:return {1220,374,32,32};
   default:return {};
   }
 }
 bool CharacterSelection::Enabled(Control control) const {
   if(control==Control::None) return false;
+  if(control>=Control::Profile0 && control<=Control::Profile7)return page_==Page::Roster && profileOffset_+int(control)-int(Control::Profile0)<ProfileCount();
+  if(control==Control::PreviousProfiles || control==Control::NextProfiles)return page_==Page::Roster &&
+    (control==Control::PreviousProfiles?profileOffset_>0:profileOffset_+profilesPerPage<ProfileCount());
+  if(control==Control::RandomAppearance || control==Control::UndoAppearance)return page_==Page::Customize &&
+    (control==Control::RandomAppearance || lookHistorySize_>0);
+  if(control>=Control::Talent0 && control<=Control::Talent5)return page_==Page::Class && callingView_==CallingView::Talents;
   if(control==Control::Replay || control==Control::Stop)
     return page_==Page::Class && callingView_==CallingView::Arts &&
       (control==Control::Replay || actionTime_>=0 || showcase_ || PreviewEffectCount()>0);
@@ -108,65 +201,85 @@ bool CharacterSelection::Enabled(Control control) const {
     return page_!=Page::Roster || status_!=Status::Unreadable;
   if(control>=Control::Skin0 && control<=Control::Dye4) return page_==Page::Customize;
   if(control==Control::Left || control==Control::Right) return page_!=Page::Roster || status_!=Status::Unreadable;
-  if(control>=Control::Class0 && control<=Control::Class10) return page_!=Page::Customize;
+  if(control>=Control::Class0 && control<=Control::Class10) return page_==Page::Class;
   if(page_==Page::Roster) {
     if(control==Control::Enter || control==Control::Hero) return status_==Status::Saved;
     if(control==Control::Refresh || control==Control::Quit) return true;
-    if(control==Control::Create) return std::any_of(slots_.begin(),slots_.end(),[](const Slot& slot){return slot.status==Status::New;});
+    if(control==Control::Create) return ProfileCount()<maxProfiles;
     return false;
   }
   if(control==Control::Back || control==Control::Cancel) return true;
-  if(page_==Page::Class) return control==Control::Next && slots_[int(class_)].status==Status::New;
+  if(page_==Page::Class) return control==Control::Next && ProfileCount()<maxProfiles;
   if(control==Control::Name || (control>=Control::SkinLeft && control<=Control::DyeRight)) return true;
-  return control==Control::Confirm && rpg::ValidCharacterName(draftName_) && slots_[int(class_)].status==Status::New;
+  return control==Control::Confirm && rpg::ValidCharacterName(draftName_) && ProfileCount()<maxProfiles;
 }
 void CharacterSelection::CreateProfile() {
-  PreviewDraft();file_=Path(class_);notice_.clear();
-  const auto result=profile::Write(file_,hero_.Save());
+  PreviewDraft();notice_.clear();ReadSlots();
+  if(ProfileCount()>=maxProfiles){notice_="The character roster is full. Your draft is kept.";return;}
+  if(draftFile_.empty())draftFile_=AvailablePath();
+  const auto result=draftFile_.empty()?profile::WriteResult::Error:profile::Write(draftFile_,hero_.Save());
   if(result!=profile::WriteResult::Saved) {
-    if(result==profile::WriteResult::Conflict) ReadSlots();
-    notice_=result==profile::WriteResult::Conflict?"This class slot is unavailable. The existing save was kept.":
+    if(result==profile::WriteResult::Conflict){ReadSlots();draftFile_.clear();}
+    notice_=result==profile::WriteResult::Conflict?"Another character was created. Your draft is kept; press Create again.":
       result==profile::WriteResult::Busy?"Another game is saving this class. Your draft is kept; try again.":
       "Could not save this character. Your draft is kept; try again.";
     return;
   }
+  file_=draftFile_;draftFile_.clear();
   SetPage(Page::Roster,Control::Enter);Refresh();
   notice_=status_==Status::Saved?"Character created. Select Enter World to begin.":"Character saved, but unreadable. Refresh to check it.";
 }
 CharacterSelection::Action CharacterSelection::Activate(Control control) {
   if(!Enabled(control)) return Action::None;
+  if(control>=Control::Profile0 && control<=Control::Profile7){SelectProfile(profileOffset_+int(control)-int(Control::Profile0));return Action::None;}
+  if(control==Control::PreviousProfiles || control==Control::NextProfiles) {
+    profileOffset_+=control==Control::PreviousProfiles?-profilesPerPage:profilesPerPage;CancelGesture();return Action::None;
+  }
   if(control==Control::Left || control==Control::Right || control==Control::Closeup || control==Control::ResetView ||
      (control>=Control::Dress0 && control<=Control::Dress2))stageAge_=1;
   if(control>=Control::Dress0 && control<=Control::Dress2) {
     dress_=Dress(int(control)-int(Control::Dress0));ResetPreview();audition_.Add(sound::Cue::UiClick);return Action::None;
   }
   if(control>=Control::Overview && control<=Control::Talents) {
-    callingView_=CallingView(int(control)-int(Control::Overview));CancelGesture();return Action::None;
+    callingView_=CallingView(int(control)-int(Control::Overview));pinnedTalent_=-1;CancelGesture();return Action::None;
   }
-  if(control>=Control::Branch0 && control<=Control::Branch2) {branch_=int(control)-int(Control::Branch0);return Action::None;}
+  if(control>=Control::Branch0 && control<=Control::Branch2) {branch_=int(control)-int(Control::Branch0);pinnedTalent_=-1;CancelGesture();return Action::None;}
+  if(control>=Control::Talent0 && control<=Control::Talent5) {
+    const int talent=(int(control)-int(Control::Talent0))*3+branch_;
+    pinnedTalent_=pinnedTalent_==talent?-1:talent;audition_.Add(sound::Cue::UiClick);return Action::None;
+  }
   if(control>=Control::Art0 && control<=Control::Art13) {
     showcase_=false;
     StartPreview(previewArts[int(control)-int(Control::Art0)]);return Action::None;
   }
   if(control>=Control::Class0 && control<=Control::Class10) {
+    pinnedTalent_=-1;
     const bool changed=class_!=rpg::ClassId(int(control)-int(Control::Class0));
     const auto outgoing=PreviewStage();const bool hadFigure=status_!=Status::Unreadable;
     ResetPreview();
-    class_=rpg::ClassId(int(control)-int(Control::Class0));Refresh();
-    if(page_==Page::Class) {PreviewDraft();focus_=Enabled(Control::Next)?Control::Next:control;if(changed)QueueIntroduction();}
-    else focus_=status_==Status::Saved?Control::Enter:status_==Status::New?Control::Create:Control::Refresh;
+    class_=rpg::ClassId(int(control)-int(Control::Class0));draftFile_.clear();
+    PreviewDraft();status_=Status::New;focus_=Enabled(Control::Next)?Control::Next:control;if(changed)QueueIntroduction();
     if(changed && hadFigure && status_!=Status::Unreadable) {
       previousStage_=outgoing;previousStage_.effects=false;stageAge_=0;
     }
     return Action::None;
   }
   switch(control) {
+  case Control::RandomAppearance: {
+    appearanceSeed_=appearanceSeed_*1664525u+1013904223u;
+    constexpr int n=rpg::Appearance::count,combinations=n*n*n;
+    const int current=look_.skin*n*n+look_.hair*n+look_.dye;
+    const int next=(current+1+int(appearanceSeed_%(combinations-1)))%combinations;
+    ApplyLook({next/(n*n),(next/n)%n,next%n});break;
+  }
+  case Control::UndoAppearance:look_=lookHistory_[--lookHistorySize_];PreviewDraft();audition_.Add(sound::Cue::UiClick);break;
   case Control::Replay:showcase_=false;StartPreview(rpg::ValidSpell(previewAbility_)?previewAbility_:0);break;
   case Control::Stop:
     // Cancel sound/effects immediately, but let both body controllers settle
     // through their normal interrupted-action blend on subsequent updates.
     introduction_=-1;automaticPreview_=showcase_=false;previewFinished_=false;
     actionTime_=-1;released_=false;showcaseRest_=0;audition_.Reset();
+    contactRemaining_=-1;
     if(effects_.value)effects_->Reset();
     break;
   case Control::Closeup:closeup_=!closeup_;zoomGoal_=closeup_?1.f:0.f;break;
@@ -185,21 +298,19 @@ CharacterSelection::Action CharacterSelection::Activate(Control control) {
   }
   case Control::Create:
     ReadSlots();
-    if(slots_[int(class_)].status!=Status::New) {
-      const auto empty=std::find_if(slots_.begin(),slots_.end(),[](const Slot& slot){return slot.status==Status::New;});
-      if(empty==slots_.end()) {notice_="All class slots are occupied.";break;}
-      class_=rpg::ClassId(empty-slots_.begin());
-    }
-    look_={};draftName_.clear();notice_.clear();PreviewDraft();SetPage(Page::Class,Control::Next);QueueIntroduction();break;
+    if(ProfileCount()>=maxProfiles){notice_="The character roster is full. Your draft is kept.";break;}
+    rosterClass_=class_;draftFile_.clear();lookHistorySize_=0;callingView_=CallingView::Overview;
+    look_={};draftName_.clear();notice_.clear();PreviewDraft();status_=Status::New;SetPage(Page::Class,Control::Next);QueueIntroduction();break;
   case Control::Next:
     ReadSlots();
-    if(slots_[int(class_)].status!=Status::New) {notice_="This class slot is occupied. Choose another calling.";break;}
+    if(ProfileCount()>=maxProfiles){notice_="The character roster is full. Your draft is kept.";break;}
+    draftFile_=AvailablePath();
     notice_.clear();PreviewDraft();SetPage(Page::Customize,Control::Name);break;
   case Control::Confirm:CreateProfile();break;
-  case Control::Cancel:SetPage(Page::Roster,Control::Create);Refresh();break;
+  case Control::Cancel:class_=rosterClass_;draftFile_.clear();SetPage(Page::Roster,Control::Create);Refresh();break;
   case Control::Back:
-    if(page_==Page::Customize) {ReadSlots();SetPage(Page::Class,Control::Next);notice_.clear();}
-    else {SetPage(Page::Roster,Control::Create);Refresh();}
+    if(page_==Page::Customize) {draftFile_.clear();ReadSlots();SetPage(Page::Class,Control::Next);notice_.clear();}
+    else {class_=rosterClass_;draftFile_.clear();SetPage(Page::Roster,Control::Create);Refresh();}
     break;
   case Control::Refresh:Refresh();break;
   case Control::Quit:return Action::Quit;
@@ -208,18 +319,19 @@ CharacterSelection::Action CharacterSelection::Activate(Control control) {
   default:
     if(control>=Control::Skin0 && control<=Control::Dye4) {
       const int n=int(control)-int(Control::Skin0);
-      (n<5?look_.skin:n<10?look_.hair:look_.dye)=n%5;PreviewDraft();
+      auto next=look_;(n<5?next.skin:n<10?next.hair:next.dye)=n%5;ApplyLook(next);
     }
     if(control>=Control::SkinLeft && control<=Control::DyeRight) {
       const int offset=int(control)-int(Control::SkinLeft);
-      int& choice=offset<2?look_.skin:offset<4?look_.hair:look_.dye;
-      choice=(choice+(offset%2?1:-1)+rpg::Appearance::count)%rpg::Appearance::count;PreviewDraft();
+      auto next=look_;int& choice=offset<2?next.skin:offset<4?next.hair:next.dye;
+      choice=(choice+(offset%2?1:-1)+rpg::Appearance::count)%rpg::Appearance::count;ApplyLook(next);
     }
     break;
   }
   return Action::None;
 }
 void CharacterSelection::ResetPreview() {
+  contactRemaining_=-1;previewContacts_=0;previewContact_={};
   previewFinished_=false;
   introduction_=-1;automaticPreview_=false;
   showcase_=false;showcaseRest_=0;audition_.Reset();
@@ -232,6 +344,7 @@ void CharacterSelection::QueueIntroduction() {
      class_==rpg::ClassId::Mage || class_==rpg::ClassId::Priest) introduction_=.55f;
 }
 void CharacterSelection::StartPreview(int ability) {
+  contactRemaining_=-1;previewContacts_=0;previewContact_={};
   previewFinished_=false;
   stageAge_=1;
   introduction_=-1;automaticPreview_=false;
@@ -256,7 +369,8 @@ CharacterSelection::ArtDetails CharacterSelection::InspectArt(int ability) const
   if(ability==2 || ability==3)return {spell.contact,std::max(0.f,spell.recovery-spell.contact),false};
   const bool heavy=ability!=0 && ability!=7 && ability!=12,ranged=hero_.ClassInfo().range>3;
   const float rate=ArtRate(ability),windup=(ranged?combat::StrokeStart(heavy):combat::Contact(heavy))/rate;
-  return {windup,std::max(0.f,combat::Duration(heavy)/rate-windup),ranged};
+  return {windup,std::max(0.f,combat::Duration(heavy)/rate-windup),ranged,
+    ranged?(combat::Contact(heavy)-combat::StrokeStart(heavy))/rate:0.f};
 }
 float CharacterSelection::PreviewDuration() const {
   return previewAbility_==2?.50f:previewAbility_==3?hero_.RecoveryCastDuration()+.42f:
@@ -343,7 +457,18 @@ CharacterSelection::Action CharacterSelection::Update(float seconds,const Input&
   const float dt=std::clamp(seconds,0.f,.05f);
   yaw_=std::remainder(yaw_+std::remainder(yawGoal_-yaw_,6.2831853f)*-std::expm1(-12.f*dt),6.2831853f);
   zoom_+=(zoomGoal_-zoom_)*-std::expm1(-12.f*dt);
-  if(effects_.value)effects_->Advance(dt);bool emitRelease=false;float releaseElapsed=0;
+  if(effects_.value)effects_->Advance(dt);bool emitRelease=false,emitSwing=false;float releaseElapsed=0,swingElapsed=0;
+  const auto contact=[&](float elapsed) {
+    previewContact_.elapsed=std::clamp(elapsed,0.f,dt);
+    effects_->Emit(previewContact_);++previewContacts_;contactRemaining_=-1;
+    audition_.Add(sound::ContactCue(previewContact_.school,previewContact_.ability,previewContact_.heavy));
+  };
+  // A released stage projectile owns its destination and contact clock. Turning
+  // the figure afterward cannot redirect it; cancellation clears the pending hit.
+  if(contactRemaining_>=0) {
+    contactRemaining_-=dt;
+    if(contactRemaining_<=0)contact(-contactRemaining_);
+  }
   if(actionTime_>=0) {
     const float previousTime=actionTime_;
     actionTime_+=dt*PreviewRate();
@@ -354,6 +479,7 @@ CharacterSelection::Action CharacterSelection::Update(float seconds,const Input&
       audition_.Add(previewAbility_==3?sound::ClassRecoveryCue(class_):hero_.ClassInfo().range>3?
         sound::ReleaseCue(class_,previewAbility_,heavy):heavy?sound::Cue::Heavy:sound::Cue::Strike);
       if(class_==rpg::ClassId::Warrior && heavy)audition_.Add(sound::Cue::WarriorEffort);
+      if(previewAbility_!=3 && hero_.ClassInfo().range<=3){emitSwing=true;swingElapsed=std::max(0.f,(actionTime_-audibleRelease)/PreviewRate());}
     }
     const float release=PreviewRelease();
     if(!released_ && previewAbility_!=2 && actionTime_>=release) {released_=true;emitRelease=true;releaseElapsed=std::max(0.f,(actionTime_-release)/PreviewRate());}
@@ -370,7 +496,7 @@ CharacterSelection::Action CharacterSelection::Update(float seconds,const Input&
   previewWeapon_.Update(dt,previewAbility_==2 || previewAbility_==3?-1:actionTime_,PreviewHeavy(),
     staff||prayer,PreviewOutfit().weapon && (staff||bow||blade||prayer),PreviewRate(),bow,
     previewAbility_,class_==rpg::ClassId::Warrior?0:class_==rpg::ClassId::Scout?1:class_==rpg::ClassId::Mage?2:class_==rpg::ClassId::Priest?3:-1);
-  if(emitRelease) {
+  if(emitRelease || emitSwing) {
       const auto outfit=PreviewOutfit();
       const auto pose=BuildCharacterPose(0,0,outfit.shield,PreviewBody(),form);
       const auto sockets=castfx::FromPose(pose,{0,0,0},yaw_,form,outfit.shield,outfit.weapon);
@@ -378,8 +504,18 @@ CharacterSelection::Action CharacterSelection::Update(float seconds,const Input&
       e.technique=previewAbility_==5;e.signature=previewAbility_==6;e.opening=previewAbility_==7;
       e.kind=previewAbility_==3?rpg::CombatVisualKind::Mend:hero_.ClassInfo().range>3?rpg::CombatVisualKind::SpellCast:
         PreviewHeavy()?rpg::CombatVisualKind::HeavyStrike:rpg::CombatVisualKind::Strike;
-      e.destination={std::sin(yaw_)*1.7f,std::cos(yaw_)*1.7f};e.destinationHeight=1.2f;e.flight=.42f;
-      e.elapsed=releaseElapsed;effects_->Emit(e,&sockets.focus);
+      e.destination={std::sin(yaw_)*1.7f,std::cos(yaw_)*1.7f};e.destinationHeight=1.2f;e.flight=InspectArt(previewAbility_).flight;
+      e.elapsed=emitSwing?swingElapsed:releaseElapsed;
+      if(emitSwing || hero_.ClassInfo().range>3 || previewAbility_==3)effects_->Emit(e,&sockets.focus);
+      if(emitRelease && previewAbility_!=3) {
+        previewContact_=e;previewContact_.kind=PreviewHeavy()?rpg::CombatVisualKind::HeavyHit:rpg::CombatVisualKind::Hit;
+        previewContact_.position=e.destination;
+        previewContact_.height=rpg::WorldMap::Height(e.destination)+e.destinationHeight;
+        // No ground damage area is invented on the character stage.
+        previewContact_.primary=false;
+        contactRemaining_=e.kind==rpg::CombatVisualKind::SpellCast?e.flight-releaseElapsed:0;
+        if(contactRemaining_<=0)contact(e.kind==rpg::CombatVisualKind::SpellCast?-contactRemaining_:releaseElapsed);
+      }
     }
   if(effects_.value && effects_->Tracking(0)) {
     const auto outfit=PreviewOutfit();
@@ -395,9 +531,13 @@ CharacterSelection::Action CharacterSelection::Update(float seconds,const Input&
   }
   const Layout layout(width_,height_);hover_=Control::None;
   const float localX=layout.LocalX(input.ClientX()),localY=layout.LocalY(input.ClientY());
+  if(page_==Page::Roster && std::isfinite(wheel) && wheel!=0 && Rect{996,106,262,510}.Contains(localX,localY)) {
+    CancelGesture();return Activate(wheel>0?Control::PreviousProfiles:Control::NextProfiles);
+  }
   if(std::abs(localX-hintPointerX_)>.5f || std::abs(localY-hintPointerY_)>.5f)keyboardHints_=false;
   hintPointerX_=localX;hintPointerY_=localY;
-  const bool stage=StageBounds().Contains(localX,localY) && Enabled(Control::Left);
+  const bool overTalentCard=InspectedTalent()>=0 && TalentCardBounds().Contains(localX,localY);
+  const bool stage=StageBounds().Contains(localX,localY) && !overTalentCard && Enabled(Control::Left);
   // A deliberate input wins over a pending entrance in the very same frame.
   // Do not zoom out or emit a late charge after the player begins inspection.
   bool deliberate=std::isfinite(wheel) && wheel!=0;
@@ -436,7 +576,11 @@ CharacterSelection::Action CharacterSelection::Update(float seconds,const Input&
     const int direction=input.Held(VK_SHIFT)?-1:1;
     do {focus_=Control((int(focus_)+direction+int(Control::None))%int(Control::None));} while(!Enabled(focus_));
   }
+  if(page_==Page::Roster && (input.Pressed(VK_DOWN) || input.Pressed(VK_UP)) && ProfileCount()>0) {
+    const int index=SelectedProfile();SelectProfile(std::clamp(index+(input.Pressed(VK_DOWN)?1:-1),0,ProfileCount()-1));return Action::None;
+  }
   if(input.Pressed(VK_ESCAPE)) {
+    if(pinnedTalent_>=0){pinnedTalent_=-1;CancelGesture();focus_=Control(int(Control::Branch0)+branch_);return Action::None;}
     CancelGesture();if(page_!=Page::Roster) return Activate(Control::Back);
     focus_=Control::Quit;return Action::None;
   }
@@ -452,9 +596,23 @@ CharacterSelection::Action CharacterSelection::Update(float seconds,const Input&
     yaw_=std::remainder(yaw_+std::clamp(localX-dragX_,-150.f,150.f)*.012f,6.2831853f);dragX_=localX;
     yawGoal_=yaw_;
   }
-  if(input.Released(VK_LBUTTON)) {
-    const auto clicked=pressed_;const bool dragged=rotating_ || nameDragging_;CancelGesture();if(!dragged && clicked==hover_) return Activate(clicked);
+  const bool nameEditing=focus_==Control::Name && page_==Page::Customize;
+  const auto heldRotation=input.Held(VK_LBUTTON) && (pressed_==Control::Left || pressed_==Control::Right)?pressed_:
+    !nameEditing && input.Held(VK_LEFT) && !input.Held(VK_RIGHT)?Control::Left:
+    !nameEditing && input.Held(VK_RIGHT) && !input.Held(VK_LEFT)?Control::Right:Control::None;
+  if(heldRotation!=Control::None && Enabled(heldRotation)) {
+    if(rotateControl_!=heldRotation){rotateControl_=heldRotation;rotateHold_=0;rotateRepeated_=false;}
+    const float before=rotateHold_;rotateHold_+=dt;
+    const float travel=std::max(0.f,rotateHold_-.28f)-std::max(0.f,before-.28f);
+    if(travel>0){rotateRepeated_=true;yawGoal_=std::remainder(yawGoal_+(heldRotation==Control::Left?-1:1)*travel*1.6f,6.2831853f);}
   }
+  if(input.Released(VK_LBUTTON)) {
+    const auto clicked=pressed_;const bool heldTurn=rotateRepeated_ && rotateControl_==clicked;
+    const bool dragged=rotating_ || nameDragging_;const float heldGoal=yawGoal_;CancelGesture();
+    if(heldTurn)yawGoal_=heldGoal;
+    if(!dragged && !heldTurn && clicked==hover_) return Activate(clicked);
+  }
+  if(heldRotation==Control::None){rotateControl_=Control::None;rotateHold_=0;rotateRepeated_=false;}
   if(focus_==Control::Name && page_==Page::Customize) {
     const auto previousName=draftName_;
     const bool control=input.Held(VK_CONTROL),alt=input.Held(VK_MENU),shift=input.Held(VK_SHIFT);

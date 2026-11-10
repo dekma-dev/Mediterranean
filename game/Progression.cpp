@@ -141,7 +141,9 @@ void Simulation::DamagePlayer(float damage,float incomingFacing,float visualElap
   if (health_<=0) return;
   if(class_==ClassId::Scout && evasion_>0) {
     evasion_=0;Emit(FeedbackKind::Miss,player_);
+    const auto before=visualEventCount_;
     EmitVisual(CombatVisualKind::BarrierHit,player_,height_+1.2f,incomingFacing,0,visualElapsed);
+    if(visualEventCount_>before)visualEvents_[before].evaded=true;
     message_="Evaded the incoming attack.";return;
   }
   const float incoming=std::max(1.f,damage-DamageReduction());

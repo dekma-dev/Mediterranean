@@ -426,20 +426,77 @@ void Prepare(Renderer& r,const rpg::Simulation& state,const castfx::Attachments&
   castfx::Prepare(r,state,sockets);
 }
 void BarrierContact(Renderer& r,const rpg::CombatVisualEvent& e,float age) {
-  if(!std::isfinite(age) || age<0 || age>=.38f)return;
+  if(!std::isfinite(age) || age<0 || age>=.38f || !std::isfinite(e.facing) ||
+     !std::isfinite(e.position.x) || !std::isfinite(e.position.z) || !std::isfinite(e.height))return;
   const float t=Unit(age/.38f),alpha=(1-t)*(1-t);
   const XMFLOAT3 p{e.position.x-std::sin(e.facing)*.45f,e.height,e.position.z-std::cos(e.facing)*.45f};
-  auto color=e.school==C::Mage?XMFLOAT4{.35f,.72f,1,alpha*.8f}:Color(e.school,alpha*.8f);
+  // Incoming-facing coordinates: every fracture and spark fan stays on the
+  // struck side when the victim or camera turns. The old XY ring went edge-on.
+  const auto at=[&](float x,float y,float z=0.f){return Add(p,{std::cos(e.facing)*x+std::sin(e.facing)*z,y,-std::sin(e.facing)*x+std::cos(e.facing)*z});};
+  const auto panel=[&](Renderer::EffectArt art,float x,float y,float sizeX,float sizeY,float angle,XMFLOAT4 color,float depth=0.f){
+    const auto point=[&](float u,float v){return at(x+u*std::cos(angle)-v*std::sin(angle),y+u*std::sin(angle)+v*std::cos(angle),depth);};
+    r.DrawEffectSurface(art,point(-sizeX,-sizeY),point(-sizeX,sizeY),point(sizeX,sizeY),point(sizeX,-sizeY),color);
+  };
+  if(e.school==C::Warrior) {
+    // A brief steel reflection and ballistic sparks, without a magical circle.
+    panel(Renderer::EffectArt::Slash,0,0,.12f+t*.10f,.30f,-.38f,{.78f,.86f,.94f,alpha*.72f});
+    panel(Renderer::EffectArt::Slash,.02f,.02f,.08f,.24f,.63f,{1,.83f,.53f,alpha*.64f},-.015f);
+    for(int n=0;n<12;++n) {
+      const float angle=n*2.399963f,speed=.65f+(n%4)*.27f;
+      const float x=std::cos(angle)*age*speed,y=std::sin(angle)*age*speed-age*age*2.6f;
+      const auto end=at(x,y,-age*(.20f+n%3*.17f));
+      const auto start=at(x-std::cos(angle)*.055f,y-std::sin(angle)*.055f,-age*(.20f+n%3*.17f)+.015f);
+      r.DrawEffectStreak(start,end,.008f,{1,.72f,.35f,alpha*.95f});
+    }
+    r.DrawEffectSprite(Renderer::EffectArt::Smoke,at(0,age*.2f),.14f+t*.23f,.12f+t*.18f,0,{.53f,.55f,.53f,alpha*.18f},true);
+    return;
+  }
+  if(e.school==C::Mage) {
+    // Facets burst from the point of contact; cracks remain in the ward plane.
+    panel(Renderer::EffectArt::Ice,0,0,.29f+t*.13f,.34f+t*.12f,.12f,{.48f,.77f,1,alpha*.54f});
+    for(int n=0;n<6;++n) {
+      const float angle=n*tau/6+.28f,dx=std::cos(angle),dy=std::sin(angle);
+      const float elbow=.13f+t*.09f,tip=.32f+t*.27f;
+      r.DrawEffectStreak(at(0,0),at(dx*elbow,dy*elbow),.012f,{.76f,.94f,1,alpha*.85f});
+      r.DrawEffectStreak(at(dx*elbow,dy*elbow),at(dx*tip-dy*.06f,dy*tip+dx*.06f),.008f,{.61f,.85f,1,alpha*.72f});
+      const float travel=age*(.70f+n%3*.23f);
+      panel(Renderer::EffectArt::Ice,dx*(.17f+travel),dy*(.17f+travel)-age*age,.038f,.10f,angle+t,{.57f,.84f,1,alpha*.85f},-travel*.35f);
+    }
+    for(float side:{-1.f,1.f})r.DrawEffectSprite(Renderer::EffectArt::Smoke,at(side*age*.35f,-age*.25f),.20f+t*.24f,.14f+t*.14f,side,{.53f,.72f,.88f,alpha*.20f},true);
+    return;
+  }
+  if(e.school==C::Scout) {
+    if(!e.evaded) {
+      // A reserve ward absorbs at the body; do not show a successful sidestep.
+      for(float side:{-1.f,1.f})panel(Renderer::EffectArt::Slash,side*.07f,0,.07f,.27f,side*.55f,{.65f,.84f,.79f,alpha*.66f});
+      for(int n=0;n<6;++n){const float angle=n*tau/6;
+        r.DrawEffectStreak(at(std::cos(angle)*.08f,std::sin(angle)*.08f),at(std::cos(angle)*(.16f+t*.14f),std::sin(angle)*(.16f+t*.14f)),.008f,{.76f,.91f,.79f,alpha*.8f});}
+      return;
+    }
+    // An evaded strike slips past the body: feathered air and dust, no shield.
+    for(int n=0;n<6;++n) {
+      const float x=(n-2.5f)*.065f,y=.18f-n*.06f;
+      r.DrawEffectStreak(at(x-.12f-t*.18f,y,-.04f),at(x+.18f+t*.36f,y+.07f,-.08f-t*.22f),.009f,{.77f,.83f,.73f,alpha*.64f});
+    }
+    r.DrawEffectSprite(Renderer::EffectArt::Smoke,at(t*.28f,-.14f),.28f+t*.28f,.14f,0,{.57f,.61f,.51f,alpha*.18f},true);
+    return;
+  }
+  if(e.school==C::Priest) {
+    panel(Renderer::EffectArt::Seal,0,0,.29f+t*.12f,.36f+t*.14f,0,{1,.83f,.42f,alpha*.62f});
+    // Three pointed gold arches bow away from the incoming blow.
+    for(int arch=0;arch<3;++arch)for(int n=0;n<12;++n) {
+      const float width=.23f+arch*.09f+t*.08f,height=.40f+arch*.10f;
+      const auto point=[&](float u){return at((2*u-1)*width,std::sin(u*pi)*height-.22f,-.025f-arch*.025f-t*.06f);};
+      r.DrawEffectStreak(point(n/12.f),point((n+1)/12.f),.010f,{1,.88f,.52f,alpha*(.76f-arch*.12f)});
+    }
+    for(int n=0;n<5;++n)r.DrawEffectSprite(Renderer::EffectArt::Sparks,at((n-2)*(.11f+t*.10f),.10f+age*(.55f+n%2*.2f),-.05f),.025f,.09f,0,{1,.93f,.72f,alpha*.85f});
+    return;
+  }
+  auto color=Color(e.school,alpha*.8f);
   Arc(r,p,.17f+t*.45f,0,tau,.025f,color);
   color.w=alpha*.7f;
   for(int i=0;i<6;++i) Ray(r,p,i*tau/6,.12f+t*.2f,.23f+t*.4f,.013f,color);
-  const bool frost=e.school==C::Mage;
-  r.DrawEffectSprite(frost?Renderer::EffectArt::Seal:Renderer::EffectArt::Sparks,p,
-    .25f+t*.22f,.25f+t*.22f,-t*.8f,color);
-  if(frost)for(int n=0;n<4;++n){
-    const float a=n*tau/4+.4f;const auto shard=Add(p,{std::cos(a)*age*1.5f,std::sin(a)*age*1.5f-age*age,0});
-    r.DrawEffectSprite(Renderer::EffectArt::Ice,shard,.035f,.13f,a,{.48f,.8f,1,alpha*.65f});
-  }
+  r.DrawEffectSprite(Renderer::EffectArt::Sparks,p,.25f+t*.22f,.25f+t*.22f,-t*.8f,color);
 }
 void States(Renderer& r,const rpg::Simulation& state,float time) {
   // Stateless tool/preview adapter. The live Game owns persistent envelopes.

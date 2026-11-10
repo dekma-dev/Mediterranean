@@ -212,7 +212,7 @@ void Game::Update(double seconds,const Input& input,float wheel) {
     interface_.SetOnly(ui::Panel::None);
     interface_.menuNotice.clear();
     ResetMotion();
-    selection_.Open(rosterFile_,simulation_.Class());
+    selection_.Open(rosterFile_,simulation_.Class(),saveFile_);
     choosingCharacter_=true;
     inputBarrier_=true;
     return;

@@ -36,7 +36,10 @@ struct AuthoredWeaponController {
       const auto clip=bow?(heavy?playerclips::Clip::BowPowerRelease:playerclips::Clip::BowRelease):staff?(heavy?playerclips::Clip::StaffSweep:playerclips::Clip::StaffThrust):
         (heavy?playerclips::Clip::Overhead:playerclips::Clip::Slash);
       const float contact=staff||bow?combat::StrokeStart(heavy):combat::Contact(heavy);
-      const float start=contact*.40f,end=contact+(heavy?.95f:.75f);
+      // Let the loaded arm decelerate after contact before returning to guard.
+      // This is presentation recovery; damage/release and cooldown stay on
+      // the simulation clock, and a new attack can still interrupt the tail.
+      const float start=contact*.40f,end=contact+(heavy?1.15f:.90f);
       phase=playerclips::AttackPhase(clip,clock,start,contact,end);
       auto target=playerclips::Sample(clip,phase);
       if(style==0 && (ability==8 || ability==11 || ability==14)) {
@@ -75,7 +78,11 @@ struct AuthoredWeaponController {
         target.hands[1]={-.10f*gather-.035f*send,(.25f*gather+.12f*send)*solemn,.07f*gather+.08f*send};
         target.weapon={.08f,.93f,.32f};
       }
-      const float w=combat::Smooth(clock/std::min(.22f,contact))*(1-combat::Smooth((clock-contact-.10f)/(end-contact-.10f)));
+      // The authored sword wind-up already departs from low carry. A second
+      // 220 ms entrance hid much of its raised-hand preparation. Retain more
+      // of that load pose while preserving a gradual entrance.
+      const float entrance=staff||bow?std::min(.22f,contact):std::min(.19f,contact);
+      const float w=combat::Smooth(clock/entrance)*(1-combat::Smooth((clock-contact-.10f)/(end-contact-.10f)));
       blendAge=std::min(.10f,blendAge+dt);
       // Fade an interrupted stroke once. Multiplying two entrance envelopes
       // compressed a fresh attack's preparation into its last few frames.

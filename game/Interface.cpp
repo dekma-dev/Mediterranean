@@ -70,12 +70,20 @@ std::string TalentEffect(const rpg::Simulation& s,int index) {
  if(info.strike || info.heavy) return "+"+Number(info.strike)+" basic / +"+Number(info.heavy)+" heavy damage";
  if(info.health) return "+"+Number(info.health)+" maximum health";
  if(info.armor) return "+"+Number(info.armor)+" damage reduction";
- if(info.castSpeed) return "+"+Number(info.castSpeed*100)+"% cast speed"+(info.mend?" / recovery power":" / -1s cooldown");
+ if(info.castSpeed) {
+  std::string result;
+  if(s.RecoveryCastDuration()>0)result="+"+Number(info.castSpeed*100)+"% cast speed";
+  const auto append=[&](const std::string& part){if(!result.empty())result+=" / ";result+=part;};
+  if(info.mend)append("+"+Number(rpg::ClassHealer(s.Class())?info.mend:info.mend*.5f)+(rpg::ClassHealer(s.Class())?" healing":" barrier capacity"));
+  if(info.mendCooldown)append("Recovery cooldown: -"+Number(info.mendCooldown)+"s");
+  return result;
+ }
  if(info.mend) return "+"+Number(rpg::ClassHealer(s.Class())?info.mend:info.mend*.5f)+(rpg::ClassHealer(s.Class())?" healing":" barrier capacity");
  if(info.mendCooldown) return "Recovery cooldown: -"+Number(info.mendCooldown)+"s";
  if(info.dashCooldown) return "Dash cooldown: -"+Number(info.dashCooldown)+"s";
  if(info.basicCooldown) return "Basic cooldown: -"+Number(info.basicCooldown)+"s";
  if(info.heavyCooldown) return "Heavy cooldown: -"+Number(info.heavyCooldown)+"s";
+ if(index==int(rpg::Talent::Overflow) && !rpg::ClassHealer(s.Class()))return "+12 barrier capacity";
  if(index>=9) return info.effect;
  return index==6?"Heavy: +25% finishing damage":rpg::ClassHealer(s.Class())?"Healing: +20 at low health":"Barrier: +10 at low health";
 }
@@ -390,9 +398,20 @@ void AbilityArtwork(Canvas& c,Rect rect,int ability,rpg::ClassId id=rpg::ClassId
  }
 }
 void TalentIcon(Canvas& c,Rect rect,int index,float alpha=1,rpg::ClassId id=rpg::ClassId::Warrior) {
+ if(rpg::ValidTalent(rpg::Talent(index)) && (rpg::AdvancedClass(id) || id==rpg::ClassId::Priest)) {
+   const int row=index/3,branch=index%3;
+   constexpr int offense[]{0,1,6,7,1,6};
+   const int ability=branch==0?offense[row]:branch==1 && (row==2 || row==5)?2:3;
+   const auto art=SpellArtwork(id,ability);
+   c.Art(rect,art.combat?Renderer::UiArt::CombatSpells:Renderer::UiArt::ClassSpells,art.Uv(),{1,1,1,alpha});
+   // A milestone is a passive enhancement of its class action, not generic Mend.
+   // Small engraved pips distinguish depth without obscuring the existing art.
+   for(int n=0;n<=row;++n)c.Diamond(rect.x+4+n*(rect.w-8)/6,rect.y+rect.h-3,1.5f,1.5f,{.95f,.78f,.42f,alpha});
+   return;
+ }
  if(id!=rpg::ClassId::Warrior && index%3==0) {ClassSigil(c,rect,id,alpha);return;}
  if (index==int(rpg::Talent::Pursuit)) {
-  AbilityArtwork(c,rect,2); return;
+  AbilityArtwork(c,rect,2,id); return;
  }
  if (index%3!=2) {
   Icon(c,rect,index%3==0?(index<3?Item::Starter:Item::Watchguard):Item::Shield,alpha);
@@ -531,6 +550,53 @@ void RenderLoading(Renderer& renderer,LoadingStage stage) {
  c.Center(0,681,1280,"Your chronicle awaits.",13,muted);
 }
 
+// Brass relief and inset enamel, using the current native UI materials. These
+// small controls share their exact input bounds with the character-stage logic.
+void CreationJewel(Canvas& c,Rect a,float hover,bool active=false,bool enabled=true) {
+ const float x=a.x+a.w*.5f,y=a.y+a.h*.5f,r=std::min(a.w,a.h)*.48f;
+ const float strength=enabled?1.f:.38f;
+ c.Oval(x,y+2,r+1,r+1,{.012f,.014f,.015f,.85f});
+ c.Oval(x,y,r,r,{.31f*strength,.24f*strength,.12f*strength,1});
+ c.Ring(x,y,r-1,{.84f*strength,.67f*strength,.34f*strength,1},2);
+ c.Ring(x,y,r-3,{.20f,.16f,.10f,1},1.5f);
+ for(int layer=7;layer>=0;--layer) {
+   const float t=float(layer)/7,rr=(r-4)*(0.35f+.65f*t);
+   c.Oval(x,y-1-(1-t)*r*.21f,rr,rr,
+     {(.025f+(1-t)*.06f)*strength,(.075f+(1-t)*.24f+hover*.07f)*strength,(.11f+(1-t)*.31f+hover*.08f)*strength,1});
+ }
+ c.Ring(x,y,r-5,{.16f,.39f,.43f,.7f},1);
+ c.Oval(x-r*.2f,y-r*.38f,r*.25f,r*.10f,{.79f,.92f,.83f,.24f*strength});
+ for(int n=0;n<8;++n) {
+   const float angle=n*6.2831853f/8,rr=r-1;
+   c.Oval(x+std::sin(angle)*rr,y+std::cos(angle)*rr,1.1f,1.1f,{.95f*strength,.79f*strength,.45f*strength,.8f});
+ }
+ if(active)c.Ring(x,y,r+1,{.94f,.81f,.48f,.75f},1.5f);
+}
+void CreationArrow(Canvas& c,Rect a,bool right,float hover,bool pressed,bool enabled=true) {
+ const float strength=enabled?1.f:.35f;const auto tint=[&](Color color){color.x*=strength;color.y*=strength;color.z*=strength;return color;};
+ const float x=a.x+a.w*.5f,y=a.y+a.h*.5f+(pressed?1.f:0.f),w=a.w*.45f,h=a.h*.45f;
+ const auto diamond=[&](float inset,Color color){color=tint(color);c.Triangle({x-w+inset,y},{x,y-h+inset},{x+w-inset,y},color);
+   c.Triangle({x-w+inset,y},{x+w-inset,y},{x,y+h-inset},color);};
+ diamond(0,{.77f,.58f,.28f,1});diamond(2,{.20f,.16f,.08f,1});diamond(4,{.055f,.22f+hover*.08f,.29f+hover*.09f,1});
+ c.Line(x-w+1,y,x,y-h+1,1.3f,tint(ink));c.Line(x,y-h+1,x+w-1,y,1.3f,tint(gold));
+ const float sign=right?1.f:-1.f;c.Line(x-sign*3,y-5,x+sign*3,y,2,tint(ink));c.Line(x+sign*3,y,x-sign*3,y+5,2,tint(gold));
+}
+void CreationCrest(Canvas& c,Rect rect,rpg::ClassId id,float glow) {
+ const float x=rect.x+rect.w*.5f,y=rect.y+rect.h*.5f;
+ constexpr Point contour[]={{-.48f,-.40f},{-.29f,-.45f},{0,-.58f},{.29f,-.45f},{.48f,-.40f},{.42f,.23f},{0,.57f},{-.42f,.23f}};
+ const auto shape=[&](float scale,Color color) {
+   for(int n=0;n<8;++n){const auto a=contour[n],b=contour[(n+1)%8];
+     c.Triangle({x,y},{x+a.x*rect.w*scale,y+a.y*rect.h*scale},{x+b.x*rect.w*scale,y+b.y*rect.h*scale},color);}
+ };
+ shape(1.08f,{.025f,.033f,.032f,1});shape(1,{.43f+.30f*glow,.40f+.23f*glow,.27f+.10f*glow,1});
+ shape(.86f,{.09f,.14f,.15f,1});
+ c.Art({x-rect.w*.33f,y-rect.h*.34f,rect.w*.66f,rect.h*.68f},Renderer::UiArt::Icons,
+   IconUv(int(rpg::WeaponFor(id).form)),{.80f+.20f*glow,.82f+.18f*glow,.80f+.20f*glow,1});
+ for(int n=0;n<8;++n){const auto a=contour[n],b=contour[(n+1)%8];
+   c.Line(x+a.x*rect.w,y+a.y*rect.h,x+b.x*rect.w,y+b.y*rect.h,1,n<4?Color{.84f,.77f,.52f,.62f+.38f*glow}:Color{.24f,.22f,.13f,1});}
+ c.Diamond(x,y-rect.h*.48f,2.8f,3.2f,{.47f,.76f,.79f,.6f+.4f*glow});
+ c.Diamond(x,y+rect.h*.43f,2,2.5f,{.75f,.62f,.34f,1});
+}
 void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selection) {
  Canvas c(renderer);using C=CharacterSelection::Control;using Page=CharacterSelection::Page;using Status=CharacterSelection::Status;
  const auto page=selection.Screen();const bool roster=page==Page::Roster,customize=page==Page::Customize;
@@ -556,8 +622,8 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  c.Gradient({0,0,1280,138},{.015f,.018f,.023f,.84f},{.015f,.018f,.023f,0});
  c.Gradient({0,588,1280,132},{.015f,.018f,.023f,0},{.015f,.018f,.023f,.92f});
  // Keep the stage open. Only text rails receive a translucent scrim.
- c.Gradient({22,156,302,438},{.018f,.025f,.028f,.84f},{.018f,.025f,.028f,.30f});
- c.Gradient({996,94,262,518},{.018f,.025f,.028f,.70f},{.018f,.025f,.028f,.38f});
+ if(!customize)c.Gradient({22,156,302,438},{.018f,.025f,.028f,.84f},{.018f,.025f,.028f,.30f});
+ if(!customize)c.Gradient({996,94,262,518},{.018f,.025f,.028f,.70f},{.018f,.025f,.028f,.38f});
  c.Skin({4,4,1272,712},20,{.85f,.87f,.86f,1},false);
  for(int side=0;side<2;++side) for(int ring=5;ring>0;--ring)
    c.Oval(393+side*413.f,356,ring*17.f,ring*26.f,{.68f,.40f,.17f,(.022f+.007f*std::sin(selection.Time()*1.7f+side))/5});
@@ -575,8 +641,14 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
    const auto a=CharacterSelection::Bounds(control);const bool enabled=selection.Enabled(control),focused=selection.Focus()==control;
    const bool primary=control==C::Enter || control==C::Next || control==C::Confirm || control==C::Create;
    c.Button(a,enabled,focused,primary);
+   if(primary) {
+     c.Gradient({a.x+7,a.y+7,a.w-14,a.h-14},{.025f,.16f,.20f,1},{.012f,.045f,.055f,1});
+     CreationJewel(c,{a.x+a.w-44,a.y+3,40,40},selection.Highlight(control),focused,enabled);
+     const float x=a.x+a.w-25,y=a.y+23;
+     c.Line(x-7,y,x-2,y+6,2,enabled?ink:muted);c.Line(x-2,y+6,x+9,y-7,2,enabled?gold:muted);
+   }
    if(enabled)c.Gradient({a.x+5,a.y+4,a.w-10,a.h-8},{.96f,.72f,.36f,.16f*selection.Highlight(control)},{.6f,.36f,.12f,.025f*selection.Highlight(control)});
-   c.Center(a.x+7,a.y+(a.h-17)*.5f-1+(selection.Pressed(control)?1.5f:0),a.w-14,label,primary?18.f:14.f,enabled?ink:muted);
+   c.Center(a.x+7,a.y+(a.h-17)*.5f-1+(selection.Pressed(control)?1.5f:0),a.w-(primary?54.f:14.f),label,primary?15.f:14.f,enabled?ink:muted);
  };
  // The bottom rail is shared by all three pages; hit rectangles never drift.
  c.Art({14,640,1252,64},Renderer::UiArt::Frame,{.27f,.28f,.72f,.71f},{.52f,.66f,.70f,.86f});
@@ -586,13 +658,12 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
    roster?saved:rpg::ValidCharacterName(enteredName));
  // A small equipment/view dock leaves the upper stage and the figure open.
  // Every icon has the same hit rectangle used by mouse, keyboard and hints.
- c.Skin({412,600,446,50},16,{.80f,.83f,.84f,1});
+ c.Gradient({412,607,446,39},{.025f,.065f,.075f,.65f},{.015f,.025f,.03f,.22f});
+ c.Line(418,646,852,646,1,{.65f,.54f,.30f,.65f});
  const auto dock=[&](C control,bool active) {
    const auto r=CharacterSelection::Bounds(control);const bool enabled=selection.Enabled(control);
-   c.Button(r,enabled,selection.Focus()==control || selection.Hover()==control,active);
-   if(enabled)c.Gradient({r.x+4,r.y+4,r.w-8,r.h-8},{1,.78f,.42f,.20f*selection.Highlight(control)},{1,.7f,.3f,0});
-   if(active)c.Line(r.x+6,r.y+r.h-4,r.x+r.w-6,r.y+r.h-4,2,gold);
-   return Rect{r.x+6,r.y+6+(selection.Pressed(control)?1.f:0),r.w-12,r.h-12};
+   CreationJewel(c,r,selection.Highlight(control),active || selection.Focus()==control,enabled);
+   return Rect{r.x+8,r.y+8+(selection.Pressed(control)?1.f:0),r.w-16,r.h-16};
  };
  for(int i=0;i<3;++i) {
    const auto r=dock(C(int(C::Dress0)+i),int(selection.PreviewDress())==i);
@@ -611,7 +682,8 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
      reset.x+13+std::sin(b)*8,reset.y+13-std::cos(b)*8,1.5f,gold);
  }
  c.Triangle({reset.x+15,reset.y+3},{reset.x+23,reset.y+7},{reset.x+15,reset.y+10},gold);
- button(C::Left,"<");button(C::Right,">");
+ CreationArrow(c,CharacterSelection::Bounds(C::Left),false,selection.Highlight(C::Left),selection.Pressed(C::Left),selection.Enabled(C::Left));
+ CreationArrow(c,CharacterSelection::Bounds(C::Right),true,selection.Highlight(C::Right),selection.Pressed(C::Right),selection.Enabled(C::Right));
  c.Line(603,611,603,643,1,border);c.Line(797,611,797,643,1,border);
  const char* outfit=selection.PreviewDress()==CharacterSelection::Dress::Equipped?"Equipped outfit":selection.PreviewDress()==CharacterSelection::Dress::Travel?"Travel outfit":"Veteran outfit";
  c.Center(332,660,690,selection.Showcasing()?"Class showcase":outfit,14,gold);
@@ -623,7 +695,7 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  if(roster) {
    if(valid) {
      ClassSigil(c,{34,184,52,52},hero.Class());c.FitText(98,186,216,saved?hero.Nickname():info.name,22,ink,saved);
-     c.Text(98,216,saved?"Level "+std::to_string(hero.Level()):"Empty class slot",15,gold);
+     c.FitText(98,216,216,saved?"Level "+std::to_string(hero.Level()):"Choose a saved hero or create a new one",15,gold);
      c.FitText(34,258,280,info.role,14,muted);
      c.Line(34,294,314,294,1,border);
      c.Text(34,326,saved?"SAVED JOURNEY":"A NEW CHRONICLE",12,gold);
@@ -633,11 +705,11 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
    } else {
      c.Wrap(34,195,280,"Unable to read this character",21,ink,2);
      c.Text(34,262,"The saved file has been kept.",14,gold);
-     c.Wrap(34,328,280,"Restore this class's save in the saves folder, then select Refresh. You can create a hero in another empty class slot.",15,ink,7);
+     c.Wrap(34,328,280,"Refresh after restoring this save. Your other characters are still available, and you can create another hero.",15,ink,7);
    }
    button(C::Create,"Create character");button(C::Enter,"Enter World");button(C::Refresh,"Refresh [R]");button(C::Quit,"Exit game");
  } else {
-   ClassSigil(c,{34,170,50,50},hero.Class());c.Text(98,175,info.name,23,ink);c.FitText(98,204,216,info.role,12,gold);
+   if(!customize){ClassSigil(c,{34,170,50,50},hero.Class());c.Text(98,175,info.name,23,ink);c.FitText(98,204,216,info.role,12,gold);}
    if(!customize) {
      using View=CharacterSelection::CallingView;const auto view=selection.CallingScreen();
      for(int tab=0;tab<3;++tab) {
@@ -680,13 +752,38 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
        const int branch=selection.CallingBranch();
        for(int i=0;i<3;++i){const auto control=C(int(C::Branch0)+i);const auto r=CharacterSelection::Bounds(control);
          c.Button(r,true,selection.Focus()==control || selection.Hover()==control,i==branch);c.Center(r.x+4,r.y+8,r.w-8,info.branches[i],12,i==branch?ink:muted);}
-       for(int row=0;row<6;++row){const auto talent=hero.TalentDefinition(row*3+branch);const Rect r{34,324+44.f*row,280,42};
-         c.Inset(r);c.Center(r.x,r.y+14,34,"Lv "+std::to_string(talent.level),10,gold);
-         c.FitText(r.x+42,r.y+5,232,talent.name,14,ink);c.FitText(r.x+42,r.y+24,232,talent.effect,10,muted);}
+       const int inspected=selection.InspectedTalent();unsigned path=0;
+       for(int index=inspected;rpg::ValidTalent(rpg::Talent(index));index=int(hero.TalentDefinition(index).prerequisite))path|=1u<<index;
+       // Draw the actual dependency graph, including the two branches from the
+       // foundation. Row order is not a prerequisite chain.
+       for(int row=0;row<6;++row) {
+         const int index=row*3+branch;const int parent=int(hero.TalentDefinition(index).prerequisite);
+         if(!rpg::ValidTalent(rpg::Talent(parent)) || parent%3!=branch)continue;
+         const auto from=CharacterSelection::Bounds(C(int(C::Talent0)+parent/3)),to=CharacterSelection::Bounds(C(int(C::Talent0)+row));
+         const bool active=(path&(1u<<index))!=0;
+         c.Line(from.x+from.w*.5f,from.y+from.h,to.x+to.w*.5f,to.y,5,{.015f,.027f,.03f,1});
+         c.Line(from.x+from.w*.5f,from.y+from.h,to.x+to.w*.5f,to.y,active?2.f:1.f,active?gold:Color{.31f,.40f,.41f,1});
+         c.Diamond(to.x+to.w*.5f,to.y-5,3,4,active?gold:muted);
+       }
+       for(int row=0;row<6;++row) {
+         const int index=row*3+branch;const auto talent=hero.TalentDefinition(index);
+         const auto control=C(int(C::Talent0)+row);const auto r=CharacterSelection::Bounds(control);
+         c.Button(r,true,selection.Hover()==control || selection.Focus()==control,index==inspected);
+         TalentIcon(c,{r.x+9,r.y+5,34,32},index,1,hero.Class());
+         c.RectFill({r.x-10,r.y+3,24,15},{.02f,.04f,.045f,.96f});c.Center(r.x-10,r.y+4,24,std::to_string(talent.level),11,gold);
+         const float width=row==1 || row==2?132.f:228.f;
+         const float x=std::clamp(r.x+r.w*.5f-width*.5f,34.f,314.f-width);
+         c.RectFill({x,r.y+r.h+1,width,17},{.015f,.025f,.028f,.94f});
+         c.Center(x,r.y+r.h+3,width,talent.name,11,index==inspected?gold:ink);
+       }
      }
-     button(C::Next,selection.ClassSlot(int(selection.SelectedClass())).status==Status::New?"Appearance & name":"Class slot occupied");
+     button(C::Next,"Appearance & name");
    } else {
-     c.Text(34,284,"HERO'S NAME",12,gold);const auto a=CharacterSelection::Bounds(C::Name);
+     c.Gradient({22,248,302,142},{.018f,.065f,.08f,.94f},{.018f,.035f,.043f,.75f});
+     c.Skin({22,248,302,142},18,{.63f,.72f,.68f,1},false);
+     CreationJewel(c,{34,255,54,54},selection.Highlight(C::Name),selection.Focus()==C::Name);
+     ClassSigil(c,{45,266,32,32},hero.Class());c.FitText(102,265,204,info.name,22,ink);
+     c.Text(102,295,"HERO'S NAME",11,gold);const auto a=CharacterSelection::Bounds(C::Name);
      c.Button(a,true,selection.Focus()==C::Name);const auto& name=selection.DraftName();
      const auto& edit=selection.NameSelection();const auto length=rpg::NameLength(name);
      const float size=18*std::min(1.f,(a.w-20)/std::max(1.f,c.Width(name,18,true)));
@@ -698,18 +795,17 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
      if(name.empty())c.Text(a.x+10,a.y+10,"Enter a name",18,muted);
      else c.Text(a.x+10,a.y+10,name,size,ink,true);
      if(editing && std::fmod(selection.Time(),1.f)<.55f)c.Line(a.x+10+advances[edit.caret],a.y+8,a.x+10+advances[edit.caret],a.y+31,1.5f,ink);
-     c.Text(256,284,std::to_string(length)+" / 20",12,muted);
+     c.Text(262,297,std::to_string(length)+" / 20",10,muted);
      const bool nameReady=rpg::ValidCharacterName(name);
      c.Text(34,368,name.empty()?"Enter a name":nameReady?"Name is ready":"At least one letter; no spaces at the ends.",12,nameReady?Color{.60f,.79f,.66f,1}:gold);
-     c.Wrap(34,398,280,"Ctrl+A selects / Ctrl+V pastes. Arrows move the cursor; Shift selects.",12,muted,4);
-     c.Wrap(34,466,280,info.identity,15,ink,5);
+     if(editing)c.Wrap(34,402,280,"Ctrl+A selects / Ctrl+V pastes. Arrows move the cursor; Shift selects.",12,muted,4);
      const auto& look=hero.Look();
      const auto choice=[&](float y,const char* title,const auto& palette,int chosen,C first,C left,C right) {
-       const Rect band{1004,y-46,248,118};
-       c.Gradient({band.x,band.y,band.w,76},{.055f,.14f,.17f,.82f},{.018f,.045f,.06f,.40f});
+       const Rect band{1004,y-46,248,82};
+       c.Gradient({band.x,band.y,band.w,76},{.025f,.11f,.14f,.84f},{.018f,.045f,.06f,.40f});
        c.Line(1008,y-44,1250,y-44,1,{.44f,.64f,.63f,.7f});
-       c.Line(1008,y+53,1250,y+53,1,{.44f,.38f,.25f,.7f});
-       c.FitText(1012,y-29,140,title,13,ink);
+       c.Line(1008,y+35,1250,y+35,1,{.44f,.38f,.25f,.7f});
+       c.FitText(1012,y-29,132,title,13,ink);
        for(int index=0;index<rpg::Appearance::count;++index){const auto control=C(int(first)+index);const auto r=CharacterSelection::Bounds(control);const auto& swatch=palette[index];
          c.Button(r,true,selection.Hover()==control || selection.Focus()==control,index==chosen);
          c.RectFill({r.x+5,r.y+5,r.w-10,r.h-10},swatch.r==0?Color{info.color[0],info.color[1],info.color[2],1}:Color{swatch.r,swatch.g,swatch.b,1});
@@ -718,37 +814,63 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
        }
        for(const auto control:{left,right}) {
          const auto r=CharacterSelection::Bounds(control);const bool hovered=selection.Hover()==control || selection.Focus()==control;
-         c.Oval(r.x+r.w*.5f,r.y+r.h*.5f,14,16,{.025f,.11f,.14f,1});
-         c.Ring(r.x+r.w*.5f,r.y+r.h*.5f,13,hovered?ink:gold,1.8f);
-         c.Center(r.x,r.y+7+(selection.Pressed(control)?1.f:0),r.w,control==left?"<":">",17,ink);
+         CreationArrow(c,r,control==right,hovered?1.f:selection.Highlight(control),selection.Pressed(control));
        }
-       c.Oval(1204,y-24,17,19,{.015f,.065f,.085f,1});c.Ring(1204,y-24,17,gold,2);
-       c.Oval(1200,y-30,7,5,{.37f,.62f,.65f,.17f});
-       c.Center(1188,y-33,32,std::to_string(chosen+1),19,ink);
-       c.Center(1035,y+36,184,palette[chosen].name,12,ink);
+       CreationJewel(c,{1180,y-42,40,40},0,true);
+       c.Center(1180,y-33,40,std::to_string(chosen+1),20,ink);
+       c.Center(1035,y+24,184,palette[chosen].name,10,ink);
      };
-     choice(284,"COMPLEXION",rpg::skinTones,look.skin,C::Skin0,C::SkinLeft,C::SkinRight);
-     choice(384,"HAIR COLOR",rpg::hairColors,look.hair,C::Hair0,C::HairLeft,C::HairRight);
-     choice(484,"TUNIC DYE",rpg::tunicDyes,look.dye,C::Dye0,C::DyeLeft,C::DyeRight);
-     c.Wrap(1008,556,242,"Appearance is saved when you create the character.",12,muted,3);button(C::Confirm,"Create character");
+     choice(240,"COMPLEXION",rpg::skinTones,look.skin,C::Skin0,C::SkinLeft,C::SkinRight);
+     choice(326,"HAIR COLOR",rpg::hairColors,look.hair,C::Hair0,C::HairLeft,C::HairRight);
+     choice(412,"TUNIC DYE",rpg::tunicDyes,look.dye,C::Dye0,C::DyeLeft,C::DyeRight);
+     c.Wrap(1008,464,242,"Appearance is saved when you create the character.",12,muted,3);
+     const auto random=CharacterSelection::Bounds(C::RandomAppearance),undo=CharacterSelection::Bounds(C::UndoAppearance);
+     CreationJewel(c,random,selection.Highlight(C::RandomAppearance),selection.Focus()==C::RandomAppearance);
+     const float dx=random.x+22,dy=random.y+22+(selection.Pressed(C::RandomAppearance)?1.f:0.f);
+     c.Triangle({dx-12,dy-7},{dx,dy-13},{dx+12,dy-7},{.89f,.74f,.43f,1});
+     c.Triangle({dx-12,dy-7},{dx+12,dy-7},{dx,dy},{.77f,.61f,.30f,1});
+     c.Triangle({dx-12,dy-7},{dx,dy},{dx,dy+13},{.67f,.47f,.20f,1});
+     c.Triangle({dx-12,dy-7},{dx,dy+13},{dx-12,dy+6},{.67f,.47f,.20f,1});
+     c.Triangle({dx,dy},{dx+12,dy-7},{dx+12,dy+6},{.92f,.78f,.43f,1});
+     c.Triangle({dx,dy},{dx+12,dy+6},{dx,dy+13},{.92f,.78f,.43f,1});
+     for(auto p:std::array<Point,5>{{{dx,dy-7},{dx-7,dy},{dx-4,dy+6},{dx+5,dy+3},{dx+8,dy-1}}})c.Oval(p.x,p.y,1.5f,1.5f,{.13f,.10f,.05f,1});
+     const bool canUndo=selection.Enabled(C::UndoAppearance);CreationJewel(c,undo,selection.Highlight(C::UndoAppearance),selection.Focus()==C::UndoAppearance,canUndo);
+     for(int n=0;n<13;++n){const float a=.7f+n*.34f,b=a+.34f;
+       c.Line(undo.x+22-std::sin(a)*11,undo.y+22-std::cos(a)*11,undo.x+22-std::sin(b)*11,undo.y+22-std::cos(b)*11,1.6f,canUndo?gold:Color{.36f,.33f,.27f,1});}
+     c.Triangle({undo.x+10,undo.y+11},{undo.x+10,undo.y+22},{undo.x+20,undo.y+18},canUndo?gold:Color{.36f,.33f,.27f,1});
+     button(C::Confirm,"Create character");
    }
    button(C::Back,"< Back");button(C::Cancel,"Cancel");
  }
- if(!customize)for(int i=0;i<int(rpg::ClassId::Count);++i) {
-   const auto control=C(int(C::Class0)+i);const auto a=CharacterSelection::Bounds(control);
-   const bool chosen=int(selection.SelectedClass())==i;const auto& slot=selection.ClassSlot(i);
-   const float glow=chosen?1.f:selection.Highlight(control);
-   c.Gradient(a,{.30f,.39f,.40f,.12f+.22f*glow},{.035f,.055f,.06f,.22f+.28f*glow});
-   c.Line(a.x,a.y+a.h,a.x+a.w,a.y+a.h,1,chosen?gold:Color{.36f,.43f,.43f,.5f});
-   if(chosen)c.Line(a.x+2,a.y+7,a.x+2,a.y+a.h-7,2,gold);
-   ClassSigil(c,{a.x+a.w-40,a.y+2,38,38},rpg::ClassId(i));
-   if(roster && slot.status==Status::Saved){
-     c.FitText(a.x+12,a.y+5,182,slot.name,15,ink,true);
-     c.FitText(a.x+12,a.y+24,182,std::string(rpg::classes[i].name)+"  /  Lv. "+std::to_string(slot.level),10,gold);
-   } else {
-     c.FitText(a.x+12,a.y+6,182,rpg::classes[i].name,16,chosen?ink:muted);
-     if(slot.status!=Status::New)c.Text(a.x+12,a.y+26,slot.status==Status::Saved?"Already recruited":"Save unavailable",9,muted);
+ if(roster) {
+   const int selected=selection.SelectedProfile();
+   if(!selection.ProfileCount())c.Paragraph({1014,170,222,130},"Your company is waiting for its first hero.",18,ink,4);
+   for(int row=0;row<CharacterSelection::profilesPerPage;++row) {
+     const int index=selection.ProfileOffset()+row;if(index>=selection.ProfileCount())break;
+     const auto control=C(int(C::Profile0)+row);const auto a=CharacterSelection::Bounds(control);const auto& profile=selection.SavedProfile(index);
+     const bool chosen=index==selected,ready=profile.status==Status::Saved;const float glow=chosen?1.f:selection.Highlight(control);
+     c.Gradient(a,{.18f,.28f,.29f,.18f+.40f*glow},{.025f,.045f,.05f,.28f+.28f*glow});
+     c.Line(a.x+6,a.y+a.h-1,a.x+a.w-5,a.y+a.h-1,1,chosen?gold:Color{.40f,.47f,.45f,.45f});
+     if(chosen){c.Line(a.x+6,a.y+2,a.x+a.w-5,a.y+2,1,gold);c.Diamond(a.x+4,a.y+a.h*.5f,3,5,gold);}
+     if(rpg::ValidClass(profile.school))CreationCrest(c,{a.x+a.w-43,a.y+7,38,38},profile.school,glow);
+     c.FitText(a.x+12,a.y+8,181,ready?profile.name:"Character unavailable",17,ready?ink:muted,ready);
+     c.FitText(a.x+12,a.y+31,181,ready?std::string(rpg::DescribeClass(profile.school).name)+" / Lv. "+std::to_string(profile.level):"Save needs attention",11,ready?gold:muted);
    }
+   for(auto control:{C::PreviousProfiles,C::NextProfiles})CreationArrow(c,CharacterSelection::Bounds(control),control==C::NextProfiles,
+     selection.Enabled(control)?selection.Highlight(control):0,selection.Pressed(control),selection.Enabled(control));
+   c.Center(1048,582,156,std::to_string(selection.ProfileCount())+" / "+std::to_string(CharacterSelection::maxProfiles)+" characters",12,ink);
+   c.Center(1048,599,156,std::to_string(selection.ProfileOffset()/CharacterSelection::profilesPerPage+1)+" / "+
+     std::to_string(std::max(1,(selection.ProfileCount()+CharacterSelection::profilesPerPage-1)/CharacterSelection::profilesPerPage)),10,muted);
+ }
+ if(!customize && !roster)for(int i=0;i<int(rpg::ClassId::Count);++i) {
+   const auto control=C(int(C::Class0)+i);const auto a=CharacterSelection::Bounds(control);
+   const bool chosen=int(selection.SelectedClass())==i;
+   const float glow=chosen?1.f:selection.Highlight(control);
+   c.Gradient({a.x,a.y+3,a.w-26,a.h-6},{.35f,.46f,.45f,.035f+.26f*glow},{.025f,.05f,.06f,.12f+.19f*glow});
+   c.Line(a.x+8,a.y+a.h-2,a.x+a.w-18,a.y+a.h-2,1,chosen?gold:Color{.43f,.52f,.52f,.30f});
+   if(chosen){c.Line(a.x+8,a.y+3,a.x+a.w-18,a.y+3,1,{.72f,.70f,.42f,.65f});c.Diamond(a.x+4,a.y+a.h*.5f,3,5,gold);}
+   CreationCrest(c,{a.x+a.w-43,a.y+2,38,38},rpg::ClassId(i),glow);
+   c.FitText(a.x+12,a.y+13,182,rpg::classes[i].name,16,chosen?ink:muted);
  }
  if(!selection.Notice().empty()){
    c.Gradient({340,150,620,62},{.02f,.025f,.03f,.92f},{.02f,.025f,.03f,.72f});
@@ -775,6 +897,21 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
    }
    c.FitText(x+14,y+329,290,"Click to demonstrate this art",12,gold);
    c.FitText(x+14,y+346,290,"Preview only; learn abilities in the world.",11,muted);
+ }
+ if(selection.InspectedTalent()>=0) {
+   const int index=selection.InspectedTalent();const auto talent=hero.TalentDefinition(index);const auto a=CharacterSelection::TalentCardBounds();
+   c.Frame(a,{.018f,.042f,.047f,.98f},{.51f,.54f,.38f,1});
+   TalentIcon(c,{a.x+14,a.y+16,40,44},index,1,hero.Class());
+   c.FitText(a.x+66,a.y+17,a.w-80,talent.name,18,gold);
+   c.Text(a.x+66,a.y+44,"Requires level "+std::to_string(talent.level),12,ink);
+   c.Line(a.x+14,a.y+72,a.x+a.w-14,a.y+72,1,border);
+   c.Paragraph({a.x+14,a.y+84,a.w-28,48},TalentEffect(hero,index),14,gold,3);
+   c.Paragraph({a.x+14,a.y+144,a.w-28,92},talent.description,13,ink,3);
+   c.Line(a.x+14,a.y+247,a.x+a.w-14,a.y+247,1,border);
+   c.FitText(a.x+14,a.y+259,a.w-28,rpg::ValidTalent(talent.prerequisite)?
+     std::string("Needs: ")+hero.TalentDefinition(int(talent.prerequisite)).name:"Foundation milestone",12,gold);
+   c.FitText(a.x+14,a.y+281,a.w-28,"Learn milestones in the world with N.",11,muted);
+   c.FitText(a.x+14,a.y+298,a.w-28,"Click to pin / Esc to close",10,muted);
  }
  if(!customize && hint>=C::Class0 && hint<=C::Class10) {
    const auto id=rpg::ClassId(int(hint)-int(C::Class0));const auto& calling=rpg::DescribeClass(id);
@@ -803,6 +940,8 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  else if(hint==C::Left || hint==C::Right){title="Rotate character";description="Drag to rotate / Wheel to zoom";}
  else if(hint==C::Replay){title="Replay art";description="Repeat the selected art without learning it or changing your character.";}
  else if(hint==C::Stop){title="Stop preview";description="Stop the demonstration and return smoothly to the ready stance.";}
+ else if(hint==C::RandomAppearance){title="Random appearance";description="Try another combination of the existing colors. Your name and class stay the same.";}
+ else if(hint==C::UndoAppearance){title="Undo appearance change";description="Restore the previous colors, including changes made with the arrows or swatches.";}
  if(title) {
    const auto a=CharacterSelection::Bounds(hint);const float x=std::clamp(a.x+a.w*.5f-160,332.f,648.f);
    c.Frame({x,504,320,74});c.Text(x+12,515,title,16,gold);c.Wrap(x+12,539,296,description,12,ink,2);

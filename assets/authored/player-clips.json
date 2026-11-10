@@ -1,8 +1,8 @@
 {
   "format": "PCL5",
-  "source": "Native 4.2 m stride; reduced forced crouch, recovery and landing load; 36 complete records preserved",
-  "source_sha256": "6c632946a66c947c20f7724a83c2e59b0b09d31fa148c9a408a7c15b7851158b",
-  "editable_source": "player-motion-v16.blend",
+  "source": "21 weapon-arm actions; non-arm source curves, native body channels and contact timing preserved",
+  "source_sha256": "354ccc0d032d56b4be9e2b4e1351ec0ef0efccfd20641e04a68849fac6dcdf54",
+  "editable_source": "player-motion-v19.blend",
   "clips": [
     {
       "clip": "Sword_Attack_Diagonal",
@@ -14,8 +14,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v15 spine/clavicle export",
-      "sha256": "c3e4d8ba60377d9394490edd0c1c307eef4543ebb9b1f68861463f61bcf5a055"
+      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
+      "sha256": "81e8641302e3bd8d3291b2204d44783bbecc604d9a5f3f16c37cb883ae4059c5"
     },
     {
       "clip": "Sword_Attack_Overhead",
@@ -27,8 +27,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v15 spine/clavicle export",
-      "sha256": "fa6a681e8a4aee381828133dd11a9ec15fa54621c18fe332e0949a9f139540e2"
+      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
+      "sha256": "aab5def8a285737a3ca5847618e91fd16f17e8ba2f901cac871dbf68469704f6"
     },
     {
       "clip": "Jump_Full",
@@ -40,8 +40,8 @@
       "takeoff": 0.3103448275862069,
       "landing": 0.5057471264367815,
       "stance": 0.0,
-      "source": "v16 native-stride authored motion",
-      "sha256": "9f54dd9a46361549724cefe1e7001845b264e5453b09645f085e9dcd21123375"
+      "source": "v18 continuous recovery arcs and landing follow-through",
+      "sha256": "85cd496022c7a2d1429adda24dc11129932b4c062ef6a676864924f9fc2d6895"
     },
     {
       "clip": "Fall_Heavy_Landing",
@@ -53,8 +53,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v16 native-stride authored motion",
-      "sha256": "c8d56543953e8e7fef720547f0e1bc60a95b6c145ca663326700bc490bae2a13"
+      "source": "v18 continuous recovery arcs and landing follow-through",
+      "sha256": "35e0a940d5d51f2520384c6beca328f59bebfcb27e9a39a7fcc815e5bba5b5ec"
     },
     {
       "clip": "Walk_Forward",
@@ -117,9 +117,9 @@
       "contact": 0.0,
       "takeoff": 0.0,
       "landing": 0.0,
-      "stance": 0.18,
-      "source": "v16 native-stride authored motion",
-      "sha256": "f50cc36298e526d3ce4a8ff3a721510197fc305117e327f47829644e07e2e514"
+      "stance": 0.2,
+      "source": "v18 continuous recovery arcs and landing follow-through",
+      "sha256": "825d80bf42fc12330dcf7d9c0e66e77a5ff38bac46cd26bbadfef2fe5115cc41"
     },
     {
       "clip": "Run_Backward",
@@ -131,8 +131,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v16 native-stride authored motion",
-      "sha256": "8ce823134bbe862912e2b08d117517c60094549af8a3760731ab82ab1f62eb2e"
+      "source": "v18 continuous recovery arcs and landing follow-through",
+      "sha256": "53ffeb44cb4748bea72fccd82da75d94f2233c381af7e5675a84851dfa8fc5f9"
     },
     {
       "clip": "Run_Left",
@@ -144,8 +144,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v16 native-stride authored motion",
-      "sha256": "ff7530fa1059d1362d180711b76e7e8817f7098beb5953f345c353c47ce4a7db"
+      "source": "v18 continuous recovery arcs and landing follow-through",
+      "sha256": "399822014b129b4ba6d82614f1020df0a8338758a08ba39dd759ceaf5e5af6c8"
     },
     {
       "clip": "Run_Right",
@@ -157,8 +157,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v16 native-stride authored motion",
-      "sha256": "4afa1db37af95f09bb4a4d1a00137b9c4bee745399be49d40232a5d3de755c47"
+      "source": "v18 continuous recovery arcs and landing follow-through",
+      "sha256": "654d72515e04616ad2a3a97b27a174c87be982f6e34fab0d35f20e61f06fdf26"
     },
     {
       "clip": "Start_Walk",
@@ -196,8 +196,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v15 spine/clavicle export",
-      "sha256": "b4f46b551b24a237376d7659b6ee0b0a80ea9e221396ee48ea7b66b40e5584ff"
+      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
+      "sha256": "d39a7410500ebe4c5c4245a1a5002ce40c009745a024ff7796aa85490b1b35c6"
     },
     {
       "clip": "Staff_Attack_Thrust",
@@ -209,8 +209,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v15 spine/clavicle export",
-      "sha256": "57832bcee85b122c770ee0aee94497873b6b745813d869812fc576ccadcc32d8"
+      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
+      "sha256": "c5b092555b36515f75e6fb74dc01c3c03b397d40dd9f001c65a76dfbf83781b4"
     },
     {
       "clip": "Sword_Walk",
@@ -234,9 +234,9 @@
       "contact": 0.0,
       "takeoff": 0.0,
       "landing": 0.0,
-      "stance": 0.18,
-      "source": "v16 native-stride authored motion",
-      "sha256": "5ad87d5ba571f32df80f4148cc369b74691f8232ad565681ec4ba99706c7f798"
+      "stance": 0.2,
+      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
+      "sha256": "a311d2a09f563523f6e5a5275da7d31903ea0126c08c79830890efb2a9d516fb"
     },
     {
       "clip": "Staff_Walk",
@@ -260,9 +260,9 @@
       "contact": 0.0,
       "takeoff": 0.0,
       "landing": 0.0,
-      "stance": 0.18,
-      "source": "v16 native-stride authored motion",
-      "sha256": "b7ee54b91c3472b30a94b22c30a3cdec5fc11831068f9dd30e31a24e6243cee1"
+      "stance": 0.2,
+      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
+      "sha256": "e38089e1f6304246767e82316fb46f015923e5eff51c7e23c33475b2dcfd726f"
     },
     {
       "clip": "Sword_Guard",
@@ -391,8 +391,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v15 spine/clavicle export",
-      "sha256": "d4620574294905a02f6e091994706e85c66f34582f5012fe486d05066616fe9b"
+      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
+      "sha256": "c11c3f1536716f3c95b32f0e96e755dfe71f3d0fe06657b1227467481e142ae4"
     },
     {
       "clip": "Bow_Power_Release",
@@ -404,8 +404,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v15 spine/clavicle export",
-      "sha256": "d9909ad207275d1be12926e31aaddf1bb2fd00ca91b2f65acc1b3d082f89d33e"
+      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
+      "sha256": "b3f231021f196ce1448572dbf77ea6ab89acc6098818e7be243f380ff4e108da"
     },
     {
       "clip": "Bow_Walk",
@@ -429,9 +429,9 @@
       "contact": 0.0,
       "takeoff": 0.0,
       "landing": 0.0,
-      "stance": 0.18,
-      "source": "v16 native-stride authored motion",
-      "sha256": "52bed00d30c90a553ed74481b45db8f4fd08e039f2c78c64df581f582768cc3b"
+      "stance": 0.2,
+      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
+      "sha256": "489ea619e5059aadcc78c8a5090866a414497ebc752c831bbe1ff9c70bd62c6d"
     },
     {
       "clip": "Sword_Carry",
@@ -521,8 +521,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v16 native-stride authored motion",
-      "sha256": "b1d2658c8b881ae5e339e8c045611c45b9a1498c71823b76e2f95aa8801cabb4"
+      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
+      "sha256": "f6682b4a5a61195c6be04d1b8a5be5dcf48f68cbe5bbe417412e5d28a22b974a"
     },
     {
       "clip": "Sword_Run_Left",
@@ -534,8 +534,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v16 native-stride authored motion",
-      "sha256": "6a89a638481b0e24a6e6e02f7bc8e5b6bb8c0d38264084fa8939824af0cc4fe7"
+      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
+      "sha256": "43c6065eb1a8be1b3a3664c6d0fcd946fab0bef674e4721374f19247db7de326"
     },
     {
       "clip": "Sword_Run_Right",
@@ -547,8 +547,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v16 native-stride authored motion",
-      "sha256": "eb1417031dab4300a3118619887f55de8a3828630b92170c123b673019b710e8"
+      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
+      "sha256": "16c4fe3ebca68ec7d26c1bf7e3d4bfdebedd3ec25a8d160518c0337ef305b271"
     },
     {
       "clip": "Staff_Walk_Backward",
@@ -599,8 +599,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v16 native-stride authored motion",
-      "sha256": "1b5b762d40e60a968ba061dd59fe12c048d55aa49ab5bcc241fee743f38f4615"
+      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
+      "sha256": "168bcb36041afebf0daafae86809a56b809aaaa0baa963b067b40ea2c1395604"
     },
     {
       "clip": "Staff_Run_Left",
@@ -612,8 +612,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v16 native-stride authored motion",
-      "sha256": "db9ee43af1e9adf39690d5adabaa56fcc7728c3b9c6befea703599fa8164b28c"
+      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
+      "sha256": "b72801e0bef1e4a77021323aac3517427f62cb12956ffa6ebf0a3d62126eba0b"
     },
     {
       "clip": "Staff_Run_Right",
@@ -625,8 +625,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v16 native-stride authored motion",
-      "sha256": "8f7dcb38d9b9286a345b9a2b0b48ae0270cfc03f4a63072f6a4184eee4a91460"
+      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
+      "sha256": "7cba51f9b0eea1d411ca0087b5f40f92b02973084e84c81559aa385da211601b"
     },
     {
       "clip": "Bow_Walk_Backward",
@@ -677,8 +677,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v16 native-stride authored motion",
-      "sha256": "5e18143523b4b4a988adfa661880dbbc34ad9d482098164de1d984a7d6002a37"
+      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
+      "sha256": "6414b016cac2357b718ae304cd345cfbb4b294756d79db6a054b3c57c6343b19"
     },
     {
       "clip": "Bow_Run_Left",
@@ -690,8 +690,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v16 native-stride authored motion",
-      "sha256": "756f1e5329371e550e08c36e07c3959359dcc72391b516645c1303772127ab29"
+      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
+      "sha256": "259a26b3bec63833cbdb7b3f4a955787e42467173b152d8d24a4c8ddbb751472"
     },
     {
       "clip": "Bow_Run_Right",
@@ -703,8 +703,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v16 native-stride authored motion",
-      "sha256": "db3a9e7d745e22326addb050568b36dbfe5dc8ed905ab4acaa4b5f6445803271"
+      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
+      "sha256": "e9cd2e0f5e21053a176344daaffedb365685a96fd6172755eb9f64976cf0702f"
     },
     {
       "clip": "Sword_Jump",
@@ -716,8 +716,8 @@
       "takeoff": 0.3103448275862069,
       "landing": 0.5057471264367815,
       "stance": 0.0,
-      "source": "v16 native-stride authored motion",
-      "sha256": "30a931e5bd5595661e2d0654a14459c65db98629d3af22eaa2f2738b3e6b14ff"
+      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
+      "sha256": "05cd478955f018a56d66a393fd9786e5ba17da3e75fe783b69dd1d74ce72e95a"
     },
     {
       "clip": "Staff_Jump",
@@ -729,8 +729,8 @@
       "takeoff": 0.3103448275862069,
       "landing": 0.5057471264367815,
       "stance": 0.0,
-      "source": "v16 native-stride authored motion",
-      "sha256": "57d1f3b9d5a6139aee92d0c2904c0dd018ca3abddace8db1ae37fe6df5a71cf0"
+      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
+      "sha256": "38f003a2f5751089b8b526c03df4daaf3580d02bdf3930d6b87724a0d0a7ffb3"
     },
     {
       "clip": "Bow_Jump",
@@ -742,45 +742,45 @@
       "takeoff": 0.3103448275862069,
       "landing": 0.5057471264367815,
       "stance": 0.0,
-      "source": "v16 native-stride authored motion",
-      "sha256": "cc4caee83d145ed600a16aa9e294f36546e013bc787016e0ce39d300735647f4"
+      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
+      "sha256": "ee2af1a89b47952d1c6975591b83003380fc069a463f5f9abfe371d0e39ca009"
     }
   ],
-  "sha256": "c2c4f5c0a72806642f1915e19b522fd2ade72ecfeaeb370d8102025e41eacc65",
+  "sha256": "a0f82e0e390bf5dee8b16789189ddd76b9bacd251c7ea647bec7b5823b5d791c",
   "retarget": "Blender +X-left/-Y-forward/Z-up to native +X-right/+Z-forward/Y-up; shoulders/arm lengths fitted to native IK; world jump displacement removed; native contacts retained.",
   "frame_channels": 53,
   "revised_actions": [
-    "Run_Forward",
+    "Sword_Attack_Diagonal",
+    "Sword_Attack_Overhead",
+    "Staff_Attack_Sweep",
+    "Staff_Attack_Thrust",
     "Sword_Run",
     "Staff_Run",
+    "Bow_Draw_Release",
+    "Bow_Power_Release",
     "Bow_Run",
-    "Run_Backward",
     "Sword_Run_Backward",
-    "Staff_Run_Backward",
-    "Bow_Run_Backward",
-    "Run_Left",
     "Sword_Run_Left",
-    "Staff_Run_Left",
-    "Bow_Run_Left",
-    "Run_Right",
     "Sword_Run_Right",
+    "Staff_Run_Backward",
+    "Staff_Run_Left",
     "Staff_Run_Right",
+    "Bow_Run_Backward",
+    "Bow_Run_Left",
     "Bow_Run_Right",
-    "Jump_Full",
     "Sword_Jump",
     "Staff_Jump",
-    "Bow_Jump",
-    "Fall_Heavy_Landing"
+    "Bow_Jump"
   ],
   "revised_track_indices": [
-    2,
-    3,
-    8,
-    9,
-    10,
-    11,
+    0,
+    1,
+    14,
+    15,
     17,
     19,
+    29,
+    30,
     32,
     39,
     40,

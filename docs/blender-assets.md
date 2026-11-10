@@ -1,8 +1,46 @@
 # Blender collection in the native renderer
 
+## Loaded weapon arms and recovery (2026-11-11, v19)
+
+The current motion source is `assets/authored/player-motion-v19.blend`.
+Twenty-one sword/staff/bow arm actions have revised running articulation,
+jump load response and attack follow-through. Equipped flight blends more
+gradually; attacks retain their contact clock and have longer presentation
+recovery. All native non-arm channels and headers, all Blender non-arm curves,
+36 complete records and twenty-one frozen sources are preserved. See
+[the v19 weapon-arm record](player-weighted-arms-v19.md) for the changes,
+measurement limits and twelve-scenario local video comparison.
+
+## Running support and compact jump recovery (2026-11-11, v18)
+
+The preceding motion source is `assets/authored/player-motion-v18.blend`.
+Sixteen runs use continuous foot recovery, horizontal weight transfer and
+periodic pelvis planning against source/native reach limits. Native support
+timing follows directional clip metadata. Four jumps and the heavy landing
+use compact leg poses and a longer arm handoff. All 36 other complete PCL5
+records and twenty frozen sources are preserved, including faces and v17.
+See [the v18 motion record](player-support-arcs-v18.md) for measurements,
+remaining limitations and the local video comparison.
+All twelve selected motion/art suites pass in Release and Debug. All six
+game outputs embed the current resources and pass fixture-save smoke launches.
+
+## Continuous support and airborne arms (2026-11-10, v17)
+
+The preceding motion source is `assets/authored/player-motion-v17.blend`.
+Sixteen running actions use a planned pelvis-support curve instead of the
+old abrupt reach-clamp release. Four jumps and the heavy landing share
+coherent arm recovery. Native playback preserves the outgoing arm pose
+through short falls, landing and repeated takeoff; it no longer retracts
+the hands through idle just before ground contact. All 36 other complete
+PCL5 records and nineteen frozen source assets are preserved. See
+[the v17 motion record](player-inertial-motion-v17.md) for the causes,
+measurements, reference limits and local video comparison.
+All twelve selected motion/art suites pass in Release and Debug. All six
+game outputs embed the current resources and pass fixture-save smoke launches.
+
 ## Source/native running stride and landing (2026-11-10, v16)
 
-The current motion source is `assets/authored/player-motion-v16.blend`.
+The preceding motion source is `assets/authored/player-motion-v16.blend`.
 Sixteen running actions now match the native 4.2-metre, 0.7-second cycle at
 6 m/s. Four jumps and the heavy landing also have revised arm/leg recovery
 and contact loading. All 36 other complete PCL5 records and the frozen

@@ -140,10 +140,17 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   const bool equippedFlight=dynamics.authoredGait&&dynamics.authoredEquipment!=playerclips::Equipment::None;
   const auto equippedJump=dynamics.authoredEquipment==playerclips::Equipment::Staff?playerclips::Clip::StaffJump:
     dynamics.authoredEquipment==playerclips::Equipment::Bow?playerclips::Clip::BowJump:playerclips::Clip::SwordJump;
-  const auto flightArms=equippedFlight&&authoredAir>0?playerclips::Sample(equippedJump,playerclips::FlightPhase(flight)):jumpClip;
+  const bool trackedArms=dynamics.authoredGait&&dynamics.flightArms>=0;
+  const float armAir=trackedArms?animation::Unit(dynamics.flightArms)*(1-burst):authoredAir;
+  const bool armLanding=trackedArms?dynamics.armLandingSeconds>=0&&dynamics.armLandingSeconds<.42f:authoredLanding;
+  const float armAge=trackedArms?dynamics.armLandingSeconds:dynamics.landingSeconds;
+  const float armLandingWeight=trackedArms?armAir:landing;
+  const auto flightArms=trackedArms?animation::AuthoredArmFrame(dynamics):armAir>0&&dynamics.authoredGait?
+    playerclips::Sample(equippedFlight?equippedJump:playerclips::Clip::Jump,playerclips::FlightPhase(flight)):jumpClip;
   const auto& jumpTrack=playerclips::Collection()[unsigned(playerclips::Clip::Jump)];
-  const auto landingArms=equippedFlight&&authoredLanding?playerclips::Sample(equippedJump,
-    jumpTrack.landing+(1-jumpTrack.landing)*dynamics.landingSeconds/.42f):landClip;
+  const auto landingArms=trackedArms?flightArms:armLanding&&dynamics.authoredGait?playerclips::Sample(equippedFlight?equippedJump:playerclips::Clip::Land,
+    equippedFlight?jumpTrack.landing+(1-jumpTrack.landing)*armAge/.42f:
+    landingTrack.contact+(1-landingTrack.contact)*armAge/.42f):landClip;
   if(carried) {stroke.weight*=animation::Unit(dynamics.carriedAttackWeight);stroke.coil*=animation::Unit(dynamics.carriedAttackWeight);}
   if(newStrike) {stroke.weight=animation::Unit(dynamics.authoredStrikeWeight);stroke.cut=animation::SmoothStep(dynamics.authoredStrikePhase);}
   if (timed) swing=stroke.weight;
@@ -215,7 +222,9 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   const float idleWeight=authoredBlend*(1-gaitAmount)*clipWeight*(1-air)*(1-castLayer);
   // Hands are interpolated to the strike later; fading their carry here too
   // would pull the wrists towards the unarmed rest pose halfway through a cut.
-  const float handAuthoredWeight=authoredBlend*(1-burst)*(1-hit)*(1-air)*(1-castLayer);
+  // Flight interpolates from this complete carry below. Fading it here as
+  // well applies (1-air) twice and pulls the wrists through the rest pose.
+  const float handAuthoredWeight=authoredBlend*(1-burst)*(1-hit)*(1-castLayer);
   const float handIdleWeight=handAuthoredWeight*(1-gaitAmount);
   pose.bodyLift+=gaitClip.hip*authoredWeight+idleClip.hip*idleWeight;
   pose.upperPitch+=gaitClip.torso.x*authoredWeight+idleClip.torso.x*idleWeight;
@@ -324,7 +333,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
       if(XMVectorGetX(XMVector3LengthSq(p))>.0001f)pole=XMVectorLerp(pole,XMVector3Normalize(p),std::clamp(w,0.f,1.f));
     };
     addPole(idleClip,authoredBlend*(1-gaitAmount));addPole(gaitClip,authoredBlend*gaitAmount);
-    addPole(flightArms,authoredAir);if(authoredLanding)addPole(landingArms,landing);
+    if(armLanding)addPole(landingArms,armLandingWeight);else addPole(flightArms,armAir);
     if(newStrike)addPole(attackClip,stroke.weight*(1-burst)*(1-hit));
     XMStoreFloat3(&elbowPoles[i],XMVector3Normalize(pole));
     elbowPoles[i]=pose.UpperDirection(elbowPoles[i]);
@@ -368,8 +377,8 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
         // Fade back to the authored landing extension before ground contact.
         const float lead=animation::Signed((dynamics.departureFeet[0].z-dynamics.departureFeet[1].z)/.45f);
         const float leg=i==0?1.f:-1.f,envelope=std::sin(flight*motion::tau*.5f)*authoredAir;
-        target.z+=leg*lead*.12f*envelope;
-        target.y=std::max(.17f,target.y+leg*(lead*.075f-std::abs(lead)*.025f)*envelope);
+        target.z+=leg*lead*.07f*envelope;
+        target.y=std::max(.17f,target.y+leg*(lead*.045f-std::abs(lead)*.015f)*envelope);
       }
     }
     if (contactWeight>0) {
@@ -428,14 +437,14 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     hand.z+=(gaitClip.hands[i].z+armStride*.13f)*handAuthoredWeight+idleClip.hands[i].z*handIdleWeight;
     // Reach forward on descent to brace for impact; rising arms trail the push.
     hand.z+=air*(.18f*animation::SmoothStep(-rise)-.10f*std::max(0.f,rise))*(1-swing);
-    if(authoredAir>0) {
+    if(armAir>0&&!armLanding) {
       const auto delta=flightArms.hands[i];const XMFLOAT3 authored{side*.40f+delta.x,1.02f+delta.y,.10f+delta.z};
-      const float w=authoredAir*(1-swing)*(1-cast);
+      const float w=armAir*(1-swing)*(1-cast);
       hand={hand.x+(authored.x-hand.x)*w,hand.y+(authored.y-hand.y)*w,hand.z+(authored.z-hand.z)*w};
     }
-    if(authoredLanding) {
-      if(equippedFlight) {
-        const auto d=landingArms.hands[i];const float w=landing*(1-swing)*(1-cast);
+    if(armLanding) {
+      if(dynamics.authoredGait) {
+        const auto d=landingArms.hands[i];const float w=armLandingWeight*(1-swing)*(1-cast);
         hand={hand.x+(side*.40f+d.x-hand.x)*w,hand.y+(1.02f+d.y-hand.y)*w,hand.z+(.10f+d.z-hand.z)*w};
       } else {hand.y+=landClip.hands[i].y*landing;hand.z+=landClip.hands[i].z*landing;}
     }
@@ -496,13 +505,13 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   if(dynamics.authoredGait&&dynamics.authoredEquipment!=playerclips::Equipment::None) {
     const XMFLOAT3 carry{idleClip.weapon.x*(1-gaitAmount)+gaitClip.weapon.x,
       idleClip.weapon.y*(1-gaitAmount)+gaitClip.weapon.y,idleClip.weapon.z*(1-gaitAmount)+gaitClip.weapon.z};
-    const float w=(1-air)*(1-burst)*(1-hit)*(1-animation::Unit(dynamics.action.open))*authoredBlend;
+    const float w=(1-burst)*(1-hit)*(1-animation::Unit(dynamics.action.open))*authoredBlend;
     XMStoreFloat3(&weapon,XMVectorLerp(XMLoadFloat3(&weapon),XMLoadFloat3(&carry),w));
   }
-  if(equippedFlight&&authoredAir>0)
-    weapon=blendDirection(weapon,flightArms.weapon,authoredAir*(1-burst)*(1-hit));
-  if(equippedFlight&&authoredLanding)
-    weapon=blendDirection(weapon,landingArms.weapon,landing*(1-burst)*(1-hit));
+  if(equippedFlight&&armAir>0&&!armLanding)
+    weapon=blendDirection(weapon,flightArms.weapon,armAir*(1-burst)*(1-hit));
+  if(equippedFlight&&armLanding)
+    weapon=blendDirection(weapon,landingArms.weapon,armLandingWeight*(1-burst)*(1-hit));
   if (timed) {
     const float weight=stroke.weight*(1-burst);
     XMFLOAT3 cut{.22f-stroke.cut*.38f,1.05f-stroke.cut*1.25f,.05f+stroke.cut*1.05f};

@@ -27,6 +27,14 @@ struct Driver {
     frame.client={LONG(layout.x+(rect.x+rect.w/2)*layout.scale),LONG(layout.y+(rect.y+rect.h/2)*layout.scale)};
   }
   void Click(Game& game,Control control) {Point(control);frame.down[VK_LBUTTON]=true;Step(game);frame.down[VK_LBUTTON]=false;Step(game);}
+  void SelectSaved(Game& game,rpg::ClassId school,int occurrence=0) {
+    int selected=-1;
+    for(int i=0;i<game.Selection().ProfileCount();++i)if(game.Selection().SavedProfile(i).school==school && occurrence--==0){selected=i;break;}
+    Check(selected>=0,"Requested saved character missing");
+    while(selected<game.Selection().ProfileOffset())Click(game,Control::PreviousProfiles);
+    while(selected>=game.Selection().ProfileOffset()+Selection::profilesPerPage)Click(game,Control::NextProfiles);
+    Click(game,Control(int(Control::Profile0)+selected-game.Selection().ProfileOffset()));
+  }
 };
 void ReportedRegressions(const std::filesystem::path& root) {
   const auto folder=root/("reported-bugs-"+std::to_string(GetTickCount64()));std::filesystem::create_directories(folder);
@@ -170,10 +178,12 @@ void Entrance(const std::filesystem::path& root,Renderer* renderer=nullptr) {
   for(const auto id:{rpg::ClassId::Warrior,rpg::ClassId::Scout,rpg::ClassId::Mage,rpg::ClassId::Priest})for(int hz:{30,60,144}) {
     auto owner=std::make_unique<Game>();auto& game=*owner;game.Initialize();
     game.ChooseCharacter(root/("entrance-"+std::to_string(int(id))+"-"+std::to_string(hz)+"-"+std::to_string(GetTickCount64()))/"patrol.save");
-    Driver d;d.Step(game);d.Click(game,Control(int(Control::Class0)+int(id)));
+    Driver d;d.Step(game);
     for(int n=0;n<60;++n)d.Step(game);
     Check(game.Selection().PreviewAction()<0,"Roster automatically performed a combat action");
-    d.Click(game,Control::Create);const auto saved=game.Selection().Hero().Save(),world=game.State().Save();
+    d.Click(game,Control::Create);if(id!=rpg::ClassId::Warrior)d.Click(game,Control(int(Control::Class0)+int(id)));
+    d.Point(Control(int(Control::Class0)+int(id)));
+    const auto saved=game.Selection().Hero().Save(),world=game.State().Save();
     const auto step=[&]{d.input.Update(d.frame);game.Update(1./hz,d.input,0);};
     for(int n=0;n<int(.40f*hz);++n)step();
     Check(game.Selection().PreviewAction()<0,"Entrance starts before the class page has settled");
@@ -182,7 +192,7 @@ void Entrance(const std::filesystem::path& root,Renderer* renderer=nullptr) {
     for(int n=0;n<hz*9;++n) {
       step();const auto& selection=game.Selection();
       if(selection.Introducing() && !previous)++starts;previous=selection.Introducing();
-      if(previous)Check(selection.PreviewAbility()==ability,"Entrance used the wrong class action");
+      if(previous){Check(selection.PreviewAbility()==ability,"Entrance used the wrong class action");Check(selection.Hint()==Control::None,"Selected class card obscured its automatic entrance");}
       for(unsigned k=0;k<selection.PreviewAudio().count;++k)
         releases+=selection.PreviewAudio().cues[k]==(id==rpg::ClassId::Warrior?sound::Cue::Heavy:sound::ReleaseCue(id,ability,true));
       if(renderer && hz==60 && !captured && selection.PreviewAction()>.20f) {
@@ -325,6 +335,134 @@ void ArtInspection(const std::filesystem::path& root,Renderer& renderer) {
   }
   Check(renderer.Resize(1280,720),"Restore creation view");
 }
+void MilestoneInspection(const std::filesystem::path& root,Renderer& renderer) {
+  for(auto id:{rpg::ClassId::Warrior,rpg::ClassId::Mage,rpg::ClassId::Scout,rpg::ClassId::Priest}) {
+    auto owned=std::make_unique<Game>();auto& game=*owned;game.Initialize();
+    const auto file=root/("milestones-"+std::to_string(int(id))+"-"+std::to_string(GetTickCount64()))/"patrol.save";
+    game.ChooseCharacter(file);Driver d;d.Step(game);d.Click(game,Control::Create);
+    d.Click(game,Control(int(Control::Class0)+int(id)));d.Click(game,Control::Talents);
+    const auto hero=game.Selection().Hero().Save(),world=game.State().Save();
+    for(auto size:{std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
+      d.frame.width=size.first;d.frame.height=size.second;d.frame.client={0,0};d.Step(game);
+      for(int branch=0;branch<3;++branch) {
+        d.Click(game,Control(int(Control::Branch0)+branch));
+        Check(game.Selection().InspectedTalent()<0,"Changing a branch retained an unrelated milestone card");
+        d.Point(Control::Talent5);for(int n=0;n<20;++n)d.Step(game);
+        Check(game.Selection().InspectedTalent()<0,"Milestone inspection ignored delay");
+        for(int n=0;n<12;++n)d.Step(game);
+        Check(game.Selection().InspectedTalent()==15+branch,"Hover shows the wrong branch milestone");
+        for(int row=0;row<6;++row) {
+          d.Click(game,Control(int(Control::Talent0)+row));
+          Check(game.Selection().InspectedTalent()==row*3+branch,"Click did not pin the actual milestone");
+          d.frame.client={0,0};d.Step(game);
+          Check(game.Selection().InspectedTalent()==row*3+branch,"Pinned milestone disappeared on pointer departure");
+        }
+      }
+      const auto layout=ui::Layout(float(size.first),float(size.second));const auto card=Selection::TalentCardBounds();
+      d.frame.client={LONG(layout.x+(card.x+50)*layout.scale),LONG(layout.y+(card.y+60)*layout.scale)};
+      d.frame.down[VK_LBUTTON]=true;d.Step(game);
+      Check(!game.Selection().Rotating(),"Click on milestone details rotates the actor behind it");
+      const auto zoom=game.Selection().PreviewZoom();d.input.Update(d.frame);game.Update(1./60,d.input,1);
+      Check(game.Selection().PreviewZoom()==zoom,"Wheel on milestone details zooms the actor behind it");
+      d.frame.down[VK_LBUTTON]=false;d.Step(game);
+      Check(renderer.Resize(size.first,size.second),"Milestone view resize");renderer.BeginFrame();game.Render(renderer);
+      Check(renderer.Capture((root/("creation-milestones-"+std::to_string(int(id))+"-"+std::to_string(size.first)+".png")).wstring())&&renderer.EndFrame(false),"Milestone inspection capture");
+      d.Key(game,VK_ESCAPE);
+      Check(game.Selection().Screen()==Selection::Page::Class && game.Selection().InspectedTalent()<0,"Esc left creation instead of closing pinned details");
+    }
+    for(int n=0;n<int(Control::None) && game.Selection().Focus()!=Control::Talent3;++n)d.Key(game,VK_TAB);
+    Check(game.Selection().Focus()==Control::Talent3,"Milestone cannot receive keyboard focus");d.Key(game,VK_RETURN);
+    Check(game.Selection().InspectedTalent()==11,"Keyboard milestone activation selects the wrong branch");
+    d.Click(game,Control::Arts);
+    Check(game.Selection().InspectedTalent()<0 && !game.Selection().Enabled(Control::Talent3),"Hidden milestone graph remained interactive");
+    Check(game.Selection().Hero().Save()==hero && game.State().Save()==world && !std::filesystem::exists(file),"Milestone inspection spent points or changed a profile/world");
+  }
+  Check(renderer.Resize(1280,720),"Restore milestone view");
+}
+void CompleteRehearsal(const std::filesystem::path& root,Renderer& renderer) {
+  for(auto id:{rpg::ClassId::Warrior,rpg::ClassId::Scout,rpg::ClassId::Mage,rpg::ClassId::Priest})for(int hz:{30,60,144}) {
+    auto owned=std::make_unique<Game>();auto& game=*owned;game.Initialize();
+    game.ChooseCharacter(root/("complete-rehearsal-"+std::to_string(int(id))+"-"+std::to_string(hz)+"-"+std::to_string(GetTickCount64()))/"patrol.save");
+    Driver d;d.Step(game);d.Click(game,Control::Create);d.Click(game,Control(int(Control::Class0)+int(id)));d.Click(game,Control::Arts);
+    const auto tick=[&](float duration){while(duration>1e-6f){const float dt=std::min(1.f/hz,duration);d.input.Update(d.frame);game.Update(dt,d.input,0);duration-=dt;}};
+    d.Click(game,Control::Right);d.Click(game,Control::Right);tick(.8f);
+    for(int ability:{0,1,6}) {
+      const auto found=std::find(Selection::previewArts.begin(),Selection::previewArts.end(),ability);
+      d.Click(game,Control(int(Control::Art0)+int(found-Selection::previewArts.begin())));
+      const auto save=game.Selection().Hero().Save(),world=game.State().Save();
+      const auto details=game.Selection().InspectArt(ability);const float expected=details.windup+details.flight;
+      float elapsed=0;bool sawSwingBeforeContact=false;
+      while(game.Selection().PreviewContactCount()==0 && elapsed<8) {
+        tick(1.f/hz);elapsed+=1.f/hz;
+        sawSwingBeforeContact|=game.Selection().PreviewEffectCount()>0 && game.Selection().PreviewContactCount()==0;
+      }
+      Check(game.Selection().PreviewContactCount()==1 && std::abs(elapsed-game.Selection().PreviewContact().elapsed-expected)<.0002f,
+        "Rehearsal contact does not follow the accepted preparation/flight clock");
+      Check(sawSwingBeforeContact,"Contact occurred before any weapon stroke/projectile was shown");
+      if(ability<2) {
+        rpg::Simulation live;Check(live.CreateCharacter(id,"Tester"),"Live timing comparison character");
+        auto& enemies=const_cast<std::vector<rpg::Enemy>&>(live.Enemies());
+        for(auto& enemy:enemies){enemy.position=enemy.home={live.Player().x,live.Player().z+1.8f};enemy.attackCooldown=100;enemy.health=0;}
+        enemies[0].health=enemies[0].MaxHealth();rpg::Command attack;attack.selectActor=enemies[0].id;attack.ability=ability;
+        // Both controllers accept at the end of the input update; their action
+        // clocks begin on the next tick, not during this acceptance frame.
+        live.Update(.001f,attack);float realTime=0;bool hit=false;
+        while(realTime<8 && !hit) {
+          live.Update(1.f/hz,{});realTime+=1.f/hz;
+          for(std::size_t n=0;n<live.VisualEventCount();++n){const auto& event=live.VisualEvents()[n];
+            if(event.kind==rpg::CombatVisualKind::Hit || event.kind==rpg::CombatVisualKind::HeavyHit){
+              hit=true;Check(std::abs(realTime-event.elapsed-expected)<.0002f,"Character preview contact differs from live combat timing");}}
+        }
+        Check(hit,"Live timing comparison never contacted");
+      }
+      Check(game.Selection().PreviewAudio().count>0,"Rehearsal contact has no impact sound");
+      Check(game.Selection().Hint()==Control::None,"An active art covered its demonstration with its own card");
+      if(hz==60 && ability==1) {
+        tick(.09f);d.frame.client={950,10};d.Step(game);renderer.BeginFrame();game.Render(renderer);
+        Check(renderer.EffectVertices()>0 && renderer.EffectVertices()<4096,"Stage contact escaped its bounded effect budget");
+        Check(renderer.Capture((root/("creation-contact-"+std::to_string(int(id))+".png")).wstring())&&renderer.EndFrame(false),"Complete rehearsal capture");
+      }
+      tick(1);Check(game.Selection().PreviewContactCount()==1,"Rehearsal emitted a duplicate impact");
+      Check(save==game.Selection().Hero().Save() && world==game.State().Save(),"Rehearsal contact modified combat or profile data");
+    }
+    if(id!=rpg::ClassId::Warrior) {
+      const auto details=game.Selection().InspectArt(1);const float preparing=details.windup+details.flight*.1f;
+      d.Click(game,Control::Art1);tick(preparing);
+      Check(game.Selection().PreviewContactCount()==0,"Projectile fixture already contacted");
+      const auto committed=game.Selection().PreviewContact();d.Click(game,Control::Right);tick(.5f);
+      Check(game.Selection().PreviewContactCount()==1 && game.Selection().PreviewContact().facing==committed.facing &&
+        game.Selection().PreviewContact().position.x==committed.position.x && game.Selection().PreviewContact().position.z==committed.position.z,
+        "Turning the stage redirected an already released projectile");
+      d.Click(game,Control::Art1);tick(preparing);d.Click(game,Control::Stop);tick(.65f);
+      Check(game.Selection().PreviewContactCount()==0 && game.Selection().PreviewEffectCount()==0,"Stopped rehearsal retained a pending impact");
+      d.Click(game,Control::Art1);tick(preparing);game.SuspendInput();tick(.65f);
+      Check(game.Selection().PreviewContactCount()==0 && game.Selection().PreviewEffectCount()==0,"Suspension replayed a pending impact");
+    }
+  }
+}
+void HeldStageRotation(const std::filesystem::path& root) {
+  float reference=0;
+  for(int hz:{30,60,144}) {
+    auto owned=std::make_unique<Game>();auto& game=*owned;game.Initialize();
+    game.ChooseCharacter(root/("held-stage-"+std::to_string(hz)+"-"+std::to_string(GetTickCount64()))/"patrol.save");
+    Driver d;d.Step(game);d.Click(game,Control::Create);d.Click(game,Control::ResetView);
+    const auto save=game.Selection().Hero().Save();
+    const auto tick=[&](float duration){while(duration>1e-6f){const float dt=std::min(1.f/hz,duration);d.input.Update(d.frame);game.Update(dt,d.input,0);duration-=dt;}};
+    d.Point(Control::Right);d.frame.down[VK_LBUTTON]=true;d.Step(game);tick(1);
+    Check(game.Selection().Yaw()>.7f && !game.Selection().Rotating(),"Held arrow failed to rotate or leaked into a stage drag");
+    d.frame.down[VK_LBUTTON]=false;d.Step(game);tick(.8f);
+    const float yaw=game.Selection().Yaw();Check(yaw>1.1f && yaw<1.3f,"Arrow release added a second tap after a held turn");
+    if(hz==30)reference=yaw;else Check(std::abs(reference-yaw)<.001f,"Held rotation depends on refresh rate");
+    Check(save==game.Selection().Hero().Save(),"Held view rotation changed a character");
+    d.Click(game,Control::Next);d.Key(game,'A');d.Key(game,'B');const float before=game.Selection().Yaw();
+    d.frame.down[VK_LEFT]=true;d.Step(game);tick(.8f);d.frame.down[VK_LEFT]=false;d.Step(game);
+    Check(std::abs(game.Selection().Yaw()-before)<.001f,"Name editing rotated the stage");
+    d.Click(game,Control::Right);d.frame.focused=false;d.Step(game);const float suspended=game.Selection().Yaw();
+    d.frame.focused=true;d.Step(game);tick(.5f);Check(std::abs(game.Selection().Yaw()-suspended)<.001f,"Focus loss retained view rotation momentum");
+  }
+}
+void MultipleProfiles(const std::filesystem::path& root,Renderer* renderer);
+void DraftTools(const std::filesystem::path& root,Renderer* renderer);
 void Render(const std::filesystem::path& root,const std::string& veteran) {
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
   Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),1280,720,L"Character selection test",false),"Hidden window");
@@ -341,7 +479,8 @@ void Render(const std::filesystem::path& root,const std::string& veteran) {
   Entrance(root,&renderer);
   StageTransitions(root,renderer);
   ArtTransport(root,renderer);
-  ArtInspection(root,renderer);
+  ArtInspection(root,renderer);MilestoneInspection(root,renderer);
+  CompleteRehearsal(root,renderer);HeldStageRotation(root);MultipleProfiles(root,&renderer);DraftTools(root,&renderer);
   {
     renderer.BeginFrame();renderer.DrawHudRect(0,0,1,1,{.02f,.03f,.04f,1});
     renderer.SetCamera({0,3,-8},{0,1,0});DirectX::XMFLOAT2 before,after;
@@ -361,12 +500,11 @@ void Render(const std::filesystem::path& root,const std::string& veteran) {
   {
     const auto folder=root/("return-roster-"+std::to_string(GetTickCount64()));
     std::filesystem::create_directories(folder);
-    const auto base=folder/"patrol.save",mageFile=folder/("hero-"+std::to_string(int(rpg::ClassId::Mage))+".save");
+    const auto base=folder/"patrol.save",mageFile=folder/"patrol-character-1.save";
     rpg::Simulation hero;hero.CreateCharacter(rpg::ClassId::Warrior,"Guard");Write(base,hero.Save());
     hero.CreateCharacter(rpg::ClassId::Mage,"Scholar");Write(mageFile,hero.Save());
     Game returning;returning.Initialize();returning.ChooseCharacter(base);Driver driver;driver.Step(returning);
-    const auto mageControl=Control(int(Control::Class0)+int(rpg::ClassId::Mage));
-    driver.Click(returning,mageControl);driver.Click(returning,Control::Enter);driver.Step(returning);
+    driver.SelectSaved(returning,rpg::ClassId::Mage);driver.Click(returning,Control::Enter);driver.Step(returning);
     Check(!returning.ChoosingCharacter() && returning.State().Class()==rpg::ClassId::Mage,"Mage entry failed");
     driver.Key(returning,'W');const auto expected=returning.State().Save();
     const auto returnClick=[&]() {
@@ -384,9 +522,9 @@ void Render(const std::filesystem::path& root,const std::string& veteran) {
     Check(returning.ChoosingCharacter() && returning.State().Save()==frozen,"Held input entered world or advanced simulation");
     driver.frame.down[VK_RETURN]=driver.frame.down[VK_LBUTTON]=false;driver.Step(returning);driver.Step(returning);
     Check(returning.Selection().Screen()==Selection::Page::Roster && std::string(returning.Selection().Hero().Nickname())=="Scholar","Returning to roster lost the active hero selection");
-    driver.Click(returning,Control::Class0);
+    driver.SelectSaved(returning,rpg::ClassId::Warrior);
     Check(std::string(returning.Selection().Hero().Nickname())=="Guard","Return used class save as roster base");
-    driver.Click(returning,mageControl);driver.Click(returning,Control::Enter);driver.Step(returning);
+    driver.SelectSaved(returning,rpg::ClassId::Mage);driver.Click(returning,Control::Enter);driver.Step(returning);
     Check(returning.State().Save()==expected,"Saved hero failed to re-enter unchanged");
     hero.CreateCharacter(rpg::ClassId::Mage,"External");Write(mageFile,hero.Save());
     returnClick();
@@ -551,9 +689,9 @@ void ClassSlots(const std::filesystem::path& root) {
   const auto base=folder/"patrol.save";
   for(int i=0;i<int(rpg::ClassId::Count);++i) {
     Game game;game.Initialize();game.ChooseCharacter(base);Driver d;d.Step(game);
-    d.Click(game,Control(int(Control::Class0)+i));
+    d.Click(game,Control::Create);d.Click(game,Control(int(Control::Class0)+i));
     Check(game.Selection().Hero().Class()==rpg::ClassId(i) && game.Selection().State()==Selection::Status::New,"Class choice did not create a fresh profile");
-    d.Click(game,Control::Create);d.Click(game,Control::Next);
+    d.Click(game,Control::Next);
     d.Click(game,Control::Name);d.Key(game,'A');d.Key(game,'S');d.Key(game,VK_RETURN);
     Check(game.Selection().DraftName()=="as","Name field did not accept keyboard text");
     d.Click(game,Control::SkinRight);d.Click(game,Control::HairRight);d.Click(game,Control::DyeLeft);
@@ -570,11 +708,89 @@ void ClassSlots(const std::filesystem::path& root) {
     Write(file,other.Save());d.Key(game,VK_F9);
     Check(game.State().Class()==rpg::ClassId(i) && std::string(game.State().Nickname())=="as","F9 accepted a different class into this slot");
     Write(file,saved.Save());d.Key(game,VK_F9);Check(game.State().Save()==saved.Save(),"Same-class F9 restore failed");
-    game.ChooseCharacter(base);d.Step(game);d.Click(game,Control(int(Control::Class0)+i));
+    game.ChooseCharacter(base);d.Step(game);d.SelectSaved(game,rpg::ClassId(i));
     Check(game.Selection().State()==Selection::Status::Saved && !game.Selection().Enabled(Control::Name),"Existing character was editable/replaced");
   }
   Game full;full.Initialize();full.ChooseCharacter(base);
-  Check(!full.Selection().Enabled(Control::Create),"Full roster allowed new creation");
+  Check(full.Selection().Enabled(Control::Create),"One hero per class still blocks additional characters");
+}
+void MultipleProfiles(const std::filesystem::path& root,Renderer* renderer=nullptr) {
+  const auto folder=root/("multiple-profiles-"+std::to_string(GetTickCount64()));std::filesystem::create_directories(folder);
+  const auto base=folder/"patrol.save",legacy=folder/"hero-5.save";
+  rpg::Simulation original;original.CreateCharacter(rpg::ClassId::Mage,"First mage");Write(legacy,original.Save());
+  const auto preserved=Read(legacy);
+  auto owned=std::make_unique<Game>();auto& game=*owned;game.Initialize();game.ChooseCharacter(base);Driver d;d.Step(game);
+  Check(game.Selection().SaveFile()==legacy && game.Selection().State()==Selection::Status::Saved,"Existing company opened on a missing default character");
+  d.SelectSaved(game,rpg::ClassId::Mage);d.Click(game,Control::Create);
+  Check(game.Selection().SelectedClass()==rpg::ClassId::Mage && game.Selection().Enabled(Control::Next),"Existing mage blocks another mage");
+  d.Click(game,Control::Next);for(int key:{'B','O','R','I','S'})d.Key(game,key);d.Click(game,Control::Confirm);
+  const auto second=game.Selection().SaveFile();
+  Check(second!=legacy && game.Selection().ProfileCount()==2 && Read(legacy)==preserved,"Second mage overwrote its predecessor");
+  Check(game.Selection().SavedProfile(game.Selection().SelectedProfile()).file==second,"New character was not selected");
+  const auto savedSecond=Read(second);d.Click(game,Control::Enter);d.Step(game);d.Key(game,VK_F5);
+  Check(!game.ChoosingCharacter() && game.State().Class()==rpg::ClassId::Mage && Read(legacy)==preserved,"Independent mage entry/save failed");
+  ui::CharacterSelection returned;returned.Open(base,rpg::ClassId::Mage,second);
+  Check(returned.SaveFile()==second && returned.Hero().Class()==rpg::ClassId::Mage && std::string(returned.Hero().Nickname())=="boris","Return selected the first mage instead of the entered mage");
+  game.ChooseCharacter(base);d.Step(game);d.SelectSaved(game,rpg::ClassId::Mage,1);
+  d.Click(game,Control::Create);d.Click(game,Control::Class0);d.Click(game,Control::Cancel);
+  Check(game.Selection().SaveFile()==second && game.Selection().SelectedClass()==rpg::ClassId::Mage && Read(legacy)==preserved,"Cancel lost the selected profile");
+  // A same-class file replacement still requires review before entering.
+  rpg::Simulation changed;changed.CreateCharacter(rpg::ClassId::Mage,"Replacement mage");Write(second,changed.Save());d.Click(game,Control::Enter);
+  Check(game.ChoosingCharacter() && game.Selection().Changed(),"Changed extra profile entered without review");
+  Write(second,"damaged");d.Click(game,Control::Refresh);
+  Check(!game.Selection().Enabled(Control::Enter) && game.Selection().Enabled(Control::Create),"Damaged extra profile blocked unrelated creation or allowed entry");
+  Write(second,savedSecond);d.Click(game,Control::Refresh);Check(game.Selection().State()==Selection::Status::Saved,"Repaired extra profile did not recover");
+  // All available pages are accessible, including two heroes of the same class.
+  for(int slot=2;slot<=10;++slot){rpg::Simulation hero;Check(hero.CreateCharacter(rpg::ClassId(slot%int(rpg::ClassId::Count)),std::string("Companion ")+char('A'+slot)),"Roster fixture name");Write(folder/("patrol-character-"+std::to_string(slot)+".save"),hero.Save());}
+  for(auto size:{std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
+    game.ChooseCharacter(base);d.frame.width=size.first;d.frame.height=size.second;d.Step(game);
+    Check(game.Selection().ProfileCount()==11 && !game.Selection().Enabled(Control::Class0),"Roster leaks hidden class controls or loses profiles");
+    d.Click(game,Control::NextProfiles);Check(game.Selection().ProfileOffset()==8,"Roster paging failed");
+    d.Click(game,Control::Profile1);const auto selected=game.Selection().SaveFile();d.Key(game,VK_UP);
+    Check(game.Selection().SaveFile()!=selected,"Keyboard cannot traverse saved profiles");
+    d.Point(Control::Profile0);d.input.Update(d.frame);game.Update(1./60,d.input,1);
+    Check(game.Selection().ProfileOffset()==0,"Roster wheel did not change pages");
+    d.SelectSaved(game,rpg::ClassId::Mage,1);
+    d.frame.client={0,0};for(int n=0;n<24;++n)d.Step(game);
+    if(renderer){Check(renderer->Resize(size.first,size.second),"Roster resize");renderer->BeginFrame();game.Render(*renderer);
+      Check(renderer->Capture((root/("multiple-roster-"+std::to_string(size.first)+".png")).wstring()) && renderer->EndFrame(false),"Roster capture");}
+  }
+  for(int slot=11;slot<=31;++slot){rpg::Simulation hero;Check(hero.CreateCharacter(rpg::ClassId::Warrior,std::string("Reserve ")+char('A'+slot%26)),"Reserve fixture name");Write(folder/("patrol-character-"+std::to_string(slot)+".save"),hero.Save());}
+  d.Click(game,Control::Refresh);Check(game.Selection().ProfileCount()==32 && !game.Selection().Enabled(Control::Create),"Roster capacity is not enforced");
+  Check(Read(legacy)==preserved,"Browsing changed the legacy mage");
+  if(renderer)Check(renderer->Resize(1280,720),"Restore roster viewport");
+}
+void DraftTools(const std::filesystem::path& root,Renderer* renderer=nullptr) {
+  const auto same=[](const rpg::Appearance& a,const rpg::Appearance& b){return a.skin==b.skin && a.hair==b.hair && a.dye==b.dye;};
+  for(auto id:{rpg::ClassId::Warrior,rpg::ClassId::Mage,rpg::ClassId::Scout,rpg::ClassId::Priest}) {
+    auto owned=std::make_unique<Game>();auto& game=*owned;game.Initialize();
+    const auto file=root/("draft-tools-"+std::to_string(int(id))+"-"+std::to_string(GetTickCount64()))/"patrol.save";
+    game.ChooseCharacter(file);Driver d;d.Step(game);d.Click(game,Control::Create);d.Click(game,Control(int(Control::Class0)+int(id)));d.Click(game,Control::Next);d.Key(game,'A');
+    const auto world=game.State().Save();const auto original=game.Selection().Hero().Look();
+    Check(!game.Selection().Enabled(Control::UndoAppearance),"New draft has a phantom undo entry");
+    for(int n=0;n<8;++n){const auto before=game.Selection().Hero().Look();d.Click(game,Control::RandomAppearance);
+      Check(!same(before,game.Selection().Hero().Look()) && game.Selection().Hero().Look().Valid(),"Random appearance repeats or leaves the palette");}
+    for(int n=0;n<8;++n)d.Click(game,Control::UndoAppearance);
+    Check(same(original,game.Selection().Hero().Look()) && !game.Selection().Enabled(Control::UndoAppearance),"Appearance undo did not recover the initial draft");
+    d.Click(game,Control::SkinRight);d.Click(game,Control::DyeLeft);d.Click(game,Control::UndoAppearance);
+    Check(game.Selection().Hero().Look().skin==1 && game.Selection().Hero().Look().dye==0,"Manual palette choices bypass undo history");
+    d.Click(game,Control::Back);d.Click(game,Control::Next);d.Click(game,Control::UndoAppearance);
+    Check(same(original,game.Selection().Hero().Look()) && game.Selection().DraftName()=="a","Wizard navigation lost the appearance history or name");
+    d.Click(game,Control::RandomAppearance);const auto chosen=game.Selection().Hero().Look();
+    Check(game.State().Save()==world && game.Selection().Hero().Class()==id && !std::filesystem::exists(file),"Draft tools mutated gameplay or published a profile");
+    if(renderer && id==rpg::ClassId::Mage){renderer->BeginFrame();game.Render(*renderer);Check(renderer->Capture((root/"identity-draft-tools.png").wstring())&&renderer->EndFrame(false),"Draft tools capture");}
+    d.Click(game,Control::Confirm);rpg::Simulation saved;
+    Check(saved.Load(Read(game.Selection().SaveFile())) && same(chosen,saved.Look()) && std::string(saved.Nickname())=="a","Randomized appearance did not survive confirmation");
+  }
+  auto first=std::make_unique<Game>(),second=std::make_unique<Game>();first->Initialize();second->Initialize();
+  const auto file=root/("creation-race-"+std::to_string(GetTickCount64()))/"patrol.save";
+  first->ChooseCharacter(file);second->ChooseCharacter(file);Driver one,two;one.Step(*first);two.Step(*second);
+  one.Click(*first,Control::Create);one.Click(*first,Control::Next);one.Key(*first,'A');
+  two.Click(*second,Control::Create);two.Click(*second,Control::Next);two.Key(*second,'B');
+  one.Click(*first,Control::Confirm);const auto original=Read(file);two.Click(*second,Control::Confirm);
+  Check(second->Selection().Screen()==Selection::Page::Customize && second->Selection().DraftName()=="b" && Read(file)==original,"Concurrent creation lost a draft or replaced a hero");
+  two.Click(*second,Control::Confirm);
+  Check(second->Selection().Screen()==Selection::Page::Roster && second->Selection().SaveFile()!=file && second->Selection().ProfileCount()==2 && Read(file)==original,"Explicit creation retry failed to publish a separate profile");
 }
 void CreationSafety(const std::filesystem::path& root) {
   const auto folder=root/("creation-safety-"+std::to_string(GetTickCount64()));std::filesystem::create_directories(folder);
@@ -584,8 +800,8 @@ void CreationSafety(const std::filesystem::path& root) {
   // Another process wins the slot after the preview was opened.
   rpg::Simulation other;other.CreateCharacter(rpg::ClassId::Warrior,"Existing Hero");const auto stable=other.Save();Write(file,stable);
   d.Click(game,Control::Confirm);
-  Check(Read(file)==stable && game.Selection().Screen()==Selection::Page::Customize && !game.Selection().Enabled(Control::Confirm) && !game.Selection().Notice().empty(),"Creation replaced an externally created hero");
-  d.Click(game,Control::Back);Check(!game.Selection().Enabled(Control::Next),"Occupied class allowed customization");
+  Check(Read(file)==stable && game.Selection().Screen()==Selection::Page::Customize && game.Selection().Enabled(Control::Confirm) && !game.Selection().Notice().empty(),"Creation replaced an externally created hero or lost retry");
+  d.Click(game,Control::Back);Check(game.Selection().Enabled(Control::Next),"Existing class still blocks another hero");
   d.Click(game,Control::Cancel);Check(game.Selection().State()==Selection::Status::Saved,"Cancel failed to restore roster state");
   for(const auto& entry:std::filesystem::directory_iterator(folder)) Check(entry.path().extension()==".save","Creation left a temporary file");
   // Folder becomes unwritable (a regular file) after the creation form opens.

@@ -9,7 +9,7 @@ The project is single-player today. Keep one map and its gameplay loop testable 
 | Component | Responsibility | Dependencies |
 | --- | --- | --- |
 | `MediterraneanLauncher` / `LaunchSupport` | Native launcher UI, local preferences, explicit-path child process, instance lifetime and validated launch arguments | Win32, GDI+, standard library; embedded project capture |
-| `CharacterSelection` | Eleven local class slots, draft name entry, selected-save validation and equipped preview before explicit world entry; Game blocks simulation until entry | `Simulation`, `Input`, shared UI canvas and character renderer |
+| `CharacterSelection` | Independent local hero files across eleven classes, paginated roster, draft name/color editing with undo, selected-save validation and equipped preview before explicit world entry; Game blocks simulation until entry | `Simulation`, `Input`, shared UI canvas and character renderer |
 | `WorldMap` | Map bounds, solid props, areas, traversal queries, navigation routes | C++ standard library |
 | `Inventory` | Canonical item catalog, bag stacks, worn slots, transactional item commands and serialization | C++ standard library |
 | `Trade` | Offer/sale prices and Simulation purchase, sell, buyback, range and stock rules | `Inventory`, `Simulation`, C++ standard library |
