@@ -155,6 +155,71 @@ void CastReceiptChecks() {
  rpg::Command ward;ward.ability=3;mage.Update(.01f,ward);receipt.Update(.01f,mage);
  Check(receipt.Opacity()==0,"Instant protection pretended to finish a cast");
 }
+void TargetReceiptChecks(Renderer& renderer,const std::filesystem::path& output) {
+ using R=ui::TargetCastReceipt::Result;
+ for(int mode=0;mode<5;++mode)for(float hz:{30.f,60.f,144.f}) {
+  auto game=std::make_unique<Game>();game->Initialize();
+  auto& state=const_cast<rpg::Simulation&>(game->State());
+  auto& actors=const_cast<std::vector<rpg::Enemy>&>(state.Enemies());
+  for(auto& actor:actors){actor.health=0;actor.windup=0;}
+  auto& target=actors[0];target.health=target.MaxHealth();target.position=target.home={state.Player().x,state.Player().z+1.8f};
+  target.state=rpg::EnemyState::Pursuing;target.attackCooldown=100;
+  rpg::Command select;select.selectActor=target.id;game->ExecuteCommand(select,.001f);
+  if(mode==4){target.kind=rpg::EnemyKind::Captain;target.rank=2;target.bossAttack=1;target.health=target.MaxHealth();}
+  target.windup=target.WindupDuration();target.facing=0; // A normal swing will miss the player behind it.
+  ui::Interface hud;hud.UpdateCombatFeedback(.001f,state);
+  Check(hud.TargetCastSignal().pending && hud.TargetCastSignal().Opacity()==0,"A live enemy windup fabricated a result");
+  const float health=state.Health();
+  if(mode==2){target.windup=0;hud.UpdateCombatFeedback(.001f,state);}
+  else if(mode==3){target.position.x+=20;hud.UpdateCombatFeedback(.001f,state);}
+  else {
+   if(mode==0 || mode==4){rpg::Command attack;attack.ability=1;game->ExecuteCommand(attack,.001f);hud.UpdateCombatFeedback(.001f,state);}
+   for(int n=0;n<int(hz*3) && hud.TargetCastSignal().Opacity()==0;++n){
+    game->ExecuteCommand({},1/hz);hud.UpdateCombatFeedback(1/hz,state);
+   }
+  }
+  const auto expected=mode==0?R::Interrupted:mode==2?R::Stopped:mode==3?R::None:R::Released;
+  Check(hud.TargetCastSignal().result==expected,"Enemy receipt disagrees with accepted interrupt/release/visibility state");
+  if(mode==1)Check(state.Health()==health,"Missed-release fixture accidentally hit the player");
+  if(mode==0)Check(target.stunned==0 && target.windup==0,"Interrupt test did not end the committed windup");
+  if(hz==60 && mode<3) {
+   // Stable debuff columns retain their identity while earlier effects expire.
+   target.rooted=2.4f;target.snared=1.3f;target.exposed=.65f;
+   for(auto size:{std::pair<int,int>{1920,1080},{960,600}}) {
+    Check(renderer.Resize(size.first,size.second),"Receipt resize");
+    const auto save=state.Save();const float age=hud.TargetCastSignal().age;
+    game->SetCameraOrbit(.12f,.5f,7);renderer.BeginFrame();game->Render(renderer,false);hud.Render(renderer,state,0,false);
+    Check(renderer.Capture((output/("target-receipt-"+std::to_string(mode)+"-"+std::to_string(size.first)+".png")).wstring()) && renderer.EndFrame(false),"Target result native capture");
+    Check(age==hud.TargetCastSignal().age && save==state.Save(),"Rendering advanced the enemy result or simulation");
+   }
+  }
+  target.windup=0;target.attackCooldown=100;
+  for(int n=0;n<int(hz);++n){game->ExecuteCommand({},1/hz);hud.UpdateCombatFeedback(1/hz,state);}
+  Check(hud.TargetCastSignal().Opacity()==0,"Enemy result did not expire after one second");
+  target.position=target.home={state.Player().x,state.Player().z+1.8f};target.state=rpg::EnemyState::Pursuing;target.windup=.4f;
+  hud.UpdateCombatFeedback(.001f,state);Check(hud.TargetCastSignal().pending,"New windup did not replace the old result");
+  hud.ResetCombatFeedback();Check(!hud.TargetCastSignal().pending && hud.TargetCastSignal().actor==0,"Load/reset retained target feedback");
+  hud.UpdateCombatFeedback(.001f,state);target.health=0;hud.UpdateCombatFeedback(.001f,state);
+  Check(hud.TargetCastSignal().actor==0,"Dead target retained a cast result");
+ }
+ {
+  rpg::Simulation state;ui::TargetCastReceipt receipt;
+  auto& actors=const_cast<std::vector<rpg::Enemy>&>(state.Enemies());
+  for(auto& actor:actors){actor.position=actor.home={state.Player().x,state.Player().z+1.8f};actor.attackCooldown=100;}
+  rpg::Command select;select.selectActor=actors[0].id;state.Update(.001f,select);
+  actors[0].state=rpg::EnemyState::Pursuing;actors[0].windup=.4f;receipt.Update(.001f,state);
+  actors[0].windup=0;receipt.Update(.001f,state);Check(receipt.result==R::Stopped,"Switch fixture has no receipt");
+  select.selectActor=actors[1].id;state.Update(.001f,select);receipt.Update(.001f,state);
+  Check(receipt.actor==actors[1].id && receipt.result==R::None && !receipt.pending,"Switching targets carried another actor's cast result");
+  receipt.Update(.5f,state);Check(receipt.actor==0 && receipt.Opacity()==0,"Discontinuous simulation retained enemy feedback");
+  actors[1].kind=rpg::EnemyKind::Dummy;receipt.Update(.001f,state);Check(receipt.actor==0,"A practice dummy showed enemy cast feedback");
+ }
+ rpg::Enemy enemy;enemy.health=100;enemy.stunned=2;enemy.rooted=3;enemy.snared=4;enemy.exposed=5;
+ const auto before=ui::TargetStatusEffects(enemy);enemy.stunned=enemy.snared=0;const auto after=ui::TargetStatusEffects(enemy);
+ Check(before.size()==4 && after.size()==2 && before[1].slot==after[0].slot && before[3].slot==after[1].slot,"Expiring effects moved unrelated target status slots");
+ enemy.health=0;Check(ui::TargetStatusEffects(enemy).empty(),"A corpse kept status icons");
+ Check(renderer.Resize(1920,1080),"Restore HUD size");
+}
 void WorldPickChecks(Renderer& renderer) {
  rpg::Simulation state;
  auto& actors=const_cast<std::vector<rpg::Enemy>&>(state.Enemies());actors.resize(2);
@@ -204,6 +269,7 @@ int main(int argc,char** argv) {
   Win32Window window;Renderer renderer;
   Check(window.Create(GetModuleHandleW(nullptr),1920,1080,L"Combat HUD review",false),"Hidden review window");
   Check(renderer.Initialize(window.GetHandle(),1920,1080),"Native review renderer");
+  TargetReceiptChecks(renderer,output);
   AbilityFeedbackChecks(&renderer,output);
   WorldPickChecks(renderer);
   PreparationChecks(renderer);

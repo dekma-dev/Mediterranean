@@ -162,7 +162,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   pose.handCast=cast;
   // A running hand is loosely closed, rather than the flat, splayed palm of
   // a casting gesture. Occupied grips remain controlled by their equipment.
-  pose.freeHandCurl=.32f+.46f*animation::Unit(dynamics.runBlend)*travel+.10f*air;
+  pose.freeHandCurl=.32f+.28f*animation::Unit(dynamics.runBlend)*travel+.10f*air;
   pose.headYaw=animation::Signed(dynamics.face.yaw/.62f)*.62f;
   pose.headPitch=animation::Signed(dynamics.face.pitch/.245f)*.245f;
   pose.bodyLift=gait*gait*.015f*(1-air)+breath*.006f*(1-air)-landing*.14f;
@@ -248,7 +248,19 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   // chest and lowers the hips before the existing impact compression.
   pose.upperYaw+=animation::Signed((sourceFeet[0].z-sourceFeet[1].z)/.6f)*.072f*(1-swing)*contactWeight*(1-authoredBlend);
   const float actionWeight=(1-burst)*(1-hit);
-  const auto action=dynamics.action*(actionWeight*(newStrike?1-stroke.weight:1));
+  auto action=dynamics.action*(actionWeight*(newStrike?1-stroke.weight:1));
+  if(newStrike && !shield && (rpg::StaffWeapon(form)||form==rpg::WeaponForm::Scepter)) {
+    // Authored attacks own the weapon hand, but an invocation still needs
+    // its free-hand path. Suppressing every additive channel at full stroke
+    // weight erased the spell gesture and pinned the supporting staff hand.
+    const float bodyWeight=actionWeight*(1-.5f*stroke.weight);
+    // The clip already provides the broad arm travel; retain a half-strength
+    // additive path at its peak instead of stacking two full-sized reaches.
+    action.left=dynamics.action.left*bodyWeight;
+    action.open=dynamics.action.open*actionWeight;
+    action.pitch=dynamics.action.pitch*bodyWeight;action.yaw=dynamics.action.yaw*bodyWeight;
+    action.roll=dynamics.action.roll*bodyWeight;action.hip=dynamics.action.hip*bodyWeight;
+  }
   pose.upperPitch+=action.pitch; pose.upperYaw+=action.yaw; pose.upperRoll+=action.roll;
   pose.bodyLift+=action.hip*(1-air);
   pose.handCast=std::max(pose.handCast,animation::Unit(action.open));

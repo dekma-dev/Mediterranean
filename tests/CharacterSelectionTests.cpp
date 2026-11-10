@@ -270,7 +270,8 @@ void ArtTransport(const std::filesystem::path& root,Renderer& renderer) {
     Check(std::abs(pose.left.x)+std::abs(pose.left.y)+std::abs(pose.left.z)+std::abs(pose.pitch)+std::abs(pose.yaw)<.0001f,"Stopped rehearsal did not settle");
     Check(!game.Selection().Enabled(Control::Stop),"Inactive stop stayed enabled");
     d.Click(game,Control::Replay);Check(game.Selection().PreviewAbility()==6 && game.Selection().PreviewAction()>=0,"Replay changed the selected ability");
-    tick(7);Check(game.Selection().PreviewTiming().progress==1 && game.Selection().PreviewAction()<0,"Finished rehearsal lost completion state");
+    for(int n=0;n<7*hz && game.Selection().PreviewAction()>=0;++n)tick(1.f/hz);
+    Check(game.Selection().PreviewTiming().progress==1 && game.Selection().PreviewAction()<0,"Finished rehearsal lost completion state");
     Check(game.Selection().Hero().Save()==hero && game.State().Save()==world,"Rehearsal controls changed profile or combat state");
     d.Click(game,Control::Replay);game.SuspendInput();tick(.3f);
     Check(game.Selection().PreviewAction()<0 && game.Selection().PreviewEffectCount()==0,"Suspension resumed an old replay");
@@ -289,6 +290,41 @@ void ArtTransport(const std::filesystem::path& root,Renderer& renderer) {
     }
   }
 }
+void ArtInspection(const std::filesystem::path& root,Renderer& renderer) {
+  for(auto id:{rpg::ClassId::Warrior,rpg::ClassId::Mage,rpg::ClassId::Scout,rpg::ClassId::Priest}) {
+    auto owned=std::make_unique<Game>();auto& game=*owned;game.Initialize();
+    game.ChooseCharacter(root/("art-inspection-"+std::to_string(int(id))+"-"+std::to_string(GetTickCount64()))/"patrol.save");
+    Driver d;d.Step(game);d.Click(game,Control::Create);d.Click(game,Control(int(Control::Class0)+int(id)));
+    d.Click(game,Control::Arts);d.Click(game,Control::Art1);d.Click(game,Control::Stop);
+    const auto hero=game.Selection().Hero().Save(),world=game.State().Save();
+    const auto recovery=game.Selection().InspectArt(3);
+    Check(std::abs(recovery.windup-game.Selection().Hero().RecoveryCastDuration())<.00001f,"Defensive card misreports preparation time");
+    Check(game.Selection().InspectArt(-1).windup==0 && game.Selection().InspectArt(4).recovery==0,"Invalid art exposes fabricated timing");
+    for(auto size:{std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
+      d.frame.width=size.first;d.frame.height=size.second;d.frame.client={950,10};d.Step(game);
+      const auto art=id==rpg::ClassId::Mage?Control::Art11:Control::Art5;
+      d.Point(art);for(int n=0;n<20;++n)d.Step(game);
+      Check(game.Selection().Hint()==Control::None,"Art inspection ignored hover delay");
+      for(int n=0;n<12;++n)d.Step(game);
+      Check(game.Selection().Hint()==art && game.Selection().PreviewAction()<0,"Art hover started an unsolicited demonstration");
+      Check(renderer.Resize(size.first,size.second),"Art inspection resize");renderer.BeginFrame();game.Render(renderer);
+      Check(renderer.Capture((root/("art-inspection-"+std::to_string(int(id))+"-"+std::to_string(size.first)+".png")).wstring())&&renderer.EndFrame(false),"Art inspection capture");
+      Check(game.Selection().Hero().Save()==hero && game.State().Save()==world,"Inspection mutated profile or world");
+    }
+    d.frame.width=1280;d.frame.height=720;d.frame.client={950,10};d.Step(game);
+    for(int n=0;n<int(Control::None) && game.Selection().Focus()!=Control::Art1;++n)d.Key(game,VK_TAB);
+    Check(game.Selection().Focus()==Control::Art1,"Keyboard cannot reach the art inspection");
+    for(int n=0;n<32;++n)d.Step(game);
+    Check(game.Selection().Hint()==Control::Art1,"Keyboard focus does not inspect an art");
+    const auto details=game.Selection().InspectArt(1);
+    d.Key(game,VK_RETURN);Check(game.Selection().PreviewAbility()==1 && game.Selection().PreviewAction()>=0,"Inspected keyboard art cannot be demonstrated");
+    const float before=game.Selection().PreviewAction();d.Step(game);const float rate=(game.Selection().PreviewAction()-before)*60;
+    const float boundary=details.ranged?combat::StrokeStart(true):combat::Contact(true);
+    Check(rate>0 && std::abs(details.windup*rate-boundary)<.0001f,"Art card timing differs from the displayed action");
+    d.Click(game,Control::Overview);Check(game.Selection().Hint()==Control::None,"Hidden Arts page retained an ability card");
+  }
+  Check(renderer.Resize(1280,720),"Restore creation view");
+}
 void Render(const std::filesystem::path& root,const std::string& veteran) {
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
   Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),1280,720,L"Character selection test",false),"Hidden window");
@@ -305,6 +341,7 @@ void Render(const std::filesystem::path& root,const std::string& veteran) {
   Entrance(root,&renderer);
   StageTransitions(root,renderer);
   ArtTransport(root,renderer);
+  ArtInspection(root,renderer);
   {
     renderer.BeginFrame();renderer.DrawHudRect(0,0,1,1,{.02f,.03f,.04f,1});
     renderer.SetCamera({0,3,-8},{0,1,0});DirectX::XMFLOAT2 before,after;

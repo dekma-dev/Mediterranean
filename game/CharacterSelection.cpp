@@ -243,9 +243,20 @@ void CharacterSelection::StartPreview(int ability) {
   if(ability==2)audition_.Add(sound::Cue::Dash);
 }
 float CharacterSelection::PreviewRate() const {
-  return previewAbility_==2 || previewAbility_==3?1.f:previewAbility_>=8?rpg::AdvancedRate(class_,previewAbility_):
-    rpg::ClassAttackRate(class_,PreviewHeavy())*
-      (previewAbility_==7?.85f:previewAbility_==6?.7f:previewAbility_==5?.8f:1.f);
+  return ArtRate(previewAbility_);
+}
+float CharacterSelection::ArtRate(int ability) const {
+  return ability==2 || ability==3?1.f:ability>=8?rpg::AdvancedRate(class_,ability):
+    rpg::ClassAttackRate(class_,ability!=0 && ability!=7 && ability!=12)*
+      (ability==7?.85f:ability==6?.7f:ability==5?.8f:1.f);
+}
+CharacterSelection::ArtDetails CharacterSelection::InspectArt(int ability) const {
+  if(!rpg::ValidSpell(ability))return {};
+  const auto spell=hero_.Spell(ability);
+  if(ability==2 || ability==3)return {spell.contact,std::max(0.f,spell.recovery-spell.contact),false};
+  const bool heavy=ability!=0 && ability!=7 && ability!=12,ranged=hero_.ClassInfo().range>3;
+  const float rate=ArtRate(ability),windup=(ranged?combat::StrokeStart(heavy):combat::Contact(heavy))/rate;
+  return {windup,std::max(0.f,combat::Duration(heavy)/rate-windup),ranged};
 }
 float CharacterSelection::PreviewDuration() const {
   return previewAbility_==2?.50f:previewAbility_==3?hero_.RecoveryCastDuration()+.42f:

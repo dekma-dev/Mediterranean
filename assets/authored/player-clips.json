@@ -1,8 +1,8 @@
 {
   "format": "PCL5",
-  "source": "Articulated spine/clavicles; 20 revised run/jump actions; other original 40-channel samples preserved",
-  "source_sha256": "9e87b01bf7c7e909ae1a2f9219b77221668e9983afa043eb03400629609a7150",
-  "editable_source": "player-motion-v15.blend",
+  "source": "Native 4.2 m stride; reduced forced crouch, recovery and landing load; 36 complete records preserved",
+  "source_sha256": "6c632946a66c947c20f7724a83c2e59b0b09d31fa148c9a408a7c15b7851158b",
+  "editable_source": "player-motion-v16.blend",
   "clips": [
     {
       "clip": "Sword_Attack_Diagonal",
@@ -40,8 +40,8 @@
       "takeoff": 0.3103448275862069,
       "landing": 0.5057471264367815,
       "stance": 0.0,
-      "source": "v15 spine/clavicle export",
-      "sha256": "f625a3b142d70216a6046afe6e91ee4ea99728c04198650ab435255a3c9c971d"
+      "source": "v16 native-stride authored motion",
+      "sha256": "9f54dd9a46361549724cefe1e7001845b264e5453b09645f085e9dcd21123375"
     },
     {
       "clip": "Fall_Heavy_Landing",
@@ -53,8 +53,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v15 spine/clavicle export",
-      "sha256": "42b0491127ddc702e68351eca302d028af3e442407426791bd28a03c490b0357"
+      "source": "v16 native-stride authored motion",
+      "sha256": "c8d56543953e8e7fef720547f0e1bc60a95b6c145ca663326700bc490bae2a13"
     },
     {
       "clip": "Walk_Forward",
@@ -110,55 +110,55 @@
     },
     {
       "clip": "Run_Forward",
-      "frames": 57,
-      "duration": 0.9333333333333333,
+      "frames": 43,
+      "duration": 0.7,
       "loop": true,
       "load": 0.0,
       "contact": 0.0,
       "takeoff": 0.0,
       "landing": 0.0,
-      "stance": 0.24,
-      "source": "v15 spine/clavicle export",
-      "sha256": "53719f65719534c763f59fcaf668ea5f5ade4c449f030a8c4e4ad87712e38194"
+      "stance": 0.18,
+      "source": "v16 native-stride authored motion",
+      "sha256": "f50cc36298e526d3ce4a8ff3a721510197fc305117e327f47829644e07e2e514"
     },
     {
       "clip": "Run_Backward",
-      "frames": 57,
-      "duration": 0.9333333333333333,
+      "frames": 43,
+      "duration": 0.7,
       "loop": true,
       "load": 0.0,
       "contact": 0.0,
       "takeoff": 0.0,
       "landing": 0.0,
-      "stance": 0.24,
-      "source": "v15 spine/clavicle export",
-      "sha256": "0f2417f3abf4faf1c1c45816ed296a5970d4fce721d4fa53357168411e6a48af"
+      "stance": 0.18,
+      "source": "v16 native-stride authored motion",
+      "sha256": "8ce823134bbe862912e2b08d117517c60094549af8a3760731ab82ab1f62eb2e"
     },
     {
       "clip": "Run_Left",
-      "frames": 57,
-      "duration": 0.9333333333333333,
+      "frames": 43,
+      "duration": 0.7,
       "loop": true,
       "load": 0.0,
       "contact": 0.0,
       "takeoff": 0.0,
       "landing": 0.0,
-      "stance": 0.24,
-      "source": "v15 spine/clavicle export",
-      "sha256": "e79d1ae28a29b2bf15a304a653a1f2ba6f9b38c6fa90546e5fe235afb15521b1"
+      "stance": 0.18,
+      "source": "v16 native-stride authored motion",
+      "sha256": "ff7530fa1059d1362d180711b76e7e8817f7098beb5953f345c353c47ce4a7db"
     },
     {
       "clip": "Run_Right",
-      "frames": 57,
-      "duration": 0.9333333333333333,
+      "frames": 43,
+      "duration": 0.7,
       "loop": true,
       "load": 0.0,
       "contact": 0.0,
       "takeoff": 0.0,
       "landing": 0.0,
-      "stance": 0.24,
-      "source": "v15 spine/clavicle export",
-      "sha256": "41b6151a4a1f8ced299ef13179dc093276e950e670865fbdca393dd7a94184ed"
+      "stance": 0.18,
+      "source": "v16 native-stride authored motion",
+      "sha256": "4afa1db37af95f09bb4a4d1a00137b9c4bee745399be49d40232a5d3de755c47"
     },
     {
       "clip": "Start_Walk",
@@ -227,16 +227,16 @@
     },
     {
       "clip": "Sword_Run",
-      "frames": 57,
-      "duration": 0.9333333333333333,
+      "frames": 43,
+      "duration": 0.7,
       "loop": true,
       "load": 0.0,
       "contact": 0.0,
       "takeoff": 0.0,
       "landing": 0.0,
-      "stance": 0.24,
-      "source": "v15 spine/clavicle export",
-      "sha256": "f02fdb29f7d3af312829086a1fd35834830c86bfe14a84cd24d50f2e57e9d6ce"
+      "stance": 0.18,
+      "source": "v16 native-stride authored motion",
+      "sha256": "5ad87d5ba571f32df80f4148cc369b74691f8232ad565681ec4ba99706c7f798"
     },
     {
       "clip": "Staff_Walk",
@@ -253,16 +253,16 @@
     },
     {
       "clip": "Staff_Run",
-      "frames": 57,
-      "duration": 0.9333333333333333,
+      "frames": 43,
+      "duration": 0.7,
       "loop": true,
       "load": 0.0,
       "contact": 0.0,
       "takeoff": 0.0,
       "landing": 0.0,
-      "stance": 0.24,
-      "source": "v15 spine/clavicle export",
-      "sha256": "2065317848e34474793cc416803161b05ae9790b7117c9ae22cb2f417611b67c"
+      "stance": 0.18,
+      "source": "v16 native-stride authored motion",
+      "sha256": "b7ee54b91c3472b30a94b22c30a3cdec5fc11831068f9dd30e31a24e6243cee1"
     },
     {
       "clip": "Sword_Guard",
@@ -422,16 +422,16 @@
     },
     {
       "clip": "Bow_Run",
-      "frames": 57,
-      "duration": 0.9333333333333333,
+      "frames": 43,
+      "duration": 0.7,
       "loop": true,
       "load": 0.0,
       "contact": 0.0,
       "takeoff": 0.0,
       "landing": 0.0,
-      "stance": 0.24,
-      "source": "v15 spine/clavicle export",
-      "sha256": "132909dc1849e0c57f8a7b07a7c3962477220bb0c5f0a9dd060197006b3b9538"
+      "stance": 0.18,
+      "source": "v16 native-stride authored motion",
+      "sha256": "52bed00d30c90a553ed74481b45db8f4fd08e039f2c78c64df581f582768cc3b"
     },
     {
       "clip": "Sword_Carry",
@@ -513,42 +513,42 @@
     },
     {
       "clip": "Sword_Run_Backward",
-      "frames": 57,
-      "duration": 0.9333333333333333,
+      "frames": 43,
+      "duration": 0.7,
       "loop": true,
       "load": 0.0,
       "contact": 0.0,
       "takeoff": 0.0,
       "landing": 0.0,
-      "stance": 0.24,
-      "source": "v15 spine/clavicle export",
-      "sha256": "220d37cd493aef7e1de2649d3ba99e2305c38f116f0f0aafa759675bf573907e"
+      "stance": 0.18,
+      "source": "v16 native-stride authored motion",
+      "sha256": "b1d2658c8b881ae5e339e8c045611c45b9a1498c71823b76e2f95aa8801cabb4"
     },
     {
       "clip": "Sword_Run_Left",
-      "frames": 57,
-      "duration": 0.9333333333333333,
+      "frames": 43,
+      "duration": 0.7,
       "loop": true,
       "load": 0.0,
       "contact": 0.0,
       "takeoff": 0.0,
       "landing": 0.0,
-      "stance": 0.24,
-      "source": "v15 spine/clavicle export",
-      "sha256": "b0bcfa5d4499c3c2c26d7e22621edeb94d3285f84a78b15d28954cded545c4ff"
+      "stance": 0.18,
+      "source": "v16 native-stride authored motion",
+      "sha256": "6a89a638481b0e24a6e6e02f7bc8e5b6bb8c0d38264084fa8939824af0cc4fe7"
     },
     {
       "clip": "Sword_Run_Right",
-      "frames": 57,
-      "duration": 0.9333333333333333,
+      "frames": 43,
+      "duration": 0.7,
       "loop": true,
       "load": 0.0,
       "contact": 0.0,
       "takeoff": 0.0,
       "landing": 0.0,
-      "stance": 0.24,
-      "source": "v15 spine/clavicle export",
-      "sha256": "43e0a24ad26da2894b7882c55eb6a3ee3ef34028b0c42ff8f181414f29a0a2f1"
+      "stance": 0.18,
+      "source": "v16 native-stride authored motion",
+      "sha256": "eb1417031dab4300a3118619887f55de8a3828630b92170c123b673019b710e8"
     },
     {
       "clip": "Staff_Walk_Backward",
@@ -591,42 +591,42 @@
     },
     {
       "clip": "Staff_Run_Backward",
-      "frames": 57,
-      "duration": 0.9333333333333333,
+      "frames": 43,
+      "duration": 0.7,
       "loop": true,
       "load": 0.0,
       "contact": 0.0,
       "takeoff": 0.0,
       "landing": 0.0,
-      "stance": 0.24,
-      "source": "v15 spine/clavicle export",
-      "sha256": "877b1b9d91f0984ff018774a4c3c51487f372449a5957184bdc6e5497d9a3cb5"
+      "stance": 0.18,
+      "source": "v16 native-stride authored motion",
+      "sha256": "1b5b762d40e60a968ba061dd59fe12c048d55aa49ab5bcc241fee743f38f4615"
     },
     {
       "clip": "Staff_Run_Left",
-      "frames": 57,
-      "duration": 0.9333333333333333,
+      "frames": 43,
+      "duration": 0.7,
       "loop": true,
       "load": 0.0,
       "contact": 0.0,
       "takeoff": 0.0,
       "landing": 0.0,
-      "stance": 0.24,
-      "source": "v15 spine/clavicle export",
-      "sha256": "d1649ec4512e4f3007744725b79a4854ed1892835a90a99836bcda9b04fb667b"
+      "stance": 0.18,
+      "source": "v16 native-stride authored motion",
+      "sha256": "db9ee43af1e9adf39690d5adabaa56fcc7728c3b9c6befea703599fa8164b28c"
     },
     {
       "clip": "Staff_Run_Right",
-      "frames": 57,
-      "duration": 0.9333333333333333,
+      "frames": 43,
+      "duration": 0.7,
       "loop": true,
       "load": 0.0,
       "contact": 0.0,
       "takeoff": 0.0,
       "landing": 0.0,
-      "stance": 0.24,
-      "source": "v15 spine/clavicle export",
-      "sha256": "136bf3f6679a6ddf7e3d02e406c454b66bd47a1318a38648a928ac71e07071a3"
+      "stance": 0.18,
+      "source": "v16 native-stride authored motion",
+      "sha256": "8f7dcb38d9b9286a345b9a2b0b48ae0270cfc03f4a63072f6a4184eee4a91460"
     },
     {
       "clip": "Bow_Walk_Backward",
@@ -669,42 +669,42 @@
     },
     {
       "clip": "Bow_Run_Backward",
-      "frames": 57,
-      "duration": 0.9333333333333333,
+      "frames": 43,
+      "duration": 0.7,
       "loop": true,
       "load": 0.0,
       "contact": 0.0,
       "takeoff": 0.0,
       "landing": 0.0,
-      "stance": 0.24,
-      "source": "v15 spine/clavicle export",
-      "sha256": "8d98852ed82ca06f68d16fd1568ee64477d828e83e3fc160fc70c4f16b8a4eb4"
+      "stance": 0.18,
+      "source": "v16 native-stride authored motion",
+      "sha256": "5e18143523b4b4a988adfa661880dbbc34ad9d482098164de1d984a7d6002a37"
     },
     {
       "clip": "Bow_Run_Left",
-      "frames": 57,
-      "duration": 0.9333333333333333,
+      "frames": 43,
+      "duration": 0.7,
       "loop": true,
       "load": 0.0,
       "contact": 0.0,
       "takeoff": 0.0,
       "landing": 0.0,
-      "stance": 0.24,
-      "source": "v15 spine/clavicle export",
-      "sha256": "d15676fb3ba475f1c71a89c03ab57ba3b06e163ab3b88ca1a97381014d2aa845"
+      "stance": 0.18,
+      "source": "v16 native-stride authored motion",
+      "sha256": "756f1e5329371e550e08c36e07c3959359dcc72391b516645c1303772127ab29"
     },
     {
       "clip": "Bow_Run_Right",
-      "frames": 57,
-      "duration": 0.9333333333333333,
+      "frames": 43,
+      "duration": 0.7,
       "loop": true,
       "load": 0.0,
       "contact": 0.0,
       "takeoff": 0.0,
       "landing": 0.0,
-      "stance": 0.24,
-      "source": "v15 spine/clavicle export",
-      "sha256": "10e5dca39e5671a26ab62216644971a39b2542049cd48ed996de1ac7e21bfdde"
+      "stance": 0.18,
+      "source": "v16 native-stride authored motion",
+      "sha256": "db3a9e7d745e22326addb050568b36dbfe5dc8ed905ab4acaa4b5f6445803271"
     },
     {
       "clip": "Sword_Jump",
@@ -716,8 +716,8 @@
       "takeoff": 0.3103448275862069,
       "landing": 0.5057471264367815,
       "stance": 0.0,
-      "source": "v15 spine/clavicle export",
-      "sha256": "9cae20012486469ddfca57e8f95a6c1895fc82c854d1d3483e7b900262090630"
+      "source": "v16 native-stride authored motion",
+      "sha256": "30a931e5bd5595661e2d0654a14459c65db98629d3af22eaa2f2738b3e6b14ff"
     },
     {
       "clip": "Staff_Jump",
@@ -729,8 +729,8 @@
       "takeoff": 0.3103448275862069,
       "landing": 0.5057471264367815,
       "stance": 0.0,
-      "source": "v15 spine/clavicle export",
-      "sha256": "6979481df581a7a74d445d7468661fde5794b6277756b54c743342a3ee1a6711"
+      "source": "v16 native-stride authored motion",
+      "sha256": "57d1f3b9d5a6139aee92d0c2904c0dd018ca3abddace8db1ae37fe6df5a71cf0"
     },
     {
       "clip": "Bow_Jump",
@@ -742,37 +742,39 @@
       "takeoff": 0.3103448275862069,
       "landing": 0.5057471264367815,
       "stance": 0.0,
-      "source": "v15 spine/clavicle export",
-      "sha256": "8aacbff6c6e03da9dfaea6257b64f091e97f596857eb2a6ec49970cce38bb59c"
+      "source": "v16 native-stride authored motion",
+      "sha256": "cc4caee83d145ed600a16aa9e294f36546e013bc787016e0ce39d300735647f4"
     }
   ],
-  "sha256": "459176d01455d673bab398a86e1d10225413329f0149a256c3b67a63e2854c88",
+  "sha256": "c2c4f5c0a72806642f1915e19b522fd2ade72ecfeaeb370d8102025e41eacc65",
   "retarget": "Blender +X-left/-Y-forward/Z-up to native +X-right/+Z-forward/Y-up; shoulders/arm lengths fitted to native IK; world jump displacement removed; native contacts retained.",
   "frame_channels": 53,
   "revised_actions": [
-    "Jump_Full",
     "Run_Forward",
-    "Run_Backward",
-    "Run_Left",
-    "Run_Right",
     "Sword_Run",
     "Staff_Run",
     "Bow_Run",
+    "Run_Backward",
     "Sword_Run_Backward",
-    "Sword_Run_Left",
-    "Sword_Run_Right",
     "Staff_Run_Backward",
-    "Staff_Run_Left",
-    "Staff_Run_Right",
     "Bow_Run_Backward",
+    "Run_Left",
+    "Sword_Run_Left",
+    "Staff_Run_Left",
     "Bow_Run_Left",
+    "Run_Right",
+    "Sword_Run_Right",
+    "Staff_Run_Right",
     "Bow_Run_Right",
+    "Jump_Full",
     "Sword_Jump",
     "Staff_Jump",
-    "Bow_Jump"
+    "Bow_Jump",
+    "Fall_Heavy_Landing"
   ],
   "revised_track_indices": [
     2,
+    3,
     8,
     9,
     10,
@@ -793,6 +795,6 @@
     55,
     56
   ],
-  "preserved_track_count": 37,
-  "rebaked_action_count": 20
+  "preserved_track_count": 36,
+  "rebaked_action_count": 21
 }

@@ -1,8 +1,33 @@
 # Blender collection in the native renderer
 
+## Source/native running stride and landing (2026-11-10, v16)
+
+The current motion source is `assets/authored/player-motion-v16.blend`.
+Sixteen running actions now match the native 4.2-metre, 0.7-second cycle at
+6 m/s. Four jumps and the heavy landing also have revised arm/leg recovery
+and contact loading. All 36 other complete PCL5 records and the frozen
+face/model sources are preserved. See [the v16 motion record](player-native-stride-v16.md)
+for the cause of the forced crouch, changes, local comparisons and checks.
+All twelve selected motion/art suites pass in Release and Debug. All six
+game outputs embed the current resources and pass fixture-save smoke launches.
+
+## Native spine and shoulder articulation (2026-11-10, v15)
+
+The preceding motion source is `assets/authored/player-motion-v15.blend`.
+The native body rig now retains the source's lower/upper spine and clavicle
+motion instead of collapsing it into one chest transform. PCL5 adds those
+channels while retaining PCL3/PCL4 decoding. Twenty running/jump actions have
+revised support-phased arm swing, shoulder motion and trunk balance; lateral
+running uses a shorter arm arc. The original forty channels of the other
+37 records and all frozen face/model sources are preserved. See
+[the v15 motion record](player-articulated-motion-v15.md) for implementation,
+reference limits, local comparisons and validation evidence.
+All twelve selected motion/art suites pass in Release and Debug; all six game
+outputs embed the current archive and pass fixture-save smoke launches.
+
 ## Running support and deterministic flight (2026-11-10, v14)
 
-The current motion source is `assets/authored/player-motion-v14.blend`.
+The preceding motion source is `assets/authored/player-motion-v14.blend`.
 Twenty running/jump actions have revised support loading, pelvis rise,
 compact leg recovery and elbow motion. Native playback fixes an early-release
 step wrap, discontinuous landing prediction during stops, residual procedural

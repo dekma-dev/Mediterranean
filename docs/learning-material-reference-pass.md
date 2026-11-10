@@ -2,6 +2,25 @@
 
 Reference root: `D:/assets/learning_material`. Date: 2026-11-06.
 
+## Ability inspection and enemy cast results (2026-11-10)
+
+Evidence inspected this pass:
+
+- Revisited the creation and raid contact sheets. Decoded 20 creation samples at 0.25-second intervals from 24–29 seconds and 16 raid samples from 30–34 seconds. Inspected individual decoded frames, including the raid's compact target status timers and central cast/spell arrangement. These are sampled visual observations, not a claim of full-speed or audio review.
+- Evidence and build logs are local under `build-cast-readability/`. Reference media and authored models were not modified.
+
+Implemented:
+
+- Creation Arts now provides a delayed mouse/keyboard inspection card with the actual ability artwork, description, targeting, required level, cooldown and range. Preparation/contact and recovery values use the selected class's action rate; defensive preparation uses the actual recovery cast duration. Inspection never starts an action, learns a spell or changes profile data. Selecting an art still uses the existing rehearsal controls.
+- Selected enemy casts now retain a brief result: Released (including a miss), Interrupted only after an accepted interrupt event, or a neutral Cast stopped when a visible preparation ends without either event. Actor changes, corpses, reset/load, invalid time steps and practice targets clear the state. An occluded/distant windup is not interpreted as an interrupt. The UI clock advances with simulation, not rendering.
+- Target stun, root, slow and vulnerability keep their own slots as earlier effects expire. Colored borders drain during their final three seconds; the displayed remaining time stays authoritative. This does not fabricate a total duration for an effect first observed mid-way. Timed player protection/discipline effects receive the same expiration treatment; absorption amounts are not treated as seconds.
+- Successful enemy interruption uses a short, class-colored broken seal: Warrior shear cuts, Scout narrow cuts, Mage displaced arcane planes and Priest a liturgical seal/axial ray. It consumes the existing accepted event and expires within 0.48 seconds, using at most 240 submitted vertices per interrupt in the regression capture. It does not change damage, cooldowns, target selection or attack timing.
+- Native screenshot review exposed cast-name/counterplay text colliding with target status timers. Those captions now sit below the cast bar. Ability card bottom padding and numeric precision were also corrected after reviewing 960x600 and 1280x720 captures; new captions have Russian translations.
+
+Verification: all six affected suites pass in Debug and Release: Localization, CharacterSelection, CombatEffects, VfxMaterials, Interface and CombatHud. Both native RPGNative smoke runs pass device/shaders, fullscreen restoration, resize, world/UI rendering and PNG capture. Scoped whitespace checks pass. Logs are in `build-cast-readability/`; captures live in each configuration's `character-selection-check/`, `combat-hud-review/` and `vfx-material-review/` directories. The final creation cards and target-result HUD were visually inspected after correcting the observed padding/translation/caption overlap issues. See `progress.md` for timings and the remaining manual acceptance limits.
+
+Remaining acceptance: review these short events in full-speed crowded combat and the four-class creation flow. Reference-level art, authored appearance variety, animation fidelity, raid-scale gameplay and complete visual/UI parity remain unfinished. These interface/effect changes do not close those requirements.
+
 ## Ability gestures and creation rehearsals (2026-11-10)
 
 Revisited the creation and raid overview sheets, then decoded additional
@@ -19,15 +38,20 @@ not complete playback or audio analysis. Evidence is under
   elevated and directed gestures. Both gameplay and the creation stage pass
   the actual ability identity to the controller. Existing accepted attack,
   damage, projectile and cooldown clocks remain authoritative.
-- Staff support now yields to an open casting hand during preparation and
-  recovery. Previously a fully weighted staff stroke could pin that hand back
-  to the shaft and erase its spell gesture. Weapon hand attachment and fixed
+  Broad heavy invocations gather earlier, leaving a longer projection path
+  before the unchanged release; they no longer cram the added travel into the
+  final third of preparation.
+- Staff/scepter weapon clips retain the weapon arm while free-hand invocation
+  channels remain active, with reduced additive arm/torso travel. Previously
+  full stroke weight suppressed every additive action channel. Staff support
+  now also yields to the open casting hand during preparation and recovery
+  instead of pinning it back to the shaft. Weapon hand attachment and fixed
   limb lengths are retained.
-- Corrected two wrist discontinuities: partially opening a nearly vertical
-  free hand could interpolate through a full revolution, and projecting the
-  palm direction onto the finger plane could flip when the two aligned.
-  Signed elevation, a smooth downward-pole guard and an explicit orthonormal
-  roll frame preserve continuous orientation.
+- Replaced wrapped wrist-angle interpolation with a forearm-to-casting vector
+  path through a forward opening arc. Partially open hands no longer scale a
+  nearly full revolution when passing a vertical/lateral reach. Palm roll is
+  built in an explicit orthonormal frame rather than projecting a blended
+  palm reference that could align with the finger direction.
 - Priest preparation distinguishes paired converging streams, six elevated
   sanctuary ribs and a narrow guiding ray. Arcane preparation adds orbiting
   facets around the solved focus. These use existing materials and actual
@@ -42,6 +66,19 @@ not complete playback or audio analysis. Evidence is under
 No source models, facial data, sound assets or save format were changed by this
 pass. Concurrent authored-motion edits are separate. Full-speed perception,
 crowded combat, final art/choreography and 1:1 recording fidelity remain open.
+Native review images are `build-class-choreography/priest-invocation.png` and
+`mage-meteor.png`; these are engine captures, not mockups. Start
+`build-learning-review/release/RPGNative.exe`, open character creation, select
+Mage or Priest and enter the Arts view to inspect/repeat each gesture.
+
+Validation: eight affected suites pass in Release and Debug (action clips,
+character selection, hands/skinning, combat release, casting effects, interface
+and localization). The new Debug sweep exceeded the prior 45-second test cap;
+its allowance is now 120 seconds, with all numerical assertions preserved.
+The final action/creation follow-up passes, as do native RPGNative startup,
+fullscreen restoration, resize and world/UI captures in both configurations.
+See `build-class-choreography/tests-accepted-{release,debug}.log`, the final
+`tests-followup-{release,debug}.log` and `smoke-{release,debug}.png.log`.
 
 ## Class inspection, stage changes and elemental aftermath (2026-11-10)
 

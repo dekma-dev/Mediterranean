@@ -1944,3 +1944,7 @@
 {"Demonstration complete", "Демонстрация завершена"},
 {"Repeat the selected art without learning it or changing your character.", "Повторить выбранное умение, не изучая его и не изменяя персонажа."},
 {"Stop the demonstration and return smoothly to the ready stance.", "Остановить демонстрацию и плавно вернуться в стойку готовности."},
+{"Cast stopped", "Подготовка прекращена"},
+{"Range", "Дальность"},
+{"Click to demonstrate this art", "Нажмите для демонстрации умения"},
+{"Preview only; learn abilities in the world.", "Только показ; умения изучаются в игре."},

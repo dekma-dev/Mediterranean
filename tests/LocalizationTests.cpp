@@ -25,6 +25,8 @@ int main() try {
   }
   check(Translate("2 talent points available")=="2 очк. вех доступно");
   check(Translate("Casting / 1.5s")=="Применение / 1.5с");
+  for(const char* caption:{"Range","Cast stopped","Click to demonstrate this art","Preview only; learn abilities in the world."})
+    check(Translate(caption)!=caption);
   check(Translate("Level 10  /  Warrior")=="Уровень 10  /  Воин");
   const auto translated=[](const char* value){return !*value || Translate(value)!=value;};
   for(int id=0;id<int(rpg::ClassId::Count);++id) {

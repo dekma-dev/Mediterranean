@@ -184,6 +184,44 @@ void MajorContact(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 p,float a
  }
 }
 }
+void Interrupt(Renderer& r,const rpg::CombatVisualEvent& e,float age) {
+ if(e.kind!=K::Interrupt || !std::isfinite(age+e.position.x+e.position.z+e.height+e.facing) || age<0 || age>=.48f)return;
+ const bool melee=e.school==C::Warrior,arrow=e.school==C::Scout,holy=e.school==C::Priest;
+ const auto tint=melee?XMFLOAT3{1,.64f,.30f}:arrow?XMFLOAT3{.57f,.89f,.72f}:holy?XMFLOAT3{1,.88f,.48f}:XMFLOAT3{.72f,.46f,1};
+ const float fade=Envelope(age,.48f,.012f),flash=Envelope(age,.13f,.004f);
+ const XMFLOAT3 centre{e.position.x,e.height,e.position.z};
+ const float c=std::cos(e.facing),s=std::sin(e.facing);
+ const auto at=[&](float x,float y,float z=0.f){return Add(centre,{c*x+s*z,y,-s*x+c*z});};
+ const auto color=[&](float alpha){return XMFLOAT4{tint.x,tint.y,tint.z,alpha};};
+ // Break a chest-height seal into separated arcs. Its open centre leaves the
+ // victim readable; fragments follow the accepted impact plane, not the camera.
+ const float radius=.31f+combat::Smooth(age/.32f)*.48f;
+ for(int piece=0;piece<6;++piece) {
+   const float spin=piece*tau/6+age*(piece%2?.8f:-.8f);
+   const float offset=combat::Smooth(age/.22f)*.16f;
+   for(int n=0;n<4;++n) {
+     const float a=spin+n*.13f,b=a+.13f;
+     const auto point=[&](float angle,float edge){return at(std::cos(angle)*(radius+edge)+std::cos(spin)*offset,
+       std::sin(angle)*(radius+edge)+std::sin(spin)*offset,age*.18f);};
+     r.DrawEffectRibbon(point(a,-.014f),point(a,.014f),point(b,.014f),point(b,-.014f),color(fade*.72f));
+   }
+   const float travel=.24f+age*1.9f;
+   const auto tip=at(std::cos(spin)*travel,std::sin(spin)*travel-age*age*.7f,-age*.22f);
+   r.DrawEffectStreak(at(std::cos(spin)*(travel-.12f),std::sin(spin)*(travel-.12f)),tip,.016f,color(fade*.68f));
+ }
+ if(melee || arrow) {
+   const float reach=(melee?.78f:.60f)+age*.45f;
+   for(int side:{-1,1})r.DrawEffectStreak(at(-reach,side*reach*.58f),at(reach,-side*reach*.58f),melee?.035f:.017f,color(fade*.8f));
+   r.DrawEffectSprite(Art::Slash,centre,melee?.72f:.42f,.65f,-.7f,color(flash*.6f));
+ } else if(holy) {
+   r.DrawEffectSprite(Art::Seal,centre,.62f+age*.2f,.62f+age*.2f,-age*.8f,color(fade*.32f));
+   r.DrawEffectStreak(at(0,-.68f),at(0,.88f),.026f,{1,.95f,.75f,flash*.85f});
+   r.DrawEffectStreak(at(-.48f,.12f),at(.48f,.12f),.019f,color(flash*.78f));
+ } else {
+   for(int side:{-1,1})r.DrawEffectSprite(Art::Arcane,at(side*age*.8f,0),.42f,.66f,side*(.2f+age*1.5f),color(fade*.44f));
+ }
+ r.DrawEffectSprite(Art::Sparks,centre,.33f,.33f,e.facing,{1,.94f,.83f,flash*.85f});
+}
 float ResidueLifetime(ResidueKind kind) {
  switch(kind){case ResidueKind::Ember:return 3.2f;case ResidueKind::Frost:case ResidueKind::Thermal:return 2.8f;
  case ResidueKind::Holy:return 1.8f;case ResidueKind::Arcane:return 1.7f;default:return 0;}

@@ -324,6 +324,18 @@ struct Canvas {
   for (float from=0;from<end;from+=.09817477f)
    Triangle(center,edge(from),edge(std::min(end,from+.09817477f)),{.006f,.012f,.025f,.70f});
  }
+ void ExpiryBorder(Rect a,float seconds,Color color) {
+  if(!std::isfinite(seconds)||seconds<=0)return;
+  // This explicitly marks the final three seconds, not an invented full
+  // duration for a debuff first observed halfway through its lifetime.
+  float left=std::clamp(seconds/3.f,0.f,1.f)*2*(a.w+a.h);
+  if(seconds<3)color.w*=.65f+.35f*std::cos(seconds*9.f);
+  const Point corners[]={{a.x,a.y},{a.x+a.w,a.y},{a.x+a.w,a.y+a.h},{a.x,a.y+a.h},{a.x,a.y}};
+  for(int edge=0;edge<4 && left>0;++edge) {
+   const auto p=corners[edge],q=corners[edge+1];const float length=edge%2?a.h:a.w,t=std::min(1.f,left/length);
+   Line(p.x,p.y,p.x+(q.x-p.x)*t,p.y+(q.y-p.y)*t,1.5f,color);left-=length;
+  }
+ }
 };
 std::string ItemTypeLabel(const rpg::ItemInfo& info) {
  return info.slot==rpg::GearSlot::Weapon?std::string(info.type)+(info.id==Item::Watchguard?" / Uncommon":" / Common"):info.type;
@@ -743,6 +755,27 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
    c.Wrap(356,162,588,selection.Notice(),14,gold,2);
  }
  const auto hint=selection.Hint();const char* title=nullptr;const char* description=nullptr;
+ if(!customize && selection.CallingScreen()==CharacterSelection::CallingView::Arts && hint>=C::Art0 && hint<=C::Art13) {
+   const int ability=CharacterSelection::previewArts[int(hint)-int(C::Art0)];
+   const auto spell=hero.Spell(ability);const auto details=selection.InspectArt(ability);
+   const float x=332,y=std::clamp(CharacterSelection::Bounds(hint).y-90,166.f,230.f);
+   c.Frame({x,y,318,372},{.018f,.040f,.05f,.98f},{.54f,.55f,.36f,1});
+   AbilityArtwork(c,{x+14,y+15,46,46},ability,hero.Class());
+   c.FitText(x+70,y+16,232,spell.name,20,gold);
+   c.Text(x+70,y+43,"Lv. "+std::to_string(rpg::SpellLevel(ability)),11,ink);
+   c.Line(x+14,y+72,x+304,y+72,1,border);
+   c.Paragraph({x+14,y+84,290,34},spell.targeting,12,gold,2);
+   c.Paragraph({x+14,y+127,290,105},spell.description,13,ink,6);
+   const char* labels[]={details.ranged?"Preparation":"Wind-up","Recovery","Cooldown","Range"};
+   const float values[]={details.windup,details.recovery,hero.AbilityCooldown(ability),spell.range};
+   for(int n=0;n<4;++n) {
+     const float xx=x+14+(n%2)*149.f,yy=y+239+(n/2)*40.f;
+     c.Inset({xx,yy,141,36});c.Text(xx+7,yy+4,labels[n],11,muted);
+     c.Text(xx+7,yy+18,Number(std::round(values[n]*100.f)/100.f)+(n==3?" m":" s"),13,ink);
+   }
+   c.FitText(x+14,y+329,290,"Click to demonstrate this art",12,gold);
+   c.FitText(x+14,y+346,290,"Preview only; learn abilities in the world.",11,muted);
+ }
  if(!customize && hint>=C::Class0 && hint<=C::Class10) {
    const auto id=rpg::ClassId(int(hint)-int(C::Class0));const auto& calling=rpg::DescribeClass(id);
    const auto style=rpg::ClassCombat(id);const auto anchor=CharacterSelection::Bounds(hint);
@@ -782,12 +815,14 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  struct StatusTip { std::string name,description,value; };
  std::vector<StatusTip> statusTips;
  const auto statusBadge=[&](float x,float y,int icon,const std::string& name,const std::string& description,
-     const std::string& value,bool harmful) {
+     const std::string& value,bool harmful,float remaining=0,int kind=-1) {
    const Rect rect{x,y,34,30};
    c.Frame(rect,dark,harmful?Color{.75f,.30f,.16f,1}:gold);
    PaintedIcon(c,{x+3,y+3,28,24},icon);
    c.RectFill({x+2,y+18,30,10},{.02f,.02f,.015f,.82f});
    c.Center(x+2,y+19,30,value,9,ink);
+   const Color accents[]={{.79f,.58f,1,1},{.43f,.86f,.84f,1},{.42f,.67f,1,1},{1,.49f,.30f,1}};
+   c.ExpiryBorder({x+2,y+2,30,26},remaining,kind>=0 && kind<4?accents[kind]:gold);
    regions_.push_back({rect,{Action::InspectStatus,int(statusTips.size())},false});
    statusTips.push_back({name,description,value});
  };
@@ -1007,14 +1042,14 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  if(s.Barrier()>0) statusBadge(ux+58+playerStatus++*39,statusY,17,"Protective ward",
    "Absorbs incoming damage. The number is remaining protection, not seconds.",Number(s.Barrier()),false);
  if(s.EvasionSeconds()>0) statusBadge(ux+58+playerStatus++*39,statusY,22,"Evasion",
-   "Evades the next incoming hit while this effect lasts.",Seconds(s.EvasionSeconds())+"s",false);
+   "Evades the next incoming hit while this effect lasts.",Seconds(s.EvasionSeconds())+"s",false,s.EvasionSeconds());
  if(s.EmpoweredReady()) statusBadge(ux+58+playerStatus++*39,statusY,24,"Full reserve",
    "Your class reserve is full. Spend it with a heavy attack or signature.","Ready",false);
  if(rpg::HasDiscipline(s.Class())) {
    const auto mask=s.ElementMask();const int elements=int(bool(mask&1))+int(bool(mask&2))+int(bool(mask&4));
    statusBadge(ux+58+playerStatus++*39,statusY,s.Class()==rpg::ClassId::Warrior?18:s.Class()==rpg::ClassId::Scout?22:24,
      rpg::DisciplineName(s.Class()),rpg::DisciplineDescription(s.Class()),
-     s.ConfluenceCast()?"Active":s.DisciplineSeconds()>0?Seconds(s.DisciplineSeconds())+"s":elements?std::to_string(elements)+" / 3":"-",false);
+     s.ConfluenceCast()?"Active":s.DisciplineSeconds()>0?Seconds(s.DisciplineSeconds())+"s":elements?std::to_string(elements)+" / 3":"-",false,s.DisciplineSeconds());
  }
  if (s.TargetActor()) {
   const auto& target=*s.TargetActor();
@@ -1038,12 +1073,21 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Gradient({cast.x+3,cast.y+3,189*std::clamp(1-target.windup/target.WindupDuration(),0.f,1.f),13},
      target.Interruptible()?Color{.76f,.42f,.11f,1}:Color{.53f,.35f,.72f,1},{.22f,.12f,.08f,1});
    c.Center(cast.x,cast.y+3,cast.w,std::string(target.AttackName())+" / "+Seconds(target.windup)+"s",11,ink);
-   c.Center(cast.x-30,cast.y-14,cast.w+60,std::string(target.Enraged()?"ENRAGED - ":"")+target.Counterplay(),10,ink);
+   c.Center(cast.x-30,cast.y+cast.h+3,cast.w+60,std::string(target.Enraged()?"ENRAGED - ":"")+target.Counterplay(),10,ink);
    regions_.push_back({cast,{},false});
   }
-  int badge=0;
-  for(const auto& effect:TargetStatusEffects(target)) statusBadge(tx+10+badge++*39,
-    ty+CombatHudLayout::statusOffset,effect.icon,effect.name,effect.description,Seconds(effect.seconds)+"s",true);
+  else if(targetCastReceipt_.actor==target.id && targetCastReceipt_.Opacity()>0) {
+   using R=TargetCastReceipt::Result;const auto result=targetCastReceipt_.result;const float fade=targetCastReceipt_.Opacity();
+   const Rect cast{tx+8,ty+CombatHudLayout::castOffset,195,19};
+   const Color color=result==R::Interrupted?Color{.90f,.28f,.18f,fade}:result==R::Released?Color{.92f,.71f,.34f,fade}:Color{.44f,.50f,.53f,fade};
+   c.Skin(cast,6,{1,1,1,fade});
+   c.Gradient({cast.x+3,cast.y+3,189*(result==R::Released?1:targetCastReceipt_.progress),13},color,{color.x*.3f,color.y*.3f,color.z*.3f,fade});
+   c.Center(cast.x+4,cast.y+3,cast.w-8,result==R::Interrupted?"Interrupted":result==R::Released?"Released":"Cast stopped",11,{1,.94f,.80f,fade});
+   c.FitText(cast.x,cast.y+cast.h+3,cast.w,targetCastReceipt_.name,10,{.91f,.84f,.69f,fade});
+   regions_.push_back({cast,{},false});
+  }
+  for(const auto& effect:TargetStatusEffects(target)) statusBadge(tx+10+effect.slot*39,
+    ty+CombatHudLayout::statusOffset,effect.icon,effect.name,effect.description,Seconds(effect.seconds)+"s",true,effect.seconds,effect.slot);
  }
  if(s.FriendlyTarget()>=0) {
   const int npc=s.FriendlyTarget();const float tx=anchors.target.x,ty=anchors.target.y;

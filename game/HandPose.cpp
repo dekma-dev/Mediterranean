@@ -57,7 +57,7 @@ HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool 
     // vector space. Scaling a wrapped elevation angle made the wrist spin
     // at both vertical and lateral reaches. A small forward arc gives the
     // palm a natural path as it opens from a hanging arm.
-    auto lifted=forearm*(1-reach)+up*reach+forward*(1.4f*reach*(1-reach));
+    auto lifted=forearm*(1-reach)+up*reach+forward*(2.f*reach*(1-reach));
     if(XMVectorGetX(XMVector3LengthSq(lifted))<.0001f)lifted=forward;
     const auto fingerAxis=XMVector3Normalize(lifted);
     auto radialAxis=right-fingerAxis*XMVector3Dot(right,fingerAxis);

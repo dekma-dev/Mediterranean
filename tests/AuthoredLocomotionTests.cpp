@@ -24,6 +24,14 @@ float Difference(const playerclips::Frame& a,const playerclips::Frame& b){
 void LibraryChecks(){
   const auto bytes=playerclips::EmbeddedBytes();const auto clips=playerclips::Decode(bytes);
   Check(clips.size()==57&&bytes.size()<2*1024*1024,"Fifty-one authored actions and six compatibility tracks must fit the motion budget");
+  for(auto clip:{playerclips::Clip::RunForward,playerclips::Clip::RunBackward,playerclips::Clip::RunLeft,playerclips::Clip::RunRight,
+      playerclips::Clip::SwordRun,playerclips::Clip::SwordRunBackward,playerclips::Clip::SwordRunLeft,playerclips::Clip::SwordRunRight,
+      playerclips::Clip::StaffRun,playerclips::Clip::StaffRunBackward,playerclips::Clip::StaffRunLeft,playerclips::Clip::StaffRunRight,
+      playerclips::Clip::BowRun,playerclips::Clip::BowRunBackward,playerclips::Clip::BowRunLeft,playerclips::Clip::BowRunRight}) {
+    const auto& track=clips[unsigned(clip)];const auto native=animation::TravelGait(track.speed);
+    Check(track.speed>5.f&&std::abs(track.duration-native.period)<1e-5f&&
+      std::abs(track.duration*track.speed-native.stride)<1e-5f,"Authored run stride disagrees with native travel distance");
+  }
   for(unsigned i=4;i<12;++i){
     const auto clip=playerclips::Clip(i);
     Check(Difference(playerclips::Sample(clip,-.000001f),playerclips::Sample(clip,.000001f))<.0001f,"Gait loop seam");
@@ -107,11 +115,11 @@ void NaturalGaitChecks(){
     }
   }
   const double covariance=product/count-(footSum/count)*(handSum/count);
-  std::cout<<"Natural gait: compression "<<compression<<", running width "<<footWidth<<", wrist alignment "<<palmAgreement<<", arm/leg covariance "<<covariance<<'\n';
+  std::cout<<"Natural gait: compression "<<compression<<", mean hip "<<hipSum/count<<", running width "<<footWidth<<", wrist alignment "<<palmAgreement<<", arm/leg covariance "<<covariance<<'\n';
   Check(palmAgreement>.99f,"Free hand reflected the backswing and folded at the wrist");
   // A loaded contact is lower than flight. Bound the mean separately so a
   // short compression can absorb contact without authorizing a constant squat.
-  Check(compression<.18f&&hipSum/count>-.075,"Steady run collapsed into a persistent crouch");
+  Check(compression<.12f&&hipSum/count>-.045,"Steady run collapsed into a persistent crouch");
   Check(highestHip>.005f&&highestHip+compression>.08f,"Pelvis smoothing erased the authored flight rise");
   Check(footWidth<.31f,"Forward running retained the wide standing stance");
   Check(covariance<-.002,"Running arm failed to oppose its same-side leg");
@@ -520,7 +528,7 @@ void EquippedFlightChecks(){
         Check(std::abs(Distance(pose.arms[side].joint,pose.arms[side].end)-CharacterPose::forearm)<.0001f,"Equipped flight stretched the forearm");
         if(initialized){
           const float step=Distance(previous.arms[side].end,pose.arms[side].end);
-          if(step>.012f)std::cout<<"Flight wrist step "<<step<<", equipment "<<unsigned(equipment)<<", side "<<side<<", tick "<<tick<<'\n';
+          if(step>.006f)std::cout<<"Flight wrist step "<<step<<", equipment "<<unsigned(equipment)<<", side "<<side<<", tick "<<tick<<", air "<<state.pose.air<<", landing "<<state.pose.landing<<'\n';
           worstHand=std::max(worstHand,step);
         }
       }
@@ -542,7 +550,7 @@ void EquippedFlightChecks(){
     }
   }
   std::cout<<"Equipped jump/landing per-ms hand "<<worstHand<<", tip "<<worstTip<<", shield "<<worstShield<<" m\n";
-  Check(worstHand<.012f&&worstTip<.018f&&worstShield<.012f,"Equipped jump/landing snapped an attachment");
+  Check(worstHand<.006f&&worstTip<.018f&&worstShield<.012f,"Equipped jump/landing snapped an attachment");
   // Rotate a solved forearm while keeping the torso fixed. The shield must
   // follow that exact rotation instead of retaining the old chest orientation.
   auto pose=BuildCharacterPose(0,0,true,{});const auto before=ShieldFrame(pose);

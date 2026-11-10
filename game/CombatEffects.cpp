@@ -447,6 +447,7 @@ void CombatEffects::Render(Renderer& renderer,const castfx::Attachments* caster)
     }
     if(e.kind==K::DisciplineReady || e.kind==K::DisciplineSpent){castfx::DisciplinePulse(renderer,e,burst.age,caster);continue;}
     if(e.kind==K::BarrierHit) { classfx::BarrierContact(renderer,e,burst.age);continue; }
+    if(e.kind==K::Interrupt && e.actor!=0) {spellvfx::Interrupt(renderer,e,burst.age);continue;}
     if(e.kind==K::Hit || e.kind==K::HeavyHit) {
       classfx::Impact(renderer,e,burst.age);continue;
     }

@@ -67,16 +67,6 @@ void ClipsAndRig() {
             const auto hand=BuildHandPose(pose,unsigned(side),true,shield,pose.handCast);
             Check(std::abs(XMVectorGetX(XMMatrixDeterminant(XMLoadFloat4x4(&hand.frame)))-1)<.00002f,"Action hand frame lost orientation/volume");
             const auto finger=hand.Point(hand.fingers[0].joints[3]);
-            if(id==7 && clip==ActionClip::Signature && layer==0 && !shield && !side && tick>=113 && tick<=116) {
-              const auto forearm=XMVector3Normalize(XMLoadFloat3(&arm.end)-XMLoadFloat3(&arm.joint));
-              const auto u=pose.UpperDirection({0,1,0}),f=pose.UpperDirection({0,0,1}),r=pose.UpperDirection({1,0,0});
-              std::cout<<"Wrist diagnostic "<<tick<<" cast "<<pose.handCast<<" v/f/r "
-                <<XMVectorGetX(XMVector3Dot(forearm,XMLoadFloat3(&u)))<<'/'
-                <<XMVectorGetX(XMVector3Dot(forearm,XMLoadFloat3(&f)))<<'/'
-                <<XMVectorGetX(XMVector3Dot(forearm,XMLoadFloat3(&r)))<<" elbow "
-                <<arm.joint.x<<'/'<<arm.joint.y<<'/'<<arm.joint.z<<" wrist "
-                <<arm.end.x<<'/'<<arm.end.y<<'/'<<arm.end.z<<'\n';
-            }
             if(tick && Distance(previous[side],finger)>largestHandStep) {
               largestHandStep=Distance(previous[side],finger);
               handCase=std::to_string(id)+"/"+std::to_string(int(clip))+"/"+std::to_string(layer)+"/"+std::to_string(shield)+"/"+std::to_string(tick)+"/"+std::to_string(side);
@@ -200,6 +190,7 @@ void Integration() {
   }
 }
 void ArtChoreography() {
+  float largestArtStep=0;std::string artCase;
   for(auto id:{ClassId::Mage,ClassId::Priest}) {
     const auto abilities=id==ClassId::Mage?std::vector<int>{0,1,5,6,8,9,10,12,13,14}:std::vector<int>{0,1,5,6,7};
     for(int ability:abilities) {
@@ -207,11 +198,17 @@ void ArtChoreography() {
       const auto clip=ability==5?ActionClip::Technique:ability==6?ActionClip::Signature:ability==7?ActionClip::Opening:heavy?ActionClip::Heavy:ActionClip::Basic;
       const auto duration=ActionDuration(clip);const float release=combat::StrokeStart(heavy);
       Check(Size(SampleAction(id,clip,0,ability))==0 && Size(SampleAction(id,clip,duration,ability))==0,"Art endpoints changed locomotion");
+      for(bool authored:{false,true}) {
       ActionChannels previous{};std::array<XMFLOAT3,2> previousFingers{};
       for(float t=0;t<duration;t+=.001f) {
         const auto sample=SampleAction(id,clip,t,ability);
         Check(std::isfinite(Size(sample)) && Size(sample-previous)<.10f,"Art gesture discontinuity");previous=sample;
         Sample motion;motion.action=sample;
+        if(authored) {
+          motion.authoredGait=true;motion.authoredEquipment=playerclips::Equipment::Staff;
+          motion.authoredStrikeWeight=1;motion.authoredStrikeHeavy=heavy;motion.authoredStrikePhase=.4f;
+          motion.authoredStrike=playerclips::Sample(heavy?playerclips::Clip::StaffSweep:playerclips::Clip::StaffThrust,.4f);
+        }
         const auto rig=BuildCharacterPose(0,0,false,motion,rpg::WeaponFor(id).form);
         for(const auto& arm:rig.arms)Check(std::abs(Distance(arm.root,arm.joint)-CharacterPose::upperArm)<.00001f &&
           std::abs(Distance(arm.joint,arm.end)-CharacterPose::forearm)<.00001f,"Art stretched an arm");
@@ -219,9 +216,13 @@ void ArtChoreography() {
           const auto hand=BuildHandPose(rig,side,true,false,rig.handCast);
           Check(std::abs(XMVectorGetX(XMMatrixDeterminant(XMLoadFloat4x4(&hand.frame)))-1)<.00002f,"Art wrist lost its frame");
           const auto finger=hand.Point(hand.fingers[0].joints[3]);
-          if(t>0)Check(Distance(finger,previousFingers[side])<.012f,"Art wrist snapped during an ability gesture");
+          if(t>0 && Distance(finger,previousFingers[side])>largestArtStep) {
+            largestArtStep=Distance(finger,previousFingers[side]);
+            artCase=std::to_string(int(id))+"/"+std::to_string(ability)+"/"+std::to_string(t)+"/"+std::to_string(side)+"/"+std::to_string(authored);
+          }
           previousFingers[side]=finger;
         }
+      }
       }
       for(int hz:{30,60,144}) {
         ActionController action;float elapsed=0;const float until=release*.8f;
@@ -240,6 +241,8 @@ void ArtChoreography() {
     SampleAction(ClassId::Mage,ActionClip::Heavy,.19f,1))>.12f,"Mage schools still share one gesture");
   Check(Size(SampleAction(ClassId::Priest,ActionClip::Heavy,.19f,5)-SampleAction(ClassId::Priest,ActionClip::Heavy,.19f,6))>.2f,
     "Priest prayer paths still share one gesture");
+  std::cout<<"Maximum 1 ms ability fingertip displacement: "<<largestArtStep<<" at "<<artCase<<'\n';
+  Check(largestArtStep<.012f,"Art wrist snapped during an ability gesture");
   for(int ability:{1,5,9,13,14}) {
     Sample sample;sample.authoredGait=true;sample.authoredEquipment=playerclips::Equipment::Staff;
     sample.authoredStrikeWeight=1;sample.authoredStrikeHeavy=true;sample.authoredStrikePhase=.4f;
@@ -247,6 +250,7 @@ void ArtChoreography() {
     sample.action=SampleAction(ClassId::Mage,ActionClip::Heavy,.30f,ability);
     const auto pose=BuildCharacterPose(0,0,false,sample,rpg::WeaponFor(ClassId::Mage).form);
     Check(pose.staffGripWeight<.01f,"Staff support grip erased the open casting gesture");
+    Check(pose.handCast>.7f,"Authored stroke suppressed the free casting hand");
   }
 }
 void Captures() {

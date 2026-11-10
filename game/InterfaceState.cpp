@@ -6,10 +6,10 @@ namespace ui {
 std::vector<StatusEffect> TargetStatusEffects(const rpg::Enemy& enemy) {
   std::vector<StatusEffect> result;
   if(enemy.health<=0) return result;
-  if(enemy.stunned>0) result.push_back({"Stunned","Unable to act until the stun expires.",24,enemy.stunned});
-  if(enemy.rooted>0) result.push_back({"Rooted","Movement is prevented while the root lasts.",22,enemy.rooted});
-  if(enemy.snared>0) result.push_back({"Snared","Movement speed is reduced while the snare lasts.",22,enemy.snared});
-  if(enemy.exposed>0) result.push_back({"Exposed","Incoming attack damage is increased by 25%.",24,enemy.exposed});
+  if(enemy.stunned>0) result.push_back({"Stunned","Unable to act until the stun expires.",24,enemy.stunned,0});
+  if(enemy.rooted>0) result.push_back({"Rooted","Movement is prevented while the root lasts.",22,enemy.rooted,1});
+  if(enemy.snared>0) result.push_back({"Snared","Movement speed is reduced while the snare lasts.",22,enemy.snared,2});
+  if(enemy.exposed>0) result.push_back({"Exposed","Incoming attack damage is increased by 25%.",24,enemy.exposed,3});
   return result;
 }
 std::string Interface::SaveHotbars() const {

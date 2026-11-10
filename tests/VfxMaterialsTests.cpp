@@ -122,6 +122,30 @@ void Lifetimes(Renderer& r,const std::filesystem::path& out){
   fx.Reset();Check(fx.BurstCount()==0 && fx.ResidueCount()==0,"Reset retained VFX");
  }
 }
+void InterruptChecks(Renderer& r,const std::filesystem::path& out) {
+ Pixels previous;
+ for(auto school:{ClassId::Warrior,ClassId::Mage,ClassId::Scout,ClassId::Priest}) {
+  CombatVisualEvent event;event.kind=K::Interrupt;event.actor=100;event.school=school;event.height=1.3f;event.facing=.3f;
+  Pixels reference;
+  for(int hz:{30,60,144}) {
+   CombatEffects effects;effects.Emit(event);float time=0;
+   while(time<.16f-1e-6f){const float dt=std::min(1.f/hz,.16f-time);effects.Advance(dt);time+=dt;}
+   r.BeginFrame();r.SetCamera({1.8f,2.1f,-4},{0,1.3f,0});effects.Render(r);
+   Check(r.EffectVertices()>150 && r.EffectVertices()<=240,"Interrupt fracture lost geometry or exceeded its 240-vertex budget");
+   const auto pixels=Capture(r,out/("interrupt-"+std::to_string(int(school))+"-"+std::to_string(hz)+".png"));
+   if(hz==30)reference=pixels;else Check(Difference(reference,pixels)<.03,"Interrupt depends on refresh rate");
+   for(int n=0;n<10;++n)effects.Advance(.05f);
+   r.BeginFrame();effects.Render(r);Check(r.EffectVertices()==0 && effects.BurstCount()==0 && r.EndFrame(false),"Interrupt fracture never drains");
+  }
+  if(!previous.empty())Check(Difference(previous,reference)>.015,"Different classes share an identical interrupt effect");
+  previous=reference;
+  for(float age:{-.1f,.48f,std::numeric_limits<float>::quiet_NaN()}) {
+   r.BeginFrame();spellvfx::Interrupt(r,event,age);Check(r.EffectVertices()==0 && r.EndFrame(false),"Invalid or expired interrupt draws geometry");
+  }
+  event.kind=K::CastStart;r.BeginFrame();spellvfx::Interrupt(r,event,.1f);
+  Check(r.EffectVertices()==0 && r.EndFrame(false),"Preparation fabricated a successful interrupt");
+ }
+}
 void AftermathChecks(Renderer& r,const std::filesystem::path& out) {
  const auto advance=[](CombatEffects& fx,float duration,int hz){float t=0;while(t<duration-1e-6f){const float dt=std::min(1.f/hz,duration-t);fx.Advance(dt);t+=dt;}};
  for(int ability:{1,5,13,14,6}) {
@@ -230,6 +254,6 @@ int main(int argc,char** argv){try{
  Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),960,600,L"VFX material review",false),"Native window");
  Renderer r;Check(r.Initialize(window.GetHandle(),960,600),"Native renderer");
  if(argc>2 && std::string(argv[2])=="--workload"){Workload(r,out);std::cout<<"PASS: bounded native VFX workload; see workload.txt.\n";return 0;}
- Rendering(r,out);Lifetimes(r,out);AftermathChecks(r,out);World(r,out);Check(r.ValidateDebugMessages(),"Native VFX warnings");
+ Rendering(r,out);Lifetimes(r,out);InterruptChecks(r,out);AftermathChecks(r,out);World(r,out);Check(r.ValidateDebugMessages(),"Native VFX warnings");
  std::cout<<"PASS: original atlas, alpha ordering, soft depth, fixed budgets, lifecycle, equal-time contacts and actual world attacks. Atlas bytes: "<<r.EffectTextureBytes()<<'\n';
  }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

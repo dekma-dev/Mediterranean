@@ -64,6 +64,8 @@ public:
   float PreviewAction() const { return actionTime_; }
   struct ArtTiming { float progress=0,release=0,follow=0; const char* phase="Ready to demonstrate"; };
   ArtTiming PreviewTiming() const;
+  struct ArtDetails {float windup=0,recovery=0;bool ranged=false;};
+  ArtDetails InspectArt(int ability) const;
   int PreviewAbility() const { return previewAbility_; }
   const animation::ActionChannels& PreviewPose() const { return previewController_.pose; }
   animation::Sample PreviewBody() const;
@@ -149,6 +151,7 @@ private:
   void ResetPreview();
   void QueueIntroduction();
   float PreviewRate() const;
+  float ArtRate(int ability) const;
   float PreviewDuration() const;
   float PreviewRelease() const;
   bool PreviewHeavy() const { return previewAbility_!=0 && previewAbility_!=7 && previewAbility_!=12; }

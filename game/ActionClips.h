@@ -71,7 +71,12 @@ inline ActionChannels SampleAction(rpg::ClassId id,ActionClip clip,float seconds
   const bool restore=clip==ActionClip::Restore,heavy=clip==ActionClip::Heavy || clip==ActionClip::Technique || clip==ActionClip::Signature;
   if(restore && id==rpg::ClassId::Warrior) return {}; // Existing Mend remains unchanged.
   const float release=restore?.18f:RangedClass(id)?combat::StrokeStart(heavy):combat::Contact(heavy);
-  const float prepare=release*(restore || heavy?.65f:.40f),follow=restore?.34f:release+.09f;
+  // Broad invocations gather earlier so their projection has time to travel;
+  // the authoritative release remains unchanged instead of whipping the
+  // whole gesture through the last third of its preparation window.
+  const bool invocation=!restore && heavy && rpg::ValidSpell(ability) &&
+    (id==rpg::ClassId::Mage || id==rpg::ClassId::Priest);
+  const float prepare=release*(invocation?.50f:restore || heavy?.65f:.40f),follow=restore?.34f:release+.09f;
   const std::array<float,5> times{0,prepare,release,follow,ActionDuration(clip)};
   auto ready=definition.prepare,cast=definition.release,settle=definition.follow;
   if(restore) {

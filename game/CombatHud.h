@@ -63,6 +63,46 @@ struct CastReceipt {
   }
 };
 
+// Selected enemy feedback is keyed by actor and accepted events. Losing sight
+// of a still-running windup is not an interrupt, and a missed attack still
+// releases. Rendering cannot invent a success from an empty timer.
+struct TargetCastReceipt {
+  enum class Result { None, Released, Interrupted, Stopped };
+  rpg::EntityId actor=0;
+  const char* name="";
+  Result result=Result::None;
+  float age=1,progress=0;
+  bool pending=false;
+  void Reset(){*this={};}
+  float Opacity() const {
+    const float life=result==Result::Interrupted?.85f:result==Result::Stopped?.45f:.35f;
+    return result==Result::None?0:1-std::clamp(age/life,0.f,1.f);
+  }
+  void Update(float dt,const rpg::Simulation& state) {
+    const auto* target=state.TargetActor();
+    if(!std::isfinite(dt)||dt<=0||dt>.25f||state.Health()<=0||!target||target->health<=0||target->kind==rpg::EnemyKind::Dummy){Reset();return;}
+    if(actor!=target->id){Reset();actor=target->id;}
+    age+=dt;
+    if(state.VisibleEnemyCast(*target)) {
+      name=target->AttackName();pending=true;result=Result::None;
+      progress=std::clamp(1-target->windup/target->WindupDuration(),0.f,1.f);return;
+    }
+    // Off-screen/occluded windups may continue. Do not keep a misleading meter.
+    if(target->windup>0){pending=false;result=Result::None;return;}
+    Result event=Result::None;float elapsed=0;
+    for(std::size_t n=0;n<state.VisualEventCount();++n) {
+      const auto& e=state.VisualEvents()[n];if(e.actor!=actor)continue;
+      using K=rpg::CombatVisualKind;
+      if(e.kind==K::Interrupt){event=Result::Interrupted;elapsed=e.elapsed;break;}
+      if(e.kind==K::EnemySwing||e.kind==K::EnemyLance||e.kind==K::EnemyQuake||e.kind==K::EnemyTempest||
+         e.kind==K::EnemyExecution||e.kind==K::BeastBite||e.kind==K::BeastCharge){event=Result::Released;elapsed=e.elapsed;}
+    }
+    if(event!=Result::None){if(!pending)name=target->AttackName();result=event;age=std::clamp(elapsed,0.f,dt);}
+    else if(pending){result=Result::Stopped;age=0;}
+    pending=false;if(Opacity()<=0)result=Result::None;
+  }
+};
+
 // Per ability, not per slot: rearranging icons cannot move the wrong receipt.
 // Rendering never advances these clocks or spends a spell.
 struct AbilityFeedback {

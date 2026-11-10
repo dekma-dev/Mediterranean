@@ -27,7 +27,7 @@ bool Owned(const rpg::Simulation& simulation,Item item);
 bool Equipped(const rpg::Simulation& simulation,Item item);
 bool CanUse(const rpg::Simulation& simulation,Item item);
 struct ItemSummary { std::string stats,comparison; float difference=0; };
-struct StatusEffect { const char* name; const char* description; int icon; float seconds; };
+struct StatusEffect { const char* name; const char* description; int icon; float seconds; int slot=0; };
 std::vector<StatusEffect> TargetStatusEffects(const rpg::Enemy& enemy);
 ItemSummary SummarizeItem(const rpg::Simulation& simulation,Item item);
 void ApplyItem(rpg::Command& command,const rpg::Simulation& simulation,Item item,int bagSlot=-1);
@@ -64,6 +64,7 @@ public:
   void Render(Renderer& renderer,const rpg::Simulation& simulation,float time,bool debug,float cameraYaw=0);
   void UpdateCombatFeedback(float dt,const rpg::Simulation& simulation) {
     castReceipt_.Update(dt,simulation);
+    targetCastReceipt_.Update(dt,simulation);
     abilityFeedback_.Update(dt,simulation);
     damageDirection_.Advance(dt,simulation.Health()>0);
     if(simulation.Health()<=0 || !std::isfinite(dt) || dt<=0 || dt>.25f) return;
@@ -73,8 +74,9 @@ public:
         damageDirection_.Hit(event.facing,std::clamp(event.elapsed,0.f,dt));
     }
   }
-  void ResetCombatFeedback() { playerHealth_.Reset();targetHealth_.Reset();damageDirection_.Reset();castReceipt_.Reset();abilityFeedback_.Reset(); }
+  void ResetCombatFeedback() { playerHealth_.Reset();targetHealth_.Reset();damageDirection_.Reset();castReceipt_.Reset();targetCastReceipt_.Reset();abilityFeedback_.Reset(); }
   const AbilityFeedback& AbilitySignals() const {return abilityFeedback_;}
+  const TargetCastReceipt& TargetCastSignal() const {return targetCastReceipt_;}
   bool CapturesMovement() const { return panel==Panel::Menu; }
   // Layouts are independent per class and saved with expedition settings.
   std::string SaveHotbars() const;
@@ -121,6 +123,7 @@ private:
   HealthTrail playerHealth_,targetHealth_;
   DamageDirection damageDirection_;
   CastReceipt castReceipt_;
+  TargetCastReceipt targetCastReceipt_;
   AbilityFeedback abilityFeedback_;
   std::array<std::array<int,hotbarSlots>,int(rpg::ClassId::Count)> hotbars_=[] {
     std::array<std::array<int,hotbarSlots>,int(rpg::ClassId::Count)> bars{};
