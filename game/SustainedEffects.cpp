@@ -1,5 +1,7 @@
 #include "game/SustainedEffects.h"
 #include "game/ClassEffects.h"
+#include "game/CastEffects.h"
+#include "game/ActorPresentation.h"
 #include "engine/Renderer.h"
 #include <algorithm>
 #include <cmath>
@@ -161,7 +163,7 @@ void SustainedEffects::Render(Renderer& r,const rpg::Simulation& s,float time,fl
     }
   }
 }
-void SustainedEffects::Warnings(Renderer& r,const rpg::Simulation& s){
+void SustainedEffects::Warnings(Renderer& r,const rpg::Simulation& s,const std::vector<presentation::Actor>* actors){
   if(s.Health()<=0)return;
   struct Warning {const rpg::Enemy* e=nullptr;float distance=0;bool threatens=false;};
   std::array<Warning,maxWarnings> chosen{};std::size_t count=0;
@@ -191,19 +193,15 @@ void SustainedEffects::Warnings(Renderer& r,const rpg::Simulation& s){
   const int fillSegments=count<=2?48:count<=4?24:12;
   for(std::size_t i=0;i<count && r.EffectVertices()+fillSegments*6+36<=detailLimit;++i){const auto& e=*chosen[i].e;
     const float progress=Unit(1-e.windup/e.WindupDuration());const bool quake=e.Boss() && e.bossAttack==0;
-    const bool disc=e.Boss() && e.bossAttack==1;const float span=quake?tau:e.HalfAngle()*2,start=quake?0:e.facing-e.HalfAngle();
+    const float span=quake?tau:e.HalfAngle()*2,start=quake?0:e.facing-e.HalfAngle();
     const auto c=e.Interruptible()?XMFLOAT4{1,.30f,.08f,.08f+progress*.09f}:XMFLOAT4{.72f,.30f,1,.08f+progress*.09f};
     for(int n=0;n<fillSegments;++n){const float a=start+span*n/fillSegments,b=start+span*(n+1)/fillSegments;
       const float inner=quake?rpg::Enemy::shockInner:.08f,outer=quake?rpg::Enemy::shockOuter:e.WarningReach();
       r.DrawEffectRibbon(Polar(e.position,a,inner),Polar(e.position,a,outer),Polar(e.position,b,outer),Polar(e.position,b,inner),c);
     }
-    // A rotating, rising charge belongs to the caster, never changes the safe area.
-    if(e.kind==rpg::EnemyKind::Wraith || e.Boss()){
-      for(int n=0;n<3;++n){const float a=progress*3+n*tau/3;
-        const auto at=Polar(e.position,a,.5f,quake?.14f: .38f+n*.38f+progress*.18f);
-        r.DrawEffectSprite(quake?Art::Dust:Art::Arcane,at,.24f+progress*.16f,quake?.18f:.31f,a,
-          quake?XMFLOAT4{.57f,.45f,.32f,progress*.34f}:disc?XMFLOAT4{.72f,.40f,1,progress*.48f}:XMFLOAT4{1,.48f,.25f,progress*.42f},quake);
-      }
+    if(actors && (e.kind==rpg::EnemyKind::Wraith || e.Boss())){
+      const auto actor=std::find_if(actors->begin(),actors->end(),[&](const presentation::Actor& a){return a.id==e.id;});
+      if(actor!=actors->end())castfx::PrepareEnemy(r,e,castfx::FromEnemy(e,*actor));
     }
   }
 }

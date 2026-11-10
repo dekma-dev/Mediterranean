@@ -1,6 +1,7 @@
 #pragma once
 #include <Windows.h>
 #include <array>
+#include <algorithm>
 #include <string>
 class Input {
 public:
@@ -15,10 +16,13 @@ public:
     float mouseX=0,mouseY=0;
     bool nativeText=false;
     std::string text;
+    bool nativeClipboard=false;
+    std::string clipboard;
   };
   void Update(HWND window,bool relativeMouse=false,float mouseX=0,float mouseY=0,const std::string& characters={}) {
     Frame frame; frame.focused=GetForegroundWindow()==window;
     frame.nativeText=true;frame.text=characters;
+    frame.nativeClipboard=true;
     frame.capsLock=(GetKeyState(VK_CAPITAL)&1)!=0;
     frame.relativeMouse=relativeMouse; frame.mouseX=mouseX; frame.mouseY=mouseY;
     for (int key=0;key<256;++key) frame.down[key]=(GetAsyncKeyState(key)&0x8000)!=0;
@@ -29,6 +33,7 @@ public:
   void Update(const Frame& frame) {
     const bool focused=frame.focused;capsLock_=frame.capsLock;
     nativeText_=frame.nativeText;characters_=focused && wasFocused_?frame.text:std::string{};
+    nativeClipboard_=frame.nativeClipboard;clipboard_=frame.clipboard;
     for (int key = 0; key < 256; ++key) {
       const bool down = focused && frame.down[key];
       pressed_[key] = wasFocused_ && down && !held_[key];
@@ -60,6 +65,25 @@ public:
   bool CapsLock() const { return capsLock_; }
   bool NativeText() const { return nativeText_; }
   const std::string& Characters() const { return characters_; }
+  // Called only by the focused editor on Ctrl+V. Test frames inject clipboard
+  // text; they never access the user's real clipboard.
+  std::string PasteText() const {
+    if(!nativeClipboard_)return clipboard_;
+    if(!Focused() || !OpenClipboard(nullptr))return {};
+    std::string result;
+    if(const auto handle=GetClipboardData(CF_UNICODETEXT)) {
+      if(const auto wide=static_cast<const wchar_t*>(GlobalLock(handle))) {
+        const auto capacity=std::min<std::size_t>(GlobalSize(handle)/sizeof(wchar_t),4096);
+        std::size_t length=0;while(length<capacity && wide[length])++length;
+        if(length) {
+          const int count=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,wide,int(length),nullptr,0,nullptr,nullptr);
+          if(count>0){result.resize(count);WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,wide,int(length),result.data(),count,nullptr,nullptr);}
+        }
+        GlobalUnlock(handle);
+      }
+    }
+    CloseClipboard();return result;
+  }
   bool Pressed(int key) const { return pressed_[key]; }
   bool Released(int key) const { return released_[key]; }
   float MouseX() const { return dx_; }
@@ -76,4 +100,6 @@ private:
   bool wasFocused_ = false, dragging_ = false,wasRelative_=false,capsLock_=false;
   bool nativeText_=false;
   std::string characters_;
+  bool nativeClipboard_=false;
+  std::string clipboard_;
 };

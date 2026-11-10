@@ -36,6 +36,34 @@ void CombatTextChecks() {
   for(int n=0;n<300 && !hit;++n){state.Update(.01f,{});for(const auto& entry:state.Feedback())if(entry.kind==rpg::FeedbackKind::Damage){hit=true;Check(entry.sequence>0,"Actual accepted hit did not receive stable presentation identity");}}
   Check(hit,"Combat number integration fixture never hit its target");
 }
+void AbilityFeedbackChecks(Renderer* renderer=nullptr,const std::filesystem::path& output={}) {
+ for(auto id:{rpg::ClassId::Warrior,rpg::ClassId::Mage,rpg::ClassId::Scout,rpg::ClassId::Priest})for(int hz:{30,60,144}) {
+  rpg::Simulation state;state.CreateCharacter(id,"Spell feedback");ui::Interface hud;
+  auto& enemy=const_cast<rpg::Enemy&>(state.Enemies()[0]);enemy.position=enemy.home={state.Player().x,state.Player().z+1.8f};
+  enemy.attackCooldown=100;enemy.health=1000;
+  hud.UpdateCombatFeedback(.001f,state);Check(hud.AbilitySignals().Ready(0)==0,"Loading a ready ability flashes every icon");
+  rpg::Command cast;cast.selectActor=enemy.id;cast.ability=0;state.Update(.001f,cast);hud.UpdateCombatFeedback(.001f,state);
+  Check(state.Attacking() && hud.AbilitySignals().Used(0)>0,"Accepted cast has no icon receipt");
+  bool returned=false;
+  for(int n=0;n<hz*6 && !returned;++n){state.Update(1.f/hz,{});hud.UpdateCombatFeedback(1.f/hz,state);returned=hud.AbilitySignals().Ready(0)>0;}
+  Check(returned && state.Cooldown(0)==0 && hud.AbilitySignals().Ready(1)==0,"Cooldown return missing or attached to another ability");
+  for(int n=0;n<int(.14f*hz);++n){state.Update(1.f/hz,{});hud.UpdateCombatFeedback(1.f/hz,state);}
+  const float pulse=hud.AbilitySignals().Ready(0);hud.MoveHotbar(0,9,id);
+  Check(hud.HotbarSpell(9,id)==0 && hud.AbilitySignals().Ready(hud.HotbarSpell(9,id))==pulse,"Moving a spell detached its feedback");
+  if(renderer && hz==60) {
+    const auto save=state.Save();renderer->BeginFrame();hud.Render(*renderer,state,3,false);
+    Check(renderer->Capture((output/("cooldown-return-"+std::to_string(int(id))+".png")).wstring()) && renderer->EndFrame(false),"Cooldown receipt capture");
+    renderer->BeginFrame();hud.Render(*renderer,state,3,false);Check(renderer->EndFrame(false) && pulse==hud.AbilitySignals().Ready(0) && save==state.Save(),"Rendering advanced ability feedback or gameplay");
+  }
+  for(int n=0;n<hz;++n){state.Update(1.f/hz,{});hud.UpdateCombatFeedback(1.f/hz,state);}
+  Check(hud.AbilitySignals().Ready(0)==0 && hud.AbilitySignals().Used(0)==0,"Ability receipt did not expire");
+  hud.ResetCombatFeedback();hud.UpdateCombatFeedback(.001f,state);Check(hud.AbilitySignals().Ready(0)==0,"Reset replayed a cooldown return");
+ }
+ rpg::Simulation rejected;rejected.CreateCharacter(rpg::ClassId::Mage,"Rejected");ui::AbilityFeedback view;
+ rejected.Update(.01f,{});view.Update(.01f,rejected);rpg::Command miss;miss.ability=0;
+ rejected.Update(.01f,miss);view.Update(.01f,rejected);Check(view.Used(0)==0,"Rejected cast illuminated its icon");
+ view.Update(NAN,rejected);Check(view.Ready(0)==0 && view.Used(0)==0,"Invalid clock retained receipts");
+}
 void PlateChecks() {
  ui::WorldPlates plates;
  // A dense pull, deliberately submitted in reverse importance/order.
@@ -176,6 +204,7 @@ int main(int argc,char** argv) {
   Win32Window window;Renderer renderer;
   Check(window.Create(GetModuleHandleW(nullptr),1920,1080,L"Combat HUD review",false),"Hidden review window");
   Check(renderer.Initialize(window.GetHandle(),1920,1080),"Native review renderer");
+  AbilityFeedbackChecks(&renderer,output);
   WorldPickChecks(renderer);
   PreparationChecks(renderer);
   for(auto id:{rpg::ClassId::Warrior,rpg::ClassId::Mage,rpg::ClassId::Scout}) {
@@ -207,6 +236,9 @@ int main(int argc,char** argv) {
     const ui::Layout layout(float(size.first),float(size.second));
     const auto click=[&](float x,float y){return hud.Pointer(layout.x+x*layout.scale,layout.y+y*layout.scale,float(size.first),float(size.second),true,false);};
     click(640,440);Check(!hud.PointerOverUi(),"The space between combat frames must remain available to world input");
+    click(600,570);Check(!hud.PointerOverUi(),"Old utility row still blocks the space above the hotbars");
+    const ui::Action actions[]={ui::Action::Character,ui::Action::Inventory,ui::Action::Build,ui::Action::Map,ui::Action::Journal,ui::Action::Menu};
+    for(int i=0;i<6;++i)Check(click(1052+i*39.f,694).action==actions[i],"Lower-edge utility shortcut did not dispatch its real panel action");
     Check(click(1140,244).action==ui::Action::Journal,"The objective entry must open the real journal");
     const auto anchor=ui::CombatHudAnchors(false).player;
     click(anchor.x+100,anchor.y+49);Check(hud.PointerOverUi(),"Reserve inspection must protect underlying world clicks");

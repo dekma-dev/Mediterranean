@@ -65,7 +65,7 @@ inline const std::array<ClassActionClip,int(rpg::ClassId::Count)> classActionCli
 }};
 inline bool RangedClass(rpg::ClassId id) { return rpg::DescribeClass(id).range>3; }
 inline float ActionDuration(ActionClip clip) { return clip==ActionClip::Restore?.72f:combat::Duration(clip==ActionClip::Heavy || clip==ActionClip::Technique || clip==ActionClip::Signature); }
-inline ActionChannels SampleAction(rpg::ClassId id,ActionClip clip,float seconds) {
+inline ActionChannels SampleAction(rpg::ClassId id,ActionClip clip,float seconds,int ability=-1) {
   if(!rpg::ValidClass(id) || !std::isfinite(seconds) || seconds<0 || seconds>=ActionDuration(clip)) return {};
   const auto& definition=classActionClips[int(id)];
   const bool restore=clip==ActionClip::Restore,heavy=clip==ActionClip::Heavy || clip==ActionClip::Technique || clip==ActionClip::Signature;
@@ -138,6 +138,40 @@ inline ActionChannels SampleAction(rpg::ClassId id,ActionClip clip,float seconds
     settle.left=settle.left+(project*.4f-gather*.2f)*strength;
     ready.yaw+=turn*strength;cast.yaw-=turn*.65f*strength;settle.yaw-=turn*.25f*strength;
     ready.pitch-=lean*.5f*strength;cast.pitch+=lean*strength;settle.pitch+=lean*.3f*strength;
+  }
+  // Ability silhouettes ride the existing accepted clock and C1 spline.
+  // Only body/free-hand channels change; the weapon grip and facial data stay
+  // with the existing rig. Compact quick casts do not inherit heavy wind-ups.
+  if(!restore && rpg::ValidSpell(ability)) {
+    ActionVector gather{},project{},finish{};float turn=0,lean=0;
+    if(id==rpg::ClassId::Mage) {
+      if(ability==5 || ability==6 || ability==8 || ability==12) {
+        gather={-.12f,.08f,.035f};project={.12f,.045f,.04f};finish={.07f,.02f,.03f};turn=.10f;lean=-.025f;
+        if(ability==8){gather.y+=.10f;project.y-=.05f;lean=.055f;}
+      } else if(ability==10 || ability==13) {
+        gather={-.07f,.14f,.06f};project={.14f,.02f,.055f};finish={.09f,-.02f,.025f};turn=-.13f;lean=.015f;
+      } else if(ability==9) {
+        gather={-.035f,.22f,-.06f};project={.025f,.15f,.075f};finish={.07f,.035f,.025f};turn=.035f;lean=-.065f;
+      } else if(ability==14) {
+        gather={-.13f,.08f,-.07f};project={.14f,.10f,.065f};finish={.08f,.035f,.035f};turn=-.15f;lean=.05f;
+      } else {
+        gather={-.075f,-.055f,-.12f};project={.045f,.065f,.095f};finish={.075f,.015f,.05f};turn=-.095f;lean=.06f;
+      }
+    } else if(id==rpg::ClassId::Priest) {
+      if(ability==5) {
+        gather={.11f,.09f,-.065f};project={-.12f,.025f,.085f};finish={-.07f,.025f,.025f};turn=.10f;lean=-.015f;
+      } else if(ability==6) {
+        gather={-.06f,.20f,-.035f};project={.08f,.16f,.03f};finish={.07f,.065f,.04f};turn=-.045f;lean=-.055f;
+      } else if(ability==7) {
+        gather={.08f,.025f,-.045f};project={-.025f,.035f,.11f};finish={.035f,.02f,.055f};turn=.045f;lean=.02f;
+      } else {
+        gather={.04f,.13f,-.05f};project={-.045f,-.04f,.08f};finish={.035f,-.02f,.035f};turn=.055f;lean=.035f;
+      }
+    }
+    const float strength=heavy?1.f:.40f;
+    ready.left=ready.left+gather*strength;cast.left=cast.left+project*strength;settle.left=settle.left+finish*strength;
+    ready.yaw+=turn*strength;cast.yaw-=turn*.65f*strength;settle.yaw-=turn*.22f*strength;
+    ready.pitch-=lean*.55f*strength;cast.pitch+=lean*strength;settle.pitch+=lean*.25f*strength;
   }
   const std::array<ActionChannels,5> keys{{{},ready,cast,settle,{}}};
   unsigned segment=0; while(segment<3 && seconds>times[segment+1]) ++segment;
@@ -228,19 +262,19 @@ struct ActionController {
   float lastSeconds=-1,releaseAge=1;
   ActionClip lastClip=ActionClip::Basic;
   rpg::ClassId lastClass=rpg::ClassId::Warrior;
-  int lastVariant=-1;
+  int lastVariant=-1,lastAbility=-1;
   void Reset() { *this={}; }
-  void Update(float dt,rpg::ClassId id,float attackSeconds,bool heavy,float healSeconds,bool alive,bool technique=false,bool signature=false,bool opening=false,int variant=-1) {
+  void Update(float dt,rpg::ClassId id,float attackSeconds,bool heavy,float healSeconds,bool alive,bool technique=false,bool signature=false,bool opening=false,int variant=-1,int ability=-1) {
     if(!alive || !rpg::ValidClass(id)) { Reset(); return; }
     if(!std::isfinite(dt) || dt<=0) return;
     dt=std::min(dt,.05f);
     const auto clip=attackSeconds>=0?(opening?ActionClip::Opening:signature?ActionClip::Signature:technique?ActionClip::Technique:heavy?ActionClip::Heavy:ActionClip::Basic):ActionClip::Restore;
     const float seconds=attackSeconds>=0?attackSeconds:healSeconds;
     const bool active=std::isfinite(seconds) && seconds>=0 && seconds<ActionDuration(clip);
-    const bool changed=lastSeconds>=0 && (!active || id!=lastClass || clip!=lastClip || variant!=lastVariant || seconds+.00001f<lastSeconds);
+    const bool changed=lastSeconds>=0 && (!active || id!=lastClass || clip!=lastClip || variant!=lastVariant || ability!=lastAbility || seconds+.00001f<lastSeconds);
     const float rate=active && !changed && lastSeconds>=0?std::clamp((seconds-lastSeconds)/dt,0.f,8.f):1.f;
     const auto sample=[&](float age) {
-      auto result=active?SampleAction(id,clip,age):ActionChannels{};
+      auto result=active?SampleAction(id,clip,age,ability):ActionChannels{};
       if(active && attackSeconds>=0 && variant>=0) result=result+SampleBossGesture(unsigned(variant),age);
       return result;
     };
@@ -266,7 +300,7 @@ struct ActionController {
     pose=pose+releasePose*carry+releaseVelocity*(.16f*drift);
     velocity=velocity+releasePose*((-30*t2+60*t3-30*t4)/.16f)+
       releaseVelocity*(1-18*t2+32*t3-15*t4);
-    lastSeconds=active?seconds:-1; lastClip=clip; lastClass=id;lastVariant=variant;
+    lastSeconds=active?seconds:-1; lastClip=clip; lastClass=id;lastVariant=variant;lastAbility=ability;
   }
 };
 }

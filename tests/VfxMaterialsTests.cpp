@@ -59,6 +59,25 @@ void Rendering(Renderer& r,const std::filesystem::path& out){
  Check(r.ValidateDebugMessages(),"VFX depth/blend/SRV state hazard");
 }
 void Lifetimes(Renderer& r,const std::filesystem::path& out){
+ for(int ability:{0,1,5,6,7}) {
+  CombatVisualEvent e;e.kind=K::SpellCast;e.school=ClassId::Priest;e.ability=ability;e.heavy=ability==1 || ability==5 || ability==6;
+  e.flight=.6f;e.destination={0,1};e.destinationHeight=1.2f;const XMFLOAT3 origin{0,1.2f,-5};
+  Pixels reference;
+  for(int hz:{30,60,144}) {
+   CombatEffects effects;effects.Emit(e,&origin);float time=0;
+   while(time<.31f-1e-6f){const float dt=std::min(1.f/hz,.31f-time);effects.Advance(dt);time+=dt;}
+   r.BeginFrame();r.SetCamera({3,2.4f,-5},{0,1,-1});effects.Render(r);
+   Check(r.EffectVertices()>180 && r.EffectVertices()<1000,"Holy flight lost its trail or exceeded per-spell budget");
+   const auto pixels=Capture(r,out/("holy-flight-"+std::to_string(ability)+"-"+std::to_string(hz)+".png"));
+   if(hz==30)reference=pixels;else Check(Difference(reference,pixels)<.03,"Holy flight depends on refresh rate");
+   effects.Advance(.05f);effects.Reset();r.BeginFrame();effects.Render(r);
+   Check(r.EffectVertices()==0 && r.EndFrame(false),"Holy flight survives cancellation/reset");
+  }
+  const auto endpoint=spellvfx::ProjectilePosition(e,origin,1);
+  Check(std::abs(endpoint.z-e.destination.z)<.0001f && std::abs(endpoint.y-(WorldMap::Height(e.destination)+e.destinationHeight))<.0001f,"Holy flight changed contact endpoint");
+  r.BeginFrame();spellvfx::Flight(r,e,origin,.68f);Check(r.EffectVertices()>0 && r.EndFrame(false),"Holy tail disappears abruptly on arrival");
+  r.BeginFrame();spellvfx::Flight(r,e,origin,.77f);Check(r.EffectVertices()==0 && r.EndFrame(false),"Holy tail does not drain");
+ }
  {
   CombatVisualEvent e;e.kind=K::SpellCast;e.school=ClassId::Mage;e.ability=13;e.heavy=true;e.flight=.4f;
   e.destination={0,0};e.destinationHeight=1.2f;const XMFLOAT3 origin{0,1.2f,-3};
@@ -91,14 +110,45 @@ void Lifetimes(Renderer& r,const std::filesystem::path& out){
    auto p=Capture(r,out/("contact-"+std::to_string(int(id))+"-"+std::to_string(ability)+"-"+std::to_string(hz)+".png"));
    if(hz==30)equal=p;else Check(Difference(equal,p)<.03,"Material layer depends on frame rate");
    while(time<1.01f){fx.Advance(.01f);time+=.01f;}
-   r.BeginFrame();fx.Render(r);Check(fx.BurstCount()==0 && r.EffectVertices()==0 && r.EndFrame(false),"Contact residue survived lifetime");
+   Check(fx.BurstCount()==0,"Brief contact survived its lifetime");
+   if(id==ClassId::Mage)Check(fx.ResidueCount()==1,"Ground aftermath disappeared with the contact flash");
+   while(time<3.3f){fx.Advance(.01f);time+=.01f;}
+   r.BeginFrame();fx.Render(r);Check(fx.ResidueCount()==0 && r.EffectVertices()==0 && r.EndFrame(false),"Ground aftermath survived its lifetime");
   }
   CombatEffects fx;fx.Emit(e);for(int i=0;i<11;++i)fx.Advance(.05f);
   r.BeginFrame();r.SetCamera({1.5f,2.3f,-4},{0,1,0});fx.Render(r);
   if(id==ClassId::Mage || e.heavy || id==ClassId::Scout)Check(r.EffectVertices()>0,"Confirmed impact lost its delayed residue");
   Capture(r,out/("residue-"+std::to_string(int(id))+"-"+std::to_string(ability)+".png"));
-  fx.Reset();Check(fx.BurstCount()==0,"Reset retained VFX");
+  fx.Reset();Check(fx.BurstCount()==0 && fx.ResidueCount()==0,"Reset retained VFX");
  }
+}
+void AftermathChecks(Renderer& r,const std::filesystem::path& out) {
+ const auto advance=[](CombatEffects& fx,float duration,int hz){float t=0;while(t<duration-1e-6f){const float dt=std::min(1.f/hz,duration-t);fx.Advance(dt);t+=dt;}};
+ for(int ability:{1,5,13,14,6}) {
+  CombatVisualEvent e{K::HeavyHit,{17,45},0,.65f,100};e.school=ability==6?ClassId::Priest:ClassId::Mage;e.ability=ability;e.heavy=true;
+  e.height=WorldMap::Height(e.position)+1.2f;Pixels reference;
+  for(int hz:{30,60,144}) {
+   CombatEffects fx;auto miss=e;miss.kind=K::SpellCast;fx.Emit(miss);Check(fx.ResidueCount()==0,"Flight fabricated ground contact");fx.Reset();
+   miss=e;miss.primary=false;fx.Emit(miss);Check(fx.ResidueCount()==0,"Secondary area victim duplicated ground aftermath");fx.Reset();
+   fx.Emit(e);advance(fx,1.05f,hz);Check(fx.ResidueCount()==1 && fx.BurstCount()==0,"Aftermath lifetime coupled to its burst");
+   const auto draw=[&]{r.BeginFrame();r.SetCamera({20,e.height+2,41},{17,e.height-.8f,45});
+     r.DrawMesh(visual::Mesh::Terrain,{0,0,0},{1,1,1},{1,1,1,1},visual::Material::Ground);fx.Render(r);};
+   draw();Check(r.EffectVertices()>0 && r.EffectVertices()<=180,"One aftermath exceeded its fixed detail budget");
+   const auto pixels=Capture(r,out/("aftermath-"+std::to_string(ability)+"-"+std::to_string(hz)+".png"));
+   if(hz==30)reference=pixels;else Check(Difference(reference,pixels)<.03,"Aftermath varies with frame rate");
+   draw();Check(Difference(pixels,Capture(r,out/"aftermath-render-repeat.png"))<.001,"Repeated rendering advanced aftermath");
+   fx.Emit(e);Check(fx.ResidueCount()==1,"Repeated contact stacked marks on the same patch");
+   advance(fx,3.4f,hz);Check(fx.ResidueCount()==0,"Aftermath did not expire");
+   fx.Emit(e);fx.Reset();Check(fx.ResidueCount()==0,"Reset retained aftermath");
+  }
+ }
+ CombatEffects crowd;CombatVisualEvent e{K::HeavyHit,{0,0},1.2f,0,100};e.school=ClassId::Mage;e.ability=1;e.heavy=true;
+ for(int n=0;n<40;++n){e.position={float(n%5),float(n/5)};e.actor=100+n;crowd.Emit(e);}
+ Check(crowd.ResidueCount()==12,"Ground aftermath pool is not bounded");advance(crowd,1.05f,60);
+ r.BeginFrame();crowd.Render(r);Check(r.EffectVertices()<=900 && r.EndFrame(false),"Crowded aftermath escaped its shared cosmetic allowance");
+ r.BeginFrame();for(int n=0;n<1000;++n)r.DrawEffectGlow({0,1,0},.1f,{1,1,1,.1f});
+ const auto reserved=r.EffectVertices();crowd.Render(r);Check(r.EffectVertices()==reserved && r.EndFrame(false),"Aftermath displaced a nearly full priority budget");
+ auto invalid=e;invalid.position.x=NAN;Check(spellvfx::MakeResidue(invalid).kind==spellvfx::ResidueKind::None,"Invalid contact created a ground mark");
 }
 std::string Fixture(ClassId id){
  Simulation s;Check(s.Load("MEDITERRANEAN 3\n-4 5.2 50 0 3 90\n5 1 1 0\n4\n0 0 0 0\n"
@@ -112,6 +162,10 @@ void Workload(Renderer& r,const std::filesystem::path& out){
  Check(r.Resize(1920,1080),"Workload resolution");
  Game game;game.Initialize();Check(game.RestoreSnapshot(Fixture(ClassId::Mage)),"Workload fixture");
  game.SetCameraOrbit(1.1f,.32f,6.5f);
+ CombatEffects aftermath;
+ for(int n=0;n<6;++n){CombatVisualEvent e{K::HeavyHit,{-5.f+(n%3)*1.1f,6.5f+(n/3)*1.3f},1.2f,0,EntityId(200+n)};
+  e.school=n%2?ClassId::Mage:ClassId::Priest;e.ability=n%2?1:6;e.heavy=true;aftermath.Emit(e);}
+ for(int n=0;n<21;++n)aftermath.Advance(.05f);
  std::ofstream report(out/"workload.txt");report<<r.AdapterDiagnostics()<<"\n1920x1080 hidden native window, vsync off.\n"
   <<"Same frozen world, 60 warm-up + 180 measured frames per phase.\n"
   <<"CPU includes submission/Present; GPU uses asynchronous originating-frame timestamps. Not interactive FPS.\n";
@@ -131,20 +185,22 @@ void Workload(Renderer& r,const std::filesystem::path& out){
     e.actor=200+n;e.ability=n%2?14:1;e.heavy=true;e.chain=3;
     classfx::Impact(r,e,.025f+float((frame+n*7)%36)/60.f);
    }
+   if(contacts)aftermath.Render(r);
    Check(r.EffectVertices()<=Renderer::maxEffectVertices,"World workload exceeded VFX budget");
    Check(r.EndFrame(false),"Native workload frame");
    if(frame>=60)cpu.push_back(std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count());
    AppendGpuObservations(gpu,r.GpuReady(),r.GpuReadyCount(),firstMeasured);
    peakVertices=std::max(peakVertices,r.EffectVertices());peakDraws=std::max(peakDraws,r.LastDrawCalls());
   }
-  report<<(contacts?"Six simultaneous mixed-class contacts\n":"World without contacts\n");
+  report<<(contacts?"Six simultaneous mixed-class contacts plus six ground aftermath patches\n":"World without contacts\n");
   distribution("CPU",cpu);distribution("GPU",gpu);report<<"peak effect vertices "<<peakVertices<<" peak draw calls "<<peakDraws<<'\n';
  }
  Check(r.ValidateDebugMessages(),"Workload DirectX warnings");
 }
 void World(Renderer& r,const std::filesystem::path& out){
  Check(r.Resize(1920,1080),"World review resolution");
- for(auto id:{ClassId::Warrior,ClassId::Mage,ClassId::Scout})for(int ability:{1,5,13,14}){
+ for(auto id:{ClassId::Warrior,ClassId::Mage,ClassId::Scout,ClassId::Priest})for(int ability:{1,5,13,14}){
+  if(id==ClassId::Priest && ability>7)continue;
   Game game;game.Initialize();Check(game.RestoreSnapshot(Fixture(id)),"World review load");
   game.SetCameraOrbit(1.1f,.32f,6.5f);Command c;c.selectActor=100;c.ability=ability;game.ExecuteCommand(c,.001f);
   Check(game.State().Attacking(),"World review attack rejected");
@@ -154,10 +210,17 @@ void World(Renderer& r,const std::filesystem::path& out){
   r.BeginFrame();game.Render(r);Capture(r,out/("world-prepare-"+stem+".png"));
   bool hit=false;for(int n=0;n<600 && !hit;++n){game.ExecuteCommand({},1.f/120);for(std::size_t v=0;v<game.State().VisualEventCount();++v)hit|=game.State().VisualEvents()[v].kind==K::Hit || game.State().VisualEvents()[v].kind==K::HeavyHit;}
   Check(hit,"World attack never contacted");tick(.12f);
+  if(id==ClassId::Mage || id==ClassId::Priest)Check(game.Effects().ResidueCount()==1,"Actual accepted spell contact did not create its primary aftermath");
   const auto saved=game.State().Save();r.BeginFrame();game.Render(r);Capture(r,out/("world-contact-"+stem+".png"));
-  Check(game.State().Save()==saved,"VFX rendering changed gameplay");tick(.38f);
+  Check(game.State().Save()==saved,"VFX rendering changed gameplay");tick(1.0f);
   r.BeginFrame();game.Render(r);Capture(r,out/("world-residue-"+stem+".png"));
-  Check(game.RestoreSnapshot(saved) && game.Effects().BurstCount()==0,"Load retained textured residue");
+  if(id==ClassId::Mage || id==ClassId::Priest) {
+   // A second, unobscured diagnostic view complements the normal HUD capture.
+   // It renders the same accepted contact/time, not a synthetic extra impact.
+   game.SetCameraOrbit(0,.85f,6.f);r.BeginFrame();game.Render(r,false);
+   Capture(r,out/("world-aftermath-overview-"+stem+".png"));
+  }
+  Check(game.RestoreSnapshot(saved) && game.Effects().BurstCount()==0 && game.Effects().ResidueCount()==0,"Load retained textured residue");
  }
 }
 }
@@ -167,6 +230,6 @@ int main(int argc,char** argv){try{
  Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),960,600,L"VFX material review",false),"Native window");
  Renderer r;Check(r.Initialize(window.GetHandle(),960,600),"Native renderer");
  if(argc>2 && std::string(argv[2])=="--workload"){Workload(r,out);std::cout<<"PASS: bounded native VFX workload; see workload.txt.\n";return 0;}
- Rendering(r,out);Lifetimes(r,out);World(r,out);Check(r.ValidateDebugMessages(),"Native VFX warnings");
+ Rendering(r,out);Lifetimes(r,out);AftermathChecks(r,out);World(r,out);Check(r.ValidateDebugMessages(),"Native VFX warnings");
  std::cout<<"PASS: original atlas, alpha ordering, soft depth, fixed budgets, lifecycle, equal-time contacts and actual world attacks. Atlas bytes: "<<r.EffectTextureBytes()<<'\n';
  }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

@@ -19,8 +19,8 @@ Library Decode(std::string_view bytes) {
  using namespace DirectX;
  Check(bytes.size()<=2*1024*1024,"Player body archive exceeds its byte budget");Reader r{bytes};
  Check(r.Get<std::uint32_t>()==0x314b5350 && r.Get<std::uint32_t>()==1 &&
-  r.Get<std::uint32_t>()==visual::bodyBones && r.Get<std::uint32_t>()==visual::bodyLodCount,"Invalid player body header");
- for(const auto& bone:visual::BodyBindPose()) for(const auto expected:{bone.from,bone.to}) {
+  r.Get<std::uint32_t>()==visual::sourceBodyBones && r.Get<std::uint32_t>()==visual::bodyLodCount,"Invalid player body header");
+ for(unsigned i=0;i<visual::sourceBodyBones;++i) for(const auto expected:{visual::BodyBindPose()[i].from,visual::BodyBindPose()[i].to}) {
   const auto actual=r.Get<XMFLOAT3>();
   Check(std::isfinite(actual.x)&&std::isfinite(actual.y)&&std::isfinite(actual.z)&&
    std::abs(actual.x-expected.x)<1e-5f && std::abs(actual.y-expected.y)<1e-5f && std::abs(actual.z-expected.z)<1e-5f,
@@ -38,6 +38,7 @@ Library Decode(std::string_view bytes) {
    const auto region=r.Get<std::uint32_t>();Check(region<visual::bodyRegions,"Invalid player body region");
    v.color={1,1,1,float(region)};visual::SkinInfluence skin;
    for(auto& bone:skin.bones)bone=r.Get<std::uint32_t>();skin.weights=r.Get<XMFLOAT4>();
+   for(auto bone:skin.bones)Check(bone<visual::sourceBodyBones,"Invalid original body bone");
    Check(std::abs(v.position.x)<.9f && v.position.y>.1f && v.position.y<1.64f && std::abs(v.position.z)<.4f,
     "Player anatomy exceeds the fitted body envelope");
    body.mesh.vertices.push_back(v);body.influences.push_back(skin);
@@ -55,5 +56,10 @@ std::string_view EmbeddedBytes() {
  Check(data!=nullptr,"Cannot load anatomical player body");
  return {static_cast<const char*>(data),SizeofResource(module,resource)};
 }
-const Library& Collection() {static const auto bodies=Decode(EmbeddedBytes());return bodies;}
+const Library& Collection() {
+ static const auto bodies=[] {auto result=Decode(EmbeddedBytes());
+  for(auto& lod:result)for(std::size_t i=0;i<lod.influences.size();++i)
+    lod.influences[i]=visual::ArticulateTorso(lod.mesh.vertices[i].position,lod.influences[i]);
+  return result;}();return bodies;
+}
 }

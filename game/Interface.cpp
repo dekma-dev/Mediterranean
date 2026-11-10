@@ -137,18 +137,18 @@ struct Canvas {
    Line(a.x+7,a.y+a.h-5,a.x+a.w-7,a.y+a.h-5,1,{1,.82f,.45f,.6f});
   }
  }
- void Text(float x,float y,const std::string& s,float size=18,Color c=ink) {
+ void Text(float x,float y,const std::string& s,float size=18,Color c=ink,bool literal=false) {
   if (c.x+c.y+c.z>1) {
-   const auto shadow=P(x+1,y+1); r.DrawText(shadow.x,shadow.y,s,{.01f,.015f,.008f,c.w*.85f},size*layout.scale/12);
+   const auto shadow=P(x+1,y+1); r.DrawText(shadow.x,shadow.y,s,{.01f,.015f,.008f,c.w*.85f},size*layout.scale/12,literal);
   }
-  const auto p=P(x,y); r.DrawText(p.x,p.y,s,c,size*layout.scale/12);
+  const auto p=P(x,y); r.DrawText(p.x,p.y,s,c,size*layout.scale/12,literal);
  }
- float Width(const std::string& s,float size=18) const { return r.TextWidth(s,size*layout.scale/12)/layout.scale; }
- void FitText(float x,float y,float width,const std::string& s,float size=18,Color c=ink) {
-  size*=std::min(1.f,width/std::max(1.f,Width(s,size)));Text(x,y,s,size,c);
+ float Width(const std::string& s,float size=18,bool literal=false) const { return r.TextWidth(s,size*layout.scale/12,literal)/layout.scale; }
+ void FitText(float x,float y,float width,const std::string& s,float size=18,Color c=ink,bool literal=false) {
+  size*=std::min(1.f,width/std::max(1.f,Width(s,size,literal)));Text(x,y,s,size,c,literal);
  }
- void Center(float x,float y,float width,const std::string& s,float size=18,Color c=ink) {
-  size*=std::min(1.f,width/std::max(1.f,Width(s,size)));Text(x+(width-Width(s,size))*.5f,y,s,size,c);
+ void Center(float x,float y,float width,const std::string& s,float size=18,Color c=ink,bool literal=false) {
+  size*=std::min(1.f,width/std::max(1.f,Width(s,size,literal)));Text(x+(width-Width(s,size,literal))*.5f,y,s,size,c,literal);
  }
  void Wrap(float x,float y,float width,const std::string& text,float size=16,Color c=muted,int maxLines=3) {
   std::istringstream paragraphs(localization::Translate(text)); std::string paragraph; int row=0;
@@ -260,10 +260,10 @@ struct Canvas {
    }
   }
  }
- void Banner(Rect a,const std::string& label,float size=18) {
+ void Banner(Rect a,const std::string& label,float size=18,bool literal=false) {
   Skin(a,std::min(20.f,a.h*.48f));
   RectFill({a.x+12,a.y+5,a.w-24,a.h-10},{.25f,.10f,.035f,.45f});
-  Center(a.x+14,a.y+(a.h-size)*.5f-2,a.w-28,label,size,{1,.88f,.61f,1});
+  Center(a.x+14,a.y+(a.h-size)*.5f-2,a.w-28,label,size,{1,.88f,.61f,1},literal);
  }
  void EmptySlot(Rect a) {
   Skin(a,10,{.46f,.44f,.38f,1});
@@ -524,9 +524,23 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  const auto page=selection.Screen();const bool roster=page==Page::Roster,customize=page==Page::Customize;
  const bool valid=!roster || selection.State()!=Status::Unreadable,saved=selection.State()==Status::Saved;
  const auto& hero=selection.Hero();const auto& info=hero.ClassInfo();
- localization::playerName=std::string(hero.Nickname())==info.title?"":hero.Nickname();
  renderer.DrawHudRect(0,0,1,1,{.017f,.016f,.014f,1});
  c.Art({0,0,1280,720},Renderer::UiArt::Hall);
+ if(valid) {
+   const auto view=selection.PreviewStage();const auto& stageClass=rpg::DescribeClass(view.school);
+   const auto stage=CharacterSelection::StageBounds();const auto p=c.P(stage.x,stage.y);
+   if(view.zoom<.5f)for(int ring=5;ring>0;--ring)
+     c.Oval(651,590,ring*17.f,ring*3.f,{.015f,.012f,.01f,.07f*(1-view.zoom*2)*view.opacity});
+   if(view.opacity>.001f && renderer.BeginPortrait(p.x,p.y,stage.w*c.layout.scale/renderer.Width(),stage.h*c.layout.scale/renderer.Height(),view.zoom,true)) {
+     DrawCharacter(renderer,{0,0},0,view.yaw,{stageClass.color[0],stageClass.color[1],stageClass.color[2],1},0,0,view.outfit,view.body);
+     if(view.effects)selection.RenderEffects(renderer);
+     renderer.EndPortrait();
+   }
+   // Composite the same painted stage over the figure. This dissolves only
+   // its presentation without touching meshes, facial shading or world shaders.
+   if(view.opacity<1)c.Art(stage,Renderer::UiArt::Hall,
+     {stage.x/1280,stage.y/720,(stage.x+stage.w)/1280,(stage.y+stage.h)/720},{1,1,1,1-view.opacity});
+ }
  c.Gradient({0,0,1280,138},{.015f,.018f,.023f,.84f},{.015f,.018f,.023f,0});
  c.Gradient({0,588,1280,132},{.015f,.018f,.023f,0},{.015f,.018f,.023f,.92f});
  // Keep the stage open. Only text rails receive a translucent scrim.
@@ -544,16 +558,7 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  c.Center(360,28,570,roster?"YOUR CHARACTERS":customize?"GIVE YOUR HERO AN IDENTITY":"CHOOSE YOUR CALLING",22,ink);
  c.Center(360,58,570,roster?"Dawnwatch  /  Local campaign":customize?"II  /  Identity":"I  /  Calling",13,gold);
  c.Center(1004,74,244,customize?"Appearance":roster?"The company":"The eleven callings",16,ink);
- if(valid) {
-   const auto stage=CharacterSelection::StageBounds();const auto p=c.P(stage.x,stage.y);
-   if(selection.PreviewZoom()<.5f) for(int ring=5;ring>0;--ring)
-     c.Oval(651,590,ring*17.f,ring*3.f,{.015f,.012f,.01f,.07f*(1-selection.PreviewZoom()*2)});
-   if(renderer.BeginPortrait(p.x,p.y,stage.w*c.layout.scale/renderer.Width(),stage.h*c.layout.scale/renderer.Height(),selection.PreviewZoom(),true)) {
-     DrawCharacter(renderer,{0,0},0,selection.Yaw(),{info.color[0],info.color[1],info.color[2],1},0,0,
-       selection.PreviewOutfit(),selection.PreviewBody());
-     selection.RenderEffects(renderer);renderer.EndPortrait();
-   }
- } else c.Center(326,353,650,"Character unavailable",22,muted);
+ if(!valid)c.Center(326,353,650,"Character unavailable",22,muted);
  const auto button=[&](C control,const char* label) {
    const auto a=CharacterSelection::Bounds(control);const bool enabled=selection.Enabled(control),focused=selection.Focus()==control;
    const bool primary=control==C::Enter || control==C::Next || control==C::Confirm || control==C::Create;
@@ -561,30 +566,51 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
    if(enabled)c.Gradient({a.x+5,a.y+4,a.w-10,a.h-8},{.96f,.72f,.36f,.16f*selection.Highlight(control)},{.6f,.36f,.12f,.025f*selection.Highlight(control)});
    c.Center(a.x+7,a.y+(a.h-17)*.5f-1+(selection.Pressed(control)?1.5f:0),a.w-14,label,primary?18.f:14.f,enabled?ink:muted);
  };
- if(valid) {
-   c.Center(412,82,452,"Equipment preview",12,muted);
-   for(int i=0;i<3;++i) {
-     const auto control=C(int(C::Dress0)+i);const auto r=CharacterSelection::Bounds(control);
-     button(control,i==0?"Equipped outfit":i==1?"Travel outfit":"Veteran outfit");
-     if(int(selection.PreviewDress())==i)c.Line(r.x+8,r.y+r.h-4,r.x+r.w-8,r.y+r.h-4,2,gold);
-   }
-   if(selection.PreviewDress()!=CharacterSelection::Dress::Equipped) {
-     c.Gradient({412,132,452,20},{.018f,.025f,.028f,.82f},{.018f,.025f,.028f,.62f});
-     c.Center(380,134,540,"Outfit preview only; equipment is earned in the world.",11,gold);
-   }
- }
  // The bottom rail is shared by all three pages; hit rectangles never drift.
  c.Art({14,640,1252,64},Renderer::UiArt::Frame,{.27f,.28f,.72f,.71f},{.52f,.66f,.70f,.86f});
  c.Line(26,640,1254,640,1,{.68f,.58f,.36f,.8f});
- c.Center(524,610,254,roster && !saved?"An unclaimed calling":hero.Nickname(),18,ink);
+ auto enteredName=selection.DraftName();while(!enteredName.empty() && enteredName.back()==' ')enteredName.pop_back();
+ c.Center(410,578,460,roster && !saved?"An unclaimed calling":hero.Nickname(),18,ink,
+   roster?saved:rpg::ValidCharacterName(enteredName));
+ // A small equipment/view dock leaves the upper stage and the figure open.
+ // Every icon has the same hit rectangle used by mouse, keyboard and hints.
+ c.Skin({412,600,446,50},16,{.80f,.83f,.84f,1});
+ const auto dock=[&](C control,bool active) {
+   const auto r=CharacterSelection::Bounds(control);const bool enabled=selection.Enabled(control);
+   c.Button(r,enabled,selection.Focus()==control || selection.Hover()==control,active);
+   if(enabled)c.Gradient({r.x+4,r.y+4,r.w-8,r.h-8},{1,.78f,.42f,.20f*selection.Highlight(control)},{1,.7f,.3f,0});
+   if(active)c.Line(r.x+6,r.y+r.h-4,r.x+r.w-6,r.y+r.h-4,2,gold);
+   return Rect{r.x+6,r.y+6+(selection.Pressed(control)?1.f:0),r.w-12,r.h-12};
+ };
+ for(int i=0;i<3;++i) {
+   const auto r=dock(C(int(C::Dress0)+i),int(selection.PreviewDress())==i);
+   Icon(c,r,i==0?Item::Belt:i==1?Item::Tunic:Item::Shoulders,valid?1.f:.35f,hero.Class());
+ }
+ const auto close=dock(C::Closeup,selection.Closeup());
+ c.Ring(close.x+10,close.y+10,7,valid?ink:muted,1.4f);c.Line(close.x+15,close.y+15,close.x+24,close.y+24,2,gold);
+ AbilityArtwork(c,dock(C::Pose,false),rpg::ValidSpell(selection.PreviewAbility())?selection.PreviewAbility():0,hero.Class());
+ const auto play=dock(C::Showcase,selection.Showcasing());
+ if(selection.Showcasing()) {c.RectFill({play.x+6,play.y+5,4,17},gold);c.RectFill({play.x+16,play.y+5,4,17},gold);}
+ else c.Triangle({play.x+7,play.y+4},{play.x+7,play.y+23},{play.x+23,play.y+13},gold);
+ const auto reset=dock(C::ResetView,false);
+ for(int i=0;i<12;++i) {
+   const float a=.65f+i*.40f,b=a+.40f;
+   c.Line(reset.x+13+std::sin(a)*8,reset.y+13-std::cos(a)*8,
+     reset.x+13+std::sin(b)*8,reset.y+13-std::cos(b)*8,1.5f,gold);
+ }
+ c.Triangle({reset.x+15,reset.y+3},{reset.x+23,reset.y+7},{reset.x+15,reset.y+10},gold);
  button(C::Left,"<");button(C::Right,">");
- button(C::Closeup,selection.Closeup()?"Full figure":"Face close-up");button(C::Pose,"Try next art");button(C::ResetView,"Reset view");
- button(C::Showcase,selection.Showcasing()?"Stop showcase":"Class showcase");
- c.Center(340,704,610,"Drag to rotate / Wheel to zoom",10,muted);
- if(selection.PreviewAction()>=0)c.Center(352,584,600,hero.Spell(selection.PreviewAbility()).name,13,gold);
+ c.Line(603,611,603,643,1,border);c.Line(797,611,797,643,1,border);
+ const char* outfit=selection.PreviewDress()==CharacterSelection::Dress::Equipped?"Equipped outfit":selection.PreviewDress()==CharacterSelection::Dress::Travel?"Travel outfit":"Veteran outfit";
+ c.Center(332,660,690,selection.Showcasing()?"Class showcase":outfit,14,gold);
+ c.Center(332,682,690,selection.PreviewDress()==CharacterSelection::Dress::Equipped?"Drag to rotate / Wheel to zoom":"Outfit preview only; equipment is earned in the world.",11,muted);
+ if(selection.PreviewAction()>=0) {
+   c.Center(352,539,600,hero.Spell(selection.PreviewAbility()).name,13,gold);
+   c.Center(352,557,600,selection.PreviewTiming().phase,10,muted);
+ }
  if(roster) {
    if(valid) {
-     ClassSigil(c,{34,184,52,52},hero.Class());c.FitText(98,186,216,saved?hero.Nickname():info.name,22,ink);
+     ClassSigil(c,{34,184,52,52},hero.Class());c.FitText(98,186,216,saved?hero.Nickname():info.name,22,ink,saved);
      c.Text(98,216,saved?"Level "+std::to_string(hero.Level()):"Empty class slot",15,gold);
      c.FitText(34,258,280,info.role,14,muted);
      c.Line(34,294,314,294,1,border);
@@ -628,6 +654,16 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
        c.Wrap(88,389+lift,226,spell.targeting,10,gold,2);c.Wrap(34,425+lift,280,spell.description,13,ink,selection.PreviewArtCount()>7?5:7);
        c.Line(34,561,314,561,1,border);c.Text(34,573,"CD "+Number(hero.AbilityCooldown(selected))+" s",11,gold);
        c.Text(174,573,spell.range>0?"Range "+Number(spell.range)+" m":"Self",11,gold);
+       const auto timing=selection.PreviewTiming();
+       c.RectFill({34,592,280,6},{.025f,.045f,.05f,1});
+       const std::array<float,4> boundaries{0,timing.release,timing.follow,1};
+       const std::array<Color,3> colors{{{.35f,.60f,.70f,1},{1,.82f,.40f,1},{.48f,.58f,.40f,1}}};
+       for(int phase=0;phase<3;++phase) {
+         const float start=boundaries[phase],end=std::min(boundaries[phase+1],timing.progress);
+         if(end>start)c.RectFill({34+280*start,593,280*(end-start),4},colors[phase]);
+       }
+       for(float point:{timing.release,timing.follow})c.Line(34+280*point,590,34+280*point,600,1,gold);
+       button(C::Replay,"Replay art");button(C::Stop,"Stop preview");
      } else {
        const int branch=selection.CallingBranch();
        for(int i=0;i<3;++i){const auto control=C(int(C::Branch0)+i);const auto r=CharacterSelection::Bounds(control);
@@ -639,26 +675,50 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
      button(C::Next,selection.ClassSlot(int(selection.SelectedClass())).status==Status::New?"Appearance & name":"Class slot occupied");
    } else {
      c.Text(34,284,"HERO'S NAME",12,gold);const auto a=CharacterSelection::Bounds(C::Name);
-     c.Button(a,true,selection.Focus()==C::Name);std::string name=selection.DraftName().empty()?"Enter a name":selection.DraftName();
-     if(selection.Focus()==C::Name && std::fmod(selection.Time(),1.f)<.55f)name+="|";
-     c.FitText(a.x+10,a.y+10,a.w-20,name,18,selection.DraftName().empty()?muted:ink);
-     c.Wrap(34,370,280,"1-20 letters; spaces, apostrophe, hyphen. Ctrl+A clears.",12,muted,3);
+     c.Button(a,true,selection.Focus()==C::Name);const auto& name=selection.DraftName();
+     const auto& edit=selection.NameSelection();const auto length=rpg::NameLength(name);
+     const float size=18*std::min(1.f,(a.w-20)/std::max(1.f,c.Width(name,18,true)));
+     std::array<float,21> advances{};
+     for(std::size_t n=0;n<=length;++n)advances[n]=c.Width(name.substr(0,NameEditor::Byte(name,n)),size,true);
+     selection.MeasureName(advances);
+     const bool editing=selection.Focus()==C::Name;
+     if(editing && edit.Selected())c.RectFill({a.x+10+advances[edit.Begin()],a.y+7,advances[edit.End()]-advances[edit.Begin()],26},{.20f,.39f,.46f,.8f});
+     if(name.empty())c.Text(a.x+10,a.y+10,"Enter a name",18,muted);
+     else c.Text(a.x+10,a.y+10,name,size,ink,true);
+     if(editing && std::fmod(selection.Time(),1.f)<.55f)c.Line(a.x+10+advances[edit.caret],a.y+8,a.x+10+advances[edit.caret],a.y+31,1.5f,ink);
+     c.Text(256,284,std::to_string(length)+" / 20",12,muted);
+     const bool nameReady=rpg::ValidCharacterName(name);
+     c.Text(34,368,name.empty()?"Enter a name":nameReady?"Name is ready":"At least one letter; no spaces at the ends.",12,nameReady?Color{.60f,.79f,.66f,1}:gold);
+     c.Wrap(34,398,280,"Ctrl+A selects / Ctrl+V pastes. Arrows move the cursor; Shift selects.",12,muted,4);
      c.Wrap(34,466,280,info.identity,15,ink,5);
      const auto& look=hero.Look();
      const auto choice=[&](float y,const char* title,const auto& palette,int chosen,C first,C left,C right) {
-       c.Text(1008,y-28,title,13,gold);c.Line(1008,y-8,1250,y-8,1,{.42f,.48f,.47f,.65f});
+       const Rect band{1004,y-46,248,118};
+       c.Gradient({band.x,band.y,band.w,76},{.055f,.14f,.17f,.82f},{.018f,.045f,.06f,.40f});
+       c.Line(1008,y-44,1250,y-44,1,{.44f,.64f,.63f,.7f});
+       c.Line(1008,y+53,1250,y+53,1,{.44f,.38f,.25f,.7f});
+       c.FitText(1012,y-29,140,title,13,ink);
        for(int index=0;index<rpg::Appearance::count;++index){const auto control=C(int(first)+index);const auto r=CharacterSelection::Bounds(control);const auto& swatch=palette[index];
          c.Button(r,true,selection.Hover()==control || selection.Focus()==control,index==chosen);
          c.RectFill({r.x+5,r.y+5,r.w-10,r.h-10},swatch.r==0?Color{info.color[0],info.color[1],info.color[2],1}:Color{swatch.r,swatch.g,swatch.b,1});
          c.Gradient({r.x+5,r.y+5,r.w-10,r.h-10},{1,.94f,.83f,.15f},{0,0,0,.3f});
          if(index==chosen)c.Line(r.x+4,r.y+r.h-3,r.x+r.w-4,r.y+r.h-3,2,gold);
        }
-       button(left,"<");button(right,">");c.Center(1040,y+36,174,palette[chosen].name,12,ink);
+       for(const auto control:{left,right}) {
+         const auto r=CharacterSelection::Bounds(control);const bool hovered=selection.Hover()==control || selection.Focus()==control;
+         c.Oval(r.x+r.w*.5f,r.y+r.h*.5f,14,16,{.025f,.11f,.14f,1});
+         c.Ring(r.x+r.w*.5f,r.y+r.h*.5f,13,hovered?ink:gold,1.8f);
+         c.Center(r.x,r.y+7+(selection.Pressed(control)?1.f:0),r.w,control==left?"<":">",17,ink);
+       }
+       c.Oval(1204,y-24,17,19,{.015f,.065f,.085f,1});c.Ring(1204,y-24,17,gold,2);
+       c.Oval(1200,y-30,7,5,{.37f,.62f,.65f,.17f});
+       c.Center(1188,y-33,32,std::to_string(chosen+1),19,ink);
+       c.Center(1035,y+36,184,palette[chosen].name,12,ink);
      };
      choice(284,"COMPLEXION",rpg::skinTones,look.skin,C::Skin0,C::SkinLeft,C::SkinRight);
-     choice(366,"HAIR COLOR",rpg::hairColors,look.hair,C::Hair0,C::HairLeft,C::HairRight);
-     choice(448,"TUNIC DYE",rpg::tunicDyes,look.dye,C::Dye0,C::DyeLeft,C::DyeRight);
-     c.Wrap(1008,534,242,"Back to change your class",12,muted,2);button(C::Confirm,"Create character");
+     choice(384,"HAIR COLOR",rpg::hairColors,look.hair,C::Hair0,C::HairLeft,C::HairRight);
+     choice(484,"TUNIC DYE",rpg::tunicDyes,look.dye,C::Dye0,C::DyeLeft,C::DyeRight);
+     c.Wrap(1008,556,242,"Appearance is saved when you create the character.",12,muted,3);button(C::Confirm,"Create character");
    }
    button(C::Back,"< Back");button(C::Cancel,"Cancel");
  }
@@ -671,7 +731,7 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
    if(chosen)c.Line(a.x+2,a.y+7,a.x+2,a.y+a.h-7,2,gold);
    ClassSigil(c,{a.x+a.w-40,a.y+2,38,38},rpg::ClassId(i));
    if(roster && slot.status==Status::Saved){
-     c.FitText(a.x+12,a.y+5,182,slot.name,15,ink);
+     c.FitText(a.x+12,a.y+5,182,slot.name,15,ink,true);
      c.FitText(a.x+12,a.y+24,182,std::string(rpg::classes[i].name)+"  /  Lv. "+std::to_string(slot.level),10,gold);
    } else {
      c.FitText(a.x+12,a.y+6,182,rpg::classes[i].name,16,chosen?ink:muted);
@@ -682,11 +742,42 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
    c.Gradient({340,150,620,62},{.02f,.025f,.03f,.92f},{.02f,.025f,.03f,.72f});
    c.Wrap(356,162,588,selection.Notice(),14,gold,2);
  }
+ const auto hint=selection.Hint();const char* title=nullptr;const char* description=nullptr;
+ if(!customize && hint>=C::Class0 && hint<=C::Class10) {
+   const auto id=rpg::ClassId(int(hint)-int(C::Class0));const auto& calling=rpg::DescribeClass(id);
+   const auto style=rpg::ClassCombat(id);const auto anchor=CharacterSelection::Bounds(hint);
+   const float x=706,y=std::clamp(anchor.y-36,110.f,190.f);
+   c.Frame({x,y,282,386},{.018f,.045f,.05f,.98f},{.51f,.54f,.38f,1});
+   ClassSigil(c,{x+14,y+14,40,40},id);c.FitText(x+62,y+14,204,calling.name,20,ink);
+   c.FitText(x+62,y+40,204,calling.role,11,gold);c.Line(x+14,y+64,x+268,y+64,1,border);
+   c.Paragraph({x+14,y+76,254,62},calling.identity,13,ink,3);
+   c.Text(x+14,y+146,style.resource,13,gold);c.Paragraph({x+14,y+168,254,40},style.payoff,12,muted,3);
+   for(int n=0;n<2;++n) {
+     const int ability=n?6:5;const auto spell=rpg::ClassSpell(id,ability);const float row=y+218+n*76.f;
+     AbilityArtwork(c,{x+14,row,30,30},ability,id);c.FitText(x+52,row+1,216,spell.name,15,gold);
+     c.FitText(x+52,row+20,216,spell.targeting,10,muted);
+     c.Paragraph({x+14,row+34,254,36},spell.description,11,ink,2);
+   }
+   c.Center(x+12,y+371,258,"Select a class to inspect its battle arts",10,muted);
+ }
+ if(hint>=C::Dress0 && hint<=C::Dress2) {
+   title=hint==C::Dress0?"Equipped outfit":hint==C::Dress1?"Travel outfit":"Veteran outfit";
+   description=hint==C::Dress0?"Inspect this hero's actual equipment.":"Outfit preview only; equipment is earned in the world.";
+ } else if(hint==C::Closeup){title=selection.Closeup()?"Full figure":"Face close-up";description="Drag to rotate / Wheel to zoom";}
+ else if(hint==C::Pose){title="Try next art";description="Preview the next class attack without changing your build.";}
+ else if(hint==C::Showcase){title=selection.Showcasing()?"Stop showcase":"Class showcase";description="Watch basic, heavy, tactical and signature attacks with sound.";}
+ else if(hint==C::ResetView){title="Reset view";description="Restore the view and equipped outfit; stop the demonstration.";}
+ else if(hint==C::Left || hint==C::Right){title="Rotate character";description="Drag to rotate / Wheel to zoom";}
+ else if(hint==C::Replay){title="Replay art";description="Repeat the selected art without learning it or changing your character.";}
+ else if(hint==C::Stop){title="Stop preview";description="Stop the demonstration and return smoothly to the ready stance.";}
+ if(title) {
+   const auto a=CharacterSelection::Bounds(hint);const float x=std::clamp(a.x+a.w*.5f-160,332.f,648.f);
+   c.Frame({x,504,320,74});c.Text(x+12,515,title,16,gold);c.Wrap(x+12,539,296,description,12,ink,2);
+ }
  if(selection.PageAge()<.20f)c.RectFill({22,156,302,438},{.018f,.025f,.028f,.30f*std::pow(1-selection.PageAge()/.20f,2.f)});
 }
 
 void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bool debug,float cameraYaw) {
- localization::playerName=std::string(s.Nickname())==s.ClassInfo().title?"":s.Nickname();
  Canvas c(renderer); regions_.clear();
  struct StatusTip { std::string name,description,value; };
  std::vector<StatusTip> statusTips;
@@ -886,7 +977,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  }
  const float ux=anchors.player.x,uy=anchors.player.y;
  regions_.push_back({{ux-3,uy,246,70},{},false});
- c.Banner({ux+48,uy,190,21},s.Nickname(),13);
+ c.Banner({ux+48,uy,190,21},s.Nickname(),13,true);
  c.Portrait(ux+27,uy+33,s);
  c.Skin({ux+51,uy+24,189,21},8);
  c.Gradient({ux+56,uy+28,179*playerHealth_.trail,13},{.82f,.59f,.24f,1},{.43f,.23f,.08f,1});
@@ -1042,8 +1133,24 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.Center(x,y+19,54,Seconds(cooldown),19,ink);
   }
   if(hover) c.RectFill({x+3,y+3,48,45},{.85f,.65f,.3f,(pointerHeld_?.23f:.12f)*std::min(1.f,hoverTime_*8+.15f)});
+  if(i>=0 && !CapturesMovement() && !dragging_) {
+    const float returned=abilityFeedback_.Ready(i),used=abilityFeedback_.Used(i);
+    if(used>0) {
+      c.Gradient({x+4,y+4,46,43},{1,.86f,.59f,used*.32f},{1,.68f,.28f,0});
+      c.Line(x+5,y+5,x+49,y+5,2,{1,.91f,.71f,used*.85f});
+    }
+    if(returned>0) {
+      const float pulse=std::sin(returned*3.14159265f),spread=(1-returned)*7;
+      for(float side:{-1.f,1.f})for(float vertical:{-1.f,1.f}) {
+        const float px=x+27+side*(23+spread),py=y+25+vertical*(22+spread);
+        c.Line(px-side*7,py,px+side*2,py,1.6f,{1,.83f,.45f,pulse*.8f});
+        c.Line(px,py-vertical*7,px,py+vertical*2,1.6f,{1,.88f,.60f,pulse*.8f});
+      }
+      c.Gradient({x+4,y+4,46,43},{1,.82f,.42f,pulse*.17f},{1,.86f,.61f,0});
+    }
+  }
   if(i==4) c.Center(x+32,y+32,18,std::to_string(s.Potions()),12,ink);
-  c.Text(x+4,y+1,BindingLabel(slotIndex),slotIndex<10?13:10,ink);
+  c.Text(x+4,y+1,BindingLabel(slotIndex),slotIndex<10?13.f:10.f,ink);
   if(i>=0 && i==s.QueuedAttack()) {
     c.Line(x+4,y+47,x+50,y+47,3,classAccent);
     c.Center(x,y+33,54,"NEXT",10,ink);
@@ -1084,21 +1191,26 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Center(preparing?740.f:668.f,538,preparing?57.f:129.f,preparing?Seconds(cast.remaining)+"s":castReceipt_.interrupted?"Interrupted":"Released",11,ink);
    regions_.push_back({{445,530,360,28},{},false});
  }
- // Navigation sits above the two spell rows, separate from cast feedback.
+ // Keep the combat center for casts and abilities. Utility navigation belongs
+ // on the lower edge, as in the PvE reference, outside the action rows.
  if (panel==Panel::None) {
-  const char* labels[]={"C Gear","I Bag","N Build","M Atlas","J Journal","Esc"};
+  const char* labels[]={"C","I","N","M","J","Esc"};
+  const char* hints[]={"C Gear","I Bag","N Build","M Atlas","J Journal","Esc"};
   const Action actions[]={Action::Character,Action::Inventory,Action::Build,Action::Map,Action::Journal,Action::Menu};
   for(int i=0;i<6;++i) {
-   const Rect nav{447+i*65.f,557,62,23};
+   const Rect nav{1034+i*39.f,677,36,30};
    button(nav,labels[i],actions[i]);
+   regions_.back().hint=hints[i];
    if((i==0 && characterOpen) || (i==1 && inventoryOpen))
     c.Line(nav.x+7,nav.y+nav.h-3,nav.x+nav.w-7,nav.y+nav.h-3,2,gold);
   }
  }
  if (s.TalentPoints()>0) {
-  c.Oval(631,555,9,9,{.35f,.20f,.06f,1}); c.Ring(631,555,9,gold);
-  c.Center(622,548,18,std::to_string(s.TalentPoints()),12,ink);
-  regions_.push_back({{622,546,18,18},{Action::Build},true});
+  if(panel==Panel::None) {
+   c.Oval(1130,674,9,9,{.35f,.20f,.06f,1}); c.Ring(1130,674,9,gold);
+   c.Center(1121,667,18,std::to_string(s.TalentPoints()),12,ink);
+   regions_.push_back({{1121,665,18,18},{Action::Build},true});
+  }
  }
  c.Text(22,674,std::to_string(s.Gold())+" gold",16,gold);
  c.Text(22,695,"WASD  Move     RMB  Orbit     F11  Display",11,muted);
@@ -1114,7 +1226,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  // Independent side windows: no world dimming, keyboard movement remains live.
  if (characterOpen) {
   blockWindow({12,116,438,500});
-  c.Banner({30,106,265,31},s.Nickname(),19); close({420,121,24,24},Panel::Character);
+  c.Banner({30,106,265,31},s.Nickname(),19,true); close({420,121,24,24},Panel::Character);
   c.Frame({65,146,188,23},{.16f,.29f,.26f,1},{.42f,.47f,.32f,1});
   c.Center(65,151,188,"Level "+std::to_string(s.Level())+"  /  "+s.ClassName(),12);
   c.Alcove({65,176,188,329});
@@ -1710,7 +1822,9 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  if(dragging_ && dragSpell_>=0) drawHotbars();
  // Reverse hit order matches pointer dispatch: covered cells never leak tooltips.
  for (auto it=regions_.rbegin();!dragging_ && it!=regions_.rend();++it) if (it->rect.Contains(mouseX_,mouseY_)) {
-  if(it->event.action==Action::InspectStatus) {
+  if(it->hint) {
+   const float x=std::clamp(it->rect.x-60,940.f,1090.f);c.Frame({x,636,180,30});c.Center(x+6,643,168,it->hint,13,ink);
+  } else if(it->event.action==Action::InspectStatus) {
    const auto& status=statusTips[it->event.value];
    const float x=std::clamp(it->rect.x-80,8.f,962.f);
    const float y=it->rect.y>300?it->rect.y-151:it->rect.y+37;

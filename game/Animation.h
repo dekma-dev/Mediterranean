@@ -20,6 +20,7 @@ struct Sample {
   float hitForward=0;
   bool directedHit=false;
   std::array<Foot,2> feet{};
+  std::array<float,2> feetReachWeight{1,1}; // Support or anticipated touchdown.
   bool feetActive=false;
   bool pelvisStabilized=false;
   float pelvisLimit=0; // Stateful contact recovery; never advanced by rendering.
@@ -34,6 +35,7 @@ struct Sample {
   float landingSeconds=-1; // Accepted landing clock for authored clip sampling.
   float support=0,clothSide=0,clothBack=0;
   std::array<Foot,2> departureFeet{};
+  std::array<float,2> departureReachWeight{1,1};
   float departure=0,departureSupport=0;
   float departurePelvisLimit=0;
   bool departurePelvisStabilized=false;
@@ -55,6 +57,7 @@ struct Sample {
   ActionChannels action;
   bool retreat=false;
   float flightPhase=-1; // Actual ballistic progress; -1 keeps preview fallback.
+  float extendedFall=0; // Blend to falling only after ordinary jump descent.
 };
 inline float ForwardRecoil(const Sample& sample) { return sample.directedHit?Signed(sample.hitForward):Unit(sample.hit); }
 struct ImpactProfile { float strength=1,peak=.055f,sidePeak=.065f; };
@@ -202,11 +205,13 @@ struct State {
     // Filtered rise is useful for secondary sway, but reverses/delays source
     // playback near takeoff/apex. Joint timing follows actual flight velocity.
     pose.flightPhase=onGround?1.f:Unit((1-velocity/motion::jumpSpeed)*.5f);
+    pose.extendedFall=onGround?0.f:SmoothStep((-velocity/motion::jumpSpeed-1.f)/.8f);
     if (!onGround && !wasAirborne) {
       flightAge=0; hasDeparture=pose.feetActive;
       departureLanding=pose.landing;
       departureLandingSeconds=pose.landingSeconds;
       pose.departureFeet=pose.feet; pose.departureSupport=pose.support;
+      pose.departureReachWeight=pose.feetReachWeight;
       pose.departurePelvisLimit=pose.pelvisLimit;
       pose.departurePelvisStabilized=pose.pelvisStabilized;
     }

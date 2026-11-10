@@ -1,6 +1,7 @@
 #pragma once
 #include "game/Simulation.h"
 #include "game/CreatureContacts.h"
+#include "game/SpellVfx.h"
 #include <DirectXMath.h>
 #include <array>
 
@@ -16,6 +17,7 @@ public:
   void Emit(const rpg::CombatVisualEvent& event,const DirectX::XMFLOAT3* spellOrigin=nullptr);
   void EmitFootstep(const presentation::CreatureContact& contact,const rpg::WorldMap& map);
   std::size_t FootprintCount() const;
+  std::size_t ResidueCount() const;
   void TrackWeapon(rpg::EntityId actor,DirectX::XMFLOAT3 root,DirectX::XMFLOAT3 tip);
   void CancelTrail(rpg::EntityId actor);
   void CancelTrails();
@@ -59,4 +61,5 @@ private:
   struct Footprint { presentation::CreatureContact contact{};float age=10,dirt=0; };
   std::array<Footprint,64> footprints_{};
   unsigned footprintCursor_=0;
+  std::array<spellvfx::Residue,12> residues_{};
 };

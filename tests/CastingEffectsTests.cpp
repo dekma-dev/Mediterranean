@@ -72,14 +72,22 @@ void AttachmentChecks(Renderer& r,const std::filesystem::path& out){
  auto dead=castfx::Preview({},{0,1,0},0);dead.alive=false;r.BeginFrame();potion.Render(r,&dead);Check(r.EffectVertices()==0 && r.EndFrame(false),"Dead actor retained potion aura");
 }
 void Preparations(Renderer& r,const std::filesystem::path& out){
- for(auto id:{ClassId::Mage,ClassId::Scout})for(int ability:{1,5,8,9,13,14}){
+ for(auto id:{ClassId::Mage,ClassId::Scout,ClassId::Priest})for(int ability:{1,5,6,7,8,9,13,14}){
+  if(id==ClassId::Priest && ability>=8)continue;
   Pixels reference;
   for(int hz:{30,60,144}){
    auto s=Hero(id);auto& target=const_cast<Enemy&>(s.Enemies()[0]);target.position=target.home={-4,7};target.state=EnemyState::Idle;target.health=target.MaxHealth();target.attackCooldown=100;target.looted=false;
+   if(ability==6)for(int n=0;n<s.CombatStyleInfo().capacity && !s.EmpoweredReady();++n) {
+    target.health=target.MaxHealth();target.stunned=100;target.attackCooldown=100;
+    Command gather;gather.selectActor=100;gather.ability=0;s.Update(.001f,gather);
+    Advance(1.6f,120,[&](float dt){s.Update(dt,{});});
+   }
+   target.health=target.MaxHealth();target.stunned=100;target.attackCooldown=100;
    Command c;c.selectActor=100;c.ability=ability;s.Update(.001f,c);Check(s.Attacking(),"Preparation fixture rejected");
    const float time=combat::StrokeStart(s.HeavyAttack())/s.AttackRate()*.70f;Advance(time,hz,[&](float dt){s.Update(dt,{});});
    const auto a=castfx::Preview({0,0,0},{-.2f,1.3f,.3f},.45f);r.BeginFrame();r.SetCamera({2.7f,2.4f,-4},{0,.9f,0});
-   castfx::Prepare(r,s,a);Check(r.EffectVertices()>0 && r.EffectVertices()<512,"Preparation budget");
+   castfx::Prepare(r,s,a);const bool quiet=id==ClassId::Scout && !s.HeavyAttack();
+   Check(quiet?r.EffectVertices()==0:r.EffectVertices()>0 && r.EffectVertices()<512,"Preparation budget");
    const auto image=Capture(r,out/("prepare-"+std::to_string(int(id))+"-"+std::to_string(ability)+"-"+std::to_string(hz)+".png"));
    if(hz==30)reference=image;else Check(Difference(reference,image)<.04,"Preparation depends on refresh rate");
    s.StopMovement();r.BeginFrame();castfx::Prepare(r,s,a);Check(r.EffectVertices()==0 && r.EndFrame(false),"Cancelled preparation retained charge");

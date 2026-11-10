@@ -22,8 +22,10 @@ std::filesystem::path CharacterSelection::Path(rpg::ClassId id) const {
   return id==rpg::ClassId::Warrior?base_:base_.parent_path()/("hero-"+std::to_string(int(id))+".save");
 }
 void CharacterSelection::SetPage(Page page,Control focus) {
+  stageAge_=1;
   if(page==Page::Roster)dress_=Dress::Equipped;
   page_=page;focus_=focus;hover_=Control::None;pageAge_=0;highlights_.fill(0);CancelGesture();ResetPreview();
+  if(page==Page::Customize)nameEditor_.Place(draftName_,rpg::NameLength(draftName_));
 }
 void CharacterSelection::ReadSlots() {
   for(int i=0;i<int(slots_.size());++i) {
@@ -35,12 +37,14 @@ void CharacterSelection::ReadSlots() {
 void CharacterSelection::Open(const std::filesystem::path& file,rpg::ClassId selected) {
   base_=file;file_=file;class_=int(selected)>=0 && selected<rpg::ClassId::Count?selected:rpg::ClassId::Warrior;
   draftName_.clear();look_={};notice_.clear();
+  nameEditor_={};measuredName_.clear();nameAdvances_.fill(0);
   dress_=Dress::Equipped;
   callingView_=CallingView::Overview;branch_=0;
   time_=yaw_=width_=height_=zoom_=zoomGoal_=0;closeup_=false;ResetPreview();SetPage(Page::Roster,Control::Enter);Refresh();
   focus_=status_==Status::Saved?Control::Enter:status_==Status::New?Control::Create:Control::Refresh;
 }
 void CharacterSelection::Refresh() {
+  stageAge_=1;
   CancelGesture();ResetPreview();changed_=false;notice_.clear();ReadSlots();file_=Path(class_);
   hero_=rpg::Simulation{};hero_.CreateCharacter(class_,rpg::DescribeClass(class_).title);
   status_=ReadProfile(file_,class_,hero_,snapshot_);
@@ -49,8 +53,16 @@ void CharacterSelection::PreviewDraft() {
   auto name=draftName_;while(!name.empty() && name.back()==' ') name.pop_back();
   hero_.CreateCharacter(class_,rpg::ValidCharacterName(name)?name:rpg::DescribeClass(class_).title,look_);
 }
+void CharacterSelection::PickName(float x,bool extend) {
+  const auto length=rpg::NameLength(draftName_);std::size_t position=length;
+  if(measuredName_==draftName_) {
+    x-=Bounds(Control::Name).x+10;
+    for(std::size_t i=0;i<length;++i)if(x<(nameAdvances_[i]+nameAdvances_[i+1])*.5f){position=i;break;}
+  }
+  nameEditor_.Place(draftName_,position,extend);
+}
 Rect CharacterSelection::Bounds(Control control) {
-  if(control>=Control::Dress0 && control<=Control::Dress2) return {412+152.f*(int(control)-int(Control::Dress0)),100,148,30};
+  if(control>=Control::Dress0 && control<=Control::Dress2) return {472+42.f*(int(control)-int(Control::Dress0)),608,38,38};
   if(control>=Control::Overview && control<=Control::Talents) return {34+94.f*(int(control)-int(Control::Overview)),236,90,30};
   if(control>=Control::Art0 && control<=Control::Art13) {
     const int n=int(control)-int(Control::Art0);return {34+40.f*(n%7),280+44.f*(n/7),38,42};
@@ -58,7 +70,7 @@ Rect CharacterSelection::Bounds(Control control) {
   if(control>=Control::Branch0 && control<=Control::Branch2) return {34+94.f*(int(control)-int(Control::Branch0)),280,90,30};
   if(control>=Control::Skin0 && control<=Control::Dye4) {
     const int n=int(control)-int(Control::Skin0);
-    return {1047+33.f*(n%5),284+82.f*(n/5),30,30};
+    return {1047+33.f*(n%5),284+100.f*(n/5),30,30};
   }
   if(control>=Control::Class0 && control<=Control::Class10) return {1004,112+44.f*(int(control)-int(Control::Class0)),244,42};
   switch(control) {
@@ -68,20 +80,25 @@ Rect CharacterSelection::Bounds(Control control) {
   case Control::Next:case Control::Confirm:case Control::Enter:return {1044,648,204,48};
   case Control::Back:case Control::Refresh:return {32,654,130,38};
   case Control::Cancel:case Control::Quit:return {174,654,130,38};
-  case Control::Left:return {482,606,36,30};
-  case Control::Right:return {784,606,36,30};
-  case Control::Closeup:return {398,654,154,38};
-  case Control::Pose:return {560,654,154,38};
-  case Control::ResetView:return {722,654,138,38};
-  case Control::Showcase:return {876,654,154,38};
-  case Control::SkinLeft:return {1008,284,30,30};case Control::SkinRight:return {1220,284,30,30};
-  case Control::HairLeft:return {1008,366,30,30};case Control::HairRight:return {1220,366,30,30};
-  case Control::DyeLeft:return {1008,448,30,30};case Control::DyeRight:return {1220,448,30,30};
+  case Control::Left:return {422,608,36,38};
+  case Control::Right:return {812,608,36,38};
+  case Control::Closeup:return {616,608,38,38};
+  case Control::Pose:return {660,608,38,38};
+  case Control::ResetView:return {748,608,38,38};
+  case Control::Showcase:return {704,608,38,38};
+  case Control::Replay:return {34,604,136,32};
+  case Control::Stop:return {178,604,136,32};
+  case Control::SkinLeft:return {1158,244,28,32};case Control::SkinRight:return {1222,244,28,32};
+  case Control::HairLeft:return {1158,344,28,32};case Control::HairRight:return {1222,344,28,32};
+  case Control::DyeLeft:return {1158,444,28,32};case Control::DyeRight:return {1222,444,28,32};
   default:return {};
   }
 }
 bool CharacterSelection::Enabled(Control control) const {
   if(control==Control::None) return false;
+  if(control==Control::Replay || control==Control::Stop)
+    return page_==Page::Class && callingView_==CallingView::Arts &&
+      (control==Control::Replay || actionTime_>=0 || showcase_ || PreviewEffectCount()>0);
   if((control>=Control::Dress0 && control<=Control::Dress2) || control==Control::Showcase)
     return page_!=Page::Roster || status_!=Status::Unreadable;
   if(control>=Control::Overview && control<=Control::Talents) return page_==Page::Class;
@@ -118,6 +135,8 @@ void CharacterSelection::CreateProfile() {
 }
 CharacterSelection::Action CharacterSelection::Activate(Control control) {
   if(!Enabled(control)) return Action::None;
+  if(control==Control::Left || control==Control::Right || control==Control::Closeup || control==Control::ResetView ||
+     (control>=Control::Dress0 && control<=Control::Dress2))stageAge_=1;
   if(control>=Control::Dress0 && control<=Control::Dress2) {
     dress_=Dress(int(control)-int(Control::Dress0));ResetPreview();audition_.Add(sound::Cue::UiClick);return Action::None;
   }
@@ -130,20 +149,33 @@ CharacterSelection::Action CharacterSelection::Activate(Control control) {
     StartPreview(previewArts[int(control)-int(Control::Art0)]);return Action::None;
   }
   if(control>=Control::Class0 && control<=Control::Class10) {
+    const bool changed=class_!=rpg::ClassId(int(control)-int(Control::Class0));
+    const auto outgoing=PreviewStage();const bool hadFigure=status_!=Status::Unreadable;
     ResetPreview();
     class_=rpg::ClassId(int(control)-int(Control::Class0));Refresh();
-    if(page_==Page::Class) {PreviewDraft();focus_=Enabled(Control::Next)?Control::Next:control;}
+    if(page_==Page::Class) {PreviewDraft();focus_=Enabled(Control::Next)?Control::Next:control;if(changed)QueueIntroduction();}
     else focus_=status_==Status::Saved?Control::Enter:status_==Status::New?Control::Create:Control::Refresh;
+    if(changed && hadFigure && status_!=Status::Unreadable) {
+      previousStage_=outgoing;previousStage_.effects=false;stageAge_=0;
+    }
     return Action::None;
   }
   switch(control) {
+  case Control::Replay:showcase_=false;StartPreview(rpg::ValidSpell(previewAbility_)?previewAbility_:0);break;
+  case Control::Stop:
+    // Cancel sound/effects immediately, but let both body controllers settle
+    // through their normal interrupted-action blend on subsequent updates.
+    introduction_=-1;automaticPreview_=showcase_=false;previewFinished_=false;
+    actionTime_=-1;released_=false;showcaseRest_=0;audition_.Reset();
+    if(effects_.value)effects_->Reset();
+    break;
   case Control::Closeup:closeup_=!closeup_;zoomGoal_=closeup_?1.f:0.f;break;
-  case Control::Pose:showcase_=false;StartPreview(previewAbility_==0?1:previewAbility_==1?5:previewAbility_==5?6:previewAbility_==6?7:0);break;
+  case Control::Pose:showcase_=false;StartPreview(automaticPreview_?0:previewAbility_==0?1:previewAbility_==1?5:previewAbility_==5?6:previewAbility_==6?7:0);break;
   case Control::Showcase:
     if(showcase_)ResetPreview();
     else {showcase_=true;showcaseStep_=0;showcaseRest_=0;StartPreview(0);}
     break;
-  case Control::ResetView:closeup_=false;zoomGoal_=0;yaw_=0;dress_=Dress::Equipped;ResetPreview();break;
+  case Control::ResetView:closeup_=false;zoomGoal_=0;yaw_=yawGoal_=0;dress_=Dress::Equipped;ResetPreview();break;
   case Control::Name:break;
   case Control::Hero:focus_=Control::Enter;break;
   case Control::Enter: {
@@ -158,7 +190,7 @@ CharacterSelection::Action CharacterSelection::Activate(Control control) {
       if(empty==slots_.end()) {notice_="All class slots are occupied.";break;}
       class_=rpg::ClassId(empty-slots_.begin());
     }
-    look_={};draftName_.clear();notice_.clear();PreviewDraft();SetPage(Page::Class,Control::Next);break;
+    look_={};draftName_.clear();notice_.clear();PreviewDraft();SetPage(Page::Class,Control::Next);QueueIntroduction();break;
   case Control::Next:
     ReadSlots();
     if(slots_[int(class_)].status!=Status::New) {notice_="This class slot is occupied. Choose another calling.";break;}
@@ -171,8 +203,8 @@ CharacterSelection::Action CharacterSelection::Activate(Control control) {
     break;
   case Control::Refresh:Refresh();break;
   case Control::Quit:return Action::Quit;
-  case Control::Left:yaw_=std::remainder(yaw_-.4f,6.2831853f);break;
-  case Control::Right:yaw_=std::remainder(yaw_+.4f,6.2831853f);break;
+  case Control::Left:yawGoal_=std::remainder(yawGoal_-.4f,6.2831853f);break;
+  case Control::Right:yawGoal_=std::remainder(yawGoal_+.4f,6.2831853f);break;
   default:
     if(control>=Control::Skin0 && control<=Control::Dye4) {
       const int n=int(control)-int(Control::Skin0);
@@ -188,10 +220,21 @@ CharacterSelection::Action CharacterSelection::Activate(Control control) {
   return Action::None;
 }
 void CharacterSelection::ResetPreview() {
+  previewFinished_=false;
+  introduction_=-1;automaticPreview_=false;
   showcase_=false;showcaseRest_=0;audition_.Reset();
   actionTime_=-1;previewAbility_=-1;released_=false;previewController_.Reset();previewWeapon_={};if(effects_.value)effects_->Reset();
 }
+void CharacterSelection::QueueIntroduction() {
+  // A single entrance, not an unattended loop. Only the four current focus
+  // classes have a reviewed introduction; ordinary roster entry stays quiet.
+  if(class_==rpg::ClassId::Warrior || class_==rpg::ClassId::Scout ||
+     class_==rpg::ClassId::Mage || class_==rpg::ClassId::Priest) introduction_=.55f;
+}
 void CharacterSelection::StartPreview(int ability) {
+  previewFinished_=false;
+  stageAge_=1;
+  introduction_=-1;automaticPreview_=false;
   closeup_=false;zoomGoal_=0;previewAbility_=ability;actionTime_=0;released_=false;
   effects_->Reset();previewWeapon_.last=-1;
   audition_.Reset();
@@ -204,6 +247,23 @@ float CharacterSelection::PreviewRate() const {
     rpg::ClassAttackRate(class_,PreviewHeavy())*
       (previewAbility_==7?.85f:previewAbility_==6?.7f:previewAbility_==5?.8f:1.f);
 }
+float CharacterSelection::PreviewDuration() const {
+  return previewAbility_==2?.50f:previewAbility_==3?hero_.RecoveryCastDuration()+.42f:
+    animation::ActionDuration(PreviewHeavy()?animation::ActionClip::Heavy:animation::ActionClip::Basic);
+}
+float CharacterSelection::PreviewRelease() const {
+  return previewAbility_==2?.12f:previewAbility_==3?hero_.RecoveryCastDuration():
+    hero_.ClassInfo().range>3?combat::StrokeStart(PreviewHeavy()):combat::Contact(PreviewHeavy());
+}
+CharacterSelection::ArtTiming CharacterSelection::PreviewTiming() const {
+  const float duration=PreviewDuration(),release=PreviewRelease();
+  const float follow=std::min(duration,release+(previewAbility_==2?.22f:.09f));
+  ArtTiming view;view.release=release/duration;view.follow=follow/duration;
+  view.progress=previewFinished_?1.f:actionTime_<0?0.f:std::clamp(actionTime_/duration,0.f,1.f);
+  view.phase=previewFinished_?"Demonstration complete":actionTime_<0?"Ready to demonstrate":
+    actionTime_<release?"Preparation":actionTime_<follow?"Release":"Recovery";
+  return view;
+}
 CharacterOutfit CharacterSelection::PreviewOutfit() const {
   auto outfit=CharacterOutfit::From(hero_.Items(),class_,hero_.Look());
   if(dress_==Dress::Equipped)return outfit;
@@ -214,6 +274,14 @@ CharacterOutfit CharacterSelection::PreviewOutfit() const {
   outfit.helm=false;
   outfit.shield=veteran && (class_==rpg::ClassId::Warrior || class_==rpg::ClassId::Paladin);
   return outfit;
+}
+CharacterSelection::StageView CharacterSelection::PreviewStage() const {
+  // Hold only presentation data for the brief outgoing dissolve. Profiles,
+  // inventory and live simulation are never copied into a second hero.
+  if(stageAge_<.10f) {
+    auto view=previousStage_;view.opacity*=1-combat::Smooth(stageAge_/.10f);return view;
+  }
+  return {class_,PreviewOutfit(),PreviewBody(),yaw_,zoom_,combat::Smooth((stageAge_-.10f)/.22f),true};
 }
 animation::Sample CharacterSelection::PreviewBody() const {
   auto pose=animation::Idle(time_);pose.action=previewController_.pose;
@@ -251,16 +319,18 @@ void CharacterSelection::RenderEffects(Renderer& renderer) const {
 }
 CharacterSelection::Action CharacterSelection::Update(float seconds,const Input& input,float wheel) {
   audition_.ClearFrame();
-  if(!input.Focused()) {CancelGesture();ResetPreview();hover_=Control::None;return Action::None;}
+  if(!input.Focused()) {CancelGesture();ResetPreview();stageAge_=1;hover_=Control::None;return Action::None;}
   if(!std::isfinite(seconds))seconds=0;
   time_=std::fmod(time_+std::clamp(seconds,0.f,.05f),600.f);
   const float uiSeconds=std::clamp(seconds,0.f,.05f);
+  stageAge_=std::min(1.f,stageAge_+uiSeconds);
   pageAge_=std::min(1.f,pageAge_+uiSeconds);
   for(int i=0;i<int(Control::None);++i) {
     const auto control=Control(i);const float goal=Enabled(control) && (hover_==control || focus_==control)?1.f:0.f;
     highlights_[i]+=(goal-highlights_[i])*(1-std::exp(-14.f*uiSeconds));
   }
   const float dt=std::clamp(seconds,0.f,.05f);
+  yaw_=std::remainder(yaw_+std::remainder(yawGoal_-yaw_,6.2831853f)*-std::expm1(-12.f*dt),6.2831853f);
   zoom_+=(zoomGoal_-zoom_)*-std::expm1(-12.f*dt);
   if(effects_.value)effects_->Advance(dt);bool emitRelease=false;float releaseElapsed=0;
   if(actionTime_>=0) {
@@ -274,16 +344,15 @@ CharacterSelection::Action CharacterSelection::Update(float seconds,const Input&
         sound::ReleaseCue(class_,previewAbility_,heavy):heavy?sound::Cue::Heavy:sound::Cue::Strike);
       if(class_==rpg::ClassId::Warrior && heavy)audition_.Add(sound::Cue::WarriorEffort);
     }
-    const float release=previewAbility_==3?hero_.RecoveryCastDuration():hero_.ClassInfo().range>3?combat::StrokeStart(heavy):combat::Contact(heavy);
+    const float release=PreviewRelease();
     if(!released_ && previewAbility_!=2 && actionTime_>=release) {released_=true;emitRelease=true;releaseElapsed=std::max(0.f,(actionTime_-release)/PreviewRate());}
-    const float duration=previewAbility_==2?.50f:previewAbility_==3?hero_.RecoveryCastDuration()+.42f:animation::ActionDuration(!PreviewHeavy()?animation::ActionClip::Basic:animation::ActionClip::Heavy);
-    if(actionTime_>=duration) actionTime_=-1;
+    if(actionTime_>=PreviewDuration()) {actionTime_=-1;previewFinished_=true;}
   }
   const float recovery=hero_.RecoveryCastDuration();
   const float recoveryPose=previewAbility_!=3 || actionTime_<0?-1:actionTime_<recovery?
     std::min(.30f,actionTime_/std::max(.001f,recovery)*1.5f):.30f+actionTime_-recovery;
   previewController_.Update(dt,class_,previewAbility_==2 || previewAbility_==3?-1:actionTime_,PreviewHeavy(),
-    recoveryPose,true,previewAbility_==5,previewAbility_==6,previewAbility_==7);
+    recoveryPose,true,previewAbility_==5,previewAbility_==6,previewAbility_==7,-1,previewAbility_);
   const auto form=rpg::WeaponFor(class_).form;
   const bool staff=rpg::StaffWeapon(form),bow=form==rpg::WeaponForm::Handbow,prayer=form==rpg::WeaponForm::Scepter;
   const bool blade=form==rpg::WeaponForm::Blade || form==rpg::WeaponForm::Mace || form==rpg::WeaponForm::Cleaver;
@@ -308,14 +377,38 @@ CharacterSelection::Action CharacterSelection::Update(float seconds,const Input&
     effects_->TrackWeapon(0,world(pose.WeaponPoint(0)),world(pose.WeaponPoint(.8f)));
   }
   const bool resized=width_!=input.Width() || height_!=input.Height();width_=input.Width();height_=input.Height();
-  if(resized || input.Pressed(VK_F11)) {CancelGesture();hover_=Control::None;return Action::None;}
+  if(resized || input.Pressed(VK_F11)) {
+    stageAge_=1;
+    if(automaticPreview_)ResetPreview();else introduction_=-1;
+    CancelGesture();hover_=Control::None;return Action::None;
+  }
   const Layout layout(width_,height_);hover_=Control::None;
   const float localX=layout.LocalX(input.ClientX()),localY=layout.LocalY(input.ClientY());
+  if(std::abs(localX-hintPointerX_)>.5f || std::abs(localY-hintPointerY_)>.5f)keyboardHints_=false;
+  hintPointerX_=localX;hintPointerY_=localY;
   const bool stage=StageBounds().Contains(localX,localY) && Enabled(Control::Left);
+  // A deliberate input wins over a pending entrance in the very same frame.
+  // Do not zoom out or emit a late charge after the player begins inspection.
+  bool deliberate=std::isfinite(wheel) && wheel!=0;
+  for(int key=1;key<256 && !deliberate;++key)deliberate=input.Pressed(key);
+  if(deliberate) {
+    if(stage && (input.Pressed(VK_LBUTTON) || wheel!=0))stageAge_=1;
+    introduction_=-1;
+    if(automaticPreview_ && (input.Pressed(VK_LBUTTON) || wheel!=0 || input.Pressed(VK_LEFT) || input.Pressed(VK_RIGHT)))ResetPreview();
+  } else if(introduction_>=0 && page_==Page::Class) {
+    introduction_-=dt;
+    if(introduction_<=0) {
+      StartPreview(class_==rpg::ClassId::Warrior || class_==rpg::ClassId::Scout?1:6);
+      automaticPreview_=true;
+    }
+  }
   for(int i=0;i<int(Control::None);++i) {
     const auto control=Control(i);
     if(Enabled(control) && Bounds(control).Contains(layout.LocalX(input.ClientX()),layout.LocalY(input.ClientY()))) hover_=control;
   }
+  const auto nextHint=keyboardHints_?focus_:hover_;
+  if(nextHint!=hint_) {hint_=nextHint;hintAge_=0;}
+  else hintAge_=std::min(1.f,hintAge_+dt);
   if(showcase_ && actionTime_<0 && !rotating_ && !input.Held(VK_LBUTTON) && !(page_==Page::Customize && focus_==Control::Name)) {
     showcaseRest_+=dt;
     if(showcaseRest_>=1.4f) {
@@ -327,6 +420,8 @@ CharacterSelection::Action CharacterSelection::Update(float seconds,const Input&
     zoomGoal_=std::clamp(zoomGoal_+wheel*.18f,0.f,1.f);closeup_=zoomGoal_>.5f;
   }
   if(input.Pressed(VK_TAB)) {
+    nameRepeatKey_=0;
+    keyboardHints_=true;hintAge_=0;
     const int direction=input.Held(VK_SHIFT)?-1:1;
     do {focus_=Control((int(focus_)+direction+int(Control::None))%int(Control::None));} while(!Enabled(focus_));
   }
@@ -335,42 +430,54 @@ CharacterSelection::Action CharacterSelection::Update(float seconds,const Input&
     focus_=Control::Quit;return Action::None;
   }
   if(input.Pressed(VK_LBUTTON)) {
+    keyboardHints_=false;hintAge_=0;
     pressed_=hover_;if(hover_!=Control::None) focus_=hover_;
     rotating_=stage && hover_==Control::None;dragX_=localX;
+    nameDragging_=page_==Page::Customize && hover_==Control::Name;
+    if(nameDragging_)PickName(localX,input.Held(VK_SHIFT));
   }
+  if(nameDragging_ && input.Held(VK_LBUTTON))PickName(localX,true);
   if(rotating_ && input.Held(VK_LBUTTON)) {
     yaw_=std::remainder(yaw_+std::clamp(localX-dragX_,-150.f,150.f)*.012f,6.2831853f);dragX_=localX;
+    yawGoal_=yaw_;
   }
   if(input.Released(VK_LBUTTON)) {
-    const auto clicked=pressed_;const bool dragged=rotating_;CancelGesture();if(!dragged && clicked==hover_) return Activate(clicked);
+    const auto clicked=pressed_;const bool dragged=rotating_ || nameDragging_;CancelGesture();if(!dragged && clicked==hover_) return Activate(clicked);
   }
   if(focus_==Control::Name && page_==Page::Customize) {
     const auto previousName=draftName_;
-    const bool control=input.Held(VK_CONTROL),alt=input.Held(VK_MENU);
-    if(control && !alt && input.Pressed('A')) draftName_.clear();
+    const bool control=input.Held(VK_CONTROL),alt=input.Held(VK_MENU),shift=input.Held(VK_SHIFT);
+    if(control && !alt && input.Pressed('A'))nameEditor_.All(draftName_);
+    if(control && !alt && input.Pressed('V'))nameEditor_.Insert(draftName_,input.PasteText());
     if(!control && !alt) {
+      const auto editKey=[&](int key){
+        if(key==VK_LEFT || key==VK_RIGHT)nameEditor_.Move(draftName_,key==VK_LEFT?-1:1,shift);
+        else nameEditor_.Erase(draftName_,key==VK_BACK);
+      };
+      bool began=false;
+      for(int key:{VK_LEFT,VK_RIGHT,VK_BACK,VK_DELETE})if(input.Pressed(key)) {
+        editKey(key);nameRepeatKey_=key;nameRepeatDelay_=.40f;began=true;
+      }
+      if(nameRepeatKey_ && !input.Held(nameRepeatKey_))nameRepeatKey_=0;
+      if(nameRepeatKey_ && !began) {
+        nameRepeatDelay_-=dt;
+        while(nameRepeatDelay_<=0){editKey(nameRepeatKey_);nameRepeatDelay_+=.05f;}
+      }
+      if(input.Pressed(VK_HOME))nameEditor_.Place(draftName_,0,shift);
+      if(input.Pressed(VK_END))nameEditor_.Place(draftName_,rpg::NameLength(draftName_),shift);
       if(input.NativeText()) {
-        for(std::size_t offset=0;offset<input.Characters().size() && rpg::NameLength(draftName_)<20;) {
-          const auto begin=offset;const auto ch=text::Next(input.Characters(),offset);
-          if(rpg::NameLetter(ch) || ch=='-' || ch=='\'' ||
-             (ch==' ' && !draftName_.empty() && draftName_.back()!=' ' && rpg::NameLength(draftName_)<19))
-            draftName_+=input.Characters().substr(begin,offset-begin);
-        }
+        nameEditor_.Insert(draftName_,input.Characters());
       } else {
         // Deterministic synthetic input used by tools/tests without a message loop.
-        for(int key='A';key<='Z';++key) if(input.Pressed(key) && rpg::NameLength(draftName_)<20) draftName_+=char((input.Held(VK_SHIFT)!=input.CapsLock())?key:key+32);
-        if(input.Pressed(VK_SPACE) && !draftName_.empty() && draftName_.back()!=' ' && rpg::NameLength(draftName_)<19) draftName_+=' ';
-        for(auto key:{VK_OEM_MINUS,VK_OEM_7}) if(input.Pressed(key) && rpg::NameLength(draftName_)<20) draftName_+=key==VK_OEM_MINUS?'-':'\'';
+        for(int key='A';key<='Z';++key)if(input.Pressed(key))nameEditor_.Insert(draftName_,std::string(1,char((shift!=input.CapsLock())?key:key+32)));
+        if(input.Pressed(VK_SPACE))nameEditor_.Insert(draftName_," ");
+        for(auto key:{VK_OEM_MINUS,VK_OEM_7})if(input.Pressed(key))nameEditor_.Insert(draftName_,key==VK_OEM_MINUS?"-":"'");
       }
-      if(input.Pressed(VK_BACK) && !draftName_.empty()) {
-        auto begin=draftName_.size()-1;
-        while(begin && (static_cast<unsigned char>(draftName_[begin])&0xc0)==0x80) --begin;
-        draftName_.erase(begin);
-      }
-    }
+    } else nameRepeatKey_=0;
     if(previousName!=draftName_) PreviewDraft();
     if(input.Pressed(VK_RETURN)) {
       while(!draftName_.empty() && draftName_.back()==' ') draftName_.pop_back();
+      nameEditor_.Place(draftName_,rpg::NameLength(draftName_));
       if(Enabled(Control::Confirm)) {PreviewDraft();focus_=Control::Confirm;}
     }
     return Action::None;

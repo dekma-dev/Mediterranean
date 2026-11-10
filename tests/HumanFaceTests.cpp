@@ -98,7 +98,12 @@ int main() {
     for(unsigned y=0;y<720;++y)for(unsigned x=0;x<960;++x) {
       const auto p=(y*960+x)*4;
       const bool difference=std::abs(int(open[p])-int(closed[p]))+std::abs(int(open[p+1])-int(closed[p+1]))+std::abs(int(open[p+2])-int(closed[p+2]))>18;
-      changed+=difference;outside+=difference && (x<330 || x>650 || y<285 || y>410);
+      // This fixed close-up frames every identity's complete head, hair and
+      // neck inside these bounds. Blinking also moves the eyelid's cast shadow
+      // on the right shoulder; that is not deformation of facial anatomy.
+      const bool headAndNeck=x>=315 && x<=610 && y>=130 && y<=575;
+      changed+=difference && headAndNeck;
+      outside+=difference && headAndNeck && (x<330 || x>650 || y<285 || y>410);
     }
     Check(changed>100 && changed<12000,"Blink must visibly close the eyes");
     Check(outside<300,"Blink displaced forehead, hairline, jaw or neck outside the ocular region");

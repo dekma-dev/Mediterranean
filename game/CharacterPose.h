@@ -10,7 +10,11 @@ struct LimbPose { DirectX::XMFLOAT3 root,joint,end; };
 struct CharacterPose {
   float bodyLift=0,upperPitch=0,upperYaw=0,upperRoll=0,bodyShift=0;
   float bodyForward=0;
+  // Authored vertical motion before world-contact reach correction.
+  float unconstrainedLift=0;
   DirectX::XMFLOAT3 pelvisRotation{};
+  std::array<DirectX::XMFLOAT3,2> spineRotation{},shoulderOffset{};
+  float spineWeight=0;
   float headYaw=0,headPitch=0;
   float handCast=0;
   float freeHandCurl=.32f;
@@ -27,6 +31,8 @@ struct CharacterPose {
   // The former .40 m shin stretched the 36 cm bind bone and forced a crouch.
   static constexpr float upperArm=.28f,forearm=.27f,thigh=.40f,shin=.36013886f;
   DirectX::XMFLOAT3 UpperPoint(DirectX::XMFLOAT3 point) const;
+  DirectX::XMMATRIX UpperTransform() const;
+  DirectX::XMMATRIX SpineTransform(unsigned segment) const;
   DirectX::XMMATRIX PelvisTransform() const;
   DirectX::XMFLOAT3 PelvisPoint(DirectX::XMFLOAT3 point) const;
   DirectX::XMFLOAT3 UpperDirection(DirectX::XMFLOAT3 direction) const;

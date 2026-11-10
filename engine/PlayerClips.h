@@ -23,8 +23,15 @@ struct Frame {
  DirectX::XMFLOAT3 pelvis{};
  DirectX::XMFLOAT2 shift{}; // Lateral and forward displacement, metres.
  std::array<DirectX::XMFLOAT3,2> elbows{};
+ // PCL4: local ankle pitch/yaw and pelvis-space knee bend directions. These
+ // survive retargeting instead of being replaced with a generic foot arc.
+ std::array<DirectX::XMFLOAT2,2> ankles{};
+ std::array<DirectX::XMFLOAT3,2> knees{};
+ // PCL5: global lower/upper spine rotations and chest-local clavicle offsets.
+ std::array<DirectX::XMFLOAT3,2> spine{},shoulders{};
+ float articulated=0;
 };
-inline constexpr unsigned frameChannels=30;
+inline constexpr unsigned frameChannels=53;
 struct Track {
  float duration=0,load=0,contact=0,takeoff=0,landing=0,stance=0,speed=0;
  bool loop=false;
@@ -43,6 +50,7 @@ float SwingHeight(const std::array<float,4>& weights,float run,int side,float ph
 // Progress along the authored ankle path, fitted between live release/contact.
 // Keeps the early heel recovery and late extension instead of a generic arc.
 float SwingProgress(const std::array<float,4>& weights,float run,int side,float phase);
+float SwingPitch(const std::array<float,4>& weights,float run,int side,float phase,float releasePitch);
 float AttackPhase(Clip clip,float seconds,float start,float contact,float end);
 float FlightPhase(float progress);
 }

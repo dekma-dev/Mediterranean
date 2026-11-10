@@ -3,6 +3,7 @@
 #include "game/CharacterPose.h"
 #include <DirectXMath.h>
 class Renderer;
+namespace presentation {struct Actor;}
 namespace castfx {
 // World-space sockets from the same solved pose used to draw the character.
 // Borrowed for a draw only: no animation, gameplay or emitter state is owned.
@@ -14,6 +15,8 @@ struct Attachments {
 };
 Attachments FromPose(const CharacterPose&,DirectX::XMFLOAT3 root,float facing,rpg::WeaponForm,bool shield,bool weapon=true,bool alive=true);
 Attachments Preview(DirectX::XMFLOAT3 root,DirectX::XMFLOAT3 focus,float facing);
+Attachments FromEnemy(const rpg::Enemy&,const presentation::Actor&);
+void PrepareEnemy(Renderer&,const rpg::Enemy&,const Attachments&);
 void Prepare(Renderer&,const rpg::Simulation&,const Attachments&);
 // Shared preparation artwork for gameplay and the isolated character audition.
 void PrepareAction(Renderer&,rpg::ClassId,int ability,bool heavy,float seconds,float rate,

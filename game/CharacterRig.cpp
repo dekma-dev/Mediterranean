@@ -28,7 +28,14 @@ visual::BodyPalette BuildCharacterRig(const CharacterPose& pose,const CharacterO
   const auto pelvis=XMMatrixRotationX(pose.pelvisRotation.x)*XMMatrixRotationZ(pose.pelvisRotation.z)*XMMatrixRotationY(pose.pelvisRotation.y);
   store(0,pose.PelvisTransform(),pelvis);
   const auto torso=XMMatrixRotationX(pose.upperPitch)*XMMatrixRotationZ(pose.upperRoll)*XMMatrixRotationY(pose.upperYaw);
-  store(1,XMMatrixTranslation(0,-.95f,0)*torso*XMMatrixTranslation(pose.bodyShift,.95f+pose.bodyLift,pose.bodyForward),torso);
+  store(1,pose.UpperTransform(),torso);
+  for(unsigned i=0;i<2;++i){
+    const auto spine=pose.SpineTransform(i);
+    store(10+i,spine,XMMatrixTranspose(XMMatrixInverse(nullptr,spine)));
+    const auto offset=pose.UpperDirection(pose.shoulderOffset[i]);
+    const auto clavicle=pose.UpperTransform()*XMMatrixTranslation(offset.x,offset.y,offset.z);
+    store(12+i,clavicle,torso);
+  }
   for(unsigned side=0;side<2;++side) for(unsigned limb=0;limb<2;++limb) {
     const auto& chain=limb?pose.arms[side]:pose.legs[side];
     // The IK elbow/knee plane is continuous through raised/forward limbs.
@@ -52,6 +59,7 @@ visual::BodyPalette BuildCharacterRig(const CharacterPose& pose,const CharacterO
       store(first+segment,XMLoadFloat4x4(&rest.inverse)*posedFrame,XMLoadFloat4x4(&rest.normal)*posedNormal);
     }
   }
+  visual::PreserveBodyVolume(result);
   const auto& tone=rpg::skinTones[outfit.appearance.skin];
   if(outfit.appearance.dye!=0) {const auto& dye=rpg::tunicDyes[outfit.appearance.dye];cloth={dye.r,dye.g,dye.b,1};}
   const XMFLOAT4 skin{tone.r,tone.g,tone.b,float(visual::Material::Skin)},steel{.52f,.59f,.61f,float(visual::Material::Metal)},

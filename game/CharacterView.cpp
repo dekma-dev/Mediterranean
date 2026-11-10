@@ -78,8 +78,8 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
         const float roll=side*.55f*std::clamp(std::atan2(std::max(0.f,side*XMVectorGetX(direction)),-XMVectorGetY(direction))-.18f,0.f,1.4f);
         const float pitch=-.25f*XMVectorGetZ(direction);
         renderer.DrawMeshTransformed(fitting.mesh,XMMatrixScaling(fitting.scale.x,fitting.scale.y,fitting.scale.z)*XMMatrixRotationX(pitch)*XMMatrixRotationZ(roll)*
-          XMMatrixTranslation(fitting.position.x,fitting.position.y-.95f,0)*torso*
-          XMMatrixTranslation(pose.bodyShift,.95f+pose.bodyLift,pose.bodyForward)*actorTransform,fitting.color,fitting.material);
+          XMMatrixTranslation(fitting.position.x+pose.shoulderOffset[arm].x,fitting.position.y+pose.shoulderOffset[arm].y,pose.shoulderOffset[arm].z)*
+          pose.UpperTransform()*actorTransform,fitting.color,fitting.material);
         continue;
       }
       if(fitting.mesh==M::GuardShoulderLeft || fitting.mesh==M::GuardShoulderRight) {

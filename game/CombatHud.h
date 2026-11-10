@@ -63,6 +63,38 @@ struct CastReceipt {
   }
 };
 
+// Per ability, not per slot: rearranging icons cannot move the wrong receipt.
+// Rendering never advances these clocks or spends a spell.
+struct AbilityFeedback {
+  std::array<float,rpg::spells.size()> previous{},readyAge{},useAge{};
+  rpg::ClassId school=rpg::ClassId::Count;
+  bool initialized=false;
+  AbilityFeedback(){readyAge.fill(1);useAge.fill(1);}
+  void Reset(){*this=AbilityFeedback{};}
+  float Ready(int ability) const {return ability<0 || ability>=int(readyAge.size())?0:std::max(0.f,1-readyAge[ability]/.55f);}
+  float Used(int ability) const {return ability<0 || ability>=int(useAge.size())?0:std::max(0.f,1-useAge[ability]/.24f);}
+  void Update(float dt,const rpg::Simulation& state) {
+    if(!std::isfinite(dt) || dt<=0 || dt>.25f || state.Health()<=0){Reset();return;}
+    if(school!=state.Class())Reset();school=state.Class();
+    for(int i=0;i<int(previous.size());++i){
+      readyAge[i]=std::min(1.f,readyAge[i]+dt);useAge[i]=std::min(1.f,useAge[i]+dt);
+      const float remaining=i==4?state.PotionCooldown():state.Cooldown(i);
+      if(initialized && previous[i]>0 && remaining<=0)readyAge[i]=std::max(0.f,dt-previous[i]);
+      // Buffered/instant actions do not necessarily have a preparation bar.
+      if(initialized && remaining>previous[i]+.001f){useAge[i]=0;readyAge[i]=1;}
+      previous[i]=remaining;
+    }
+    for(std::size_t n=0;n<state.VisualEventCount();++n){
+      const auto& event=state.VisualEvents()[n];if(event.actor!=0)continue;
+      using K=rpg::CombatVisualKind;
+      const int ability=event.kind==K::CastStart?event.ability:event.kind==K::DashStart?2:event.kind==K::Potion?4:
+        event.kind==K::Mend && state.RecoveryCastDuration()<=0?3:-1;
+      if(ability>=0 && ability<int(useAge.size())){useAge[ability]=std::clamp(event.elapsed,0.f,dt);readyAge[ability]=1;}
+    }
+    initialized=true;
+  }
+};
+
 struct WorldPlate {
   rpg::EntityId id=0;
   float anchorX=0,anchorY=0,width=128,height=30,distance=0;

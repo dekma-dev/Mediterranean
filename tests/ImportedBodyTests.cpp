@@ -36,28 +36,29 @@ int main() {
   bad=geometry;bad.mesh.vertices[0].normal={0,0,0};Reject([&]{visual::ValidateBodyGeometry(bad);});
   bad=geometry;bad.mesh.vertices[0].color.w=float(visual::bodyRegions);Reject([&]{visual::ValidateBodyGeometry(bad);});
   auto wrong=asset.skeleton.RestPose();wrong.skin.pop_back();Reject([&]{assets::BodyPose(asset,wrong);});
-  std::vector<animation::Joint> joints(11);for(int i=0;i<11;++i) {joints[i].name="joint"+std::to_string(i);joints[i].parent=i-1;}
+  std::vector<animation::Joint> joints(visual::bodyBones+1);for(unsigned i=0;i<joints.size();++i) {joints[i].name="joint"+std::to_string(i);joints[i].parent=i-1;}
   assets::RigAsset large{animation::Skeleton(joints),{},asset.mesh};Reject([&]{assets::BodyGeometry(large);});
   Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),960,720,L"Imported skin checks",false),"Window");
   Renderer gpu;Check(gpu.Initialize(window.GetHandle(),960,720,&geometry),"Imported immutable buffers");
   unsigned changed=0;std::vector<unsigned char> first;
-  for(int step=0;step<4;++step) {
-    const float seconds=step==3?1.f:step*.25f;
+  for(int step=0;step<8;++step) {
+    const float seconds=step%4==3?1.f:(step%4)*.25f;
     const auto pose=asset.skeleton.Sample(asset.clips[0].clip,seconds,false);
     // Plain material isolates deformation/normals: the production shader keeps
     // cloth coordinates in bind space, unlike the baked CPU reference.
-    const auto palette=assets::BodyPose(asset,pose,{.45f,.62f,.75f,float(visual::Material::Plain)});
+    auto palette=assets::BodyPose(asset,pose,{.45f,.62f,.75f,float(visual::Material::Plain)});
+    if(step>=4){visual::PreserveBodyVolume(palette);Check(palette.deformation.x==1,"Volume preview did not enable dual quaternion skinning");}
     const auto deformed=assets::DeformMesh(asset.mesh,pose);
     auto reference=geometry;
     for(std::size_t i=0;i<deformed.size();++i) {
       const auto cpu=visual::SkinVertex(geometry.mesh.vertices[i],geometry.influences[i],palette);
-      Check(XMVectorGetX(XMVector3Length(XMLoadFloat3(&cpu.position)-XMLoadFloat3(&deformed[i].position)))<.00002f,"Adapter changed joint order or weights");
-      reference.mesh.vertices[i].position=deformed[i].position;reference.mesh.vertices[i].normal=deformed[i].normal;
+      if(step<4)Check(XMVectorGetX(XMVector3Length(XMLoadFloat3(&cpu.position)-XMLoadFloat3(&deformed[i].position)))<.00002f,"Adapter changed joint order or weights");
+      reference.mesh.vertices[i].position=cpu.position;reference.mesh.vertices[i].normal=cpu.normal;
       reference.influences[i]={};reference.influences[i].weights={1,0,0,0};
     }
     Win32Window refWindow;Check(refWindow.Create(GetModuleHandleW(nullptr),960,720,L"CPU reference",false),"Reference window");
     Renderer cpu;Check(cpu.Initialize(refWindow.GetHandle(),960,720,&reference),"Reference buffers");
-    auto identity=palette;for(unsigned i=0;i<visual::bodyBones;++i) {XMStoreFloat4x4(&identity.joints[i],XMMatrixIdentity());XMStoreFloat4x4(&identity.normals[i],XMMatrixIdentity());}
+    auto identity=palette;identity.deformation={};for(unsigned i=0;i<visual::bodyBones;++i) {XMStoreFloat4x4(&identity.joints[i],XMMatrixIdentity());XMStoreFloat4x4(&identity.normals[i],XMMatrixIdentity());}
     const auto name=L"imported-"+std::to_wstring(step);
     Frame(gpu,palette,name+L"-gpu.png");Frame(cpu,identity,name+L"-cpu.png");
     const auto a=Pixels(name+L"-gpu.png"),b=Pixels(name+L"-cpu.png");

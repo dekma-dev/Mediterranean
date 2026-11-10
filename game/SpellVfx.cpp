@@ -184,6 +184,77 @@ void MajorContact(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 p,float a
  }
 }
 }
+float ResidueLifetime(ResidueKind kind) {
+ switch(kind){case ResidueKind::Ember:return 3.2f;case ResidueKind::Frost:case ResidueKind::Thermal:return 2.8f;
+ case ResidueKind::Holy:return 1.8f;case ResidueKind::Arcane:return 1.7f;default:return 0;}
+}
+Residue MakeResidue(const rpg::CombatVisualEvent& e) {
+ if(!e.primary || (e.kind!=K::Hit && e.kind!=K::HeavyHit) || !rpg::ValidSpell(e.ability) ||
+    (e.school!=C::Mage && e.school!=C::Priest) || !std::isfinite(e.position.x) ||
+    !std::isfinite(e.position.z) || !std::isfinite(e.facing))return {};
+ const auto school=School(e.ability);
+ const auto kind=e.school==C::Priest?ResidueKind::Holy:school==Element::Fire?ResidueKind::Ember:
+   school==Element::Frost?ResidueKind::Frost:school==Element::Thermal?ResidueKind::Thermal:ResidueKind::Arcane;
+ return {e.position,kind,std::isfinite(e.elapsed)?std::clamp(e.elapsed,0.f,.05f):0,e.facing,
+   (e.heavy?1.55f:.85f)*(e.signature || e.ability==8 || e.ability==11?1.25f:1.f),e.actor*37u+unsigned(e.ability)*71u};
+}
+void Aftermath(Renderer& r,const Residue& e) {
+ const float life=ResidueLifetime(e.kind);
+ if(!std::isfinite(e.age+e.position.x+e.position.z+e.size+e.facing) || e.age<0 || e.age>=life || e.size<=0)return;
+ const float age=e.age,fade=combat::Smooth(age/.18f)*(1-combat::Smooth(age/life));
+ const float size=std::clamp(e.size,.3f,2.f);
+ const auto local=[&](float x,float z,float lift=.04f){const float c=std::cos(e.facing),s=std::sin(e.facing);
+   return Ground({e.position.x+(c*x+s*z)*size,e.position.z+(-s*x+c*z)*size},lift);};
+ if(e.kind==ResidueKind::Holy) {
+   Stamp(r,e.position,size*.68f,e.facing,{1,.77f,.34f,fade*.36f});
+   for(int n=0;n<6;++n) {
+     const float a=n*tau/6,phase=Unit((age-.08f*n)/1.3f),rise=std::sin(phase*pi);
+     for(int k=0;k<2;++k){const float u=k*.5f,v=(k+1)*.5f;
+       const auto at=[&](float t){return local(std::cos(a)*(.22f+t*.42f),std::sin(a)*(.22f+t*.42f),.06f+std::sin(t*pi)*.28f*rise);};
+       r.DrawEffectStreak(at(u),at(v),.012f,{1,.91f,.65f,fade*.45f});
+     }
+     r.DrawEffectSprite(Art::Sparks,local(std::cos(a)*.48f,std::sin(a)*.48f,.10f+phase*.85f),.035f,.075f,0,{1,.94f,.76f,fade*rise*.6f});
+   }
+   return;
+ }
+ if(e.kind==ResidueKind::Arcane) {
+   for(int n=0;n<3;++n){const float a=n*tau/3+age*.12f;
+     const auto p=[&](float angle,float radius){return local(std::cos(angle)*radius,std::sin(angle)*radius,.055f);};
+     const auto x=p(a,.25f),y=p(a+.22f,.72f),z=p(a+.55f,.58f),w=p(a+.45f,.21f);
+     r.DrawEffectSurface(Art::Arcane,x,y,z,w,{.62f,.44f,1,fade*.38f});
+     r.DrawEffectStreak(x,y,.013f,{.77f,.78f,1,fade*.55f});r.DrawEffectStreak(y,z,.013f,{.77f,.78f,1,fade*.55f});
+   }
+   return;
+ }
+ const bool frost=e.kind==ResidueKind::Frost,mixed=e.kind==ResidueKind::Thermal;
+ for(unsigned n=0;n<6;++n) {
+   const float a=n*tau/6+Rand(e.seed+n)*.28f,reach=.42f+Rand(e.seed+n*19)*.36f;
+   const bool ice=frost || (mixed && n%2==0);
+   const auto centre=local(std::cos(a)*reach*.50f,std::sin(a)*reach*.50f,.035f);
+   if(ice) {
+     const auto inner=local(std::cos(a)*.12f,std::sin(a)*.12f),joint=local(std::cos(a+.14f)*reach*.65f,std::sin(a+.14f)*reach*.65f);
+     const auto outer=local(std::cos(a)*reach,std::sin(a)*reach);
+     r.DrawEffectStreak(inner,joint,.045f,{.24f,.52f,.80f,fade*.28f});
+     r.DrawEffectStreak(inner,joint,.020f,{.66f,.90f,1,fade*.85f});r.DrawEffectStreak(joint,outer,.014f,{.80f,.95f,1,fade*.72f});
+     const float melt=1-combat::Smooth(age/life),h=(.11f+.06f*Rand(e.seed+n*31))*melt;
+     r.DrawEffectSurface(Art::Ice,Add(centre,{-.07f,0,0}),Add(centre,{-.04f,h,0}),Add(centre,{.06f,h*.65f,0}),Add(centre,{.08f,0,0}),{.50f,.78f,.94f,fade*.60f});
+   }else {
+     const float x=std::cos(a)*reach*.55f,z=std::sin(a)*reach*.55f,w=.19f+Rand(e.seed+n*7)*.10f;
+     r.DrawGroundMark(local(x-w,z-w,.015f),local(x-w,z+w,.015f),local(x+w,z+w,.015f),local(x+w,z-w,.015f),{.045f,.029f,.018f,fade*.55f});
+     const float glow=fade*std::pow(Unit(1-age/2.7f),.45f),flicker=.85f+.15f*std::sin(age*9+n*2.f);
+     const auto tip=local(x+std::cos(a)*.19f,z+std::sin(a)*.19f);
+     r.DrawEffectStreak(centre,tip,.055f,{1,.20f,.025f,glow*flicker*.32f});
+     r.DrawEffectStreak(centre,tip,.024f,{1,.55f,.12f,glow*flicker*.95f});
+     r.DrawEffectSprite(Art::Sparks,Add(centre,{std::sin(a)*age*.07f,.10f+age*.35f,std::cos(a)*age*.07f}),.025f,.065f,a,{1,.51f,.13f,glow*.55f});
+   }
+ }
+ const float vapor=Envelope(age-.14f,1.8f,.12f);
+ for(int n=0;n<2;++n) {
+   const auto p=local((n?1.f:-1.f)*.19f,.08f+age*.09f,.13f+age*.24f);
+   r.DrawEffectSprite(Art::Smoke,p,(.23f+age*.13f)*size,(.15f+age*.16f)*size,n+age*.08f,
+     frost || mixed?XMFLOAT4{.50f,.67f,.76f,vapor*.20f}:XMFLOAT4{.23f,.20f,.17f,vapor*.22f},true);
+ }
+}
 float ContactLifetime(const rpg::CombatVisualEvent& e){return e.school==C::Priest?.88f:e.school==C::Mage?(e.heavy || e.chain>=2?.88f:.70f):.66f;}
 XMFLOAT3 ProjectilePosition(const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float progress){
  const float t=std::isfinite(progress)?Unit(progress):0;
@@ -342,10 +413,33 @@ void Flight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float ag
   return;
  }
  if(e.school==C::Priest){
-  const float front=1-combat::Smooth(after/.035f),tail=std::max(0.f,t-1.65f*power/length);
-  r.DrawEffectStreak(point(tail),head,.075f*power,{1,.84f,.40f,fade*.55f});
-  r.DrawEffectStreak(point(tail),head,.022f*power,{1,.97f,.82f,fade*.85f});
-  r.DrawEffectSprite(Art::Seal,head,.32f*power,.32f*power,age*2,{1,.88f,.48f,front*.7f});
+  const bool absolution=e.ability==5,sanctuary=e.ability==6,guiding=e.ability==7;
+  const float front=1-combat::Smooth(after/.035f);
+  const float wakeLength=guiding?3.8f:absolution?3.2f:sanctuary?3.6f:e.heavy?2.8f:2.1f;
+  const float tail=std::max(0.f,t-wakeLength*(1-combat::Smooth(after/.16f))/length);
+  // A luminous flight path grows only behind the accepted projectile head.
+  // It is not an instant caster-to-victim beam and never announces an early hit.
+  if(t>tail+.00001f)for(int strand=0;strand<(absolution?2:1);++strand) {
+   const auto at=[&](float u){const float s=(u-tail)/(t-tail),phase=u*length*3.2f-age*3+strand*pi;
+    const float radius=absolution?.18f*std::sin(s*pi):0.f;
+    return Add(point(u),{cx*std::cos(phase)*radius,std::sin(phase)*radius,-sx*std::cos(phase)*radius});};
+   for(int n=0;n<16;++n) {
+    const float a=tail+(t-tail)*n/16,b=tail+(t-tail)*(n+1)/16,taper=(n+1)/16.f;
+    r.DrawEffectStreak(at(a),at(b),(.045f+.045f*taper)*power,{1,.67f,.18f,fade*taper*.28f});
+    r.DrawEffectStreak(at(a),at(b),(.008f+.010f*taper)*power,{1,.98f,.85f,fade*taper*.86f});
+    if(n%4==0)r.DrawEffectSprite(Art::Sparks,at(b),.075f,.075f,age,{1,.9f,.61f,fade*taper*.32f});
+   }
+  }
+  r.DrawEffectSprite(Art::Seal,head,(guiding?.19f:.32f)*power,(guiding?.19f:.32f)*power,age*2,{1,.88f,.48f,front*.7f});
+  if(sanctuary)for(int n=0;n<6;++n) {
+   // Six open, swept vanes identify the full-Faith spell in flight, not only
+   // after contact. Leave gaps so the enemy and hostile warnings remain legible.
+   const float a=n*tau/6+age*.7f;
+   const XMFLOAT3 wing{cx*std::cos(a)*.48f,std::sin(a)*.48f,-sx*std::cos(a)*.48f};
+   const auto root=Add(head,{-sx*.8f,0,-cx*.8f}),tip=Add(head,wing);
+   r.DrawEffectSurface(Art::Slash,root,Add(root,wing),tip,head,{1,.88f,.51f,front*.34f});
+   r.DrawEffectStreak(root,tip,.018f,{1,.98f,.86f,front*.72f});
+  }
   if(e.heavy){
    // A tapering reliquary lance has volume from side and overhead cameras.
    // Its point stays at the accepted projectile head throughout the flight.
@@ -437,8 +531,9 @@ void Flight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float ag
   if(mixed)r.DrawEffectSprite(Art::Ice,head,.075f*power,.23f*power,roll+.35f,{.55f,.82f,1,headFade*.85f});}
  r.DrawEffectGlow(head,.035f*power,{.9f,.92f,1,headFade*.6f});
 }
-void EnemyContact(Renderer& r,const rpg::CombatVisualEvent& e,float age,bool fullDetail){
+void EnemyContact(Renderer& r,const rpg::CombatVisualEvent& e,float age,bool fullDetail,const XMFLOAT3* origin){
  if(!std::isfinite(age)||age<0 || age>=.72f)return;
+ if(origin && (!std::isfinite(origin->x)||!std::isfinite(origin->y)||!std::isfinite(origin->z)))origin=nullptr;
  const bool quake=e.kind==K::EnemyQuake,tempest=e.kind==K::EnemyTempest;
  const bool lance=e.kind==K::EnemyLance,execution=e.kind==K::EnemyExecution;
  if(!quake && !tempest && !lance && !execution && e.kind!=K::BeastCharge)return;
@@ -497,16 +592,27 @@ void EnemyContact(Renderer& r,const rpg::CombatVisualEvent& e,float age,bool ful
   const int segments=fullDetail?20:8,count=fullDetail?8:4;
   for(int strand=0;strand<(execution && fullDetail?4:2);++strand)for(int n=0;n<segments;++n){
    const auto bolt=[&](float u){const float wave=std::sin(u*31+strand*2.4f+age*13);
-    return at(u,(strand%2?1.f:-1.f)*(.18f+std::sin(u*pi)*.55f),.90f+wave*.12f*std::sin(u*pi));};
+    const auto p=at(u,(strand%2?1.f:-1.f)*(.18f+std::sin(u*pi)*.55f),.90f+wave*.12f*std::sin(u*pi));
+    // Snapshot the release socket once, then meet the committed cone. Moving
+    // the caster afterwards must not steer an already resolved attack.
+    if(!origin)return p;
+    const float join=combat::Smooth(std::min(1.f,u/.22f));
+    return XMFLOAT3{origin->x+(p.x-origin->x)*join,origin->y+(p.y-origin->y)*join,origin->z+(p.z-origin->z)*join};};
    const float a=float(n)/segments,b=float(n+1)/segments;
-   r.DrawEffectStreak(bolt(a),bolt(b),execution?.062f:.035f,{.59f,.32f,1,body*(1-a*.5f)});
-   if(strand==0)r.DrawEffectStreak(bolt(a),bolt(b),.014f,{.88f,.79f,1,std::max(flash,body*.6f)*.9f});
+   // The accepted hit is instantaneous. Give its first frame a full discharge
+   // rather than a nearly invisible line while the lingering body ramps up.
+   const float discharge=std::max(body,flash*.85f)*(1-a*.5f);
+   r.DrawEffectStreak(bolt(a),bolt(b),execution?.082f:.055f,{.59f,.32f,1,discharge});
+   if(strand==0){
+     r.DrawEffectStreak(bolt(a),bolt(b),.12f,{.48f,.22f,1,flash*.28f*(1-a*.5f)});
+     r.DrawEffectStreak(bolt(a),bolt(b),.020f,{.88f,.79f,1,std::max(flash,body*.6f)*.9f});
+   }
   }
   for(int n=0;n<count;++n){const float u=(n+.5f)/count;const auto p=at(u,0,.90f+age*.35f);
    r.DrawEffectSprite(Art::Arcane,p,.16f+age*.17f,.35f+age*.2f,e.facing+age*1.3f,{.62f,.40f,1,body*.66f});
    r.DrawEffectSprite(Art::Smoke,at(u,0,.22f+age*.3f),.16f+age*.32f,.13f+age*.22f,n*.7f,{.40f,.34f,.49f,residue*.32f},true);
   }
-  r.DrawEffectSprite(Art::Seal,point(e.facing,.25f,1.05f),.25f+age*.4f,.25f+age*.4f,-age*3,{.72f,.50f,1,body*.55f});
+  r.DrawEffectSprite(Art::Seal,origin?*origin:point(e.facing,.25f,1.05f),.25f+age*.4f,.25f+age*.4f,-age*3,{.72f,.50f,1,body*.55f});
  }else if(age<.48f){
   for(int n=0;n<4;++n){const float a=e.facing+(n-1.5f)*.35f;
    r.DrawEffectSprite(Art::Dust,point(a,.7f+age,.18f+age*.4f),.16f+age*.68f,.12f+age*.44f,a,{.64f,.52f,.37f,Envelope(age,.48f)*.44f},true);}

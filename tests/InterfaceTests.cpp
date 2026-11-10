@@ -600,7 +600,7 @@ int main() {
   }
   {
     auto gameStorage=std::make_unique<Game>(); Game& game=*gameStorage; game.Initialize(); Input input; Input::Frame frame;
-    frame.focused=true; frame.client={802,568}; frame.screen=frame.client;
+    frame.focused=true; frame.client={1247,692}; frame.screen=frame.client;
     const auto step=[&]() {
       input.Update(frame); game.Update(.05,input,0);
       renderer.BeginFrame(); game.Render(renderer); Require(renderer.EndFrame(false),"Menu movement capture render failed");
@@ -896,7 +896,7 @@ int main() {
       rpg::Simulation buildState; Require(buildState.Load(Fixture("veteran-preview.save")),"Scaled build fixture");
       screen.SetOnly(ui::Panel::None);
       renderer.BeginFrame(); screen.Render(renderer,buildState,0,false); Require(renderer.EndFrame(false),"Build HUD render");
-      Require(click(608,568).action==ui::Action::Build,"N shortcut must be clickable at every UI scale");
+      Require(click(1130,692).action==ui::Action::Build,"N shortcut must be clickable at every UI scale");
       screen.SetOnly(ui::Panel::Build); screen.selectedTalent=0;
       Require(click(1000,563).action==ui::Action::None,"Opening N must invalidate the previous layout");
       const auto drawBuild=[&]() {

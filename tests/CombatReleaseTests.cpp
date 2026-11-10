@@ -2,6 +2,7 @@
 #include "game/ClassEffects.h"
 #include "game/SpellVfx.h"
 #include "game/CastEffects.h"
+#include "game/ActorPresentation.h"
 #include "engine/Renderer.h"
 #include "platform/Win32Window.h"
 #include <wincodec.h>
@@ -85,6 +86,52 @@ void Lighting(Renderer& r,const std::filesystem::path& out){
   caster.alive=true;Tick(fx,1,60);r.BeginFrame();fx.Illuminate(r,state,caster);Check(r.CombatLightCount()==0 && r.EndFrame(false),"Expired burst retained light");
  }
 }
+void EnemyPreparation(Renderer& r,const std::filesystem::path& out){
+ const auto distance=[](XMFLOAT3 a,XMFLOAT3 b){return std::sqrt((a.x-b.x)*(a.x-b.x)+(a.y-b.y)*(a.y-b.y)+(a.z-b.z)*(a.z-b.z));};
+ for(auto kind:{EnemyKind::Wraith,EnemyKind::Captain})for(unsigned mode:{0u,1u,2u}) {
+  auto state=Hero(ClassId::Warrior);auto& enemy=const_cast<Enemy&>(state.Enemies()[0]);
+  enemy.kind=kind;enemy.rank=1;enemy.health=enemy.MaxHealth();enemy.state=EnemyState::Pursuing;
+  enemy.position={0,0};enemy.home=enemy.position;enemy.facing=.4f;enemy.bossAttack=mode;enemy.windup=enemy.WindupDuration()*.35f;
+  presentation::Actor actor;actor.Reset(enemy);actor.motion.attack=.7f;
+  actor.animation.pose.action.right={-.07f,.21f,.32f};actor.animation.pose.action.left={-.06f,.15f,.16f};
+  const auto socket=castfx::FromEnemy(enemy,actor);auto still=actor;still.motion.attack=0;still.animation.pose={};
+  Check(distance(socket.right,castfx::FromEnemy(enemy,still).right)>.1f,"Hostile charge ignores animated arm");
+  auto moved=enemy;moved.position={8,4};auto shifted=castfx::FromEnemy(moved,actor);
+  Check(std::abs(shifted.focus.x-socket.focus.x-8)<1e-5f && std::abs(shifted.focus.z-socket.focus.z-4)<1e-5f &&
+    std::abs(shifted.focus.y-socket.focus.y-(WorldMap::Height(moved.position)-WorldMap::Height(enemy.position)))<1e-5f,"Hostile socket ignores world translation/terrain");
+  auto rotated=actor;rotated.motion.facing+=3.14159265f;const auto turn=castfx::FromEnemy(enemy,rotated);
+  Check(std::abs(turn.focus.x+socket.focus.x)<1e-4f && std::abs(turn.focus.z+socket.focus.z)<1e-4f,"Hostile socket ignores actor facing");
+  const auto begin=[&]{r.BeginFrame();r.SetCamera({3,2,-5},{0,1,0});};
+  const auto tag=std::to_string(int(kind))+"-"+std::to_string(mode);
+  begin();castfx::PrepareEnemy(r,enemy,socket);Check(r.EffectVertices()>100 && r.EffectVertices()<=360,"Hostile charge invisible or over its budget");
+  const auto pixels=Capture(r,out/("enemy-charge-"+tag+".png"));
+  begin();castfx::PrepareEnemy(r,enemy,socket);Check(Capture(r,out/("enemy-charge-repeat-"+tag+".png"))==pixels,"Rendering advances enemy preparation");
+  for(float windup:{0.f,-1.f,std::numeric_limits<float>::quiet_NaN()}){auto cancelled=enemy;cancelled.windup=windup;begin();castfx::PrepareEnemy(r,cancelled,socket);
+    Check(r.EffectVertices()==0 && r.EndFrame(false),"Interrupted/invalid cast retained preparation");}
+  auto dead=socket;dead.alive=false;begin();castfx::PrepareEnemy(r,enemy,dead);Check(r.EffectVertices()==0 && r.EndFrame(false),"Dead enemy retained charge");
+  CombatVisualEvent e;e.kind=kind==EnemyKind::Wraith?K::EnemyLance:K::EnemyExecution;e.position=enemy.position;e.facing=enemy.facing;
+  auto origin=socket.focus;CombatEffects fx;fx.Emit(e,&origin);fx.Advance(.05f);
+  begin();fx.Render(r);const auto beam=Capture(r,out/("enemy-socket-release-"+tag+".png"));origin={30,40,50};
+  begin();fx.Render(r);Check(Capture(r,out/("enemy-socket-frozen-"+tag+".png"))==beam,"Resolved beam follows a later socket change");
+ }
+ // Exercise the real bind/update/render path at different frame rates and both
+ // sides of contact, not only standalone particles with synthetic origins.
+ for(int hz:{30,60,144}) {
+  auto owner=std::make_unique<Game>();auto& game=*owner;game.Initialize();Check(game.RestoreSnapshot(Hero(ClassId::Warrior).Save()),"Wraith fixture");
+  auto& enemy=const_cast<Enemy&>(game.State().Enemies()[0]);enemy.kind=EnemyKind::Wraith;enemy.health=enemy.MaxHealth();
+  enemy.position=enemy.home={-4,9};enemy.state=EnemyState::Pursuing;enemy.windup=.65f;enemy.attackCooldown=0;enemy.facing=3.14159265f;
+  game.SetCameraOrbit(.85f,.5f,7);
+  for(int n=0;n<int(.3f*hz);++n)game.ExecuteCommand({},1.f/hz);
+  r.BeginFrame();game.Render(r);Capture(r,out/("world-wraith-charge-"+std::to_string(hz)+".png"));
+  bool release=false;
+  for(int n=0;n<hz && !release;++n){game.ExecuteCommand({},1.f/hz);for(std::size_t i=0;i<game.State().VisualEventCount();++i)release|=game.State().VisualEvents()[i].kind==K::EnemyLance;}
+  Check(release && game.Effects().BurstCount()>0,"Authoritative wraith contact lost its beam");
+  game.ExecuteCommand({},.035f);
+  r.BeginFrame();game.Render(r);Capture(r,out/("world-wraith-release-"+std::to_string(hz)+".png"));
+  const auto save=game.State().Save();r.BeginFrame();game.Render(r);Check(r.EndFrame(false) && save==game.State().Save(),"Hostile rendering mutates gameplay");
+  Check(game.RestoreSnapshot(Hero(ClassId::Warrior).Save()) && game.Effects().BurstCount()==0,"Load retained hostile socket emission");
+ }
+}
 void Native(Renderer& r,const std::filesystem::path& out){
  const auto begin=[&]{r.BeginFrame();r.SetCamera({6,6,-8},{0,.8f,1});
   r.DrawMesh(visual::Mesh::Terrain,{0,0,0},{1,1,1},{.23f,.25f,.22f,1},visual::Material::Stone);};
@@ -162,6 +209,6 @@ int main(int argc,char** argv){try{
  Check(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"COM");TargetHeights();
  const auto out=argc>1?std::filesystem::path(argv[1]):std::filesystem::path("combat-release-review");std::filesystem::create_directories(out);
  Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),960,600,L"Combat release checks",false),"Window");
- Renderer r;Check(r.Initialize(window.GetHandle(),960,600),"Renderer");Lighting(r,out);Native(r,out);World(r,out);
+ Renderer r;Check(r.Initialize(window.GetHandle(),960,600),"Renderer");EnemyPreparation(r,out);Lighting(r,out);Native(r,out);World(r,out);
  Check(r.ValidateDebugMessages(),"DirectX release warnings");std::cout<<"PASS: native release sequence, equal-time geometry, bounded lifetime, actual boss contacts and render/load isolation.\n";
  }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

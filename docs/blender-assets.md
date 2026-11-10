@@ -1,8 +1,52 @@
 # Blender collection in the native renderer
 
+## Running support and deterministic flight (2026-11-10, v14)
+
+The current motion source is `assets/authored/player-motion-v14.blend`.
+Twenty running/jump actions have revised support loading, pelvis rise,
+compact leg recovery and elbow motion. Native playback fixes an early-release
+step wrap, discontinuous landing prediction during stops, residual procedural
+wrist swing and idle-clock-dependent jump descent. Thirty-seven other records
+and all frozen face/model sources are preserved. See
+[the v14 motion record](player-support-motion-v14.md) for scope and review.
+Twelve motion/art suites pass in Release and Debug; all six game outputs
+embed the current clips and pass fixture-save smoke launches.
+
+## Articulated running, flight and body volume (2026-11-10, v13)
+
+The preceding motion source is `assets/authored/player-motion-v13.blend`.
+Twenty-one running/jump/landing actions have revised elbow articulation,
+heel recovery and flight poses. Human body and garment deformation now
+preserves joint volume with dual-quaternion blending and an affine residual.
+Thirty-six other native records, frozen model/face sources and the original
+collection are preserved. See [the v13 motion record](player-volume-motion-v13.md)
+for implementation, comparison and validation.
+Twelve motion/art suites pass in Release and Debug; all six game outputs
+embed the current clips and pass fixture-save smoke launches.
+
+## Continuous bilateral gait and support (2026-11-10, v12)
+
+The preceding motion source is `assets/authored/player-motion-v12.blend`.
+Thirty-two gait actions have revised arm swing and contact loading. Native
+playback uses one continuous clock for both feet and the torso, retains reach
+weights through takeoff and resumes from a contact after landing. Recovering
+feet no longer pull down the pelvis or cross the supporting leg. Twenty-five
+other native records and all frozen face/model sources are preserved. See
+[the v12 motion record](player-contact-motion-v12.md) for scope and review.
+
+## Authored ankle and knee transport (2026-11-10, v11)
+
+The preceding motion source is `assets/authored/player-motion-v11.blend`.
+Thirty-seven gait/jump/landing actions have revised recovery and loading poses.
+PCL4 preserves ankle rotations and knee bend directions through native IK;
+the previous height clamp and generic recovery rotation no longer flatten the
+folded running leg. Twenty retained tracks preserve their original channels.
+Faces, model geometry and the original collection are unchanged. See
+[the v11 motion record](player-leg-motion-v11.md) for scope and review evidence.
+
 ## Source recovery and articulated arms (2026-11-06, v10)
 
-The current editable motion source is `assets/authored/player-motion-v10.blend`.
+The preceding editable motion source is `assets/authored/player-motion-v10.blend`.
 Thirty-two gait actions now use shoulder/elbow articulation and revised ankle
 recovery. Native playback retains the source's horizontal recovery timing,
 advances jumps from actual flight velocity and preserves the departing leading

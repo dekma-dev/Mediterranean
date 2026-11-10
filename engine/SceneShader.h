@@ -166,7 +166,7 @@ VOut VSWorld(InstanceIn i) {
 // Float4 elements avoid the SM5 2048-byte structured-element limit.
 StructuredBuffer<float4> bodyRows : register(t9);
 matrix BodyMatrix(uint actor,uint joint,bool normal) {
- uint base=actor*263+(normal?128:0)+joint*4;
+ uint base=actor*292+(normal?128:0)+joint*4;
  return transpose(matrix(bodyRows[base],bodyRows[base+1],bodyRows[base+2],bodyRows[base+3]));
 }
 struct SkinIn { InstanceIn object; uint4 bones : BLENDINDICES; float4 weights : BLENDWEIGHT; };
@@ -187,13 +187,19 @@ float3 CoveredBodyPoint(float3 p) {
  float fit=max(torso,hips);
  p.x*=1-.17*fit;p.z*=1-.24*fit;return p;
 }
+float3 VolumeRotate(float4 q,float3 p) {
+ return p+2*cross(q.xyz,cross(q.xyz,p)+q.w*p);
+}
+float3 VolumeTranslation(float4 q,float4 d) {
+ return 2*(q.w*d.xyz-d.w*q.xyz+cross(q.xyz,d.xyz));
+}
 void SkinBody(inout InstanceIn i,uint4 joints,float4 weights) {
  // The same mesh is inspectable without an actor in the equipment gallery.
  // Do not fetch an absent/unrelated body palette for a bind-pose preview.
  if(i.surface.w==-9)return;
  GarmentLag(i);
  uint actor=(uint)i.surface.z;
- if(i.surface.x==14 && bodyRows[actor*263+256].w==15) {
+ if(i.surface.x==14 && bodyRows[actor*292+256].w==15) {
   float3 p=CoveredBodyPoint(i.p);float e=.0005;
   float3 dx=(CoveredBodyPoint(i.p+float3(e,0,0))-CoveredBodyPoint(i.p-float3(e,0,0)))/(2*e);
   float3 dy=(CoveredBodyPoint(i.p+float3(0,e,0))-CoveredBodyPoint(i.p-float3(0,e,0)))/(2*e);
@@ -205,9 +211,26 @@ void SkinBody(inout InstanceIn i,uint4 joints,float4 weights) {
   p+=mul(float4(i.p,1),BodyMatrix(actor,joints[k],false)).xyz*weights[k];
   n+=mul(float4(i.n,0),BodyMatrix(actor,joints[k],true)).xyz*weights[k];
  }
+ [branch] if(bodyRows[actor*292+291].x>0) {
+  uint reference=0;
+  [unroll] for(uint r=1;r<4;++r)if(weights[r]>weights[reference])reference=r;
+  float4 anchor=bodyRows[actor*292+263+joints[reference]*2],real=0,dual=0;
+  [unroll] for(uint k=0;k<4;++k){
+   uint base=actor*292+263+joints[k]*2;
+   float4 q=bodyRows[base],d=bodyRows[base+1];
+   float sign=dot(q,anchor)<0?-1:1;
+   real+=q*(weights[k]*sign);dual+=d*(weights[k]*sign);
+  }
+  float magnitude=length(real);
+  if(magnitude>1e-6){
+   real/=magnitude;dual/=magnitude;
+   p+=VolumeRotate(real,i.p)+VolumeTranslation(real,dual);
+   n+=VolumeRotate(real,i.n);
+  }
+ }
  i.p=p; i.n=normalize(n);
  if(i.surface.x!=22) {
-  float4 style=bodyRows[actor*263+256+(uint)i.tint.w];
+  float4 style=bodyRows[actor*292+256+(uint)i.tint.w];
   i.tint=float4(style.rgb,1); i.surface.x=style.w;
  }
 }
@@ -470,7 +493,7 @@ float4 PSMain(VOut i) : SV_TARGET {
   return result;
  }
  [branch] if(i.bodyStyle && i.bodyStyle<0xfffffffe) {
-  float4 style=bodyRows[(i.bodyStyle-1)*263+256+BodyRegion(i.tp)];
+  float4 style=bodyRows[(i.bodyStyle-1)*292+256+BodyRegion(i.tp)];
   i.tint=float4(style.rgb,1);i.material=style.w;
  }
  float3 geometric=normalize(i.n),n=geometric;

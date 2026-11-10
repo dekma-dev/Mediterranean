@@ -4,7 +4,7 @@
 #include "game/ClassEquipment.h"
 #include <iostream>
 #include <set>
-int main() {
+int main() try {
   using namespace localization;
   const auto directory=std::filesystem::current_path()/"localization-test-settings";
   std::filesystem::create_directories(directory);
@@ -14,7 +14,7 @@ int main() {
   check(language==Language::Russian);
   std::set<std::string_view> keys;
   for(const auto& entry:Dictionary()) {
-    check(keys.insert(entry.english).second);
+    if(!keys.insert(entry.english).second)throw std::runtime_error("Duplicate localization key: "+std::string(entry.english));
     check(Translate(entry.english)==entry.russian);
     check(Translate(entry.russian)==entry.russian);
     for(std::size_t at=0;at<entry.russian.size();) {
@@ -48,8 +48,10 @@ int main() {
   check(language==Language::English && Translate("Return to game")=="Return to game");
   check(Select(Language::Russian)); Initialize(directory);
   check(language==Language::Russian);
-  playerName="Warrior"; check(Translate(playerName)==playerName);
+  check(Translate("Warrior")=="Воин");
   std::size_t offset=0; check(text::Next("Язык",offset)==0x42f && offset==2);
   check(Translate("English")=="English");
   std::cout<<"Russian catalog, glyphs, complete class/quest descriptions, composed HUD, language persistence and UTF-8 passed\n";
+} catch(const std::exception& error) {
+  std::cerr<<error.what()<<'\n';return 1;
 }

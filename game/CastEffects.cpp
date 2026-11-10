@@ -1,6 +1,7 @@
 #include "game/CastEffects.h"
 #include "game/ClassEffects.h"
 #include "game/HandPose.h"
+#include "game/ActorPresentation.h"
 #include "engine/Renderer.h"
 #include <algorithm>
 #include <cmath>
@@ -69,6 +70,54 @@ void RecoveryCharge(Renderer& r,C id,const Attachments& a,float progress){
 Attachments Preview(XMFLOAT3 root,XMFLOAT3 focus,float facing){
  Attachments a;a.root=root;a.focus=focus;a.facing=facing;a.left=Local(a,root,-.32f,1.15f,.15f);a.right=Local(a,root,.32f,1.15f,.15f);return a;
 }
+Attachments FromEnemy(const rpg::Enemy& enemy,const presentation::Actor& actor){
+ Attachments a;a.root={enemy.position.x,rpg::WorldMap::Height(enemy.position),enemy.position.z};
+ a.facing=actor.motion.facing;a.alive=enemy.health>0 && actor.id==enemy.id && actor.kind==enemy.kind && !enemy.Beast();
+ const auto asset=enemy.kind==rpg::EnemyKind::Wraith?authored::Asset::Revenant:
+   enemy.kind==rpg::EnemyKind::Captain || enemy.kind==rpg::EnemyKind::Reaver?authored::Asset::Orc:authored::Asset::Skeleton;
+ const auto palette=authored::Pose(asset,float(actor.clock),actor.motion.phase,actor.motion.attack,
+   actor.animation.pose.travel,actor.Gesture());
+ // Palm landmarks of the existing presentation rig, transformed by exactly
+ // its four-weight skinning rule. This does not edit the mesh or its weights.
+ const auto hand=[&](float side){
+   visual::Vertex vertex{};vertex.position={side*.52f*(asset==authored::Asset::Orc?1.22f:1.f),1.20f,.04f};
+   vertex.normal={0,1,0};
+   const auto p=visual::SkinVertex(vertex,authored::Influence(asset,vertex.position),palette).position;
+   return Local(a,a.root,p.x,p.y,p.z);
+ };
+ a.left=hand(-1);a.right=hand(1);a.focus=a.right;return a;
+}
+void PrepareEnemy(Renderer& r,const rpg::Enemy& enemy,const Attachments& a){
+ if(!Valid(a) || enemy.health<=0 || !std::isfinite(enemy.windup) || enemy.windup<=0 ||
+    (!enemy.Boss() && enemy.kind!=rpg::EnemyKind::Wraith) || r.EffectVertices()+360>3600)return;
+ const float progress=Unit(1-enemy.windup/enemy.WindupDuration());
+ const float weight=combat::Smooth(progress/.16f),power=.45f+.55f*progress;
+ const bool quake=enemy.Boss() && enemy.bossAttack==0,tempest=enemy.Boss() && enemy.bossAttack==1;
+ const XMFLOAT4 color=quake?XMFLOAT4{1,.52f,.18f,weight*.65f}:XMFLOAT4{.67f,.38f,1,weight*.72f};
+ // Keep the damaging footprint entirely in Warnings; these open filaments
+ // describe the preparation at the actual animated hands, above that border.
+ const auto focus=tempest?Mix(a.left,a.right,.5f):a.focus;
+ for(int n=0;n<3;++n){
+   const float angle=n*tau/3-progress*5;
+   const auto start=Local(a,focus,std::cos(angle)*(.40f+.20f*power),-.18f+std::sin(angle)*.24f,std::sin(angle)*.26f);
+   Stream(r,a,start,focus,.08f,angle,weight,color,8);
+ }
+ if(tempest || !quake)Stream(r,a,a.left,focus,.16f,progress*11,weight,color,8);
+ for(const auto hand:{a.left,a.right}) {
+   const float size=(quake?.15f:.18f)*power;
+   Panel(r,a,quake?Art::Sparks:Art::Seal,hand,size,size,-progress*3,color);
+ }
+ if(quake){
+   for(int n=0;n<4;++n){const float u=std::fmod(progress*2+n*.25f,1.f),angle=n*tau/4;
+     const auto p=Mix(Local(a,a.root,std::cos(angle)*.46f,.10f,std::sin(angle)*.46f),a.right,u);
+     r.DrawEffectSprite(Art::Dust,p,.10f+.08f*(1-u),.13f,angle,{.57f,.46f,.33f,weight*std::sin(u*pi)*.45f},true);}
+ }else{
+   Panel(r,a,Art::Arcane,focus,.15f+progress*.13f,.22f+progress*.16f,progress*4,color);
+   r.DrawEffectGlow(focus,.045f+progress*.025f,{.87f,.77f,1,weight*.75f});
+   // A short forward spine makes the committed aim readable before release.
+   if(!tempest)r.DrawEffectStreak(focus,Local(a,focus,0,0,.16f+progress*.38f),.018f,{.91f,.81f,1,weight*.65f});
+ }
+}
 Attachments FromPose(const CharacterPose& pose,XMFLOAT3 root,float facing,rpg::WeaponForm form,bool shield,bool weapon,bool alive){
  Attachments a;a.root=root;a.facing=facing;a.alive=alive;
  const auto world=[&](XMFLOAT3 p){return Local(a,root,p.x,p.y,p.z);};
@@ -104,6 +153,44 @@ void PrepareAction(Renderer& r,C id,int ability,bool heavy,float seconds,float r
   return;
  }
  if(id==C::Priest){
+  if(ability==5) {
+   // Absolution gathers two prayer paths through the moving hands, then
+   // joins them at the same focus that will release the paired projectile.
+   for(int side:{-1,1}) {
+    const auto hand=side<0?a.left:a.right;
+    const auto source=Local(a,a.root,side*.62f,.20f,-.10f);
+    Stream(r,a,source,hand,side*.22f,age*2,power,{1,.83f,.39f,.62f},10);
+    Stream(r,a,hand,a.focus,side*.13f,-age*3,power,{1,.96f,.76f,.72f},8);
+    Panel(r,a,Art::Seal,hand,.11f+power*.07f,.11f+power*.07f,side*age*.4f,{1,.88f,.52f,power*.65f});
+   }
+   Panel(r,a,Art::Slash,a.focus,.045f+power*.035f,.15f+power*.23f,0,{1,.94f,.76f,power*.85f});
+   return;
+  }
+  if(ability==6) {
+   // Sanctuary rises as open, vaulted ribs rather than another ball around
+   // the palm. Gaps preserve the champion silhouette and the weapon grip.
+   Seal(r,a,.82f+power*.20f,0,{1,.82f,.39f,power*.30f});
+   for(int n=0;n<6;++n) {
+    const float angle=n*tau/6,reach=.52f+.12f*power;
+    const auto foot=Local(a,a.root,std::cos(angle)*reach,.10f,std::sin(angle)*reach);
+    const auto crown=Local(a,a.focus,std::cos(angle)*.22f,.20f,std::sin(angle)*.22f);
+    const auto at=[&](float t){auto p=Mix(foot,crown,t);p.y+=std::sin(t*pi)*.20f*power;return p;};
+    for(int k=0;k<6;++k){const float u=k/6.f,v=(k+1)/6.f;
+     r.DrawEffectStreak(at(u),at(v),.012f+.006f*power,{1,.87f,.54f,power*(.22f+.37f*std::sin((u+v)*pi*.5f))});}
+    const float flow=std::fmod(age*.7f+n/6.f,1.f);
+    r.DrawEffectSprite(Art::Sparks,at(flow),.045f,.10f,0,{1,.97f,.81f,power*std::sin(flow*pi)*.7f});
+   }
+   Panel(r,a,Art::Seal,a.focus,.17f+power*.10f,.17f+power*.10f,0,{1,.94f,.71f,power*.72f});
+   return;
+  }
+  if(ability==7) {
+   const auto end=Local(a,a.focus,0,0,.18f+power*.30f);
+   Stream(r,a,a.right,a.focus,.08f,age*3,power,{1,.87f,.48f,.55f},8);
+   r.DrawEffectStreak(a.focus,end,.025f,{1,.97f,.78f,power*.9f});
+   for(int side:{-1,1})r.DrawEffectStreak(Local(a,a.focus,side*.13f,-.06f,-.08f),end,.012f,{1,.81f,.31f,power*.65f});
+   Panel(r,a,Art::Seal,a.focus,.11f+power*.08f,.11f+power*.08f,0,{1,.91f,.58f,power*.6f});
+   return;
+  }
   const float radius=.20f+power*.20f;
   Panel(r,a,Art::Seal,a.focus,radius,radius,-age*.5f,{1,.84f,.4f,power*.65f});
   for(int n=0;n<6;++n){const float angle=n*tau/6+age*.4f;const auto p=Local(a,a.focus,std::cos(angle)*radius*1.4f,std::sin(angle)*radius*1.4f);
@@ -139,7 +226,15 @@ void PrepareAction(Renderer& r,C id,int ability,bool heavy,float seconds,float r
  }
  else if(mage && !arcane){r.DrawEffectSprite(Art::Flame,a.focus,radius*.8f,radius*1.2f,.1f*std::sin(age*2),{1,.85f,.57f,power*.85f},true);
   if(thermal)Panel(r,a,Art::Ice,a.focus,radius*.32f,radius*1.25f,-age*.5f,{.56f,.84f,1,power*.8f});}
- else Panel(r,a,Art::Seal,a.focus,radius,radius,-age*.65f,{color.x,color.y,color.z,power*.8f});
+ else {
+  Panel(r,a,Art::Seal,a.focus,radius,radius,-age*.65f,{color.x,color.y,color.z,power*.8f});
+  if(arcane)for(int n=0;n<3;++n) {
+   const float angle=n*tau/3+age*.7f,reach=radius*(1.1f-.25f*power);
+   const auto p=Local(a,a.focus,std::cos(angle)*reach,std::sin(angle)*reach,std::sin(angle+age)*.12f);
+   Panel(r,a,Art::Arcane,p,.05f+.04f*power,.12f+.08f*power,angle,{.77f,.58f,1,power*.68f});
+   r.DrawEffectStreak(p,Mix(p,a.focus,.3f),.010f,{.87f,.85f,1,power*.6f});
+  }
+ }
  if(large){
   const auto footColor=thermal?cool:color;
   Seal(r,a,.62f+power*.33f,age*.15f,{footColor.x,footColor.y,footColor.z,power*.32f});

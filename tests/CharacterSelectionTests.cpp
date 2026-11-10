@@ -1,4 +1,5 @@
 #include "game/Game.h"
+#include "game/Localization.h"
 #include "engine/Renderer.h"
 #include "game/CharacterRig.h"
 #include "game/ProfileStorage.h"
@@ -165,10 +166,145 @@ void Flow(const std::filesystem::path& root,const std::string& veteran) {
   }
   game.Initialize();game.ChooseCharacter(root);Check(game.Selection().State()==Selection::Status::Unreadable,"Directory treated as a missing save");
 }
+void Entrance(const std::filesystem::path& root,Renderer* renderer=nullptr) {
+  for(const auto id:{rpg::ClassId::Warrior,rpg::ClassId::Scout,rpg::ClassId::Mage,rpg::ClassId::Priest})for(int hz:{30,60,144}) {
+    auto owner=std::make_unique<Game>();auto& game=*owner;game.Initialize();
+    game.ChooseCharacter(root/("entrance-"+std::to_string(int(id))+"-"+std::to_string(hz)+"-"+std::to_string(GetTickCount64()))/"patrol.save");
+    Driver d;d.Step(game);d.Click(game,Control(int(Control::Class0)+int(id)));
+    for(int n=0;n<60;++n)d.Step(game);
+    Check(game.Selection().PreviewAction()<0,"Roster automatically performed a combat action");
+    d.Click(game,Control::Create);const auto saved=game.Selection().Hero().Save(),world=game.State().Save();
+    const auto step=[&]{d.input.Update(d.frame);game.Update(1./hz,d.input,0);};
+    for(int n=0;n<int(.40f*hz);++n)step();
+    Check(game.Selection().PreviewAction()<0,"Entrance starts before the class page has settled");
+    int starts=0,releases=0;bool previous=false,captured=false;
+    const int ability=id==rpg::ClassId::Warrior || id==rpg::ClassId::Scout?1:6;
+    for(int n=0;n<hz*9;++n) {
+      step();const auto& selection=game.Selection();
+      if(selection.Introducing() && !previous)++starts;previous=selection.Introducing();
+      if(previous)Check(selection.PreviewAbility()==ability,"Entrance used the wrong class action");
+      for(unsigned k=0;k<selection.PreviewAudio().count;++k)
+        releases+=selection.PreviewAudio().cues[k]==(id==rpg::ClassId::Warrior?sound::Cue::Heavy:sound::ReleaseCue(id,ability,true));
+      if(renderer && hz==60 && !captured && selection.PreviewAction()>.20f) {
+        renderer->BeginFrame();game.Render(*renderer);
+        Check(renderer->Capture((root/("automatic-entrance-"+std::to_string(int(id))+".png")).wstring()) && renderer->EndFrame(false),"Entrance capture");captured=true;
+      }
+    }
+    Check(starts==1 && releases==1 && !game.Selection().Showcasing(),"Entrance repeats, loses release audio or starts a loop");
+    Check(saved==game.Selection().Hero().Save() && world==game.State().Save(),"Entrance altered profile or world");
+    d.Click(game,Control::Pose);Check(game.Selection().PreviewAbility()==0,"Entrance changed the manual preview cycle");
+    // Changing class replaces a pending entrance; focus/page/inspection wins.
+    for(int cancel=0;cancel<5;++cancel) {
+      d.Click(game,Control::Class0);d.Click(game,Control::Class5);
+      if(cancel==0)game.SuspendInput();
+      if(cancel==1)d.Click(game,Control::Closeup);
+      if(cancel==2)d.Click(game,Control::Next);
+      if(cancel==3){d.frame.width+=8;d.Step(game);}
+      if(cancel==4){d.Point(Control::Pose);d.Click(game,Control::Pose);}
+      for(int n=0;n<hz*2;++n){step();Check(!game.Selection().Introducing(),"Cancelled entrance restarted");}
+      if(cancel==1)Check(game.Selection().Closeup(),"Entrance stole the close-up camera");
+      if(cancel==2)d.Click(game,Control::Back);
+    }
+  }
+}
+void StageTransitions(const std::filesystem::path& root,Renderer& renderer) {
+  for(int hz:{30,60,144}) {
+    auto owned=std::make_unique<Game>();auto& game=*owned;game.Initialize();
+    game.ChooseCharacter(root/("transition-"+std::to_string(hz)+"-"+std::to_string(GetTickCount64()))/"patrol.save");
+    Driver d;d.Step(game);d.Click(game,Control::Create);d.Click(game,Control::Class5);
+    const auto profile=game.Selection().Hero().Save(),world=game.State().Save();float elapsed=0;
+    const auto tick=[&](float until){while(elapsed<until-1e-6f){const float dt=std::min(1.f/hz,until-elapsed);d.input.Update(d.frame);game.Update(dt,d.input,0);elapsed+=dt;}};
+    Check(game.Selection().SelectedClass()==rpg::ClassId::Mage && game.Selection().PreviewStage().school==rpg::ClassId::Warrior,
+      "Class selection did not separate committed identity from outgoing presentation");
+    for(float time:{.05f,.14f,.32f}) {
+      tick(time);const auto view=game.Selection().PreviewStage();
+      Check(view.school==(time<.1f?rpg::ClassId::Warrior:rpg::ClassId::Mage),"Dissolve changed school on the wrong phase");
+      const float expected=time<.1f?1-combat::Smooth(time/.1f):combat::Smooth((time-.1f)/.22f);
+      Check(std::abs(view.opacity-expected)<.0001f,"Creation dissolve varies with refresh rate");
+      if(hz==60){renderer.BeginFrame();game.Render(renderer);
+        Check(renderer.Capture((root/("stage-transition-"+std::to_string(int(time*1000))+".png")).wstring())&&renderer.EndFrame(false),"Stage dissolve native capture");}
+      Check(game.Selection().Hero().Save()==profile && game.State().Save()==world,"Dissolve modified profile or gameplay");
+    }
+    d.Click(game,Control::Class3);for(int i=0;i<3;++i)d.Step(game);
+    const auto before=game.Selection().PreviewStage();d.Click(game,Control::Class2);
+    Check(game.Selection().PreviewStage().school==before.school && game.Selection().PreviewStage().opacity<=before.opacity,
+      "Rapid class switching resurrected a fully opaque stale hero");
+    d.Click(game,Control::Pose);Check(game.Selection().PreviewStage().opacity==1 && game.Selection().PreviewStage().school==rpg::ClassId::Scout,
+      "Explicit art preview did not win over a pending dissolve");
+    d.Click(game,Control::Class5);game.SuspendInput();Check(game.Selection().PreviewStage().opacity==1,"Suspension retained an unfinished dissolve");
+    d.Click(game,Control::Class3);d.Click(game,Control::Next);
+    Check(game.Selection().PreviewStage().opacity==1 && game.Selection().PreviewStage().school==rpg::ClassId::Priest,
+      "Appearance page inherited another class's outgoing figure");
+    d.Click(game,Control::Back);d.Click(game,Control::ResetView);
+    const auto beforeInspection=game.Selection().Hero().Save();
+    for(auto size:{std::pair<int,int>{960,600},{1280,720},{2560,1080}}) {
+      d.frame.width=size.first;d.frame.height=size.second;d.Step(game);d.Point(Control::Class5);
+      for(int n=0;n<32;++n)d.Step(game);
+      Check(game.Selection().Hint()==Control::Class5 && game.Selection().SelectedClass()==rpg::ClassId::Priest &&
+        game.Selection().Hero().Save()==beforeInspection,"Hover inspection selected or changed a different class");
+      if(hz==60){Check(renderer.Resize(size.first,size.second),"Inspection resize");renderer.BeginFrame();game.Render(renderer);
+        Check(renderer.Capture((root/("class-inspection-"+std::to_string(size.first)+".png")).wstring())&&renderer.EndFrame(false),"Class inspection native capture");}
+    }
+    d.frame.width=1280;d.frame.height=720;d.Step(game);Check(renderer.Resize(1280,720),"Restore stage capture size");
+  }
+}
+void ArtTransport(const std::filesystem::path& root,Renderer& renderer) {
+  for(auto id:{rpg::ClassId::Warrior,rpg::ClassId::Scout,rpg::ClassId::Mage,rpg::ClassId::Priest})for(int hz:{30,60,144}) {
+    auto owned=std::make_unique<Game>();auto& game=*owned;game.Initialize();
+    game.ChooseCharacter(root/("transport-"+std::to_string(int(id))+"-"+std::to_string(hz)+"-"+std::to_string(GetTickCount64()))/"patrol.save");
+    Driver d;d.Step(game);d.Click(game,Control::Create);d.Click(game,Control(int(Control::Class0)+int(id)));
+    Check(!game.Selection().Enabled(Control::Replay),"Hidden replay remained interactive");
+    d.Click(game,Control::Arts);d.Click(game,Control::Art5);
+    const auto hero=game.Selection().Hero().Save(),world=game.State().Save();
+    const auto tick=[&](float duration){while(duration>1e-6f){const float dt=std::min(1.f/hz,duration);d.input.Update(d.frame);game.Update(dt,d.input,0);duration-=dt;}};
+    tick(.21f);const auto timing=game.Selection().PreviewTiming();
+    Check(timing.progress>0 && timing.release<=timing.follow && timing.follow<=1,"Invalid rehearsal phase display");
+    if(hz==60) {
+      renderer.BeginFrame();game.Render(renderer);
+      Check(renderer.Capture((root/("art-transport-"+std::to_string(int(id))+".png")).wstring())&&renderer.EndFrame(false),"Rehearsal native capture");
+    }
+    d.Click(game,Control::Stop);
+    Check(game.Selection().PreviewAction()<0 && game.Selection().PreviewAbility()==6 && !game.Selection().Showcasing() &&
+      game.Selection().PreviewEffectCount()==0 && !game.Selection().PreviewAudio().preparing,"Stop did not cancel rehearsal while retaining the selection");
+    tick(.25f);const auto pose=game.Selection().PreviewPose();
+    Check(std::abs(pose.left.x)+std::abs(pose.left.y)+std::abs(pose.left.z)+std::abs(pose.pitch)+std::abs(pose.yaw)<.0001f,"Stopped rehearsal did not settle");
+    Check(!game.Selection().Enabled(Control::Stop),"Inactive stop stayed enabled");
+    d.Click(game,Control::Replay);Check(game.Selection().PreviewAbility()==6 && game.Selection().PreviewAction()>=0,"Replay changed the selected ability");
+    tick(7);Check(game.Selection().PreviewTiming().progress==1 && game.Selection().PreviewAction()<0,"Finished rehearsal lost completion state");
+    Check(game.Selection().Hero().Save()==hero && game.State().Save()==world,"Rehearsal controls changed profile or combat state");
+    d.Click(game,Control::Replay);game.SuspendInput();tick(.3f);
+    Check(game.Selection().PreviewAction()<0 && game.Selection().PreviewEffectCount()==0,"Suspension resumed an old replay");
+    d.Click(game,Control::Overview);Check(!game.Selection().Enabled(Control::Replay) && !game.Selection().Enabled(Control::Stop),"Overview exposed rehearsal controls");
+    if(hz==60 && (id==rpg::ClassId::Mage || id==rpg::ClassId::Priest)) {
+      d.Click(game,Control::Arts);
+      const auto arts=id==rpg::ClassId::Mage?std::vector<int>{1,5,9,13,14}:std::vector<int>{1,5,6,7};
+      for(int ability:arts) {
+        const auto found=std::find(Selection::previewArts.begin(),Selection::previewArts.end(),ability);
+        d.Click(game,Control(int(Control::Art0)+int(found-Selection::previewArts.begin())));
+        const bool heavy=ability!=7;const float phase=combat::StrokeStart(heavy)*.70f;
+        while(game.Selection().PreviewAction()>=0 && game.Selection().PreviewAction()<phase)tick(.005f);
+        d.frame.client={950,80};d.Step(game);renderer.BeginFrame();game.Render(renderer);
+        Check(renderer.Capture((root/("art-gesture-"+std::to_string(int(id))+"-"+std::to_string(ability)+".png")).wstring())&&renderer.EndFrame(false),"Ability gesture capture");
+      }
+    }
+  }
+}
 void Render(const std::filesystem::path& root,const std::string& veteran) {
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
   Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),1280,720,L"Character selection test",false),"Hidden window");
   Renderer renderer;Check(renderer.Initialize(window.GetHandle(),1280,720),"Renderer initialization");
+  {
+    const auto language=localization::language;localization::language=localization::Language::English;
+    const float literalWidth=renderer.TextWidth("Warrior",2);
+    localization::language=localization::Language::Russian;
+    Check(renderer.TextWidth("Warrior",2,true)==literalWidth &&
+      renderer.TextWidth("Warrior",2)==renderer.TextWidth("Воин",2,true),
+      "Literal nicknames and translated interface captions share the same text path");
+    localization::language=language;
+  }
+  Entrance(root,&renderer);
+  StageTransitions(root,renderer);
+  ArtTransport(root,renderer);
   {
     renderer.BeginFrame();renderer.DrawHudRect(0,0,1,1,{.02f,.03f,.04f,1});
     renderer.SetCamera({0,3,-8},{0,1,0});DirectX::XMFLOAT2 before,after;
@@ -325,6 +461,10 @@ void Render(const std::filesystem::path& root,const std::string& veteran) {
   Check(game.Selection().DraftName()==std::string(20,'W'),"Name input did not enforce maximum length");
   renderer.BeginFrame();game.Render(renderer);
   Check(renderer.Capture((root/"creation-long-name.png").wstring()) && renderer.EndFrame(false),"Long-name render");
+  d.Key(game,VK_HOME);d.frame.down[VK_SHIFT]=true;for(int n=0;n<7;++n)d.Key(game,VK_RIGHT);d.frame.down[VK_SHIFT]=false;
+  renderer.BeginFrame();game.Render(renderer);
+  Check(renderer.Capture((root/"creation-name-selection.png").wstring()) && renderer.EndFrame(false),"Selected-name capture");
+  d.Key(game,VK_END);
   const auto draftName=game.Selection().DraftName();
   for(int n=0;n<5;++n) {
     d.Click(game,Control(int(Control::Skin0)+n));
@@ -363,7 +503,7 @@ void Render(const std::filesystem::path& root,const std::string& veteran) {
     game.Selection().Hero().Save()==draft && game.Selection().DraftName()==draftName,"Preview controls changed the draft or failed reset");
   d.Click(game,Control::Name);
   d.frame.down[VK_CONTROL]=true;d.Key(game,'A');d.frame.down[VK_CONTROL]=false;d.Step(game);
-  Check(game.Selection().DraftName().empty() && !game.Selection().Enabled(Control::Confirm),"Ctrl+A did not clear and disable creation");
+  Check(game.Selection().DraftName()==draftName && game.Selection().NameSelection().Selected(),"Ctrl+A did not select the complete existing name");
   d.Key(game,VK_OEM_MINUS);Check(!game.Selection().Enabled(Control::Confirm),"Punctuation-only name was accepted");
   d.Key(game,VK_BACK);d.Key(game,'X');d.Key(game,VK_SPACE);d.Key(game,VK_RETURN);
   Check(game.Selection().DraftName()=="x" && game.Selection().Focus()==Control::Confirm,"Finish editing did not trim name/focus confirmation");
@@ -439,6 +579,40 @@ void AppearancePersistence() {
     if(index) Check(palette.colors[0].x==rpg::tunicDyes[index].r,"Tunic dye did not reach the continuous mesh");
   }
 }
+void NameEditing(const std::filesystem::path& root) {
+  ui::NameEditor edit;std::string value="Алёна";edit.Place(value,2);
+  edit.Insert(value,"ь");Check(value=="Альёна" && edit.caret==3,"Unicode insertion split a letter");
+  edit.Erase(value,true);edit.Move(value,1,true);edit.Insert(value,"и");Check(value=="Алина","Selected Cyrillic replacement failed");
+  edit.All(value);edit.Insert(value,"123\xff");Check(value=="Алина" && edit.Selected(),"Invalid paste erased selection");
+  edit.Insert(value,std::string(21,'W'));Check(value==std::string(20,'W') && edit.caret==20,"Selected paste did not enforce character limit");
+  edit.Place(value,0);edit.Erase(value,false);Check(value.size()==19 && edit.caret==0,"Delete did not remove next character");
+  auto owner=std::make_unique<Game>();auto& game=*owner;game.Initialize();game.ChooseCharacter(root/"name-editor"/"patrol.save");
+  Driver d;d.Step(game);d.Click(game,Control::Create);d.Click(game,Control::Next);
+  d.frame.nativeText=true;d.frame.text="Алёна";d.Step(game);d.frame.text.clear();
+  d.Key(game,VK_HOME);d.Key(game,VK_RIGHT);d.frame.down[VK_SHIFT]=true;d.Key(game,VK_RIGHT);d.frame.down[VK_SHIFT]=false;
+  d.frame.text="ри";d.Step(game);d.frame.text.clear();Check(game.Selection().DraftName()=="Ариёна","Native selected insertion failed");
+  d.frame.down[VK_CONTROL]=true;d.Key(game,'A');d.frame.clipboard="Мирослав-Ёж123";d.Key(game,'V');d.frame.down[VK_CONTROL]=false;
+  Check(game.Selection().DraftName()=="Мирослав-Ёж","Clipboard filtering or UTF-8 paste failed");
+  // Measured proportional glyph boundaries are used in local layout space.
+  for(const auto size:{std::pair<int,int>{960,600},{1920,1080},{2560,1080}}) {
+    d.frame.width=size.first;d.frame.height=size.second;d.Step(game);
+    std::array<float,21> advances{};for(int n=0;n<21;++n)advances[n]=float(n*10);
+    game.Selection().MeasureName(advances);const ui::Layout layout(float(size.first),float(size.second));
+    const auto name=Selection::Bounds(Control::Name);
+    const auto point=[&](float x){d.frame.client={LONG(layout.x+(name.x+10+x)*layout.scale),LONG(layout.y+(name.y+20)*layout.scale)};};
+    point(12);d.frame.down[VK_LBUTTON]=true;d.Step(game);point(42);d.Step(game);
+    Check(game.Selection().NameSelection().Begin()==1 && game.Selection().NameSelection().End()==4,"Scaled text drag selected wrong characters");
+    d.Point(Control::Confirm);d.frame.down[VK_LBUTTON]=false;d.Step(game);
+    Check(game.Selection().Screen()==Selection::Page::Customize && !std::filesystem::exists(game.Selection().SaveFile()),"Text drag published a profile");
+  }
+  d.frame.down[VK_CONTROL]=true;d.Key(game,'A');d.frame.clipboard=std::string(20,'W');d.Key(game,'V');d.frame.down[VK_CONTROL]=false;
+  d.frame.down[VK_BACK]=true;for(int n=0;n<48;++n)d.Step(game);d.frame.down[VK_BACK]=false;d.Step(game);
+  Check(game.Selection().DraftName().size()<15 && !game.Selection().DraftName().empty(),"Held Backspace does not repeat after its delay");
+  d.frame.down[VK_CONTROL]=true;d.Key(game,'A');d.frame.clipboard=" Алёна ";d.Key(game,'V');d.frame.down[VK_CONTROL]=false;
+  Check(!game.Selection().Enabled(Control::Confirm),"Leading space allowed profile publication");
+  d.Key(game,VK_HOME);d.Key(game,VK_DELETE);d.Key(game,VK_RETURN);
+  Check(game.Selection().DraftName()=="Алёна" && game.Selection().Focus()==Control::Confirm,"Edited name failed final trim/validation");
+}
 void RussianNames(const std::filesystem::path& root) {
   Game game;game.Initialize();game.ChooseCharacter(root/("russian-"+std::to_string(GetTickCount64()))/"patrol.save");
   Driver d;d.Step(game);d.Click(game,Control::Create);d.Click(game,Control::Next);
@@ -482,6 +656,44 @@ void StageInteraction(const std::filesystem::path& root) {
     d.frame.down[VK_LBUTTON]=false;d.Step(game);d.Click(game,Control::ResetView);
     Check(game.Selection().Yaw()==0 && !game.Selection().Closeup(),"Stage reset did not restore the view");
     Check(game.Selection().Hero().Save()==draft && game.State().Save()==world,"Camera navigation changed durable game state");
+  }
+}
+void CompactDock(const std::filesystem::path& root) {
+  auto storage=std::make_unique<Game>();auto& game=*storage;game.Initialize();game.ChooseCharacter(root/"dock"/"patrol.save");
+  Driver d;d.Step(game);d.Click(game,Control::Create);
+  const std::array<Control,9> controls{Control::Left,Control::Right,Control::Dress0,Control::Dress1,Control::Dress2,
+    Control::Closeup,Control::Pose,Control::Showcase,Control::ResetView};
+  for(auto a:controls)for(auto b:controls)if(a!=b) {
+    const auto x=Selection::Bounds(a),y=Selection::Bounds(b);
+    Check(!(x.x<y.x+y.w && x.x+x.w>y.x && x.y<y.y+y.h && x.y+x.h>y.y),"Dock hit regions overlap");
+  }
+  for(auto size:{std::pair<int,int>{960,600},{1920,1080},{2560,1080}}) {
+    d.frame.width=size.first;d.frame.height=size.second;d.Step(game);d.Point(Control::Dress2);
+    for(int n=0;n<12;++n)d.Step(game);
+    Check(game.Selection().Hint()==Control::None,"Dock tooltip appears before deliberate hover");
+    for(int n=0;n<18;++n)d.Step(game);
+    Check(game.Selection().Hint()==Control::Dress2,"Scaled dock hover does not reveal its tooltip");
+    d.frame.down[VK_LBUTTON]=true;d.Step(game);Check(game.Selection().Hint()==Control::None,"Pressed dock retained a blocking tooltip");
+    d.frame.down[VK_LBUTTON]=false;d.Step(game);
+    Check(game.Selection().PreviewDress()==Selection::Dress::Veteran && !game.Selection().Rotating(),"Dock click leaked through into stage rotation");
+    d.frame.focused=false;d.Step(game);Check(game.Selection().Hint()==Control::None,"Focus loss retained a tooltip");
+    d.frame.focused=true;d.Step(game);
+  }
+  d.Key(game,VK_TAB);const auto focused=game.Selection().Focus();
+  for(int n=0;n<30;++n)d.Step(game);
+  Check(game.Selection().Hint()==focused,"Keyboard navigation cannot inspect a compact control");
+  d.Point(Control::Closeup);for(int n=0;n<30;++n)d.Step(game);
+  Check(game.Selection().Hint()==Control::Closeup,"Mouse movement did not reclaim hints after keyboard navigation");
+  float reference=0;
+  for(int hz:{30,60,144}) {
+    d.Click(game,Control::ResetView);const auto before=game.Selection().Hero().Save();
+    d.Key(game,VK_RIGHT);
+    Check(game.Selection().Yaw()>0 && game.Selection().Yaw()<.4f,"Arrow rotation snaps rather than easing");
+    for(int n=0;n<hz;++n){d.input.Update(d.frame);game.Update(1./hz,d.input,0);}
+    const float yaw=game.Selection().Yaw();
+    Check(std::abs(yaw-.4f)<.0001f,"Arrow rotation does not settle at the requested angle");
+    if(hz==30)reference=yaw;else Check(std::abs(yaw-reference)<.00001f,"Arrow rotation depends on refresh rate");
+    Check(game.Selection().Hero().Save()==before,"View controls changed durable character data");
   }
 }
 void WardrobeAndShowcase(const std::filesystem::path& root) {
@@ -531,6 +743,6 @@ void WardrobeAndShowcase(const std::filesystem::path& root) {
 int main() {
   const auto root=std::filesystem::current_path()/"character-selection-check";std::filesystem::create_directories(root);
   const auto veteran=Read(std::filesystem::path(RPG_TEST_FIXTURES)/"veteran-preview.save");
-  ReportedRegressions(root);StorageTransactions(root);Flow(root,veteran);ClassSlots(root);CreationSafety(root);AppearancePersistence();RussianNames(root);StageInteraction(root);WardrobeAndShowcase(root);Render(root,veteran);
+  ReportedRegressions(root);StorageTransactions(root);Flow(root,veteran);ClassSlots(root);CreationSafety(root);AppearancePersistence();NameEditing(root);RussianNames(root);StageInteraction(root);CompactDock(root);WardrobeAndShowcase(root);Render(root,veteran);
   std::cout<<"PASS: character metadata, frozen world, input isolation, saved/new/error/repaired states, changed saves, resize/focus, hidden DX11 captures\n";
 }

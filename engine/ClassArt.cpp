@@ -83,7 +83,7 @@ GarmentWeights DecodeGarmentWeights(std::string_view bytes,const Library& meshes
   for(unsigned v=0;v<count;++v) {
    const auto influence=r.Get<visual::SkinInfluence>();const float values[]={influence.weights.x,influence.weights.y,influence.weights.z,influence.weights.w};float sum=0;
    for(unsigned k=0;k<4;++k) {
-    Check(influence.bones[k]<visual::bodyBones,"Invalid garment bone");
+    Check(influence.bones[k]<visual::sourceBodyBones,"Invalid garment bone");
     if(part>=unsigned(Part::WarriorSkirt) && part<=unsigned(Part::MageSkirt))
      Check(influence.bones[k]==0 || (influence.bones[k]>=2 && influence.bones[k]<=5),"Invalid hem bone");
     Check(std::isfinite(values[k]) && values[k]>=0 && values[k]<=1,"Invalid garment influence");sum+=values[k];
@@ -101,7 +101,12 @@ std::string_view GarmentWeightBytes() {
 }
 const std::vector<visual::SkinInfluence>& GarmentInfluences(visual::Mesh mesh) {
  Check(visual::IsGarmentMesh(mesh),"Not a skinned garment mesh");
- static const auto weights=DecodeGarmentWeights(GarmentWeightBytes(),Collection());
+ static const auto weights=[] {auto result=DecodeGarmentWeights(GarmentWeightBytes(),Collection());
+  for(unsigned part=0;part<result.size();++part)for(unsigned lod=0;lod<2;++lod)
+   for(std::size_t i=0;i<result[part][lod].size();++i)
+    result[part][lod][i]=visual::ArticulateTorso(Collection()[part][lod].vertices[i].position,result[part][lod][i],
+      part==unsigned(Part::WarriorChest)||part==unsigned(Part::WarriorVeteranChest));
+  return result;}();
  const unsigned index=unsigned(mesh)-unsigned(visual::Mesh::OldWarriorChest);return weights[index/2][index%2];
 }
 }

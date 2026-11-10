@@ -78,12 +78,14 @@ void Native(Renderer& r,const std::filesystem::path& out){
  roster.resize(8);for(int n=0;n<8;++n){auto& foe=roster[n];foe.id=100+n;foe.kind=EnemyKind::Captain;foe.rank=1;
   foe.position={-4.f+(n%3)*.22f,7.f+(n/3)*.22f};foe.home=foe.position;foe.health=foe.MaxHealth();
   foe.state=EnemyState::Pursuing;foe.windup=.7f;foe.facing=pi;foe.bossAttack=0;}
- begin(s);SustainedEffects::Warnings(r,s);const unsigned warningVertices=r.EffectVertices();
+ std::vector<presentation::Actor> actors;presentation::Bind(actors,s.Combatants(),s.SparringOpponent());
+ begin(s);SustainedEffects::Warnings(r,s,&actors);const unsigned warningVertices=r.EffectVertices();
  Check(warningVertices>=3168 && warningVertices<=3600,"Eight quake borders missing or over budget");
  const auto original=Capture(r,out/"crowd-warnings.png");std::reverse(roster.begin(),roster.end());
- begin(s);SustainedEffects::Warnings(r,s);const auto reordered=Capture(r,out/"crowd-warnings-reordered.png");
+ presentation::Bind(actors,s.Combatants(),s.SparringOpponent());
+ begin(s);SustainedEffects::Warnings(r,s,&actors);const auto reordered=Capture(r,out/"crowd-warnings-reordered.png");
  Check(original==reordered,"Warning priority depends on roster order");
- begin(s);SustainedEffects::Warnings(r,s);for(int n=0;n<2000;++n)r.DrawEffectGlow({-4,1,7},.05f,{1,1,1,.01f});
+ begin(s);SustainedEffects::Warnings(r,s,&actors);for(int n=0;n<2000;++n)r.DrawEffectGlow({-4,1,7},.05f,{1,1,1,.01f});
  Check(r.EffectVertices()==Renderer::maxEffectVertices && r.EndFrame(false),"Cosmetics escaped shared warning budget");
  for(auto& foe:roster)foe.windup=0;
  begin(s);SustainedEffects::Warnings(r,s);Check(r.EffectVertices()==0 && r.EndFrame(false),"Interrupted cast left danger contour");

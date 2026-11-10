@@ -13,7 +13,6 @@ namespace localization {
 enum class Language { Russian, English };
 inline Language language=Language::Russian;
 inline std::filesystem::path settings;
-inline std::string playerName;
 inline void Initialize(const std::filesystem::path& directory) {
   settings=directory/"language.ini";language=Language::Russian;
   std::ifstream file(settings);std::string value;std::getline(file,value);
@@ -40,7 +39,7 @@ inline const std::vector<Entry>& Dictionary() {
   }();return entries;
 }
 inline std::string Translate(std::string_view input) {
-  if(language==Language::English || input==playerName) return std::string(input);
+  if(language==Language::English) return std::string(input);
   // Bound dynamic HUD text cache.
   static std::unordered_map<std::string,std::string> cache;
   if(auto entry=cache.find(std::string(input));entry!=cache.end()) return entry->second;

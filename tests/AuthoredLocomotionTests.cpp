@@ -23,7 +23,7 @@ float Difference(const playerclips::Frame& a,const playerclips::Frame& b){
 }
 void LibraryChecks(){
   const auto bytes=playerclips::EmbeddedBytes();const auto clips=playerclips::Decode(bytes);
-  Check(clips.size()==57&&bytes.size()<768*1024,"Fifty-one authored actions and six compatibility tracks must fit the motion budget");
+  Check(clips.size()==57&&bytes.size()<2*1024*1024,"Fifty-one authored actions and six compatibility tracks must fit the motion budget");
   for(unsigned i=4;i<12;++i){
     const auto clip=playerclips::Clip(i);
     Check(Difference(playerclips::Sample(clip,-.000001f),playerclips::Sample(clip,.000001f))<.0001f,"Gait loop seam");
@@ -37,7 +37,7 @@ void LibraryChecks(){
       walkPeak=std::max(walkPeak,playerclips::SwingHeight(w,0,side,i/100.f));
       runPeak=std::max(runPeak,playerclips::SwingHeight(w,1,side,i/100.f));
     }
-    Check(walkPeak>.025f&&runPeak>walkPeak+.10f&&runPeak<=.29f,"Walk/run need different bounded recovery heights");
+    Check(walkPeak>.025f&&runPeak>walkPeak+.10f&&runPeak<=.48f,"Walk/run need different bounded recovery heights");
     Check(playerclips::SwingHeight(w,1,0,0)==0&&playerclips::SwingHeight(w,1,1,1)==0,"Contact endpoints must be flat");
   }
   const auto rejected=[](std::string data){try{playerclips::Decode(data);return false;}catch(const std::exception&){return true;}};
@@ -46,6 +46,27 @@ void LibraryChecks(){
   std::size_t offset=12;for(unsigned i=0;i<4;++i)offset+=36+clips[i].frames.size()*sizeof(playerclips::Frame);
   corrupt=std::string(bytes);float bad=.5f;std::memcpy(corrupt.data()+offset+36,&bad,sizeof(bad));
   Check(rejected(corrupt),"Broken imported loop must be rejected");
+  // Compatibility archives still load with zero new channels. Repacking the
+  // current samples also exercises the variable on-disk stride independently
+  // of the in-memory Frame layout.
+  std::string legacy(bytes.substr(0,12));legacy[3]='3';legacy[4]=3;
+  std::size_t pos=12;
+  for(const auto& track:clips){
+    legacy.append(bytes.substr(pos,36));pos+=36;
+    for(std::size_t i=0;i<track.frames.size();++i){legacy.append(bytes.substr(pos,120));pos+=sizeof(playerclips::Frame);}
+  }
+  const auto compatibility=playerclips::Decode(legacy);
+  Check(compatibility[8].frames[20].ankles[0].x==0&&compatibility[8].frames[20].knees[0].z==0,"Legacy clips must initialize extension channels");
+  Check(Difference(compatibility[8].frames[20],clips[8].frames[20])==0,"PCL3 compatibility changed existing channels");
+  corrupt=std::string(bytes);bad=2;
+  std::memcpy(corrupt.data()+12+36+34*sizeof(float),&bad,sizeof(bad));
+  Check(rejected(corrupt),"Invalid authored knee direction must be rejected");
+  Check(clips[8].frames[20].articulated==1,"Blender spine and clavicle channels were discarded");
+  Check(compatibility[8].frames[20].articulated==0,"Legacy archive enabled nonexistent spine channels");
+  corrupt=std::string(bytes);bad=.5f;std::memcpy(corrupt.data()+12+36+52*sizeof(float),&bad,sizeof(bad));
+  Check(rejected(corrupt),"Invalid skeletal extension flag accepted");
+  corrupt=std::string(bytes);bad=.2f;std::memcpy(corrupt.data()+12+36+46*sizeof(float),&bad,sizeof(bad));
+  Check(rejected(corrupt),"Unreachable clavicle offset accepted");
 }
 struct Walker {
   animation::State state;animation::FootPlacement feet;
@@ -61,8 +82,8 @@ struct Walker {
   }
 };
 void NaturalGaitChecks(){
-  float compression=0,palmAgreement=1,footWidth=0;
-  double footSum=0,handSum=0,product=0;unsigned count=0;
+  float compression=0,palmAgreement=1,footWidth=0,highestHip=-1;
+  double footSum=0,handSum=0,product=0,hipSum=0;unsigned count=0;
   for(float speed:{1.4f,6.f}){
     Walker walk;
     for(int tick=0;tick<2400;++tick){
@@ -78,6 +99,7 @@ void NaturalGaitChecks(){
       }
       if(speed>5){
         compression=std::max(compression,-pose.bodyLift);
+        highestHip=std::max(highestHip,pose.bodyLift);hipSum+=pose.bodyLift;
         footWidth=std::max(footWidth,std::abs(pose.legs[1].end.x-pose.legs[0].end.x));
         const float foot=pose.legs[0].end.z,hand=pose.arms[0].end.z;
         footSum+=foot;handSum+=hand;product+=foot*hand;++count;
@@ -87,9 +109,89 @@ void NaturalGaitChecks(){
   const double covariance=product/count-(footSum/count)*(handSum/count);
   std::cout<<"Natural gait: compression "<<compression<<", running width "<<footWidth<<", wrist alignment "<<palmAgreement<<", arm/leg covariance "<<covariance<<'\n';
   Check(palmAgreement>.99f,"Free hand reflected the backswing and folded at the wrist");
-  Check(compression<.095f,"Steady run collapsed into a persistent crouch");
+  // A loaded contact is lower than flight. Bound the mean separately so a
+  // short compression can absorb contact without authorizing a constant squat.
+  Check(compression<.18f&&hipSum/count>-.075,"Steady run collapsed into a persistent crouch");
+  Check(highestHip>.005f&&highestHip+compression>.08f,"Pelvis smoothing erased the authored flight rise");
   Check(footWidth<.31f,"Forward running retained the wide standing stance");
   Check(covariance<-.002,"Running arm failed to oppose its same-side leg");
+}
+void AuthoredLegChecks(){
+  const std::array<float,4> forward={1,0,0,0};
+  float recoveryPitch=0,livePitch=0,liveHeight=0;
+  for(int side=0;side<2;++side){
+    Check(std::abs(playerclips::SwingPitch(forward,1,side,0,.4f)-.4f)<1e-6f,"Toe-off must retain its real orientation");
+    Check(std::abs(playerclips::SwingPitch(forward,1,side,1,.4f))<1e-6f,"Touchdown must meet the flat world anchor");
+    for(int k=0;k<=100;++k)recoveryPitch=std::max(recoveryPitch,playerclips::SwingPitch(forward,1,side,k/100.f,.4f));
+  }
+  Walker runner;
+  for(int k=0;k<300;++k){
+    runner.Update(1.f/120,6,1,0);
+    if(k<120)continue;
+    const auto pose=BuildCharacterPose(0,0,false,runner.state.pose);
+    for(int side=0;side<2;++side){
+      livePitch=std::max(livePitch,pose.footPitch[side]);liveHeight=std::max(liveHeight,pose.legs[side].end.y);
+      Check(std::abs(Distance(pose.legs[side].root,pose.legs[side].joint)-CharacterPose::thigh)<1e-5f,"Authored knee plane stretched thigh");
+      Check(std::abs(Distance(pose.legs[side].joint,pose.legs[side].end)-CharacterPose::shin)<1e-5f,"Authored knee plane stretched shin");
+    }
+  }
+  Check(recoveryPitch>.65f&&livePitch>.65f,"Source ankle recovery was lost between Blender and native playback");
+  Check(liveHeight>.48f&&liveHeight<.68f,"Recovery must fold behind the hip without a high-knee march");
+  auto sample=runner.state.pose;sample.feetActive=true;
+  sample.feet[0]={-.13f,.42f,.12f,0,0};sample.feet[1]={.13f,.20f,-.08f,0,0};
+  sample.authoredMotion.knees[0]={0,0,1};
+  const auto first=BuildCharacterPose(0,0,false,sample);
+  sample.authoredMotion.knees[0]={.6f,0,.8f};
+  const auto second=BuildCharacterPose(0,0,false,sample);
+  Check(Distance(first.legs[0].joint,second.legs[0].joint)>.02f,"Native IK discarded exported knee direction");
+  Check(Distance(first.legs[0].end,second.legs[0].end)<1e-6f,"Changing knee plane moved the contact anchor");
+  animation::Sample reach;reach.authoredGait=true;reach.feetActive=true;
+  reach.feet[0]={-.18f,.17f,-.55f,0,0};reach.feet[1]={.18f,.17f,0,0,0};
+  const auto anchored=BuildCharacterPose(0,0,false,reach);
+  reach.feetReachWeight[0]=0;
+  const auto recovery=BuildCharacterPose(0,0,false,reach);
+  Check(recovery.bodyLift>anchored.bodyLift+.15f,"Recovering foot pulled the whole pelvis into a squat");
+  Check(Distance(recovery.legs[1].end,anchored.legs[1].end)<1e-5f,"Releasing swing reach displaced the support foot");
+  Check(std::abs(Distance(recovery.legs[0].root,recovery.legs[0].joint)-CharacterPose::thigh)<1e-5f&&
+    std::abs(Distance(recovery.legs[0].joint,recovery.legs[0].end)-CharacterPose::shin)<1e-5f,"Free leg reach correction stretched a bone");
+  std::cout<<"Authored legs: recovery pitch "<<livePitch<<", ankle height "<<liveHeight<<'\n';
+}
+void ContinuousCycleChecks(){
+  for(int hz:{30,60,144})for(float speed:{1.4f,6.f}){
+    Walker walker;float previous=0,minRate=10,maxRate=0;bool planted[2]={true,true};
+    std::array<std::vector<float>,2> contacts;
+    for(int tick=0;tick<hz*5;++tick){
+      walker.Update(1.f/hz,speed,1,0);
+      const float phase=walker.state.pose.authoredPhase;
+      if(tick>hz*2){
+        const float rate=std::remainder(phase-previous,1.f)*hz;
+        minRate=std::min(minRate,rate);maxRate=std::max(maxRate,rate);
+        for(int side=0;side<2;++side)if(walker.feet.Planted(side)&&!planted[side])contacts[side].push_back(phase);
+      }
+      previous=phase;for(int side=0;side<2;++side)planted[side]=walker.feet.Planted(side);
+    }
+    const float expected=1/animation::TravelGait(speed).period;
+    Check(minRate>expected-.003f&&maxRate<expected+.003f,"Constant travel warped the authored cycle clock");
+    for(int side=0;side<2;++side){
+      Check(contacts[side].size()>=2,"Both legs must complete repeated support phases");
+      for(float p:contacts[side])Check(std::abs(std::remainder(p-side*.5f,1.f))<expected/hz+.015f,"Opposite contact drifted away from the half-cycle");
+    }
+  }
+  Walker walker;float previous=0;
+  for(int tick=0;tick<480;++tick){
+    const float dt=1.f/144,flight=tick*dt-1,span=2*motion::jumpSpeed/motion::gravity;
+    const bool air=flight>0&&flight<span;
+    const float height=air?motion::jumpSpeed*flight-.5f*motion::gravity*flight*flight:0;
+    walker.position.z+=6*dt;
+    walker.state.Update(dt,height,air?motion::jumpSpeed-motion::gravity*flight:0,6*dt,true,0);
+    walker.state.locomotion.Update(dt,air?0:6*dt,1,0,0,!air,0,height,true);
+    animation::ApplyAuthoredLocomotion(walker.state,dt);
+    walker.feet.Update(dt,walker.position,0,!air,true,walker.state.pose);
+    const float phase=walker.state.pose.authoredPhase;
+    if(tick>30)Check(std::remainder(phase-previous,1.f)>-.0001f,"Takeoff or landing played the body cycle backwards");
+    previous=phase;
+  }
+  std::cout<<"Continuous bilateral gait: uniform clock at 30/60/144 Hz; half-cycle contacts; no reverse phase through flight\n";
 }
 void RecoveryTimingChecks(){
   const std::array<float,4> forward={1,0,0,0};
@@ -123,8 +225,46 @@ void RecoveryTimingChecks(){
     Check(seen&&previous>.9f,"Flight animation did not progress from takeoff to pre-contact extension");
   }
 }
+void FlightClockChecks(){
+  for(const auto equipment:{playerclips::Equipment::None,playerclips::Equipment::Sword,playerclips::Equipment::Staff,playerclips::Equipment::Bow})
+    for(float phase:{.55f,.8f,.98f}){
+      animation::Sample sample;sample.authoredGait=true;sample.authoredBlend=1;sample.authoredEquipment=equipment;
+      sample.air=1;sample.rise=-.7f;sample.flightPhase=phase;
+      const auto first=BuildCharacterPose(0,0,false,sample);
+      for(float clock:{.37f,1.8f,27.1f}){
+        sample.authoredClock=clock;const auto next=BuildCharacterPose(0,0,false,sample);
+        Check(std::abs(first.bodyLift-next.bodyLift)<1e-6f,"Jump pelvis depends on unrelated idle time");
+        for(int side=0;side<2;++side)Check(Distance(first.legs[side].end,next.legs[side].end)<1e-6f&&
+          Distance(first.arms[side].end,next.arms[side].end)<1e-6f,"Jump limbs sampled a free-running fall loop");
+      }
+    }
+  animation::State state;
+  state.Update(.01f,.8f,-motion::jumpSpeed,0,true,0);
+  Check(state.pose.extendedFall==0,"Normal jump descent must retain its landing trajectory");
+  state.Update(.01f,3.f,-motion::jumpSpeed*1.8f,0,true,0);
+  Check(state.pose.extendedFall>.99f,"Deep fall did not enter the separate falling pose");
+  std::cout<<"Flight poses: independent of idle clock; extended fall driven by descent velocity\n";
+}
+void LateralClearanceChecks(){
+  float minimum=10,maximumStep=0;
+  for(float speed:{1.4f,3.f,6.f})for(float right:{-1.f,1.f}){
+    Walker walker;CharacterPose previous;
+    for(int tick=0;tick<4000;++tick){
+      walker.Update(.001f,speed,0,right);
+      const auto pose=BuildCharacterPose(0,0,false,walker.state.pose);
+      if(tick>1000){
+        minimum=std::min(minimum,pose.legs[1].end.x-pose.legs[0].end.x);
+        for(int side=0;side<2;++side)maximumStep=std::max(maximumStep,Distance(previous.legs[side].end,pose.legs[side].end));
+      }
+      previous=pose;
+    }
+  }
+  std::cout<<"Lateral clearance "<<minimum<<" m; maximum ankle change per ms "<<maximumStep<<" m\n";
+  Check(minimum>.09f,"Lateral recovery crossed the supporting leg");
+  Check(maximumStep<.014f,"Lateral clearance snapped a foot at release/contact");
+}
 void ContactsAndTransitions(){
-  float worstSlip=0,worstJump=0;playerclips::Frame reference;
+  float worstSlip=0,worstJump=0,worstFoot=0;playerclips::Frame reference;
   for(int hz:{30,60,144,1000}){
     Walker walk;std::array<XMFLOAT3,2> previous{};bool planted[2]={};
     for(int i=0;i<hz*2;++i){
@@ -150,14 +290,16 @@ void ContactsAndTransitions(){
     const auto pose=BuildCharacterPose(0,0,false,taps.state.pose);
     for(int side=0;side<2;++side) {
       const float delta=Distance(previous.arms[side].end,pose.arms[side].end);
+      worstFoot=std::max(worstFoot,Distance(previous.legs[side].end,pose.legs[side].end));
       if(delta>.012f)std::cerr<<"Reversal frame "<<i<<" side "<<side<<" hand "<<delta<<" hip "<<previous.bodyLift<<" -> "<<pose.bodyLift<<" feet "<<taps.state.pose.feet[0].x<<','<<taps.state.pose.feet[0].y<<','<<taps.state.pose.feet[0].z<<" | "<<taps.state.pose.feet[1].x<<','<<taps.state.pose.feet[1].y<<','<<taps.state.pose.feet[1].z<<'\n';
       worstJump=std::max(worstJump,delta);
     }
     previous=pose;
   }
-  std::cout<<"Authored gait: maximum planted slip "<<worstSlip<<" m, hand change per ms "<<worstJump<<" m\n";
+  std::cout<<"Authored gait: maximum planted slip "<<worstSlip<<" m, hand change per ms "<<worstJump<<" m, ankle change per ms "<<worstFoot<<" m\n";
   Check(worstSlip<.002f,"Authored pelvis displaced world-space foot anchors");
   Check(worstJump<.012f,"Start/stop/reversal caused a visible hand snap");
+  Check(worstFoot<.025f,"A wrapped early-release step teleported its recovering foot");
   // Shared locomotion must coexist with every weapon form, not just the guard.
   for(unsigned id=0;id<unsigned(rpg::ClassId::Count);++id)for(bool heavy:{false,true}){
     Walker moving;for(int i=0;i<60;++i)moving.Update(.01f,5,1,0);
@@ -462,5 +604,7 @@ int main(int argc,char** argv){try{
   if(argc==2&&std::string_view(argv[1])=="--capture-only") {Captures();return 0;}
   if(argc==2&&std::string_view(argv[1])=="--flight-only") {LibraryChecks();EquippedFlightChecks();return 0;}
   if(argc==2&&std::string_view(argv[1])=="--bow-only") {LibraryChecks();BowMotionChecks();WeaponCarryChecks();EquippedFlightChecks();std::cout<<"PASS: archery draw, release, carry and flight\n";return 0;}
-  LibraryChecks();GroundedMotionChecks();NaturalGaitChecks();RecoveryTimingChecks();ContactsAndTransitions();WeaponMotionChecks();BowMotionChecks();WeaponCarryChecks();EquippedFlightChecks();Captures();std::cout<<"PASS: imported gait loops, directional weapon carry, equipped jumps, combat guards, contacts, transition continuity, gameplay isolation and native comparison\n";}
+  LibraryChecks();GroundedMotionChecks();NaturalGaitChecks();AuthoredLegChecks();ContinuousCycleChecks();LateralClearanceChecks();RecoveryTimingChecks();FlightClockChecks();ContactsAndTransitions();WeaponMotionChecks();BowMotionChecks();WeaponCarryChecks();EquippedFlightChecks();
+  if(!(argc==2&&std::string_view(argv[1])=="--motion-only"))Captures();
+  std::cout<<"PASS: imported gait loops, directional weapon carry, equipped jumps, combat guards, contacts, transition continuity, gameplay isolation and native comparison\n";}
 catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

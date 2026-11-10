@@ -150,7 +150,7 @@ void Crescent(Renderer& renderer,XMFLOAT3 origin,float facing,float age,bool hea
   }
 }
 }
-void CombatEffects::Reset() { bursts_={}; trails_={}; wake_={}; serial_=0; footprints_={};footprintCursor_=0; }
+void CombatEffects::Reset() { bursts_={}; trails_={}; wake_={}; serial_=0; footprints_={};footprintCursor_=0;residues_={}; }
 void CombatEffects::EmitFootstep(const presentation::CreatureContact& contact,const rpg::WorldMap& map) {
  if(!std::isfinite(contact.position.x+contact.position.y+contact.position.z+contact.strength+contact.facing) || contact.strength<=0)return;
  const auto p=rpg::Vec2{contact.position.x,contact.position.z};const auto surface=map.SurfaceAt(p);
@@ -160,9 +160,13 @@ void CombatEffects::EmitFootstep(const presentation::CreatureContact& contact,co
 std::size_t CombatEffects::FootprintCount() const {
  return std::count_if(footprints_.begin(),footprints_.end(),[](const auto& p){return p.age<2.8f;});
 }
+std::size_t CombatEffects::ResidueCount() const {
+ return std::count_if(residues_.begin(),residues_.end(),[](const auto& r){return r.age<spellvfx::ResidueLifetime(r.kind);});
+}
 void CombatEffects::Advance(float dt) {
   if (!std::isfinite(dt) || dt<=0) return;
   dt=std::min(dt,.05f);
+  for(auto& residue:residues_)residue.age=std::min(10.f,residue.age+dt);
   for(auto& print:footprints_)print.age=std::min(10.f,print.age+dt);
   for (std::size_t i=0;i<wake_.count;++i) wake_.samples[i].age+=dt;
   const auto wakeEnd=std::remove_if(wake_.samples.begin(),wake_.samples.begin()+wake_.count,
@@ -189,6 +193,18 @@ void CombatEffects::Emit(const rpg::CombatVisualEvent& event,const XMFLOAT3* spe
   if(event.kind==K::UiClick || event.kind==K::CastStart || event.kind==K::ReserveReady || event.kind==K::CastCancelled ||
     event.kind==K::EnemyPrepare || event.kind==K::BossPrepare) return;
   const float elapsed=std::isfinite(event.elapsed)?std::clamp(event.elapsed,0.f,.05f):0;
+  auto residue=spellvfx::MakeResidue(event);
+  residue.order=serial_+1;
+  if(residue.kind!=spellvfx::ResidueKind::None) {
+    // Repeated contacts can rekindle a small patch, not stack an unlimited
+    // pile of decals at a practice target. Existing marks stay on the ground.
+    auto slot=std::find_if(residues_.begin(),residues_.end(),[&](const auto& r){
+      return r.kind==residue.kind && r.age<spellvfx::ResidueLifetime(r.kind) &&
+        std::hypot(r.position.x-residue.position.x,r.position.z-residue.position.z)<.5f;
+    });
+    if(slot!=residues_.end()) {slot->age=std::min(slot->age,.3f);slot->size=std::max(slot->size,residue.size);}
+    else {*std::max_element(residues_.begin(),residues_.end(),[](const auto& a,const auto& b){return a.age==b.age?a.order>b.order:a.age<b.age;})=residue;}
+  }
   if (event.kind==K::DashStart) {
     CancelTrail(0);
     wake_={}; wake_.school=event.school;
@@ -327,7 +343,7 @@ void CombatEffects::Render(Renderer& renderer,const castfx::Attachments* caster)
     if(a->event.actor!=b->event.actor)return a->event.actor<b->event.actor;
     return a->event.kind<b->event.kind;
   });
-  for(std::size_t i=0;i<releaseCount;++i)spellvfx::EnemyContact(renderer,releases[i]->event,releases[i]->age,releaseCount<=2);
+  for(std::size_t i=0;i<releaseCount;++i)spellvfx::EnemyContact(renderer,releases[i]->event,releases[i]->age,releaseCount<=2,&releases[i]->spellOrigin);
   for(const auto& print:footprints_) {
     if(print.age>=2.8f)continue;
     const auto& e=print.contact;const float c=std::cos(e.facing),s=std::sin(e.facing);
@@ -521,4 +537,14 @@ void CombatEffects::Render(Renderer& renderer,const castfx::Attachments* caster)
       renderer.DrawEffectGlow(mote,.045f+Noise(burst.seed+i*7)*.035f,tint);
     }
   }
+  // Last cosmetic priority: never displace current danger, release or hit
+  // geometry. At most six recent patches share a 900-vertex allowance.
+  std::array<const spellvfx::Residue*,12> residueOrder{};std::size_t residueCount=0;
+  for(const auto& residue:residues_)if(residue.age<spellvfx::ResidueLifetime(residue.kind))residueOrder[residueCount++]=&residue;
+  std::sort(residueOrder.begin(),residueOrder.begin()+residueCount,[](const auto* a,const auto* b){
+    return a->age==b->age?a->order>b->order:a->age<b->age;
+  });
+  const auto residueLimit=std::min(Renderer::maxEffectVertices,renderer.EffectVertices()+900);
+  for(std::size_t i=0;i<std::min<std::size_t>(6,residueCount) && renderer.EffectVertices()+180<=residueLimit;++i)
+    spellvfx::Aftermath(renderer,*residueOrder[i]);
 }

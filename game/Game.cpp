@@ -312,6 +312,8 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   sustained_.Update(simulation_,dt);
   for (std::size_t i=0;i<simulation_.VisualEventCount();++i) {
     const auto& event=simulation_.VisualEvents()[i];
+    // Attach hostile beams after their shared actor pose has advanced below.
+    if(event.kind==rpg::CombatVisualKind::EnemyLance || event.kind==rpg::CombatVisualKind::EnemyExecution)continue;
     if(event.kind==rpg::CombatVisualKind::SpellCast) {
       auto launch=playerAnimation_.pose;
       launch.attackSeconds=-1; launch.cast=0;
@@ -381,7 +383,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   if(simulation_.ClassInfo().range>3 && simulation_.Attacking())
     playerAnimation_.pose.attackSeconds=-1;
   playerAnimation_.actions.Update(dt,simulation_.Class(),simulation_.AttackSeconds(),simulation_.HeavyAttack(),
-    simulation_.CastingRecovery()?std::min(.30f,simulation_.RecoveryProgress()*1.5f):playerAnimation_.castAge,simulation_.Health()>0,simulation_.TechniqueAttack(),simulation_.SignatureAttack(),simulation_.OpeningAttack());
+    simulation_.CastingRecovery()?std::min(.30f,simulation_.RecoveryProgress()*1.5f):playerAnimation_.castAge,simulation_.Health()>0,simulation_.TechniqueAttack(),simulation_.SignatureAttack(),simulation_.OpeningAttack(),-1,simulation_.AttackAbility());
   playerAnimation_.pose.action=playerAnimation_.actions.pose;
   if(simulation_.Class()!=rpg::ClassId::Warrior) playerAnimation_.pose.cast=0;
   playerAnimation_.pose.heavyAttack=simulation_.HeavyAttack();
@@ -479,6 +481,15 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
     enemyActors_[i].animation.pose.motion=enemyActors_[i].animation.locomotion.pose;
   }
   UpdateFaces(dt);
+  for(std::size_t i=0;i<simulation_.VisualEventCount();++i) {
+    const auto& event=simulation_.VisualEvents()[i];
+    if(event.kind!=rpg::CombatVisualKind::EnemyLance && event.kind!=rpg::CombatVisualKind::EnemyExecution)continue;
+    const auto enemy=std::find_if(enemies.begin(),enemies.end(),[&](const rpg::Enemy& e){return e.id==event.actor;});
+    const auto actor=std::find_if(enemyActors_.begin(),enemyActors_.end(),[&](const presentation::Actor& a){return a.id==event.actor;});
+    if(enemy!=enemies.end() && actor!=enemyActors_.end()) {
+      const auto origin=castfx::FromEnemy(*enemy,*actor).focus;effects_.Emit(event,&origin);
+    } else effects_.Emit(event);
+  }
   for(unsigned i=0;i<creatureSteps_.count;++i)effects_.EmitFootstep(creatureSteps_.events[i],simulation_.Map());
   const auto track=[&](rpg::EntityId id,rpg::Vec2 position,float height,const motion::Actor& motion,
     const animation::Sample& animation,bool shield,bool armed) {
@@ -594,7 +605,7 @@ void Game::Render(Renderer& renderer,bool showInterface) {
   const float cameraDistance=cameraBoom_.distance;
   renderer.SetCamera({player.x+direction.x*cameraDistance,cameraHeight_+std::sin(cameraPitch_)*cameraDistance,
     player.z+direction.z*cameraDistance},{player.x,cameraHeight_,player.z});
-  SustainedEffects::Warnings(renderer,simulation_);
+  SustainedEffects::Warnings(renderer,simulation_,&enemyActors_);
   std::array<TrainingPropPose,3> training;
   for(std::size_t i=0;i<training.size();++i) {
     const auto& reaction=dummyAnimations_[i].pose;

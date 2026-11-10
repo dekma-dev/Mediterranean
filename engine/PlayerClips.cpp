@@ -14,8 +14,9 @@ struct Reader {
 };
 }
 Library Decode(std::string_view bytes){
- Check(bytes.size()<=768*1024,"Player clip budget exceeded");Reader r{bytes};
- Check(r.Get<unsigned>()==0x334c4350&&r.Get<unsigned>()==3&&r.Get<unsigned>()==unsigned(Clip::Count),"Invalid player clip header");Library result;
+ Check(bytes.size()<=2*1024*1024,"Player clip budget exceeded");Reader r{bytes};
+ const auto magic=r.Get<unsigned>(),version=r.Get<unsigned>();
+ Check(((magic==0x334c4350&&version==3)||(magic==0x344c4350&&version==4)||(magic==0x354c4350&&version==5))&&r.Get<unsigned>()==unsigned(Clip::Count),"Invalid player clip header");Library result;
  for(auto& track:result){
   auto count=r.Get<unsigned>();track.duration=r.Get<float>();
   track.load=r.Get<float>();track.contact=r.Get<float>();track.takeoff=r.Get<float>();track.landing=r.Get<float>();track.stance=r.Get<float>();track.speed=r.Get<float>();
@@ -24,12 +25,23 @@ Library Decode(std::string_view bytes){
   for(float v:{track.load,track.contact,track.takeoff,track.landing,track.stance})Check(std::isfinite(v)&&v>=0&&v<=1,"Invalid clip marker");
   Check(std::isfinite(track.speed)&&track.speed>=0&&track.speed<=10,"Invalid clip travel speed");
   for(unsigned i=0;i<count;++i){
-   auto f=r.Get<Frame>();std::array<float,frameChannels> values;std::memcpy(values.data(),&f,sizeof(f));
+   Frame f;
+   if(version==5)f=r.Get<Frame>();
+   else if(version==4){const auto legacy=r.Get<std::array<float,40>>();std::memcpy(&f,legacy.data(),sizeof(legacy));}
+   else {const auto legacy=r.Get<std::array<float,30>>();std::memcpy(&f,legacy.data(),sizeof(legacy));}
+   std::array<float,frameChannels> values;std::memcpy(values.data(),&f,sizeof(f));
    for(float v:values)Check(std::isfinite(v)&&std::abs(v)<=3.2f,"Invalid player clip channel");
    for(const auto& elbow:f.elbows) {
     const float n=elbow.x*elbow.x+elbow.y*elbow.y+elbow.z*elbow.z;
     Check(n<1e-8f||std::abs(n-1)<1e-4f,"Invalid player elbow plane");
    }
+   for(const auto& knee:f.knees) {
+    const float n=knee.x*knee.x+knee.y*knee.y+knee.z*knee.z;
+    Check(n<1e-8f||std::abs(n-1)<1e-4f,"Invalid player knee plane");
+   }
+   for(const auto& ankle:f.ankles)Check(std::abs(ankle.x)<=1.5f&&std::abs(ankle.y)<=1.5f,"Invalid player ankle rotation");
+   Check(f.articulated==0||f.articulated==1,"Invalid articulated source flag");
+   for(const auto& shoulder:f.shoulders)Check(std::hypot(shoulder.x,shoulder.y,shoulder.z)<.12f,"Invalid clavicle translation");
    Check(std::abs(f.weapon.x*f.weapon.x+f.weapon.y*f.weapon.y+f.weapon.z*f.weapon.z-1)<1e-4f,"Invalid player weapon direction");track.frames.push_back(f);
   }
  }
@@ -96,7 +108,7 @@ Frame Locomotion(const std::array<float,4>& weights,float run,float phase,Equipm
     const auto forward=equipment==Equipment::Staff?(pace?Clip::StaffRun:Clip::StaffWalk):equipment==Equipment::Bow?(pace?Clip::BowRun:Clip::BowWalk):(pace?Clip::SwordRun:Clip::SwordWalk);
     const auto first=equipment==Equipment::Staff?Clip::StaffWalkBackward:equipment==Equipment::Bow?Clip::BowWalkBackward:Clip::SwordWalkBackward;
     const auto armed=Sample(d?Clip(unsigned(first)+pace*3+d-1):forward,phase);
-    frame.hands=armed.hands;frame.elbows=armed.elbows;
+    frame.hands=armed.hands;frame.elbows=armed.elbows;frame.shoulders=armed.shoulders;
     // The source already authors the load lag. Keep socket and elbow samples
     // at the same instant instead of introducing a second orientation delay.
     frame.weapon=armed.weapon;
@@ -121,7 +133,23 @@ float SwingHeight(const std::array<float,4>& weights,float run,int side,float ph
  }
  h/=std::max(1.f,total);
  const float edge=std::clamp(std::min(t,1-t)*10.f,0.f,1.f);
- return std::clamp(h,0.f,.29f)*edge*edge*(3-2*edge);
+ return std::clamp(h,0.f,.48f)*edge*edge*(3-2*edge);
+}
+float SwingPitch(const std::array<float,4>& weights,float run,int side,float phase,float releasePitch){
+ if(side<0||side>1||!std::isfinite(phase)||!std::isfinite(releasePitch))return 0;
+ const float t=std::clamp(phase,0.f,1.f),u=t*t*(3-2*t);
+ run=std::clamp(std::isfinite(run)?run:0.f,0.f,1.f);
+ float shape=0,total=0;
+ for(unsigned d=0;d<4;++d)for(unsigned pace=0;pace<2;++pace){
+  const float w=std::clamp(std::isfinite(weights[d])?weights[d]:0.f,0.f,1.f)*(pace?run:1-run);if(w<.00001f)continue;
+  const auto clip=Clip(unsigned(Clip::WalkForward)+pace*4+d);const auto& track=Collection()[unsigned(clip)];
+  const float begin=track.stance-side*.5f,end=1-side*.5f;
+  const float a=Sample(clip,begin).ankles[side].x,b=Sample(clip,end).ankles[side].x;
+  shape+=(Sample(clip,begin+(end-begin)*t).ankles[side].x-a*(1-u)-b*u)*w;total+=w;
+ }
+ // Keep the actual toe-off orientation and the flat landing anchor. Only the
+ // interior shape comes from the source; neither endpoint can pop on contact.
+ return std::clamp(releasePitch*(1-u)+shape/std::max(1.f,total),-.3f,1.3f);
 }
 float SwingProgress(const std::array<float,4>& weights,float run,int side,float phase){
  if(side<0||side>1||!std::isfinite(phase))return 0;

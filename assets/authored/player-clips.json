@@ -1,8 +1,8 @@
 {
-  "format": "PCL3",
-  "source": "32 revised gait actions; flight, attacks and facial/model data preserved",
-  "source_sha256": "232285e315a39ddb9162817eb46cddb6fd136d3cd58ff6f30dacc877bf539d1b",
-  "editable_source": "player-motion-v10.blend",
+  "format": "PCL5",
+  "source": "Articulated spine/clavicles; 20 revised run/jump actions; other original 40-channel samples preserved",
+  "source_sha256": "9e87b01bf7c7e909ae1a2f9219b77221668e9983afa043eb03400629609a7150",
+  "editable_source": "player-motion-v15.blend",
   "clips": [
     {
       "clip": "Sword_Attack_Diagonal",
@@ -14,8 +14,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v8 full-body retarget",
-      "sha256": "a66ea104a52ccf6540a369c298f76952fb06b4386df6cc34a89c253a3cff61f6"
+      "source": "v15 spine/clavicle export",
+      "sha256": "c3e4d8ba60377d9394490edd0c1c307eef4543ebb9b1f68861463f61bcf5a055"
     },
     {
       "clip": "Sword_Attack_Overhead",
@@ -27,8 +27,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v8 full-body retarget",
-      "sha256": "5ebec35cf8ef59641e68b88ebce9dc5546bf040c2c8f8094909205f6cc245243"
+      "source": "v15 spine/clavicle export",
+      "sha256": "fa6a681e8a4aee381828133dd11a9ec15fa54621c18fe332e0949a9f139540e2"
     },
     {
       "clip": "Jump_Full",
@@ -40,8 +40,8 @@
       "takeoff": 0.3103448275862069,
       "landing": 0.5057471264367815,
       "stance": 0.0,
-      "source": "v9 Blender coordinated gait and flight",
-      "sha256": "9a2bb8b92bf4cae3b3ee651395a26271725ac5c4833c4402a6e51851dde24599"
+      "source": "v15 spine/clavicle export",
+      "sha256": "f625a3b142d70216a6046afe6e91ee4ea99728c04198650ab435255a3c9c971d"
     },
     {
       "clip": "Fall_Heavy_Landing",
@@ -53,8 +53,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v9 Blender coordinated gait and flight",
-      "sha256": "67d64db207b6950c59e4d0fcf1521356bdb338b70bcabd77be3a64d12897f8df"
+      "source": "v15 spine/clavicle export",
+      "sha256": "42b0491127ddc702e68351eca302d028af3e442407426791bd28a03c490b0357"
     },
     {
       "clip": "Walk_Forward",
@@ -66,8 +66,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "c76d640b30dc674286dd0de708454eeabf1bcd6b4ae18a935f24cf6780cdb4b3"
+      "source": "v15 spine/clavicle export",
+      "sha256": "18e42df417b4a1a80c254ad17e873b6903b3fc593cf043fc42ec81635d2f3f42"
     },
     {
       "clip": "Walk_Backward",
@@ -79,8 +79,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "cb1a2be78cdfe77ee0b32c9921e3c93e044052875be45a68569fc8631867431e"
+      "source": "v15 spine/clavicle export",
+      "sha256": "b1bc3368fd87904b79a626e39638ee7478a5e882285c14c7b4d47b7f065a6824"
     },
     {
       "clip": "Walk_Left",
@@ -92,8 +92,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "bfc003dca473726f786841b6372e7a54a68ed154cfc10d435af734f0a16304ee"
+      "source": "v15 spine/clavicle export",
+      "sha256": "e344591e9ff342fd8f604844aa6c98ec6721b7116f72a86222da900b92510417"
     },
     {
       "clip": "Walk_Right",
@@ -105,8 +105,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "9c846cc53b7907a49b450f690b4a8d8e745fe5c55966e70a1cc7880350ddced8"
+      "source": "v15 spine/clavicle export",
+      "sha256": "7adca87d34b2ad8da41115c10a17e2ace5393f42cc34ffd3d8732170fa0eea31"
     },
     {
       "clip": "Run_Forward",
@@ -118,8 +118,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.24,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "c1fdbd2f8c2bf4e5ec848bf642a7cb31fed74f513fb7ebda4e59852e9077b2f5"
+      "source": "v15 spine/clavicle export",
+      "sha256": "53719f65719534c763f59fcaf668ea5f5ade4c449f030a8c4e4ad87712e38194"
     },
     {
       "clip": "Run_Backward",
@@ -131,8 +131,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.24,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "78ebfca6b98ddfc04f285da768f971e67cf65e52f963dc07dfa6754ae3e25be9"
+      "source": "v15 spine/clavicle export",
+      "sha256": "0f2417f3abf4faf1c1c45816ed296a5970d4fce721d4fa53357168411e6a48af"
     },
     {
       "clip": "Run_Left",
@@ -144,8 +144,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.24,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "e3776094f4e53c15599adf5bf05e8bd5a1b582f3110f70bff72ce1140b0ff847"
+      "source": "v15 spine/clavicle export",
+      "sha256": "e79d1ae28a29b2bf15a304a653a1f2ba6f9b38c6fa90546e5fe235afb15521b1"
     },
     {
       "clip": "Run_Right",
@@ -157,8 +157,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.24,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "99aeedb35f213fc88549cc0ec283c2484c38f52ca1ea4bcd909ff03383032205"
+      "source": "v15 spine/clavicle export",
+      "sha256": "41b6151a4a1f8ced299ef13179dc093276e950e670865fbdca393dd7a94184ed"
     },
     {
       "clip": "Start_Walk",
@@ -170,8 +170,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "compatibility channels retained; zero pelvis/elbow extension",
-      "sha256": "0e8838fb36203de2335d2d22579927f55fd0a013df317d0daab6fbb6b88c6a12"
+      "source": "v15 spine/clavicle export",
+      "sha256": "a58dfe0d89773295afb4d137b7772b643dfab8d1b41acbcc1675fd6d8cbaea63"
     },
     {
       "clip": "Stop_Walk",
@@ -183,8 +183,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "compatibility channels retained; zero pelvis/elbow extension",
-      "sha256": "481502de88e940f7f8ba4fe1ef16372085d6ef28d007d290e513364563ba3a64"
+      "source": "v15 spine/clavicle export",
+      "sha256": "0579d11f4e414422173752fcb0092e394af4a657c0e7ec5a0e1128857858b446"
     },
     {
       "clip": "Staff_Attack_Sweep",
@@ -196,8 +196,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v8 full-body retarget",
-      "sha256": "1f0eadd3b32341ce2f9c22ad4d65174869eef30283334a87e1f7d71483a2ed8b"
+      "source": "v15 spine/clavicle export",
+      "sha256": "b4f46b551b24a237376d7659b6ee0b0a80ea9e221396ee48ea7b66b40e5584ff"
     },
     {
       "clip": "Staff_Attack_Thrust",
@@ -209,8 +209,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v8 full-body retarget",
-      "sha256": "457371200e39dad6a278da6631eaf9ea77e9e0a46346e8e34b32c729ad338959"
+      "source": "v15 spine/clavicle export",
+      "sha256": "57832bcee85b122c770ee0aee94497873b6b745813d869812fc576ccadcc32d8"
     },
     {
       "clip": "Sword_Walk",
@@ -222,8 +222,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "d71d46289e869ef67406a7a451cf7b3dbc5bf41bde7800eb81f50e3a390b2a62"
+      "source": "v15 spine/clavicle export",
+      "sha256": "393b2a99684edbb2a90db8a4605deac54d4cd2cf5e62e1fea1631e1042bf44ba"
     },
     {
       "clip": "Sword_Run",
@@ -235,8 +235,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.24,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "c0288b99c5a4b6e94283268af04f2eb73d557249f4d76aae48ac791abb8f2bf9"
+      "source": "v15 spine/clavicle export",
+      "sha256": "f02fdb29f7d3af312829086a1fd35834830c86bfe14a84cd24d50f2e57e9d6ce"
     },
     {
       "clip": "Staff_Walk",
@@ -248,8 +248,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "83bf4761606ac9cd0a99e7d6dd9f0395bd0b2241211cd3f5814affbe15e532d0"
+      "source": "v15 spine/clavicle export",
+      "sha256": "81064f4573c71400543dbbf64930cf5875e5fe19bbac0224373820f13e201490"
     },
     {
       "clip": "Staff_Run",
@@ -261,8 +261,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.24,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "46d63df20f2fc0e8e752778cb69186e24be8d9e7e34b87180fa1f5ebcc96c805"
+      "source": "v15 spine/clavicle export",
+      "sha256": "2065317848e34474793cc416803161b05ae9790b7117c9ae22cb2f417611b67c"
     },
     {
       "clip": "Sword_Guard",
@@ -274,8 +274,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v8 full-body retarget",
-      "sha256": "e8b3682d0dccf5da674bb63c3858d152f70e1cd0944a5850765b4772ba0c143c"
+      "source": "v15 spine/clavicle export",
+      "sha256": "3a33f28b0a1a3ea026fad981f8c18688c17f44fc4942d51e66ba9a6faf6ec908"
     },
     {
       "clip": "Staff_Guard",
@@ -287,8 +287,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v8 full-body retarget",
-      "sha256": "268d18b4c0f11efbb56b7413024bb8cc77d89d16e6aa8c9ad963b4f2797156ef"
+      "source": "v15 spine/clavicle export",
+      "sha256": "9377599467fdd749fbe268126140488daaae01698e797a68ef307e19f896850e"
     },
     {
       "clip": "Idle_Relaxed",
@@ -300,8 +300,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v8 full-body retarget",
-      "sha256": "6119d502a63915303cc3869176cd3146162daf2fd2ee2f9075650ad7f252ba38"
+      "source": "v15 spine/clavicle export",
+      "sha256": "1e47b9b54905b6cdda3555efd1f52d73596fd34f72e6296aecd261dc8a7fc852"
     },
     {
       "clip": "Fall_Airborne",
@@ -313,8 +313,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v9 Blender coordinated gait and flight",
-      "sha256": "9d3c3a721b30bc638c6d5b13d71317f20643fbc22c8d80d03926016f96d4c30b"
+      "source": "v15 spine/clavicle export",
+      "sha256": "73317f05125ed6dc17735bbffc42ee02549665d213ea5b68270634ec0251b3cc"
     },
     {
       "clip": "Legacy_Slash",
@@ -326,8 +326,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "compatibility channels retained; zero pelvis/elbow extension",
-      "sha256": "0d89e1be6c3b3062dfd4d065f9ccf3bae93a54cee31c420f5d23b904a6dc499d"
+      "source": "v15 spine/clavicle export",
+      "sha256": "aa6658f8f0ffaf64b60f2ecaa1b890db93311ca1a2068447084526697599aff2"
     },
     {
       "clip": "Legacy_Overhead",
@@ -339,8 +339,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "compatibility channels retained; zero pelvis/elbow extension",
-      "sha256": "724488163aee57f4e6e7339c48e59072e14d4e4053d9b2d8fc9eebbd0e4ee0b8"
+      "source": "v15 spine/clavicle export",
+      "sha256": "15a330ac406716c3eb296e21836c21e77225596b3ae609227534e5c377b891fc"
     },
     {
       "clip": "Legacy_Jump",
@@ -352,8 +352,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "compatibility channels retained; zero pelvis/elbow extension",
-      "sha256": "f2fc98f41ad4c8c6b41be53a6d5f210ecaa8f6ea0f880d7e4c056b2aaf45bc61"
+      "source": "v15 spine/clavicle export",
+      "sha256": "eae6035340c0d54117839c01c1b25a5fcb5587aa95ce73a821f091096bb94ef0"
     },
     {
       "clip": "Legacy_Land",
@@ -365,8 +365,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "compatibility channels retained; zero pelvis/elbow extension",
-      "sha256": "0b87049b3d144942fbd7bdb33b123b1e660b26808fb230a3965179315b14e1bb"
+      "source": "v15 spine/clavicle export",
+      "sha256": "6a45cd59033d13b8d1af63f0e8060883dcc01c6e76eec537250012c6cfab28a6"
     },
     {
       "clip": "Bow_Guard",
@@ -378,8 +378,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v8 full-body retarget",
-      "sha256": "5c1a8c2938ec87ad88020b217c3202ef0dcff40a859207bcc5387f362f635f3d"
+      "source": "v15 spine/clavicle export",
+      "sha256": "77febccecf7461c6350dab4dfc4088d2860855ed7b0531d85cce27fda6de1f5a"
     },
     {
       "clip": "Bow_Draw_Release",
@@ -391,8 +391,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v8 full-body retarget",
-      "sha256": "bc87f88f05ac70afdf7a3aae03a30e2d2267544fdb57fbd3b7fd663fd6d990cb"
+      "source": "v15 spine/clavicle export",
+      "sha256": "d4620574294905a02f6e091994706e85c66f34582f5012fe486d05066616fe9b"
     },
     {
       "clip": "Bow_Power_Release",
@@ -404,8 +404,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v8 full-body retarget",
-      "sha256": "4be9994434a92d1430375450d164a587622e585e00b7a9cc398ca02504146cb5"
+      "source": "v15 spine/clavicle export",
+      "sha256": "d9909ad207275d1be12926e31aaddf1bb2fd00ca91b2f65acc1b3d082f89d33e"
     },
     {
       "clip": "Bow_Walk",
@@ -417,8 +417,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "c9c8bea6b40c75c5c3c00d9ad5eba147e816c76047c031862e2ed15862029d4e"
+      "source": "v15 spine/clavicle export",
+      "sha256": "cf16460a27b218a6f05bb06d1d8b8205d1630e1afa0ae65558ffe140005330a3"
     },
     {
       "clip": "Bow_Run",
@@ -430,8 +430,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.24,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "7a8d59641ef99d468d96e540ee565af14bc5ab40279aa6eae69a9c0952d5350b"
+      "source": "v15 spine/clavicle export",
+      "sha256": "132909dc1849e0c57f8a7b07a7c3962477220bb0c5f0a9dd060197006b3b9538"
     },
     {
       "clip": "Sword_Carry",
@@ -443,8 +443,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v8 full-body retarget",
-      "sha256": "b4e9c92221599fbe0e747971394a59211ed81987cb04a67f4139a14e882e1a59"
+      "source": "v15 spine/clavicle export",
+      "sha256": "e9113cab9251f5c40c4cb29467eeeddd2a6fec536b3aa20b6cdd7186d2687777"
     },
     {
       "clip": "Staff_Carry",
@@ -456,8 +456,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v8 full-body retarget",
-      "sha256": "bcc95049f7def91d58dd308427db5e1c5e55481fd7dfd6964614c9da79dc1e63"
+      "source": "v15 spine/clavicle export",
+      "sha256": "a94d57b7e256d5205ac09a165e7e85421b4892035240031634830937b6a5f633"
     },
     {
       "clip": "Bow_Carry",
@@ -469,8 +469,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v8 full-body retarget",
-      "sha256": "7f343a80f2a0fa32a149356bbdb106be1364be514efba3420fa46049b6373d84"
+      "source": "v15 spine/clavicle export",
+      "sha256": "d28189865b826c237f9373471902994bea755c2799e27adc7aa198b773fde34b"
     },
     {
       "clip": "Sword_Walk_Backward",
@@ -482,8 +482,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "4769eb0b32a29931358d936b0c5b684db0be55910a2f2c7e893ae1752748196c"
+      "source": "v15 spine/clavicle export",
+      "sha256": "3a6d9c33cbe83c911ea5c7d8ad256ded11822bfdef12e035d230490488d9f7e4"
     },
     {
       "clip": "Sword_Walk_Left",
@@ -495,8 +495,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "1f1391ccf44568b764467ec20de9f42defa6f3747050975bed666ffc405c98b7"
+      "source": "v15 spine/clavicle export",
+      "sha256": "92bb8eb9858a0b8637429db927e90d5292bbe5e9ecfddd6b6b296a061e7514b4"
     },
     {
       "clip": "Sword_Walk_Right",
@@ -508,8 +508,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "5d3aaff495f4247b6684b0355f8f051082e3586bd686c94dc5c35c04105d29e4"
+      "source": "v15 spine/clavicle export",
+      "sha256": "0327200208500694421818b1ffd2c20c0cf9c4bf831da486c7e349de61f77e56"
     },
     {
       "clip": "Sword_Run_Backward",
@@ -521,8 +521,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.24,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "5e3e6fe2992d9a111a8f863ff9f549c71e81c88fe22d7a042da4e736c30a389d"
+      "source": "v15 spine/clavicle export",
+      "sha256": "220d37cd493aef7e1de2649d3ba99e2305c38f116f0f0aafa759675bf573907e"
     },
     {
       "clip": "Sword_Run_Left",
@@ -534,8 +534,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.24,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "db5983d979a8d7d3bd0f1bca5d665fb1823acf30febca395b16e9bab5b432e40"
+      "source": "v15 spine/clavicle export",
+      "sha256": "b0bcfa5d4499c3c2c26d7e22621edeb94d3285f84a78b15d28954cded545c4ff"
     },
     {
       "clip": "Sword_Run_Right",
@@ -547,8 +547,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.24,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "c70f9e127c318f41f110a07f8a0407800f2f7aee2e29f26e77024a7422dd795a"
+      "source": "v15 spine/clavicle export",
+      "sha256": "43e0a24ad26da2894b7882c55eb6a3ee3ef34028b0c42ff8f181414f29a0a2f1"
     },
     {
       "clip": "Staff_Walk_Backward",
@@ -560,8 +560,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "d7c7a8b853e74e92f8d74038616153edf30331ac7e619a845ec4fd40557ba6a5"
+      "source": "v15 spine/clavicle export",
+      "sha256": "e7a5efb50a8c0855c92b81613d258fd45677c41668aecc3962f66bbc0fbfa6fb"
     },
     {
       "clip": "Staff_Walk_Left",
@@ -573,8 +573,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "330db5efde401f406f3a0ad1c44a2cf5f46f35cae236437847ce7414fe8a066a"
+      "source": "v15 spine/clavicle export",
+      "sha256": "1e58cf174f313415519717d17a7cd31d5dac3f2d9ebc94d4c44b743941a5a535"
     },
     {
       "clip": "Staff_Walk_Right",
@@ -586,8 +586,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "d9249f3791b724a97a1b846ae0a52a13c0983cc55bda1505c4968e24bb1f47fe"
+      "source": "v15 spine/clavicle export",
+      "sha256": "0cb4720e326edc54d32a120ae862b11f99183da21326ab19177b753800e168b1"
     },
     {
       "clip": "Staff_Run_Backward",
@@ -599,8 +599,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.24,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "8e499a2650bb9e1e2e3e491a44fd4af1f96a041da280b00d2277afe4d26ff108"
+      "source": "v15 spine/clavicle export",
+      "sha256": "877b1b9d91f0984ff018774a4c3c51487f372449a5957184bdc6e5497d9a3cb5"
     },
     {
       "clip": "Staff_Run_Left",
@@ -612,8 +612,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.24,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "400b643c57d6678aa3334ff7bda6e9fea1f6647b56a25ae2967b56bf7e92d280"
+      "source": "v15 spine/clavicle export",
+      "sha256": "d1649ec4512e4f3007744725b79a4854ed1892835a90a99836bcda9b04fb667b"
     },
     {
       "clip": "Staff_Run_Right",
@@ -625,8 +625,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.24,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "ec28349abd3f7eb601c07ba147eda3b290960520365aa271bcb49cc57d7dfb90"
+      "source": "v15 spine/clavicle export",
+      "sha256": "136bf3f6679a6ddf7e3d02e406c454b66bd47a1318a38648a928ac71e07071a3"
     },
     {
       "clip": "Bow_Walk_Backward",
@@ -638,8 +638,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "1d378b3698fecd072052cc26c36a54089bc65067af058ea34ed5b0f3f4c3df20"
+      "source": "v15 spine/clavicle export",
+      "sha256": "86601cc18a05ad081aae6071f5204b0fa52ae8b8c892a917755f334f58866ed8"
     },
     {
       "clip": "Bow_Walk_Left",
@@ -651,8 +651,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "9f30f9c7e000debdfcc3c18ef899988b26ae57b183dc23670c93338613e535fa"
+      "source": "v15 spine/clavicle export",
+      "sha256": "babd6e7a5196cce06e9cc93727d72930cf94d2d43f623ef1dc67b9d31400c2e3"
     },
     {
       "clip": "Bow_Walk_Right",
@@ -664,8 +664,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "da1573c1a1a8b43e699e270b235a7a08fca2bc774e0dab6380cebad3307d4752"
+      "source": "v15 spine/clavicle export",
+      "sha256": "eda67d7284fd0c333745de5c33f176d190c0d5534648a9c6089059924f5bf123"
     },
     {
       "clip": "Bow_Run_Backward",
@@ -677,8 +677,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.24,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "bf23eaf406b7bfe26eb7b071af3a0382fef5332d4b047ff26b5d718767b00f97"
+      "source": "v15 spine/clavicle export",
+      "sha256": "8d98852ed82ca06f68d16fd1568ee64477d828e83e3fc160fc70c4f16b8a4eb4"
     },
     {
       "clip": "Bow_Run_Left",
@@ -690,8 +690,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.24,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "5f962305285e889069c7b9237224ae8825c85f7ad1eb3dc3f1da8a579b48ea40"
+      "source": "v15 spine/clavicle export",
+      "sha256": "d15676fb3ba475f1c71a89c03ab57ba3b06e163ab3b88ca1a97381014d2aa845"
     },
     {
       "clip": "Bow_Run_Right",
@@ -703,8 +703,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.24,
-      "source": "v10 Blender shoulder/elbow articulation and ankle recovery",
-      "sha256": "ca9ba3d70302d431df92b67ae2eadd25760b65bbe453a293c62784cecf466bd3"
+      "source": "v15 spine/clavicle export",
+      "sha256": "10e5dca39e5671a26ab62216644971a39b2542049cd48ed996de1ac7e21bfdde"
     },
     {
       "clip": "Sword_Jump",
@@ -716,8 +716,8 @@
       "takeoff": 0.3103448275862069,
       "landing": 0.5057471264367815,
       "stance": 0.0,
-      "source": "v9 Blender coordinated gait and flight",
-      "sha256": "0ea9bd794198894a85aaa7c7002d8e431e67812cf6cb444ed4c0024e42dc2db1"
+      "source": "v15 spine/clavicle export",
+      "sha256": "9cae20012486469ddfca57e8f95a6c1895fc82c854d1d3483e7b900262090630"
     },
     {
       "clip": "Staff_Jump",
@@ -729,8 +729,8 @@
       "takeoff": 0.3103448275862069,
       "landing": 0.5057471264367815,
       "stance": 0.0,
-      "source": "v9 Blender coordinated gait and flight",
-      "sha256": "a9a00e462aba0908e514e6b8886ea5e42d96ed7a69a9a53bab19da0a59d85c25"
+      "source": "v15 spine/clavicle export",
+      "sha256": "6979481df581a7a74d445d7468661fde5794b6277756b54c743342a3ee1a6711"
     },
     {
       "clip": "Bow_Jump",
@@ -742,80 +742,57 @@
       "takeoff": 0.3103448275862069,
       "landing": 0.5057471264367815,
       "stance": 0.0,
-      "source": "v9 Blender coordinated gait and flight",
-      "sha256": "6f60ca0a98d9e24f847845192cfb15ca595918f128abb7a16028dd665d9f7afe"
+      "source": "v15 spine/clavicle export",
+      "sha256": "8aacbff6c6e03da9dfaea6257b64f091e97f596857eb2a6ec49970cce38bb59c"
     }
   ],
-  "sha256": "cbe2c4d9bb9cdd738b96a918c7686c4d4cf889f51ff2d9e960c7baa975f4a7ed",
+  "sha256": "459176d01455d673bab398a86e1d10225413329f0149a256c3b67a63e2854c88",
   "retarget": "Blender +X-left/-Y-forward/Z-up to native +X-right/+Z-forward/Y-up; shoulders/arm lengths fitted to native IK; world jump displacement removed; native contacts retained.",
-  "frame_channels": 30,
+  "frame_channels": 53,
   "revised_actions": [
-    "Walk_Forward",
-    "Sword_Walk",
-    "Staff_Walk",
-    "Bow_Walk",
-    "Walk_Backward",
-    "Sword_Walk_Backward",
-    "Staff_Walk_Backward",
-    "Bow_Walk_Backward",
-    "Walk_Left",
-    "Sword_Walk_Left",
-    "Staff_Walk_Left",
-    "Bow_Walk_Left",
-    "Walk_Right",
-    "Sword_Walk_Right",
-    "Staff_Walk_Right",
-    "Bow_Walk_Right",
+    "Jump_Full",
     "Run_Forward",
+    "Run_Backward",
+    "Run_Left",
+    "Run_Right",
     "Sword_Run",
     "Staff_Run",
     "Bow_Run",
-    "Run_Backward",
     "Sword_Run_Backward",
-    "Staff_Run_Backward",
-    "Bow_Run_Backward",
-    "Run_Left",
     "Sword_Run_Left",
-    "Staff_Run_Left",
-    "Bow_Run_Left",
-    "Run_Right",
     "Sword_Run_Right",
+    "Staff_Run_Backward",
+    "Staff_Run_Left",
     "Staff_Run_Right",
-    "Bow_Run_Right"
+    "Bow_Run_Backward",
+    "Bow_Run_Left",
+    "Bow_Run_Right",
+    "Sword_Jump",
+    "Staff_Jump",
+    "Bow_Jump"
   ],
   "revised_track_indices": [
-    4,
-    5,
-    6,
-    7,
+    2,
     8,
     9,
     10,
     11,
-    16,
     17,
-    18,
     19,
-    31,
     32,
-    36,
-    37,
-    38,
     39,
     40,
     41,
-    42,
-    43,
-    44,
     45,
     46,
     47,
-    48,
-    49,
-    50,
     51,
     52,
-    53
+    53,
+    54,
+    55,
+    56
   ],
-  "preserved_track_count": 25
+  "preserved_track_count": 37,
+  "rebaked_action_count": 20
 }

@@ -53,8 +53,27 @@ DirectX::XMFLOAT3 CharacterPose::UpperDirection(DirectX::XMFLOAT3 p) const {
     -x*std::sin(upperYaw)+z*std::cos(upperYaw)};
 }
 DirectX::XMFLOAT3 CharacterPose::UpperPoint(DirectX::XMFLOAT3 p) const {
-  p.y-=.95f; p=UpperDirection(p); p.y+=.95f+bodyLift; p.x+=bodyShift;p.z+=bodyForward; return p;
+  DirectX::XMStoreFloat3(&p,DirectX::XMVector3TransformCoord(DirectX::XMLoadFloat3(&p),UpperTransform()));return p;
 }
+DirectX::XMMATRIX CharacterPose::SpineTransform(unsigned segment) const {
+  using namespace DirectX;
+  const auto rotation=[](XMFLOAT3 r){return XMMatrixRotationX(r.x)*XMMatrixRotationZ(r.z)*XMMatrixRotationY(r.y);};
+  const auto chest=rotation({upperPitch,upperYaw,upperRoll});
+  if(spineWeight<=0)return XMMatrixTranslation(0,-.95f,0)*chest*XMMatrixTranslation(bodyShift,.95f+bodyLift,bodyForward);
+  const auto lower=rotation(spineRotation[0]),upper=rotation(spineRotation[1]);
+  const auto a=PelvisPoint({0,.95f,0});
+  auto center=XMLoadFloat3(&a);
+  if(segment>=1)center+=XMVector3TransformNormal(XMVectorSet(0,.15f,0,0),lower);
+  if(segment>=2)center+=XMVector3TransformNormal(XMVectorSet(0,.17f,0,0),upper);
+  const float y=segment==0?.95f:segment==1?1.10f:1.27f;
+  const auto legacyCenter=XMVector3TransformNormal(XMVectorSet(0,y-.95f,0,0),chest)+XMVectorSet(bodyShift,.95f+bodyLift,bodyForward,0);
+  center=XMVectorLerp(legacyCenter,center,spineWeight);
+  const auto desired=segment==0?lower:segment==1?upper:chest;
+  const auto q=XMQuaternionSlerp(XMQuaternionRotationMatrix(chest),XMQuaternionRotationMatrix(desired),spineWeight);
+  auto matrix=XMMatrixTranslation(0,-y,0)*XMMatrixRotationQuaternion(q);
+  matrix.r[3]+=XMVectorSetW(center,0);return matrix;
+}
+DirectX::XMMATRIX CharacterPose::UpperTransform() const {return SpineTransform(2);}
 DirectX::XMMATRIX CharacterPose::PelvisTransform() const {
   using namespace DirectX;
   return XMMatrixTranslation(0,-.93f,0)*XMMatrixRotationX(pelvisRotation.x)*
@@ -77,8 +96,7 @@ DirectX::XMFLOAT3 CharacterPose::FootPoint(unsigned side,DirectX::XMFLOAT3 local
 DirectX::XMMATRIX CharacterPose::HeadTransform() const {
   using namespace DirectX;
   return XMMatrixTranslation(0,-1.61f,0)*XMMatrixRotationX(headPitch)*XMMatrixRotationY(headYaw)*
-    XMMatrixTranslation(0,1.61f-.95f,0)*XMMatrixRotationX(upperPitch)*XMMatrixRotationZ(upperRoll)*
-    XMMatrixRotationY(upperYaw)*XMMatrixTranslation(bodyShift,.95f+bodyLift,bodyForward);
+    XMMatrixTranslation(0,1.61f,0)*UpperTransform();
 }
 DirectX::XMFLOAT3 CharacterPose::HeadPoint(DirectX::XMFLOAT3 point) const {
   DirectX::XMFLOAT3 result;
@@ -114,7 +132,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   auto jumpClip=authoredAir>0?playerclips::Sample(dynamics.authoredGait?playerclips::Clip::Jump:playerclips::Clip::LegacyJump,
     dynamics.authoredGait?playerclips::FlightPhase(flight):.23f+.53f*flight):playerclips::Frame{};
   if(dynamics.authoredGait&&authoredAir>0)jumpClip=playerclips::Blend(jumpClip,
-    playerclips::Sample(playerclips::Clip::Fall,dynamics.authoredClock/1.6f),animation::SmoothStep(-rise)*.55f);
+    playerclips::Sample(playerclips::Clip::Fall,.5f),animation::Unit(dynamics.extendedFall));
   const bool authoredLanding=dynamics.landingSeconds>=0&&dynamics.landingSeconds<.42f&&landing>0;
   const auto& landingTrack=playerclips::Collection()[unsigned(playerclips::Clip::Land)];
   const auto landClip=authoredLanding?playerclips::Sample(dynamics.authoredGait?playerclips::Clip::Land:playerclips::Clip::LegacyLand,
@@ -250,9 +268,16 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   }
   // Full-body source channels share the same layer weights as the chest.
   // Feet retain world anchors; the pelvis moves over them and IK compensates.
+  XMFLOAT3 sourceChest{};
   const auto addBody=[&](const playerclips::Frame& f,float weight) {
     pose.pelvisRotation.x+=f.pelvis.x*weight;pose.pelvisRotation.y+=f.pelvis.y*weight;pose.pelvisRotation.z+=f.pelvis.z*weight;
     pose.bodyShift+=f.shift.x*weight;pose.bodyForward+=f.shift.y*weight;
+    const float w=animation::Unit(f.articulated)*weight;pose.spineWeight+=w;
+    if(f.articulated>0){sourceChest.x+=f.torso.x*weight;sourceChest.y+=f.torso.y*weight;sourceChest.z+=f.torso.z*weight;}
+    for(unsigned i=0;i<2;++i){
+      XMStoreFloat3(&pose.spineRotation[i],XMLoadFloat3(&pose.spineRotation[i])+XMLoadFloat3(&f.spine[i])*weight);
+      XMStoreFloat3(&pose.shoulderOffset[i],XMLoadFloat3(&pose.shoulderOffset[i])+XMLoadFloat3(&f.shoulders[i])*weight);
+    }
   };
   addBody(gaitClip,authoredWeight);addBody(idleClip,idleWeight);
   addBody(jumpClip,authoredAir*(1-swing));
@@ -274,6 +299,11 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     pose.bodyLift+=motion.lift;pose.bodyShift+=motion.side;pose.bodyForward+=motion.forward;
     pose.pelvisRotation.x+=motion.pelvisPitch;pose.pelvisRotation.y+=motion.pelvisYaw;pose.pelvisRotation.z+=motion.pelvisRoll;
   }
+  pose.spineWeight=animation::Unit(pose.spineWeight);
+  const auto finalChest=XMVectorSet(pose.upperPitch,pose.upperYaw,pose.upperRoll,0);
+  const auto residual=finalChest*pose.spineWeight-XMLoadFloat3(&sourceChest);
+  for(unsigned i=0;i<2;++i)XMStoreFloat3(&pose.spineRotation[i],XMLoadFloat3(&pose.spineRotation[i])+
+    finalChest*(1-pose.spineWeight)+residual*(i?.60f:.25f));
   for(int i=0;i<2;++i) {
     const XMFLOAT3 fallback{i==0?-.8f:.8f,-.2f,-1};
     auto pole=XMLoadFloat3(&fallback);
@@ -296,15 +326,16 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     float x=std::isfinite(foot.x)?foot.x-hip:0,z=std::isfinite(foot.z)?foot.z:0;
     const float distance=std::hypot(x,z),scale=distance>.58f?.58f/distance:1.f;
     x*=scale; z*=scale;
-      const float y=std::isfinite(foot.y) && foot.y>=-.2f && foot.y<=1.f?std::clamp(foot.y,-.16f,.50f):.17f;
+    const float y=std::isfinite(foot.y) && foot.y>=-.2f && foot.y<=1.f?std::clamp(foot.y,-.16f,.76f):.17f;
     contacts[i]={hip+x,y,z};
     pose.footYaw[i]=std::isfinite(foot.yaw)?std::remainder(foot.yaw,motion::tau)*contactWeight:0;
-    pose.footPitch[i]=std::isfinite(foot.pitch)?std::clamp(foot.pitch,-.3f,.65f)*contactWeight:0;
+    pose.footPitch[i]=std::isfinite(foot.pitch)?std::clamp(foot.pitch,-.3f,1.3f)*contactWeight:0;
   }
   // The push leg sweeps back, then the opposite leg reaches into the catch.
   const float drive=1-2*animation::SmoothStep((animation::Unit(dynamics.dashPhase)-.20f)/.50f);
   std::array<XMFLOAT3,2> targets{};
   std::array<float,2> strides{};
+  pose.unconstrainedLift=pose.bodyLift;
   for (int i=0;i<2;++i) {
     const float side=i==0?-1.f:1.f,stride=side*(gait*(1-burst)+(dash*.95f*drive-brake*.65f)*driveSign)*(1-air);
     strides[i]=stride;
@@ -317,6 +348,8 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     if(authoredAir>0) {
       const auto delta=jumpClip.feet[i];const XMFLOAT3 authored{side*.18f+delta.x,.17f+delta.y,delta.z};
       target={target.x+(authored.x-target.x)*authoredAir,target.y+(authored.y-target.y)*authoredAir,target.z+(authored.z-target.z)*authoredAir};
+      pose.footPitch[i]+=jumpClip.ankles[i].x*authoredAir*(1-contactWeight);
+      pose.footYaw[i]+=jumpClip.ankles[i].y*authoredAir*(1-contactWeight);
       if(dynamics.flightPhase>=0){
         // A moving takeoff keeps its leading leg. The old fixed tuck brought
         // both legs together regardless of the stride that launched the jump.
@@ -340,8 +373,13 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     // Keep a small non-singular bend without reintroducing a visible idle
     // crouch. The solver itself reserves 0.05 mm of extension.
     constexpr float reach=CharacterPose::thigh+CharacterPose::shin-.0002f;
-    pose.bodyLift=std::min(pose.bodyLift,
-      target.y+std::sqrt(std::max(0.f,reach*reach-x*x-z*z))-(hip.y-pose.bodyLift));
+    // A planted leg constrains the body; a recovering leg is free to shorten
+    // its reach. Fitting the pelvis to both ankle targets dragged the entire
+    // runner down every time the trailing foot left its reach sphere.
+    const float fit=dynamics.authoredGait&&contactWeight>0?animation::Unit(
+      dynamics.feetActive?dynamics.feetReachWeight[i]:dynamics.departureReachWeight[i]):1.f;
+    const float limit=target.y+std::sqrt(std::max(0.f,reach*reach-x*x-z*z))-(hip.y-pose.bodyLift);
+    pose.bodyLift+=std::min(0.f,limit-pose.bodyLift)*fit;
   }
   if(dynamics.pelvisStabilized&&std::isfinite(dynamics.pelvisLimit))
     pose.bodyLift=std::min(pose.bodyLift,std::clamp(dynamics.pelvisLimit,-.45f,.30f));
@@ -354,7 +392,17 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   }
   for (int i=0;i<2;++i) {
     const float side=i==0?-1.f:1.f;
-    const XMFLOAT3 knee{std::sin(pose.pelvisRotation.y)*.35f,0,std::cos(pose.pelvisRotation.y)};
+    XMFLOAT3 knee{std::sin(pose.pelvisRotation.y)*.35f,0,std::cos(pose.pelvisRotation.y)};
+    auto bend=XMLoadFloat3(&knee);
+    const auto addKnee=[&](const playerclips::Frame& f,float w){
+      auto authored=XMLoadFloat3(&f.knees[i]);
+      if(XMVectorGetX(XMVector3LengthSq(authored))>.0001f){
+        authored=XMVector3Normalize(XMVector3TransformNormal(authored,pose.PelvisTransform()));
+        bend=XMVectorLerp(bend,authored,animation::Unit(w));
+      }
+    };
+    addKnee(gaitClip,authoredWeight);addKnee(jumpClip,authoredAir);
+    XMStoreFloat3(&knee,XMVector3Normalize(bend));
     pose.legs[i]=Solve(pose.PelvisPoint({side*.17f,.93f,0}),targets[i],knee,CharacterPose::thigh,CharacterPose::shin,.00005f);
     const float armStride=strides[i]+(std::clamp(contacts[i].z/.30f,-1.f,1.f)-strides[i])*contactWeight;
     const float attack=i==1&&!newStrike?swing:0;
@@ -363,7 +411,9 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     hand.z+=dynamics.motion.reach*clipWeight;
     hand.x+=gaitClip.hands[i].x*handAuthoredWeight+idleClip.hands[i].x*handIdleWeight;
     hand.y+=gaitClip.hands[i].y*handAuthoredWeight+idleClip.hands[i].y*handIdleWeight;
-    hand.z+=(gaitClip.hands[i].z+armStride*.13f*gaitAmount)*handAuthoredWeight+idleClip.hands[i].z*handIdleWeight;
+    // The imported gait plus idle blend already supplies the entire arm path.
+    // Cancel the legacy contact swing throughout that blend, including stops.
+    hand.z+=(gaitClip.hands[i].z+armStride*.13f)*handAuthoredWeight+idleClip.hands[i].z*handIdleWeight;
     // Reach forward on descent to brace for impact; rising arms trail the push.
     hand.z+=air*(.18f*animation::SmoothStep(-rise)-.10f*std::max(0.f,rise))*(1-swing);
     if(authoredAir>0) {
@@ -418,7 +468,9 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
       hand.y+=.20f*animation::Unit(action.aim);hand.z+=.20f*animation::Unit(action.aim);
       if(form==rpg::WeaponForm::Handbow) hand.x-=.12f*animation::Unit(action.aim);
     }
-    const auto shoulder=pose.UpperPoint({side*.305f,1.43f,0}),wrist=pose.UpperPoint(hand);
+    const auto offsetShoulder=pose.shoulderOffset[i];
+    hand.x+=offsetShoulder.x;hand.y+=offsetShoulder.y;hand.z+=offsetShoulder.z;
+    const auto shoulder=pose.UpperPoint({side*.305f+offsetShoulder.x,1.43f+offsetShoulder.y,offsetShoulder.z}),wrist=pose.UpperPoint(hand);
     // Legacy procedural gestures have no authored elbow channel. Retain their
     // established bend plane; the transported solver belongs to authored clips.
     pose.arms[i]=dynamics.authoredGait || newStrike?SolveArm(shoulder,wrist,elbowPoles[i]):
@@ -495,7 +547,10 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     const auto& strike=playerclips::Collection()[unsigned(heavy?playerclips::Clip::StaffSweep:playerclips::Clip::StaffThrust)];
     const float loaded=newStrike?animation::SmoothStep(dynamics.authoredStrikePhase/strike.contact):1.f;
     pose.staffGripWeight=authoredBlend*(1-burst)*(1-hit)*(1-cast)*
-      std::max(ready,stroke.weight*loaded)*(1-animation::Unit(action.open)*(1-stroke.weight));
+      std::max(ready,stroke.weight*loaded)*(1-animation::SmoothStep(action.open/.70f));
+    // A spell's open-hand gesture releases the supporting grip throughout
+    // preparation as well as recovery. Full stroke weight must not repin the
+    // casting palm to the shaft and erase its ability-specific choreography.
     // Retarget the two-handed shaft onto the shorter, wider native skeleton.
     // Project the shared grip into BOTH reach spheres before solving either arm.
     auto grip=XMLoadFloat3(&pose.weaponGrip),axis=shaftUp;

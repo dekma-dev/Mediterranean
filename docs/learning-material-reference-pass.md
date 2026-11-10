@@ -2,6 +2,257 @@
 
 Reference root: `D:/assets/learning_material`. Date: 2026-11-06.
 
+## Ability gestures and creation rehearsals (2026-11-10)
+
+Revisited the creation and raid overview sheets, then decoded additional
+native-resolution samples from `character_creating.mp4` at 0.25-second
+intervals between 32 and 42 seconds and from `pve_loc.mp4` between 4 and
+7 seconds. The creation samples distinguish the free casting hand from the
+held weapon and show a bright, localized invocation; the combat samples
+retain separate preparation and release cues. This is sampled visual review,
+not complete playback or audio analysis. Evidence is under
+`build-class-choreography/reference-creation` and `reference-pve`.
+
+- Mage fire, frost, meteor, arcane and thermal abilities now add distinct
+  free-hand paths and body counter-rotation to the existing continuous action
+  spline. Priest Absolution, Sanctuary and Guiding light have inward/outward,
+  elevated and directed gestures. Both gameplay and the creation stage pass
+  the actual ability identity to the controller. Existing accepted attack,
+  damage, projectile and cooldown clocks remain authoritative.
+- Staff support now yields to an open casting hand during preparation and
+  recovery. Previously a fully weighted staff stroke could pin that hand back
+  to the shaft and erase its spell gesture. Weapon hand attachment and fixed
+  limb lengths are retained.
+- Corrected two wrist discontinuities: partially opening a nearly vertical
+  free hand could interpolate through a full revolution, and projecting the
+  palm direction onto the finger plane could flip when the two aligned.
+  Signed elevation, a smooth downward-pole guard and an explicit orthonormal
+  roll frame preserve continuous orientation.
+- Priest preparation distinguishes paired converging streams, six elevated
+  sanctuary ribs and a narrow guiding ray. Arcane preparation adds orbiting
+  facets around the solved focus. These use existing materials and actual
+  hand/focus sockets, with fewer than 512 submitted vertices per preparation.
+  Cancellation immediately removes preparation geometry.
+- The creation Arts view has explicit Replay and Stop controls and a
+  preparation/release/recovery timeline. Stop clears queued audition sounds
+  and transient effects while the action controllers settle naturally. Replay
+  retains the selected ability; completion remains visible until another
+  action. These controls grant no spell, equipment or progression.
+
+No source models, facial data, sound assets or save format were changed by this
+pass. Concurrent authored-motion edits are separate. Full-speed perception,
+crowded combat, final art/choreography and 1:1 recording fidelity remain open.
+
+## Class inspection, stage changes and elemental aftermath (2026-11-10)
+
+Revisited the creation overview sheets and decoded additional native-resolution
+samples from `character_creating.mp4` at 0.10-second intervals between 19 and
+22 seconds, plus `pve_loc2.mp4` at 0.20-second intervals between 5 and 8 seconds.
+The creation samples show a briefly empty stage between class presentations
+and a detailed hover card beside the class rail. The PvE samples retain light
+and ground cues after the first contact. This is sampled visual review, not
+complete playback, frame-by-frame review of every recording or audio analysis.
+Evidence lives in `build-stage-afterglow/reference-transition` and
+`build-stage-afterglow/reference-pve`; source recordings were not modified.
+
+- Class hover/focus now opens a delayed inspection card with the real identity,
+  resource payoff and two actual tactical/signature abilities. It uses the
+  existing icons and Russian/English translations without selecting the class,
+  writing a profile or granting a skill. The card remains beside the class rail
+  at small, standard and ultrawide window sizes.
+- Class selection changes the stage through a 100 ms outgoing dissolve and
+  220 ms incoming reveal. Only outfit/body/view presentation data is retained;
+  there is no second simulated hero. The original Hall artwork covers the
+  figure during the dissolve, leaving interface rails readable. Rapid switching
+  starts from the currently visible opacity; rotation, zoom, explicit auditions,
+  page changes, focus loss and display changes settle the transition. Existing
+  once-only entrances still start after their settling delay.
+- Accepted primary Mage/Priest contacts can now leave a separate ground trace
+  after the brief impact expires: cooling embers/soot, shrinking frost cracks,
+  arcane facets or sacred arches/motes. Thermal contacts mix hot/cold branches.
+  Terrain height is sampled for each ground point. The traces last 1.7-3.2 s;
+  they do not deal damage, follow a moving victim or create new area warnings.
+  Cancelled casts, flights and secondary area victims cannot create them.
+- Twelve fixed records bound history; repeated same-element contacts within
+  half a metre rekindle a patch rather than stacking it. At most six patches
+  render, sharing a 900-vertex allowance after current danger/release/contact
+  geometry. Each patch uses at most 180 vertices. Load/reset clears history;
+  no texture asset, download or persistent save field was added.
+
+CharacterSelectionTests checks equal-time transition opacity at 30/60/144 Hz,
+rapid switches, explicit controls, suspension, profile isolation and scaled
+inspection cards. VfxMaterialsTests covers actual accepted world contacts,
+independent lifetimes, equal-time rendering, terrain captures, merging, expiry,
+pool saturation, last-priority allocation, invalid data and reset/load.
+Normal world/HUD captures are complemented by explicitly HUD-hidden overview
+captures of the same accepted hit/time, so interface occlusion does not conceal
+the ground treatment during review. These are diagnostic views, not evidence
+of a completed live-raid acceptance pass.
+
+Validation: all five affected suites passed in Release and Debug
+(CharacterSelectionTests, CombatEffectsTests, VfxMaterialsTests, InterfaceTests
+and LocalizationTests). After the native trace-readability adjustment, the two
+affected combat/VFX suites passed again in both configurations. Final RPGNative
+smoke checks passed device/shader initialization, hidden fullscreen restoration,
+resize and world/UI capture in both configurations. Logs are in
+`build-stage-afterglow`: `tests-{release,debug}.log`,
+`tests-verified-{release,debug}.log`, `build-verified-{release,debug}.log` and
+`smoke-{release,debug}.png.log`.
+
+A single Release workload on the RTX 4060 at 1920x1080 rendered the same frozen
+world, then six simultaneous mixed contacts with six queued ground traces:
+peak VFX geometry was 3090/6144 vertices and draw calls were 225 without versus
+227 with these effects. CPU p50 was 7.51/5.46 ms; asynchronous GPU p50 was
+6.89/5.46 ms from only 9/22 ready samples. The reversed timing difference and
+sparse GPU samples do not establish an effect cost or a performance improvement.
+This is a bounded submission check, not interactive FPS or a dense-raid claim.
+Full report: `build-stage-afterglow/workload/workload.txt`.
+
+No model/source export, frozen face, sound asset, spell damage/cooldown rule or
+save format was edited in this pass. Full reference parity remains open:
+authored class choreography, final environment/character art and full-speed
+crowded combat need further work and visual acceptance.
+
+## Identity editing, appearance rows and spell receipts (2026-11-10)
+
+Revisited the creation overview sheets (0-44 and 48-92 seconds), prioritizing
+the right-hand appearance rows and left identity card. Existing native combat
+captures were compared with the previously sampled PvE/raid material. This
+is sampled visual analysis, not a new complete playback or audio analysis.
+
+- Replaced append-only nickname entry with a Unicode character editor: real
+  proportional-font caret placement, mouse drag/Shift selection, arrows,
+  Home/End, whole-character Backspace/Delete and held-key repeat. Ctrl+A
+  selects; Ctrl+V filters an explicit paste to the existing naming alphabet
+  and twenty-character limit. Empty/invalid paste preserves selected text.
+  Native clipboard access occurs only on the user's paste command; synthetic
+  test input supplies isolated clipboard text. Creation still validates and
+  saves through the existing profile transaction.
+- Identity text and its measurements bypass translation explicitly. Names
+  such as `Warrior` remain unchanged in the editor, roster, HUD and character
+  panel. They no longer prevent unrelated class/interface captions from being
+  translated. No saved nickname is rewritten.
+- Appearance rows now have teal/brass dividers, circular previous/next buttons,
+  a selected-variant number, existing swatches and a separate localized color
+  caption. Their vertical spacing avoids overlap at small/full/ultrawide
+  sizes. This presents the five existing variants; it adds no new face,
+  hair geometry, race or sex options.
+- The action bar distinguishes accepted activation from cooldown return:
+  a short top sheen accompanies use; a fading corner flare marks actual
+  cooldown completion. Timers are per ability, so moving/duplicating bindings
+  does not attach feedback to the wrong spell. Initial load, rejected actions,
+  death/reset and invalid update clocks do not fabricate readiness events.
+  Repeated rendering cannot advance these timers or change the simulation.
+
+CharacterSelectionTests covers Unicode edits, selected replacement, filtered
+paste, limits, key repeat, scaled selection, drag-release isolation, literal
+measurement, actual creation/save behavior and native appearance captures.
+CombatHudTests uses actual accepted casts for all four focused classes at
+30/60/144 Hz, checks cooldown transitions, moved bindings, rejected actions,
+reset/expiry and repeated rendering. HUD-only diagnostic captures deliberately
+omit world geometry; they are not full-play screenshots. Final logs and
+curated native captures for this continuation are in `build-identity-feedback`.
+
+All four affected suites pass in Release and Debug; both final RPGNative smoke
+checks pass device/shader initialization, hidden fullscreen restoration,
+resize and world/UI capture. See `tests-final-{release,debug}.log` and
+`smoke-{release,debug}.png.log` in that artifact directory.
+
+No model/source export, audio bank, spell damage/cooldown rule or profile format
+was changed in this pass. Full reference parity and crowded live-combat
+acceptance remain open.
+
+## Class entrances and attached hostile casts (2026-11-10)
+
+Reviewed the full-size creation frame at 32 seconds and raid frame at 72
+seconds alongside the latest native creation captures. The creation reference
+uses a held class gesture and hand/weapon light on its open stage; combat
+effects have a clear origin and a bright discharge. This pass uses our existing
+runtime animation and artwork, not newly authored animations or modified models.
+
+- Entering class creation or choosing a different focused class schedules one
+  short presentation after 550 ms. Warrior/Scout demonstrate a heavy action;
+  Mage/Priest demonstrate their signature. The normal preparation, release and
+  existing sounds run once. Roster browsing remains quiet; the repeated manual
+  showcase is still an explicit control.
+- Manual input cancels the queued entrance. Inspection, page transitions,
+  native suspension and display changes do not replay it later. A manual Pose
+  sequence still starts with the basic action after an automatic entrance.
+  No preview grants spells/equipment or advances the campaign.
+- Wraith/boss charges now follow palm landmarks transformed by the existing
+  authored presentation rig's exact skinning palette. Wraith lance and boss
+  execution snapshot that animated origin on release, then join the already
+  committed cone. The released beam does not follow subsequent actor motion.
+  Damage time, reach, safe zones and line-of-sight rules are unchanged.
+- Violet gathering filaments distinguish lance/execution; the tempest gathers
+  between both hands; quake gathers earth-colored material. These replace the
+  detached orbiting charge. Cancellation removes preparation immediately.
+- The first contact frame now has a full beam discharge instead of waiting for
+  the lingering body to fade in. All warning borders retain first submission
+  priority. At most eight selected warnings share the existing 3,600-vertex
+  warning/detail allowance; attached charge is omitted when that allowance is
+  full. No new textures, sound files or unbounded particle pools were added.
+
+Verification artifacts for this continuation are under `build-class-entrance`.
+All seven affected suites pass in Release and Debug: actor presentation,
+character selection, combat/class effects, sustained effects, combat release
+and casting. Both final executable smoke checks pass. See
+`tests-final-{release,debug}.log` and `smoke-{release,debug}.png.log` there.
+Native captures are emitted by CharacterSelectionTests and CombatReleaseTests
+inside `build-learning-review/{release,debug}`. Compare the four
+`automatic-entrance-*.png` images and `world-wraith-{charge,release}-60.png`.
+These checks establish working presentation/input integration, not complete
+reference parity, final authored choreography or crowded-raid performance.
+
+## Compact creation controls and holy flight (2026-11-10)
+
+Revisited the creation overview, its full-size 52-second customization frame,
+and the PvE/raid overviews including the 8-second raid frame. The reference
+keeps wardrobe/view controls in a compact dock below the actor, and utility
+navigation on the screen edge rather than between cast feedback and spells.
+Its bright spell paths retain an identifiable core through the combat scene.
+The local decoder also sampled the 38-41 second creation transition at 0.3-second
+intervals; inspected frames show the outgoing/incoming figure transition,
+compact tooltip and hand-attached glow. Evidence is under
+`build-reference-dock/creation-gesture`; this pass does not implement sex/race
+switching or claim to reproduce that authored gesture.
+
+- Moved actual/travel/veteran outfit selection below the figure, alongside
+  compact view/action controls. Existing painted equipment and ability artwork
+  identify the controls. Hover/focus hints appear after a deliberate dwell,
+  dismiss on press/suspension and follow mouse movement after keyboard use.
+- Arrow-button rotation now eases toward its requested angle with the shortest
+  angular difference. Direct drag remains responsive; cancellation/reset does
+  not replay a queued turn. Preview choices still grant no gear or progression.
+- Moved C/I/N/M/J/Esc shortcuts and the unspent-talent badge to the lower-right
+  edge. The freed space above the spell rows is available to world input;
+  shortcuts still invoke actual panels and expose localized hover labels.
+- Priest projectile trails now have a pale core and a longer fading amber
+  body. Absolution has paired braided paths, Guiding light a narrow long wake,
+  and Sanctuary strike six open vanes. These follow accepted flight time and
+  destination; no beam reaches a victim before the real projectile arrives.
+  Existing preparation, contact, healing and sound events remain authoritative.
+- A duplicate translation introduced during the pass was removed. The
+  localization test now reports duplicate keys and catches exceptions instead
+  of falling into an interactive CRT abort during unattended Debug testing.
+
+No source/export models, frozen facial data, audio bank, gameplay balance or
+save format are changed by this pass. Concurrent authored-motion work is
+separate. Original recordings are untouched; this is sampled visual analysis,
+not a frame-by-frame/audio review or a claim of complete reference parity.
+Validation and actual native captures are recorded in `progress.md`.
+
+Validation completed in both configurations: localization, character selection,
+class effects, VFX materials, interface and combat HUD suites pass. After the
+utility move, two old interface-test click positions were updated; the same-frame
+movement-stop and scaled build-shortcut assertions remain in place and pass.
+The final UI retake also covers the reset glyph correction. Both game binaries
+pass startup/fullscreen-restore/resize/world-UI smoke checks. Evidence in
+`build-reference-dock`: `tests-final-{release,debug}.log` and
+`tests-ui-{release,debug}.log`, `smoke-{release,debug}.png.log`,
+`creation-before.png`, `creation-after.png`, `priest-flight.png`, and
+`combat-after.png`. The screenshots are native renderer output, not mockups.
+
 ## Wardrobe, audible showcase and combat follow-up
 
 The follow-up revisited the creation overview and full-size frame at 44 seconds

@@ -26,9 +26,9 @@ template<class T> void Corrupt(std::string_view original,std::size_t offset,T va
 void Archive() {
   const auto bytes=playerbody::EmbeddedBytes();
   const auto decoded=playerbody::Decode(bytes);
-  std::size_t offset=16+visual::bodyBones*24;
+  std::size_t offset=16+visual::sourceBodyBones*24;
   for(std::size_t count=0;count<=offset;++count) Reject(bytes.substr(0,count));
-  Corrupt(bytes,0,0u);Corrupt(bytes,4,2u);Corrupt(bytes,8,visual::bodyBones+1);Corrupt(bytes,12,0u);
+  Corrupt(bytes,0,0u);Corrupt(bytes,4,2u);Corrupt(bytes,8,visual::sourceBodyBones+1);Corrupt(bytes,12,0u);
   Corrupt(bytes,16,100.f);Corrupt(bytes,20,std::numeric_limits<float>::quiet_NaN());
   for(unsigned lod=0;lod<decoded.size();++lod) {
     const auto& body=decoded[lod];const auto count=body.mesh.vertices.size();
@@ -43,7 +43,7 @@ void Archive() {
       Reject(bytes.substr(0,end));
     Corrupt(bytes,vertex,std::numeric_limits<float>::infinity());
     Corrupt(bytes,vertex+4,-10.f);Corrupt(bytes,vertex+12,100.f);
-    Corrupt(bytes,vertex+24,visual::bodyRegions);Corrupt(bytes,vertex+28,visual::bodyBones);
+    Corrupt(bytes,vertex+24,visual::bodyRegions);Corrupt(bytes,vertex+28,visual::sourceBodyBones);
     Corrupt(bytes,vertex+44,-1.f);Corrupt(bytes,vertex+48,std::numeric_limits<float>::quiet_NaN());
     Corrupt(bytes,indices,unsigned(count));
     Corrupt(bytes,indices+4,body.mesh.indices[0]); // Collapsed triangle.

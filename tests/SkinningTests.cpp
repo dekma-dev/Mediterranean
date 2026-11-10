@@ -97,6 +97,7 @@ void Poses(unsigned level) {
     sample.bank=std::sin(frame*.2f); sample.hit=frame>65?.6f:0;
     const auto pose=BuildCharacterPose(0,std::sin(frame*.1f),shield,sample);
     const auto palette=BuildCharacterRig(pose,{}, {.22f,.37f,.54f,1});
+    Check(palette.deformation.x==1,"Human rig silently fell back to collapsing matrix skinning");
     const auto& bind=visual::BodyBindPose();
     for(unsigned bone=0;bone<visual::bodyBones;++bone) {
       const auto reference=XMMatrixTranspose(XMMatrixInverse(nullptr,XMLoadFloat4x4(&palette.joints[bone])));
@@ -124,6 +125,28 @@ void Poses(unsigned level) {
     }
   }
 }
+void ArticulatedTorsoChecks() {
+  animation::Sample sample;sample.authoredGait=true;sample.authoredBlend=1;sample.gaitWeights={1,0,0,0};sample.runBlend=1;
+  float shoulderTravel=0,spineDifference=0;
+  for(int frame=0;frame<120;++frame){
+    sample.authoredMotion=playerclips::Locomotion(sample.gaitWeights,1,frame/120.f);
+    const auto pose=BuildCharacterPose(0,0,false,sample);const auto rig=BuildCharacterRig(pose,{}, {.3f,.4f,.5f,1});
+    Check(pose.spineWeight>.99f&&rig.deformation.x==1,"Articulated run lost spine or volume preservation");
+    const auto chest=XMLoadFloat4x4(&rig.joints[1]),lower=XMLoadFloat4x4(&rig.joints[10]);
+    spineDifference=std::max(spineDifference,XMVectorGetX(XMVector3Length(XMVector3TransformNormal(XMVectorSet(0,1,0,0),chest)-XMVector3TransformNormal(XMVectorSet(0,1,0,0),lower))));
+    for(unsigned side=0;side<2;++side){
+      const XMFLOAT3 bind{side?.305f:-.305f,1.43f,0};XMFLOAT3 shoulder;
+      XMStoreFloat3(&shoulder,XMVector3TransformCoord(XMLoadFloat3(&bind),XMLoadFloat4x4(&rig.joints[12+side])));
+      Check(Distance(shoulder,pose.arms[side].root)<.00001f,"Clavicle skin joint detached from the upper arm");
+      shoulderTravel=std::max(shoulderTravel,Distance(pose.shoulderOffset[side],{}));
+    }
+  }
+  Check(spineDifference>.04f&&shoulderTravel>.003f,"Running remained a rigid torso with immobile shoulders");
+  unsigned spineVertices=0,shoulderVertices=0;
+  for(const auto& skin:visual::CharacterBody().influences)for(unsigned bone:skin.bones){spineVertices+=bone==10||bone==11;shoulderVertices+=bone==12||bone==13;}
+  Check(spineVertices>100&&shoulderVertices>20,"New skeleton was not bound to the runtime body");
+  std::cout<<"Articulated torso: spine direction separation "<<spineDifference<<", clavicle motion "<<shoulderTravel<<", spine/shoulder bindings "<<spineVertices<<'/'<<shoulderVertices<<'\n';
+}
 void LodSelection() {
   Check(visual::SelectBodyLod(500)==0 && visual::SelectBodyLod(100)==1 && visual::SelectBodyLod(30)==2,"Projected-size detail selection");
   for(float invalid : {-1.f,std::numeric_limits<float>::quiet_NaN(),std::numeric_limits<float>::infinity()})
@@ -142,6 +165,34 @@ void LodSelection() {
   for(unsigned id=4;id<1000;++id) history.Select(id,40);
   Check(history.Select(1,400)==0,"Bounded history replacement must remain usable");
 }
+void VolumePreservation() {
+  visual::BodyPalette palette{};
+  for(unsigned i=0;i<visual::bodyBones;++i){
+    const auto transform=XMMatrixRotationY((i%2?1.f:-1.f)*XMConvertToRadians(80));
+    XMStoreFloat4x4(&palette.joints[i],transform);XMStoreFloat4x4(&palette.normals[i],transform);
+  }
+  visual::Vertex vertex{};vertex.position={1,0,0};vertex.normal={1,0,0};
+  visual::SkinInfluence weights{{0,1,0,0},{.5f,.5f,0,0}};
+  const auto linear=visual::SkinVertex(vertex,weights,palette);
+  visual::PreserveBodyVolume(palette);
+  Check(palette.deformation.x==1,"Rigid palette must enable volume preservation");
+  const auto volume=visual::SkinVertex(vertex,weights,palette);
+  Check(Distance(linear.position,{0,0,0})<.18f&&std::abs(Distance(volume.position,{0,0,0})-1)<1e-5f,
+    "Twisting a blended joint must preserve its cross section");
+  auto& flipped=palette.volume[1];
+  XMStoreFloat4(&flipped.rotation,-XMLoadFloat4(&flipped.rotation));
+  XMStoreFloat4(&flipped.translation,-XMLoadFloat4(&flipped.translation));
+  Check(Distance(visual::SkinVertex(vertex,weights,palette).position,volume.position)<1e-5f,"Antipodal quaternion changed the surface");
+  for(unsigned i=0;i<visual::bodyBones;++i){
+    const auto transform=XMMatrixScaling(.995f,1.007f,1)*XMMatrixRotationZ(.7f)*XMMatrixTranslation(.2f,1.1f,-.3f);
+    XMStoreFloat4x4(&palette.joints[i],transform);
+    XMStoreFloat4x4(&palette.normals[i],XMMatrixTranspose(XMMatrixInverse(nullptr,transform)));
+  }
+  palette.deformation={};const auto affine=visual::SkinVertex(vertex,weights,palette);
+  visual::PreserveBodyVolume(palette);const auto retained=visual::SkinVertex(vertex,weights,palette);
+  Check(Distance(affine.position,retained.position)<1e-5f&&Distance(affine.normal,retained.normal)<1e-5f,
+    "Bind-length correction or rigid attachment changed under volume preservation");
+}
 void RigContinuity() {
   float worst=0,worstJoint=0,worstExcess=0; unsigned worstBone=0; int worstFrame=0,worstLayer=0; bool worstHeavy=false;
   for(bool heavy : {false,true}) for(bool shield : {false,true}) for(int layer=0;layer<4;++layer) {
@@ -150,6 +201,20 @@ void RigContinuity() {
       animation::Sample sample; sample.attackSeconds=frame*.001f; sample.heavyAttack=heavy;
       sample.air=layer==1?1.f:0; sample.rise=.5f; sample.cast=layer==2?1.f:0; sample.landing=layer==3?1.f:0;
       const auto rig=BuildCharacterRig(BuildCharacterPose(0,0,shield,sample),{}, {.2f,.4f,.6f,1});
+      if(frame)for(const auto pair:{std::pair<unsigned,unsigned>{0,2},{2,3},{0,4},{4,5},{1,6},{6,7},{1,8},{8,9}}){
+        auto point=visual::BodyBindPose()[pair.second].from;point.z+=.08f;
+        visual::Vertex vertex{};vertex.position=point;vertex.normal={0,0,1};
+        visual::SkinInfluence weights{{pair.first,pair.second,0,0},{.5f,.5f,0,0}};
+        const auto a=visual::SkinVertex(vertex,weights,previous),b=visual::SkinVertex(vertex,weights,rig);
+        float boneTravel=0;
+        for(unsigned bone:{pair.first,pair.second}){
+          const auto p=XMLoadFloat3(&point);
+          boneTravel=std::max(boneTravel,XMVectorGetX(XMVector3Length(
+            XMVector3TransformCoord(p,XMLoadFloat4x4(&rig.joints[bone]))-
+            XMVector3TransformCoord(p,XMLoadFloat4x4(&previous.joints[bone])))));
+        }
+        Check(Distance(a.position,b.position)<2*boneTravel+.003f,"Blended joint surface flipped independently of its bones");
+      }
       if(frame) for(unsigned bone=0;bone<visual::bodyBones;++bone) {
         const auto& rest=visual::BodyBindPose()[bone];
         float jointStep=0;
@@ -184,7 +249,7 @@ void RigContinuity() {
 }
 }
 int main() {
-  RigContinuity(); LodSelection();
+  VolumePreservation(); RigContinuity(); LodSelection(); ArticulatedTorsoChecks();
   for(unsigned level=0;level<visual::bodyLodCount;++level) { Topology(level); Poses(level); }
   Check(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"COM initialization");
   Win32Window window; Check(window.Create(GetModuleHandle(nullptr),960,720,L"Skinned body checks",false),"Hidden skin test window");

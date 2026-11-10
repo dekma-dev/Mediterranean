@@ -53,23 +53,25 @@ HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool 
     const auto rightLocal=pose.UpperDirection({1,0,0}),upLocal=pose.UpperDirection({0,1,0}),forwardLocal=pose.UpperDirection({0,0,1});
     const auto right=XMLoadFloat3(&rightLocal),up=XMLoadFloat3(&upLocal),forward=XMLoadFloat3(&forwardLocal);
     const float reach=animation::SmoothStep(cast)*(side?.45f:1.f);
-    // Keep the wrist in the forearm's actual sagittal plane. acos(vertical)
-    // lost the sign of forward reach: a backswing was reflected forwards,
-    // folding the wrist and turning both running palms towards the sky.
-    const float vertical=XMVectorGetX(XMVector3Dot(forearm,up));
-    const float sagittal=XMVectorGetX(XMVector3Dot(forearm,forward));
-    float angle=std::atan2(sagittal,vertical);
-    if(angle<0)angle+=XM_2PI;
-    const float elevation=angle*(1-reach);
-    const float lateral=std::clamp(XMVectorGetX(XMVector3Dot(forearm,right))*(1-reach),-.98f,.98f);
-    const float radial=std::sqrt(1-lateral*lateral);
-    const auto fingerAxis=right*lateral+(up*std::cos(elevation)+forward*std::sin(elevation))*radial;
-    // Relaxed palms face the body, with the thumb forward. Only a deliberate
-    // casting gesture supinates and opens them towards the target.
-    const auto palmReference=right*((side?-1.f:1.f)*(1-reach))+forward*reach;
-    const auto palm=XMVector3Normalize(palmReference-fingerAxis*XMVector3Dot(palmReference,fingerAxis));
-    const auto across=XMVector3Normalize(XMVector3Cross(fingerAxis,palm));
-    frame={across,fingerAxis,XMVector3Cross(across,fingerAxis),XMVectorSet(0,0,0,1)};
+    // Lift the actual forearm direction toward the open casting pose in
+    // vector space. Scaling a wrapped elevation angle made the wrist spin
+    // at both vertical and lateral reaches. A small forward arc gives the
+    // palm a natural path as it opens from a hanging arm.
+    auto lifted=forearm*(1-reach)+up*reach+forward*(1.4f*reach*(1-reach));
+    if(XMVectorGetX(XMVector3LengthSq(lifted))<.0001f)lifted=forward;
+    const auto fingerAxis=XMVector3Normalize(lifted);
+    auto radialAxis=right-fingerAxis*XMVector3Dot(right,fingerAxis);
+    if(XMVectorGetX(XMVector3LengthSq(radialAxis))<.0001f)
+      radialAxis=XMVector3Cross(fingerAxis,forward);
+    radialAxis=XMVector3Normalize(radialAxis);
+    const auto normal=XMVector3Cross(radialAxis,fingerAxis);
+    // Construct the roll in this orthonormal frame. Projecting a blended
+    // palm reference onto fingerAxis's plane flips when both nearly align.
+    // Relaxed palms face inward; casting untwists them without that pole.
+    const float twist=(side?-1.f:1.f)*(1-reach)*1.57079633f;
+    const auto across=radialAxis*std::cos(twist)-normal*std::sin(twist);
+    const auto palm=normal*std::cos(twist)+radialAxis*std::sin(twist);
+    frame={across,fingerAxis,palm,XMVectorSet(0,0,0,1)};
     // The wrist is fixed to the solved arm even while the casting palm turns.
     const auto wrist=XMVector3TransformNormal(XMVectorSet(0,-.055f,-.043f,0),frame);
     frame.r[3]=XMVectorSetW(XMLoadFloat3(&arm.end)-wrist,1);

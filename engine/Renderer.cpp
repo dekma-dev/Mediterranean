@@ -134,7 +134,7 @@ bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
  elements.push_back({"BLENDWEIGHT",0,DXGI_FORMAT_R32G32B32A32_FLOAT,2,16,D3D11_INPUT_PER_VERTEX_DATA,0});
  if (!Check(device_->CreateInputLayout(elements.data(),static_cast<UINT>(elements.size()),body->GetBufferPointer(),body->GetBufferSize(),bodyLayout_.GetAddressOf()),L"Create skinned layout")) return false;
  static_assert(sizeof(Instance)==160,"Instance layout must match the shader.");
- static_assert(sizeof(visual::SkinInfluence)==32 && sizeof(visual::BodyPalette)==4208,"Keep skinning layouts synchronized with HLSL.");
+ static_assert(sizeof(visual::SkinInfluence)==32 && sizeof(visual::BodyPalette)==4672,"Keep skinning layouts synchronized with HLSL.");
  static_assert(sizeof(visual::HandPalette)==1024 && sizeof(visual::HandPalette)*visual::maxHands==65536,"Hand palettes must match HLSL and the D3D11 constant limit.");
  std::vector<Vertex> vertices; std::vector<std::uint32_t> indices;
  std::vector<visual::SkinInfluence> influences;
@@ -546,10 +546,18 @@ void Renderer::DrawHead(const XMMATRIX& transform,const XMFLOAT4& color,float bl
 unsigned Renderer::DrawBody(XMFLOAT3 position,float yaw,const visual::BodyPalette& palette,std::uint64_t actor) {
  if(bodyCount_>=visual::maxBodies) { error_=L"Scene exceeded the 32 skinned-body budget."; frameFailed_=true; return visual::maxBodies; }
  auto& gpu=bodyPalettes_[bodyCount_]; gpu.colors=palette.colors;
+ gpu.volume=palette.volume;gpu.deformation=palette.deformation;
  bodyActors_[bodyCount_]=actor;
  for(unsigned bone=0;bone<visual::bodyBones;++bone) {
-  XMStoreFloat4x4(&gpu.joints[bone],XMMatrixTranspose(XMLoadFloat4x4(&palette.joints[bone])));
-  XMStoreFloat4x4(&gpu.normals[bone],XMMatrixTranspose(XMLoadFloat4x4(&palette.normals[bone])));
+  auto matrix=XMLoadFloat4x4(&palette.joints[bone]),normal=XMLoadFloat4x4(&palette.normals[bone]);
+  if(palette.deformation.x>0){
+   auto rigid=XMMatrixRotationQuaternion(XMLoadFloat4(&palette.volume[bone].rotation));
+   normal-=rigid;rigid.r[3]=matrix.r[3];matrix-=rigid;
+  }
+  // Volume mode uploads only the small affine residual alongside the dual
+  // quaternion. This avoids four extra rigid transforms per vertex/pass.
+  XMStoreFloat4x4(&gpu.joints[bone],XMMatrixTranspose(matrix));
+  XMStoreFloat4x4(&gpu.normals[bone],XMMatrixTranspose(normal));
  }
  DrawMesh(visual::Mesh::Body,position,{1,1,1},{1,1,1,1},visual::Material::Cloth,yaw);
  auto& item=world_[unsigned(visual::Mesh::Body)].back(); item.instance.surface.z=float(bodyCount_++);
@@ -1098,8 +1106,8 @@ bool Renderer::ValidateDebugMessages() {
  return true;
 }
 
-float Renderer::TextWidth(const std::string& source,float size) const {
- const auto text=localization::Translate(source);
+float Renderer::TextWidth(const std::string& source,float size,bool literal) const {
+ const auto text=literal?source:localization::Translate(source);
  float line=0,width=0;
  for (std::size_t offset=0;offset<text.size();) {
   const auto ch=text::Next(text,offset);
@@ -1157,8 +1165,8 @@ void Renderer::DrawRoundMapArtwork(float x,float y,float width,float height) {
   hud_.insert(hud_.end(),{center,vertex(std::cos(a),std::sin(a)),vertex(std::cos(b),std::sin(b))});
  }
 }
-void Renderer::DrawText(float x,float y,const std::string& source,const XMFLOAT4& color,float size) {
- const auto text=localization::Translate(source);
+void Renderer::DrawText(float x,float y,const std::string& source,const XMFLOAT4& color,float size,bool literal) {
+ const auto text=literal?source:localization::Translate(source);
  const float start=x,scale=size*.5f,dx=32*scale/width_,dy=32*scale/height_;
  for (std::size_t offset=0;offset<text.size();) {
   const auto ch=text::Next(text,offset);

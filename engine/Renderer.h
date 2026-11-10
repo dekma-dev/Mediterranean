@@ -136,7 +136,7 @@ public:
   // Artwork joins the existing HUD batch; no texture swaps or per-panel upload.
   void DrawUiArt(UiArt art,float x,float y,float width,float height,
     DirectX::XMFLOAT4 uv={0,0,1,1},DirectX::XMFLOAT4 tint={1,1,1,1});
-  float TextWidth(const std::string& text,float size) const;
+  float TextWidth(const std::string& text,float size,bool literal=false) const;
   bool HasMapArtwork() const { return mapView_!=nullptr; }
   bool HasTerrainSurface() const { return terrainView_!=nullptr; }
   bool SetTerrainSurface(const std::vector<std::uint8_t>& pixels,unsigned size);
@@ -144,7 +144,7 @@ public:
   void DrawMapArtwork(float x,float y,float width,float height);
   void DrawRoundMapArtwork(float x,float y,float width,float height);
   std::size_t InterfaceBytes() const { return 512*512+mapBytes_+uiBytes_; }
-  void DrawText(float x, float y, const std::string& text, const DirectX::XMFLOAT4& color, float size = 2);
+  void DrawText(float x, float y, const std::string& text, const DirectX::XMFLOAT4& color, float size = 2,bool literal=false);
   const std::wstring& Error() const { return error_; }
 private:
   bool Check(HRESULT result, const wchar_t* operation);
