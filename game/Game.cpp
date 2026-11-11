@@ -420,7 +420,10 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   playerAnimation_.pose.authoredStrikePhase=playerAnimation_.authoredWeapon.phase;
   playerAnimation_.pose.authoredStrikeHeavy=playerAnimation_.authoredWeapon.heavy;
   playerAnimation_.pose.authoredAccent=playerAnimation_.authoredWeapon.accent;
+  playerAnimation_.pose.authoredMechanics=playerAnimation_.authoredWeapon.mechanics;
+  playerAnimation_.pose.authoredMechanicsTracked=true;
   playerAnimation_.pose.authoredReady=playerAnimation_.authoredWeapon.ready;
+  playerAnimation_.pose.authoredEntryReady=playerAnimation_.authoredWeapon.entryReady;
   playerFeet_.Update(dt,simulation_.Player(),playerPose_.facing,simulation_.Grounded() && !simulation_.Dashing(),
     simulation_.Health()>0,playerAnimation_.pose);
   const auto enemies=simulation_.Combatants();
@@ -502,8 +505,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
       return {position.x+std::cos(motion.facing)*p.x+std::sin(motion.facing)*p.z,height+p.y,
         position.z-std::sin(motion.facing)*p.x+std::cos(motion.facing)*p.z};
     };
-    const float tip=form==rpg::WeaponForm::Mace?.67f:form==rpg::WeaponForm::Cleaver?.80f:.96f;
-    effects_.TrackWeapon(id,point(.22f),point(tip));
+    effects_.TrackWeapon(id,point(rpg::weaponTraceRoot),point(rpg::WeaponTraceTip(form)));
   };
   track(0,simulation_.Player(),simulation_.WorldHeight(),playerPose_,playerAnimation_.pose,
     simulation_.Items().Worn(rpg::GearSlot::Offhand)!=rpg::Item::None,

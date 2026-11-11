@@ -102,6 +102,17 @@ int main() {
     wake.TrackDash({0,0,8},true,.01f,1);
     Require(wake.DashSampleCount()==0,"A discontinuity must never stretch the wake across the map");
   }
+  for(int rate:{22,30,60,144,1000}) {
+    CombatEffects blade;blade.Emit({K::Strike,{0,0},0,0});
+    blade.TrackWeapon(0,{-1,.8f,-1},{-1,1.2f,-1});float elapsed=0;
+    while(elapsed<.235f-1e-7f){const float dt=std::min(1.f/rate,.235f-elapsed);blade.Advance(dt);elapsed+=dt;
+      const float x=-1+elapsed*8;blade.TrackWeapon(0,{x,.8f,-1},{x,1.2f,-1});}
+    Require(blade.WeaponSampleCount(0)>=19 && blade.WeaponSampleCount(0)<=22 &&
+      blade.WeaponHistorySeconds(0)>.145f && blade.WeaponHistorySeconds(0)<.161f,
+      "Blade sampling must retain the same density and duration across update rates");
+    for(int n=0;n<4;++n)blade.Advance(.05f);
+    Require(blade.WeaponSampleCount(0)==0 && blade.TrailCount()==0,"Measured blade wake never drains");
+  }
   auto injured=fresh.Save();
   const auto healthPosition=injured.find(" 100 ");
   Require(healthPosition!=std::string::npos,"Recovery fixture health field missing");
@@ -294,6 +305,16 @@ int main() {
   Require(renderer.EffectVertices()>0 && renderer.EndFrame(false),"A moving blade must leave a short trail");
   pool.Advance(.02f); pool.TrackWeapon(0,{4,.5f,0},{4,1.3f,0}); scene(); pool.Render(renderer);
   Require(renderer.EffectVertices()==0 && renderer.EndFrame(false),"Dash/teleport discontinuities must not stretch blade ribbons");
+  for(int invalid=0;invalid<3;++invalid){CombatEffects blade;blade.Emit({K::Strike,{0,0},0,0});
+    blade.TrackWeapon(0,{0,.5f,-1},{0,1.3f,-1});blade.Advance(.02f);
+    const XMFLOAT3 root=invalid==0?XMFLOAT3{NAN,.5f,-1}:invalid==1?XMFLOAT3{4,.5f,-1}:XMFLOAT3{0,1.3f,-1};
+    blade.TrackWeapon(0,root,{0,1.3f,-1});scene();blade.Render(renderer);
+    Require(blade.TrailCount()==0 && renderer.EffectVertices()==0 && renderer.EndFrame(false),"Invalid/teleported grip must cancel the whole wake");
+  }
+  {CombatEffects blade;blade.Emit({K::HeavyStrike,{0,0},0,0});
+    blade.TrackWeapon(0,{0,.5f,-1},{0,1.3f,-1});blade.Advance(.05f);blade.TrackWeapon(0,{0,.5f,-1},{0,1.3f,-1});
+    scene();blade.Render(renderer);Require(renderer.EffectVertices()==0 && renderer.EndFrame(false),"Stationary tracked blade fabricated a decorative slash");
+  }
   Image referenceRate;
   for (int rate : {30,60,144}) {
     CombatEffects consistent;
@@ -309,7 +330,8 @@ int main() {
   CombatEffects saturated;
   // At high update rates the fixed history must retain duration, not merely
   // the latest 32 frames. Keep the synthetic crescent outside the camera.
-  for (int rate : {60,144,1000}) {
+  Image measuredReference;
+  for (int rate : {22,30,60,144,1000}) {
     CombatEffects history; history.Emit({K::Strike,{100,100},0,0});
     history.TrackWeapon(0,{-1,.8f,-1},{-1,1.2f,-1});
     float elapsed=0;
@@ -331,6 +353,8 @@ int main() {
     }
     std::cout<<"Blade history width at "<<rate<<" Hz: "<<last-first<<'\n';
     Require(last-first>150,"High update rates must retain the visible blade trail history");
+    if(rate==22)measuredReference=frame;
+    else Require(MeanDifference(measuredReference,frame)<.015,"Equal-time measured blade wake varies with update rate");
   }
   for (unsigned i=0;i<CombatEffects::maxTrails;++i) saturated.Emit({K::HeavyStrike,{0,0},0,0,100+i});
   for (unsigned i=0;i<CombatEffects::maxBursts;++i) saturated.Emit({K::HeavyHit,{0,0},1,0});

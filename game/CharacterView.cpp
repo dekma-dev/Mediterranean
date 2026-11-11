@@ -104,7 +104,9 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
       // The guard cape already contains its rearward drape. Pin its seam to
       // the fitted doublet instead of adding a second stand-off from the back.
       renderer.DrawCloak(upper({0,1.49f,guard?-.105f:-.19f}),yaw+pose.upperYaw,pose.upperPitch,pose.upperRoll,
-        dynamics.clothSide,dynamics.clothBack,guard,oldStyle?(guard?XMFLOAT4{.62f,.52f,.45f,1}:outfit.classId==rpg::ClassId::Scout?XMFLOAT4{.48f,.68f,.46f,1}:XMFLOAT4{.67f,.48f,.67f,1}):XMFLOAT4{1,1,1,1});
+        dynamics.clothSide,dynamics.clothBack,guard,oldStyle?(guard?XMFLOAT4{.62f,.52f,.45f,1}:outfit.classId==rpg::ClassId::Scout?XMFLOAT4{.48f,.68f,.46f,1}:XMFLOAT4{.67f,.48f,.67f,1}):XMFLOAT4{1,1,1,1},
+        {dynamics.cloak.midSide,dynamics.cloak.midBack,dynamics.cloak.hemSide,dynamics.cloak.hemBack},
+        dynamics.cloak.active?XMFLOAT3{dynamics.cloak.flutter,dynamics.cloak.phase,dynamics.cloak.twist}:XMFLOAT3{});
       if(!oldStyle)for (float side : {-1.f,1.f})
         part(M::Torso,side*.13f,1.49f,.015f,{.12f,.09f,.39f},{.12f,.24f,.36f,1},S::Cloth);
       if(!oldStyle)part(M::Sphere,0,1.48f,.195f,{.09f,.065f,.03f},{.72f,.54f,.24f,1},S::Metal);

@@ -9,6 +9,41 @@ namespace {
 void Require(bool value,const char* message) {
   if (!value) { std::cerr<<message<<'\n'; std::exit(1); }
 }
+void CloakInertiaChecks() {
+  // A heavy hem must follow the middle of the cloth, then continue moving
+  // after braking. Compare the same forcing at three render rates.
+  std::array<animation::CloakSample,3> samples{};
+  for(unsigned rate=0;rate<3;++rate) {
+    const int hz=rate==0?30:rate==1?60:144;
+    animation::CloakMotion cloth;
+    animation::CloakSample early,loaded,stopped,settled;
+    for(int tick=0;tick<3*hz;++tick) {
+      const auto s=cloth.Update(1.f/hz,tick<hz?6.f:0.f,0,tick<hz?.7f:0.f);
+      Require(s.active && std::isfinite(s.phase) && s.midBack>=0 && s.midBack<=.16f &&
+        s.hemBack>=0 && s.hemBack<=.39f && std::abs(s.hemSide)<=.20f && s.flutter<=.04f,
+        "Cloak inertia escaped its finite rendering envelope");
+      if(tick==hz/6-1)early=s;
+      if(tick==hz-1)loaded=s;
+      if(tick==hz+hz/6-1)stopped=s;
+      if(tick==3*hz-1)settled=s;
+    }
+    Require(early.hemBack<early.midBack*3 && loaded.hemBack>loaded.midBack*3.5f,
+      "Cloak middle and hem moved as one rigid board");
+    Require(stopped.hemBack>loaded.hemBack*.65f && stopped.flutter>settled.flutter*3,
+      "Cloak lost its trailing momentum at a stop");
+    Require(settled.hemBack<.03f && std::abs(settled.hemSide)<.002f,
+      "Cloak did not settle after braking and turning");
+    samples[rate]=stopped;
+  }
+  for(unsigned i=1;i<3;++i)Require(std::abs(samples[i].hemBack-samples[0].hemBack)<.006f &&
+    std::abs(samples[i].hemSide-samples[0].hemSide)<.006f,"Cloak motion depends on render frequency");
+  animation::State state;
+  for(int i=0;i<120;++i)state.Update(1.f/60,0,0,.1f,true,0);
+  Require(state.pose.cloak.active && state.pose.cloak.hemBack>.10f,"Locomotion did not drive cloak inertia");
+  state.Reset();Require(!state.pose.cloak.active,"Reset retained the previous cloak state");
+  state.Update(1.f/60,0,0,0,true,0);
+  Require(state.pose.cloak.hemBack<.001f,"Reset retained hidden cloth velocity");
+}
 bool Finite(DirectX::XMFLOAT3 p) { return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z); }
 float Distance(DirectX::XMFLOAT3 a,DirectX::XMFLOAT3 b) {
   return std::sqrt((a.x-b.x)*(a.x-b.x)+(a.y-b.y)*(a.y-b.y)+(a.z-b.z)*(a.z-b.z));
@@ -386,6 +421,7 @@ void TransitionRegressions() {
 }
 }
 int main() {
+  CloakInertiaChecks();
   ClassContactRegressions();
   {
     const auto bytes=playerclips::EmbeddedBytes();

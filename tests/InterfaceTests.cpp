@@ -773,27 +773,30 @@ int main() {
     Require(closeBag.action==ui::Action::Close && closeBag.value==int(ui::Panel::Inventory),"Bag close must identify only the bag.");
     Require(click(1040,580).action==ui::Action::None && screen.PointerOverWindow(),"Blank bag surface must capture its pointer.");
     Require(click(680,380).action==ui::Action::None && !screen.PointerOverWindow(),"World gap must remain available for camera orbit.");
-    Require(click(493,681).action==ui::Action::None,"Dash requires an available target with side windows open.");
+    const auto actionTransform=ui::HudTransform::At(float(size.first),float(size.second),640,710);
+    const auto barClick=[&](float x,float y){return click(actionTransform.X(x),actionTransform.Y(y));};
+    Require(barClick(493,681).action==ui::Action::None,"Dash requires an available target with side windows open.");
     const auto beforeDash=simulation.Save();
     Require(simulation.Load(test::dashFixture),"Interface target dash fixture");
     rpg::Command selectDash; selectDash.nextTarget=true; simulation.Update(.001f,selectDash);
     renderer.BeginFrame(); screen.Render(renderer,simulation,0,false); Require(renderer.EndFrame(false),"Target dash render");
-    Require(click(493,681).action==ui::Action::Ability,"Available Dash must remain usable with both side windows open.");
+    Require(barClick(493,681).action==ui::Action::Ability,"Available Dash must remain usable with both side windows open.");
     const auto gesture=[&](float x,bool press,bool held,bool release) {
-      return screen.Pointer(layout.x+x*layout.scale,layout.y+681*layout.scale,float(size.first),float(size.second),press,false,held,release);
+      return screen.Pointer(layout.x+actionTransform.X(x)*layout.scale,layout.y+actionTransform.Y(681)*layout.scale,float(size.first),float(size.second),press,false,held,release);
     };
     Require(gesture(493,true,true,false).action==ui::Action::None,"Hotbar press must not cast before a potential drag");
     gesture(898,false,true,false);const auto drop=gesture(898,false,false,true);
       Require(drop.action==ui::Action::None && screen.HotbarSpell(9,simulation.Class())==2 && screen.HotbarSpell(2,simulation.Class())==9,"Drag must swap spells without casting");
     renderer.BeginFrame();screen.Render(renderer,simulation,0,false);Require(renderer.EndFrame(false),"Moved hotbar render");
-    Require(click(898,681).action==ui::Action::Ability && click(493,681).action==ui::Action::None,"Moved action uses its new slot; old slot is empty");
+    Require(barClick(898,681).action==ui::Action::Ability && barClick(493,681).action==ui::Action::None,"Moved action uses its new slot; old slot is empty");
     screen.MoveHotbar(9,2,simulation.Class());
     Require(simulation.Load(beforeDash),"Restore interface state after target dash check");
     screen.SetOnly(ui::Panel::None);
     renderer.BeginFrame();screen.Render(renderer,simulation,0,false);Require(renderer.EndFrame(false),"Dual-row drag layout");
     const auto beforeRows=simulation.Save();
     const auto beforeBindings=screen.SaveHotbars();
-    const auto rowPointer=[&](float x,float y,bool press,bool held,bool release) {
+    const auto rowPointer=[&](float x,float y,bool press,bool held,bool release,bool bar=true) {
+      if(bar){x=actionTransform.X(x);y=actionTransform.Y(y);}
       return screen.Pointer(layout.x+x*layout.scale,layout.y+y*layout.scale,float(size.first),float(size.second),press,false,held,release);
     };
     rowPointer(377,681,true,true,false);rowPointer(898,620,false,true,false);
@@ -809,7 +812,7 @@ int main() {
     screen.MoveHotbar(19,0,simulation.Class());
     screen.SetOnly(ui::Panel::Build);
     renderer.BeginFrame();screen.Render(renderer,simulation,0,false);Require(renderer.EndFrame(false),"Spellbook drop source");
-    rowPointer(165,192,true,true,false);rowPointer(898,620,false,true,false);
+    rowPointer(165,192,true,true,false,false);rowPointer(898,620,false,true,false);
     renderer.BeginFrame();screen.Render(renderer,simulation,0,false);
     Require(renderer.Capture(L"spellbook-drop-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),"Raised spellbook drop targets");
     Require(rowPointer(898,620,false,false,true).action==ui::Action::None && screen.HotbarSpell(19,simulation.Class())==0,
@@ -1246,7 +1249,8 @@ int main() {
     ui::Interface hud; const ui::Layout layout(float(size.first),float(size.second));
     renderer.BeginFrame(); hud.Render(renderer,state,0,false); Require(renderer.EndFrame(false),"Combat HUD layout failed");
     const auto before=state.Save();
-    const auto event=hud.Pointer(layout.x+466*layout.scale,layout.y+681*layout.scale,
+    const auto bars=ui::HudTransform::At(float(size.first),float(size.second),640,710);
+    const auto event=hud.Pointer(layout.x+bars.X(466)*layout.scale,layout.y+bars.Y(681)*layout.scale,
       float(size.first),float(size.second),true,false);
     Require(event.action==ui::Action::None,"Cooling ability must remain disabled despite new progress indicators");
     renderer.BeginFrame(); hud.Render(renderer,state,0,false);
@@ -1255,7 +1259,7 @@ int main() {
     Require(state.Save()==before,"HUD rendering and disabled clicks must not change combat state");
     float hoverClock=0;
     for(int slot:{0,4,6,7}) {
-      hud.Pointer(layout.x+(377+slot*58.f)*layout.scale,layout.y+679*layout.scale,
+      hud.Pointer(layout.x+bars.X(377+slot*58.f)*layout.scale,layout.y+bars.Y(679)*layout.scale,
         float(size.first),float(size.second),false,false);
       for(int frame=0;frame<10;++frame) {
         hoverClock+=.05f;renderer.BeginFrame();hud.Render(renderer,state,hoverClock,false);
@@ -1408,7 +1412,8 @@ int main() {
     renderer.BeginFrame();hud.Render(renderer,state,0,false);
     Require(renderer.Capture(L"incoming-attacks-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),"Incoming attack capture");
     const ui::Layout layout(float(size.first),float(size.second));
-    const auto event=hud.Pointer(layout.x+500*layout.scale,layout.y+60*layout.scale,float(size.first),float(size.second),true,false);
+    const auto warning=ui::HudTransform::At(float(size.first),float(size.second),608,24);
+    const auto event=hud.Pointer(layout.x+warning.X(500)*layout.scale,layout.y+warning.Y(60)*layout.scale,float(size.first),float(size.second),true,false);
     Require(event.action==ui::Action::SelectThreat && event.value==102 && hud.PointerOverUi() && state.Save()==before,
       "Incoming row must return its caster identity without changing simulation during rendering");
     rpg::Command select;select.nextTarget=true;state.Update(.001f,select);

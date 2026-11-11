@@ -52,6 +52,13 @@ they must not be presented as a universal reduction in acceleration or as
 human motion-capture validation. Existing 1 ms continuity, floor-clearance,
 two-hand grip, interruption and simulation-isolation checks remain in force.
 
+The integration run also exposed a stale `ClassEquipmentTests` UI fixture:
+it clicked class-creation controls on the saved-character roster. The capture
+now selects the exact saved profile and advances roster pages as necessary.
+This changes only the test; it does not change character selection or gameplay.
+The original failed run is retained in the local validation record, alongside
+the targeted rerun.
+
 Local review: `.blender-local/motion-v19-20261111/review.html`. It compares
 twelve identical scenarios before/after, with sword, staff and bow runs,
 jumps, light and heavy attacks, plus a game-world recording. Chronological
@@ -63,3 +70,22 @@ Blender opens on `Sword_Run`; the assembled character mesh remains in the
 unchanged `player-hero-study.blend`. Authoring and review scripts stay ignored
 by Git. Detailed metrics, preservation checks and final validation are stored
 locally in `.blender-local/motion-v19-20261111/validation-summary.json`.
+
+## Validation results
+
+All twelve selected animation/art suites pass in Release and Debug. The
+initial Release run took 296.21 seconds and passed eleven suites; after the
+roster-fixture correction, the isolated `ClassEquipmentTests` rerun passed
+in 19.07 seconds. Debug passed all twelve in 442.03 seconds. Existing motion
+limits were not relaxed. The new loaded-arm regression additionally checks
+shoulder-relative wrist acceleration, carrying excursion, elbow flexion and
+palm attachment for sword, staff and bow.
+
+All six game outputs passed fixture-save smoke launches: Ninja Release/Debug,
+Visual Studio Release/Debug, and the frontier native/debug outputs. Resource
+extraction confirms that each executable embeds the exact current PCL5 motion,
+KIT1 equipment and GWT2 garment archives. Body data and face/scalp shader blocks
+remain unchanged. The local review contains 25 verified 1280×720, 30 fps videos:
+twelve matched before/after pairs and one game-world recording. Final contact
+sheets and selected native/game captures were visually inspected; this is
+frame-based review, not a claim of motion-capture or real-time visual validation.

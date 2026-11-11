@@ -1,8 +1,8 @@
 {
   "format": "PCL5",
-  "source": "21 weapon-arm actions; non-arm source curves, native body channels and contact timing preserved",
-  "source_sha256": "354ccc0d032d56b4be9e2b4e1351ec0ef0efccfd20641e04a68849fac6dcdf54",
-  "editable_source": "player-motion-v19.blend",
+  "source": "Forearm-aligned cutting grip and economical locomotion recovery",
+  "source_sha256": "e169919f341eb0e8cdd565ce09089b4544d932d31d724a2a842e42715b5ec7c5",
+  "editable_source": "player-motion-v20.blend",
   "clips": [
     {
       "clip": "Sword_Attack_Diagonal",
@@ -14,8 +14,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
-      "sha256": "81e8641302e3bd8d3291b2204d44783bbecc604d9a5f3f16c37cb883ae4059c5"
+      "source": "v20 grip/recovery revision",
+      "sha256": "fe9ddb9f49889f5b4c0e8df5287da6ee832b1c791af4eff1a14c68f14f34bb31"
     },
     {
       "clip": "Sword_Attack_Overhead",
@@ -27,8 +27,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
-      "sha256": "aab5def8a285737a3ca5847618e91fd16f17e8ba2f901cac871dbf68469704f6"
+      "source": "v20 grip/recovery revision",
+      "sha256": "46fcd9ef14a3bd5160c07b02154d914c2dad82cfb1d1436878fafecba8f1fed8"
     },
     {
       "clip": "Jump_Full",
@@ -66,8 +66,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v15 spine/clavicle export",
-      "sha256": "18e42df417b4a1a80c254ad17e873b6903b3fc593cf043fc42ec81635d2f3f42"
+      "source": "v20 grip/recovery revision",
+      "sha256": "b37eda970f638cc866cf5bd8a4e3bd47520b07fc83bbd97304d51249ac121dd8"
     },
     {
       "clip": "Walk_Backward",
@@ -79,8 +79,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v15 spine/clavicle export",
-      "sha256": "b1bc3368fd87904b79a626e39638ee7478a5e882285c14c7b4d47b7f065a6824"
+      "source": "v20 grip/recovery revision",
+      "sha256": "0deb17bfabd34b6f452b8e3c34570c8282e2c0abfe4f3cf3e9e18da2b3d65385"
     },
     {
       "clip": "Walk_Left",
@@ -92,8 +92,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v15 spine/clavicle export",
-      "sha256": "e344591e9ff342fd8f604844aa6c98ec6721b7116f72a86222da900b92510417"
+      "source": "v20 grip/recovery revision",
+      "sha256": "e7b82d40e8b4c080b25919b5cde9036534880e63c1f25c5aeb7d6de92d6347c2"
     },
     {
       "clip": "Walk_Right",
@@ -105,8 +105,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v15 spine/clavicle export",
-      "sha256": "7adca87d34b2ad8da41115c10a17e2ace5393f42cc34ffd3d8732170fa0eea31"
+      "source": "v20 grip/recovery revision",
+      "sha256": "0db2e382eba2d1f46f2e4750ad5f892d58d384136192c6a2e6d2a5f2eee91de5"
     },
     {
       "clip": "Run_Forward",
@@ -118,8 +118,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.2,
-      "source": "v18 continuous recovery arcs and landing follow-through",
-      "sha256": "825d80bf42fc12330dcf7d9c0e66e77a5ff38bac46cd26bbadfef2fe5115cc41"
+      "source": "v20 grip/recovery revision",
+      "sha256": "22989470e4a32a9199f06b0d70636e74d62a5ef2da7926df88cde705d44f884e"
     },
     {
       "clip": "Run_Backward",
@@ -131,8 +131,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v18 continuous recovery arcs and landing follow-through",
-      "sha256": "53ffeb44cb4748bea72fccd82da75d94f2233c381af7e5675a84851dfa8fc5f9"
+      "source": "v20 grip/recovery revision",
+      "sha256": "6a3d92645957987149a886679c30bc725b09ed137cf41798d16fbd0a9a8c715c"
     },
     {
       "clip": "Run_Left",
@@ -144,8 +144,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v18 continuous recovery arcs and landing follow-through",
-      "sha256": "399822014b129b4ba6d82614f1020df0a8338758a08ba39dd759ceaf5e5af6c8"
+      "source": "v20 grip/recovery revision",
+      "sha256": "4e76aac240ae3ae3a5d05b717fe787fdf2670286b852c888a756e2e963247eaf"
     },
     {
       "clip": "Run_Right",
@@ -157,8 +157,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v18 continuous recovery arcs and landing follow-through",
-      "sha256": "654d72515e04616ad2a3a97b27a174c87be982f6e34fab0d35f20e61f06fdf26"
+      "source": "v20 grip/recovery revision",
+      "sha256": "adf87943ec50cea36ea49266d3fee17fa2314fe2136df0ede247b8fb894c6cae"
     },
     {
       "clip": "Start_Walk",
@@ -222,8 +222,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v15 spine/clavicle export",
-      "sha256": "393b2a99684edbb2a90db8a4605deac54d4cd2cf5e62e1fea1631e1042bf44ba"
+      "source": "v20 grip/recovery revision",
+      "sha256": "fb7436f318a1f5574cb6c8799c8986ab2aef901631d7367e7d63fe65c82a7fc5"
     },
     {
       "clip": "Sword_Run",
@@ -235,8 +235,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.2,
-      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
-      "sha256": "a311d2a09f563523f6e5a5275da7d31903ea0126c08c79830890efb2a9d516fb"
+      "source": "v20 grip/recovery revision",
+      "sha256": "c426017e5abf7037be16b021bffef033e0f76777040bfaba1fab7c3efda20f22"
     },
     {
       "clip": "Staff_Walk",
@@ -248,8 +248,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v15 spine/clavicle export",
-      "sha256": "81064f4573c71400543dbbf64930cf5875e5fe19bbac0224373820f13e201490"
+      "source": "v20 grip/recovery revision",
+      "sha256": "429c1b843e88dfde49ee5fd1fd2e1043ffed0e2d34ed308e365aa91b8976a915"
     },
     {
       "clip": "Staff_Run",
@@ -261,8 +261,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.2,
-      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
-      "sha256": "e38089e1f6304246767e82316fb46f015923e5eff51c7e23c33475b2dcfd726f"
+      "source": "v20 grip/recovery revision",
+      "sha256": "ea5e3f371f31422cb013be28cbc48a7566d4e3c6e4796f10d8e33300202e5de2"
     },
     {
       "clip": "Sword_Guard",
@@ -274,8 +274,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v15 spine/clavicle export",
-      "sha256": "3a33f28b0a1a3ea026fad981f8c18688c17f44fc4942d51e66ba9a6faf6ec908"
+      "source": "v20 grip/recovery revision",
+      "sha256": "38f5df2ca903dec84ab26097593f919383ac6e9d8ee46c6a74b544e77a1a16f8"
     },
     {
       "clip": "Staff_Guard",
@@ -417,8 +417,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v15 spine/clavicle export",
-      "sha256": "cf16460a27b218a6f05bb06d1d8b8205d1630e1afa0ae65558ffe140005330a3"
+      "source": "v20 grip/recovery revision",
+      "sha256": "9f3d05b65a6f6d3a653882846b09db90f4d353b7a93d752a2ab46974f8f0dfbc"
     },
     {
       "clip": "Bow_Run",
@@ -430,8 +430,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.2,
-      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
-      "sha256": "489ea619e5059aadcc78c8a5090866a414497ebc752c831bbe1ff9c70bd62c6d"
+      "source": "v20 grip/recovery revision",
+      "sha256": "15707ba85516fe8edba64894e2136ebe667bbd4d9bd0d9b2a23bc2b76febe0fe"
     },
     {
       "clip": "Sword_Carry",
@@ -443,8 +443,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v15 spine/clavicle export",
-      "sha256": "e9113cab9251f5c40c4cb29467eeeddd2a6fec536b3aa20b6cdd7186d2687777"
+      "source": "v20 grip/recovery revision",
+      "sha256": "2df6f72c391cb625f1e19a4b05b3187d91beb7fafc9cb7fbec647feb32115653"
     },
     {
       "clip": "Staff_Carry",
@@ -482,8 +482,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v15 spine/clavicle export",
-      "sha256": "3a6d9c33cbe83c911ea5c7d8ad256ded11822bfdef12e035d230490488d9f7e4"
+      "source": "v20 grip/recovery revision",
+      "sha256": "59cd5b9e0768c39b22ff0446452c958afbc1cb96a26aec1d0890a6b1af50de31"
     },
     {
       "clip": "Sword_Walk_Left",
@@ -495,8 +495,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v15 spine/clavicle export",
-      "sha256": "92bb8eb9858a0b8637429db927e90d5292bbe5e9ecfddd6b6b296a061e7514b4"
+      "source": "v20 grip/recovery revision",
+      "sha256": "e7aff9a6decfccbd9968b36f4189c5c14bd1816783943af6cb81ee06c173d344"
     },
     {
       "clip": "Sword_Walk_Right",
@@ -508,8 +508,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v15 spine/clavicle export",
-      "sha256": "0327200208500694421818b1ffd2c20c0cf9c4bf831da486c7e349de61f77e56"
+      "source": "v20 grip/recovery revision",
+      "sha256": "e3147ee33377f2ee911f2b666a5313b2f4d229f3c5928952cd4e3dc482b77a23"
     },
     {
       "clip": "Sword_Run_Backward",
@@ -521,8 +521,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
-      "sha256": "f6682b4a5a61195c6be04d1b8a5be5dcf48f68cbe5bbe417412e5d28a22b974a"
+      "source": "v20 grip/recovery revision",
+      "sha256": "cf1ca8a7ac3d8ec72cb905d3d54e5acd61d7a3475d23a03dba4905a1debee0bb"
     },
     {
       "clip": "Sword_Run_Left",
@@ -534,8 +534,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
-      "sha256": "43c6065eb1a8be1b3a3664c6d0fcd946fab0bef674e4721374f19247db7de326"
+      "source": "v20 grip/recovery revision",
+      "sha256": "b64b61d2f8c66d045bbeaf4980eef8dd7b367fd2d6cf4efaccb3e24b04590a46"
     },
     {
       "clip": "Sword_Run_Right",
@@ -547,8 +547,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
-      "sha256": "16c4fe3ebca68ec7d26c1bf7e3d4bfdebedd3ec25a8d160518c0337ef305b271"
+      "source": "v20 grip/recovery revision",
+      "sha256": "446fe5d6947ff61067ca56672cf9499e641721cf1d70cff03c0e905478bf4735"
     },
     {
       "clip": "Staff_Walk_Backward",
@@ -560,8 +560,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v15 spine/clavicle export",
-      "sha256": "e7a5efb50a8c0855c92b81613d258fd45677c41668aecc3962f66bbc0fbfa6fb"
+      "source": "v20 grip/recovery revision",
+      "sha256": "1fca2f8557bba1d8cff64ab13d3fee1d87acba76e59594f2e8faf163faf27782"
     },
     {
       "clip": "Staff_Walk_Left",
@@ -573,8 +573,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v15 spine/clavicle export",
-      "sha256": "1e58cf174f313415519717d17a7cd31d5dac3f2d9ebc94d4c44b743941a5a535"
+      "source": "v20 grip/recovery revision",
+      "sha256": "dc9e120febd6ea92b38af6f9ac9ad0d46289c3173f44af6395b919d4aae18acf"
     },
     {
       "clip": "Staff_Walk_Right",
@@ -586,8 +586,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v15 spine/clavicle export",
-      "sha256": "0cb4720e326edc54d32a120ae862b11f99183da21326ab19177b753800e168b1"
+      "source": "v20 grip/recovery revision",
+      "sha256": "fb978e7e67b7286b19bc74763f236fc605ee099f9d95f50e58bd72da11d2f465"
     },
     {
       "clip": "Staff_Run_Backward",
@@ -599,8 +599,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
-      "sha256": "168bcb36041afebf0daafae86809a56b809aaaa0baa963b067b40ea2c1395604"
+      "source": "v20 grip/recovery revision",
+      "sha256": "26eb60e008c73819b24d9b7c7499fa7a38c2b59f050c4b966e19734b0094da3c"
     },
     {
       "clip": "Staff_Run_Left",
@@ -612,8 +612,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
-      "sha256": "b72801e0bef1e4a77021323aac3517427f62cb12956ffa6ebf0a3d62126eba0b"
+      "source": "v20 grip/recovery revision",
+      "sha256": "ca52431b8dfe450b9ae40a6453cc844594d30a675af82c7f416b18b27004bdde"
     },
     {
       "clip": "Staff_Run_Right",
@@ -625,8 +625,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
-      "sha256": "7cba51f9b0eea1d411ca0087b5f40f92b02973084e84c81559aa385da211601b"
+      "source": "v20 grip/recovery revision",
+      "sha256": "73fddd5be29a00dcc51d267d179f43701eb5fc1b75344a5acc2f23d1d5e534d8"
     },
     {
       "clip": "Bow_Walk_Backward",
@@ -638,8 +638,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v15 spine/clavicle export",
-      "sha256": "86601cc18a05ad081aae6071f5204b0fa52ae8b8c892a917755f334f58866ed8"
+      "source": "v20 grip/recovery revision",
+      "sha256": "96f68a0893fc21139d79fbca9c41d98e118312183ed309a36dcd850b81ec6214"
     },
     {
       "clip": "Bow_Walk_Left",
@@ -651,8 +651,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v15 spine/clavicle export",
-      "sha256": "babd6e7a5196cce06e9cc93727d72930cf94d2d43f623ef1dc67b9d31400c2e3"
+      "source": "v20 grip/recovery revision",
+      "sha256": "fd6d144045afb90f794e3e7fab91aaef41103d3ac8503cb47c8b959c56906577"
     },
     {
       "clip": "Bow_Walk_Right",
@@ -664,8 +664,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v15 spine/clavicle export",
-      "sha256": "eda67d7284fd0c333745de5c33f176d190c0d5534648a9c6089059924f5bf123"
+      "source": "v20 grip/recovery revision",
+      "sha256": "81373eae6c4a7d8396adc1295d5edc28a8c419f91c736ff6f445198acb463698"
     },
     {
       "clip": "Bow_Run_Backward",
@@ -677,8 +677,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
-      "sha256": "6414b016cac2357b718ae304cd345cfbb4b294756d79db6a054b3c57c6343b19"
+      "source": "v20 grip/recovery revision",
+      "sha256": "7b57af20fd4955f4fe5691dc5a257bc26879a8d5e08a340fea78add42b44ffac"
     },
     {
       "clip": "Bow_Run_Left",
@@ -690,8 +690,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
-      "sha256": "259a26b3bec63833cbdb7b3f4a955787e42467173b152d8d24a4c8ddbb751472"
+      "source": "v20 grip/recovery revision",
+      "sha256": "94ee0c1429ee5913b955d1db119e1085fc4184b6cd1cff56f3baf0f062a9705e"
     },
     {
       "clip": "Bow_Run_Right",
@@ -703,8 +703,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
-      "sha256": "e9cd2e0f5e21053a176344daaffedb365685a96fd6172755eb9f64976cf0702f"
+      "source": "v20 grip/recovery revision",
+      "sha256": "5342fe0890e50c2d70d90e99995f4664a7ecd75bcefa5434276fbfeac28be148"
     },
     {
       "clip": "Sword_Jump",
@@ -716,8 +716,8 @@
       "takeoff": 0.3103448275862069,
       "landing": 0.5057471264367815,
       "stance": 0.0,
-      "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
-      "sha256": "05cd478955f018a56d66a393fd9786e5ba17da3e75fe783b69dd1d74ce72e95a"
+      "source": "v20 grip/recovery revision",
+      "sha256": "5e4ffb0da1349325438fbfb3cd2ef300fe967e1bd6223d5447274f974f729c05"
     },
     {
       "clip": "Staff_Jump",
@@ -746,55 +746,87 @@
       "sha256": "ee2af1a89b47952d1c6975591b83003380fc069a463f5f9abfe371d0e39ca009"
     }
   ],
-  "sha256": "a0f82e0e390bf5dee8b16789189ddd76b9bacd251c7ea647bec7b5823b5d791c",
+  "sha256": "d654d711ed03aec9959f2d12ca7e021a91d3e9916d7d9005b371cf2036f27742",
   "retarget": "Blender +X-left/-Y-forward/Z-up to native +X-right/+Z-forward/Y-up; shoulders/arm lengths fitted to native IK; world jump displacement removed; native contacts retained.",
   "frame_channels": 53,
   "revised_actions": [
     "Sword_Attack_Diagonal",
     "Sword_Attack_Overhead",
-    "Staff_Attack_Sweep",
-    "Staff_Attack_Thrust",
+    "Walk_Forward",
+    "Walk_Backward",
+    "Walk_Left",
+    "Walk_Right",
+    "Run_Forward",
+    "Run_Backward",
+    "Run_Left",
+    "Run_Right",
+    "Sword_Walk",
     "Sword_Run",
+    "Staff_Walk",
     "Staff_Run",
-    "Bow_Draw_Release",
-    "Bow_Power_Release",
+    "Sword_Guard",
+    "Bow_Walk",
     "Bow_Run",
+    "Sword_Carry",
+    "Sword_Walk_Backward",
+    "Sword_Walk_Left",
+    "Sword_Walk_Right",
     "Sword_Run_Backward",
     "Sword_Run_Left",
     "Sword_Run_Right",
+    "Staff_Walk_Backward",
+    "Staff_Walk_Left",
+    "Staff_Walk_Right",
     "Staff_Run_Backward",
     "Staff_Run_Left",
     "Staff_Run_Right",
+    "Bow_Walk_Backward",
+    "Bow_Walk_Left",
+    "Bow_Walk_Right",
     "Bow_Run_Backward",
     "Bow_Run_Left",
     "Bow_Run_Right",
-    "Sword_Jump",
-    "Staff_Jump",
-    "Bow_Jump"
+    "Sword_Jump"
   ],
   "revised_track_indices": [
     0,
     1,
-    14,
-    15,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    16,
     17,
+    18,
     19,
-    29,
-    30,
+    20,
+    31,
     32,
+    33,
+    36,
+    37,
+    38,
     39,
     40,
     41,
+    42,
+    43,
+    44,
     45,
     46,
     47,
+    48,
+    49,
+    50,
     51,
     52,
     53,
-    54,
-    55,
-    56
+    54
   ],
-  "preserved_track_count": 36,
-  "rebaked_action_count": 21
+  "preserved_track_count": 20,
+  "rebaked_action_count": 37
 }

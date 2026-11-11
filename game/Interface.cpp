@@ -331,6 +331,33 @@ struct Canvas {
   };
   for (float from=0;from<end;from+=.09817477f)
    Triangle(center,edge(from),edge(std::min(end,from+.09817477f)),{.006f,.012f,.025f,.70f});
+  if(fraction>0 && fraction<1) {
+   const auto boundary=edge(end);
+   Line(center.x,center.y,boundary.x,boundary.y,1,{.94f,.78f,.43f,.60f});
+  }
+ }
+ void Vitality(Rect a,float fraction,float trail) {
+  // Faceted brass housing, with clipped green glass and a separate damage tail.
+  const float bevel=std::min(a.h*.5f,10.f),mid=a.y+a.h*.5f;
+  const Point edge[]={{a.x,mid},{a.x+bevel,a.y},{a.x+a.w-bevel,a.y},{a.x+a.w,mid},
+    {a.x+a.w-bevel,a.y+a.h},{a.x+bevel,a.y+a.h}};
+  for(int i=0;i<6;++i)Triangle({a.x+a.w*.5f,mid},edge[i],edge[(i+1)%6],{.055f,.075f,.035f,1});
+  for(int i=0;i<6;++i)Line(edge[i].x,edge[i].y,edge[(i+1)%6].x,edge[(i+1)%6].y,1.5f,
+    i<3?Color{.65f,.57f,.29f,1}:Color{.22f,.18f,.085f,1});
+  const auto fill=[&](float amount,bool lost) {
+    const float width=(a.w-8)*std::clamp(amount,0.f,1.f);
+    for(int band=0;band<8;++band) {
+      const float t=(band+.5f)/8,dy=3+(a.h-6)*band/8,dh=(a.h-6)/8;
+      const float inset=3+std::abs(2*t-1)*std::max(0.f,bevel-3);
+      const float right=std::min(a.w-inset,4+width);
+      if(right<=inset)continue;
+      const float light=band<3?.62f+.13f*band:1-(band-2)*.14f;
+      RectFill({a.x+inset,a.y+dy,right-inset,dh+.1f},lost?Color{.80f*light,.49f*light,.16f*light,1}:
+        Color{.44f*light,.70f*light,.16f*light,1});
+    }
+  };
+  fill(trail,true);fill(fraction,false);
+  Line(a.x+bevel+2,a.y+3,a.x+a.w-bevel-2,a.y+3,1,{.82f,.90f,.53f,.48f});
  }
  void ExpiryBorder(Rect a,float seconds,Color color) {
   if(!std::isfinite(seconds)||seconds<=0)return;
@@ -344,6 +371,21 @@ struct Canvas {
    Line(p.x,p.y,p.x+(q.x-p.x)*t,p.y+(q.y-p.y)*t,1.5f,color);left-=length;
   }
  }
+};
+// A section owns its render transform and returns all generated input regions
+// to the outer 1280x720 canvas. Pointer state is restored before any other panel.
+struct HudSection {
+ Canvas& canvas;std::vector<Region>& regions;float& mouseX;float& mouseY;
+ Layout previous;HudTransform transform;std::size_t first;float px,py;
+ HudSection(Canvas& c,std::vector<Region>& r,float& mx,float& my,HudTransform t):
+   canvas(c),regions(r),mouseX(mx),mouseY(my),previous(c.layout),transform(t),first(r.size()),px(mx),py(my) {
+   c.layout.x+=t.x*c.layout.scale;c.layout.y+=t.y*c.layout.scale;c.layout.scale*=t.scale;
+   mx=(mx-t.x)/t.scale;my=(my-t.y)/t.scale;
+ }
+ ~HudSection(){for(std::size_t n=first;n<regions.size();++n)regions[n].rect=transform.Map(regions[n].rect);
+   canvas.layout=previous;mouseX=px;mouseY=py;}
+ HudSection(const HudSection&)=delete;
+ HudSection& operator=(const HudSection&)=delete;
 };
 std::string ItemTypeLabel(const rpg::ItemInfo& info) {
  return info.slot==rpg::GearSlot::Weapon?std::string(info.type)+(info.id==Item::Watchguard?" / Uncommon":" / Common"):info.type;
@@ -362,38 +404,38 @@ void Icon(Canvas& c,Rect rect,Item item,float alpha=1,rpg::ClassId id=rpg::Class
 void ClassSigil(Canvas& c,Rect rect,rpg::ClassId id,float alpha=1) {
  PaintedIcon(c,rect,int(rpg::WeaponFor(id).form),alpha);
 }
-void AbilityArtwork(Canvas& c,Rect rect,int ability,rpg::ClassId id=rpg::ClassId::Warrior) {
+void AbilityArtwork(Canvas& c,Rect rect,int ability,rpg::ClassId id=rpg::ClassId::Warrior,float alpha=1) {
  const auto art=SpellArtwork(id,ability);
  if(art.tile>=0) {
-   c.Art(rect,art.combat?Renderer::UiArt::CombatSpells:Renderer::UiArt::ClassSpells,art.Uv(),{1,1,1,1});return;
+   c.Art(rect,art.combat?Renderer::UiArt::CombatSpells:Renderer::UiArt::ClassSpells,art.Uv(),{1,1,1,alpha});return;
  }
- if(ability==2) PaintedIcon(c,rect,22);
+ if(ability==2) PaintedIcon(c,rect,22,alpha);
  else if(ability==3) {
-  if(rpg::ClassHealer(id)) PaintedIcon(c,rect,23);
-  else if(id==rpg::ClassId::Scout) PaintedIcon(c,rect,22);
-  else Icon(c,rect,Item::Shield,1,id);
+  if(rpg::ClassHealer(id)) PaintedIcon(c,rect,23,alpha);
+  else if(id==rpg::ClassId::Scout) PaintedIcon(c,rect,22,alpha);
+  else Icon(c,rect,Item::Shield,alpha,id);
  }
  else if(ability>=5) {
-  ClassSigil(c,rect,id,1);
+  ClassSigil(c,rect,id,alpha);
   if(ability>=8) {
-   const Color accent=id==rpg::ClassId::Mage?(ability==8?Color{.5f,.85f,1,1}:Color{1,.45f,.17f,1}):gold;
+   const Color accent=id==rpg::ClassId::Mage?(ability==8?Color{.5f,.85f,1,alpha}:Color{1,.45f,.17f,alpha}):Color{gold.x,gold.y,gold.z,alpha};
    for(int n=0;n<(ability==8?3:1);++n)
     c.Line(rect.x+4+n*5.f,rect.y+rect.h-5,rect.x+rect.w-4,rect.y+4+n*5.f,2,accent);
-   c.Text(rect.x+rect.w-13,rect.y+rect.h-14,ability==8?"V":ability==9?"VIII":ability==10?"VI":"X",9,ink);
+   c.Text(rect.x+rect.w-13,rect.y+rect.h-14,ability==8?"V":ability==9?"VIII":ability==10?"VI":"X",9,{ink.x,ink.y,ink.z,alpha});
   }
   if(ability==6) for(float side:{0.f,1.f}) {
    const float x=rect.x+2+side*(rect.w-4);
-   c.Line(x,rect.y+2,x,rect.y+rect.h-2,1.5f,gold);
-   c.Line(rect.x+2,rect.y+2+side*(rect.h-4),rect.x+rect.w-2,rect.y+2+side*(rect.h-4),1.5f,gold);
+   c.Line(x,rect.y+2,x,rect.y+rect.h-2,1.5f,{gold.x,gold.y,gold.z,alpha});
+   c.Line(rect.x+2,rect.y+2+side*(rect.h-4),rect.x+rect.w-2,rect.y+2+side*(rect.h-4),1.5f,{gold.x,gold.y,gold.z,alpha});
   }
  }
- else if(ability==4) PaintedIcon(c,rect,11);
- else if(ability==1 && (id==rpg::ClassId::Warrior || id==rpg::ClassId::Paladin || id==rpg::ClassId::Demonologist)) PaintedIcon(c,rect,24);
+ else if(ability==4) PaintedIcon(c,rect,11,alpha);
+ else if(ability==1 && (id==rpg::ClassId::Warrior || id==rpg::ClassId::Paladin || id==rpg::ClassId::Demonologist)) PaintedIcon(c,rect,24,alpha);
  else {
-  PaintedIcon(c,rect,int(rpg::WeaponFor(id).form));
+  PaintedIcon(c,rect,int(rpg::WeaponFor(id).form),alpha);
   if(ability==1) {
-   c.Line(rect.x+3,rect.y+4,rect.x+rect.w-3,rect.y+4,2,gold);
-   c.Line(rect.x+3,rect.y+8,rect.x+rect.w-3,rect.y+8,1,gold);
+   c.Line(rect.x+3,rect.y+4,rect.x+rect.w-3,rect.y+4,2,{gold.x,gold.y,gold.z,alpha});
+   c.Line(rect.x+3,rect.y+8,rect.x+rect.w-3,rect.y+8,1,{gold.x,gold.y,gold.z,alpha});
   }
  }
 }
@@ -951,6 +993,10 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
 
 void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bool debug,float cameraYaw) {
  Canvas c(renderer); regions_.clear();
+ const auto actionTransform=HudTransform::At(float(renderer.Width()),float(renderer.Height()),640,710);
+ const auto warningTransform=HudTransform::At(float(renderer.Width()),float(renderer.Height()),608,s.Sparring() || s.SparringReportTime()>0?205.f:24.f);
+ const auto castTransform=HudTransform::At(float(renderer.Width()),float(renderer.Height()),640,586);
+ const auto mapTransform=HudTransform::At(float(renderer.Width()),float(renderer.Height()),1280,0);
  struct StatusTip { std::string name,description,value; };
  std::vector<StatusTip> statusTips;
  const auto statusBadge=[&](float x,float y,int icon,const std::string& name,const std::string& description,
@@ -1010,9 +1056,12 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  const auto anchors=CombatHudAnchors(!combatLayout);
  plates.Reserve(anchors.player.x-3,anchors.player.y,246,70);
  if(s.TargetActor() || s.FriendlyTarget()>=0) plates.Reserve(anchors.target.x,anchors.target.y,257,70);
- plates.Reserve(1090,3,176,178);plates.Reserve(1016,194,250,183);
- if(combatLayout && incoming.count)
-  plates.Reserve(438,s.Sparring() || s.SparringReportTime()>0?205.f:24.f,340,24+incoming.count*36.f);
+ const auto mapBounds=mapTransform.Map(Rect{1090,3,176,178});
+ plates.Reserve(mapBounds.x,mapBounds.y,mapBounds.w,mapBounds.h);plates.Reserve(1016,194,250,183);
+ if(combatLayout && incoming.count) {
+  const auto board=warningTransform.Map(Rect{438,s.Sparring() || s.SparringReportTime()>0?205.f:24.f,340,24+incoming.count*36.f});
+  plates.Reserve(board.x,board.y,board.w,board.h);
+ }
  plates.Arrange();
  for(std::size_t i=0;i<plates.count;++i) {
   const auto& plate=plates.rows[i];if(!plate.visible) continue;
@@ -1125,6 +1174,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Line(x,y,640+std::sin(angle+.055f)*174,340-std::cos(angle+.055f)*112,2,{1,.65f,.35f,alpha});
   }
   if(incoming.count) {
+   HudSection section(c,regions_,mouseX_,mouseY_,warningTransform);
    const Rect board{438,s.Sparring() || s.SparringReportTime()>0?205.f:24.f,340,24+incoming.count*36.f};
    c.Gradient(board,{.025f,.022f,.019f,.83f},{.025f,.022f,.019f,.25f});
    c.FitText(board.x+8,board.y+3,324,"INCOMING ATTACKS / SELECT",11,gold);
@@ -1153,10 +1203,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  regions_.push_back({{ux-3,uy,246,70},{},false});
  c.Banner({ux+48,uy,190,21},s.Nickname(),13,true);
  c.Portrait(ux+27,uy+33,s);
- c.Skin({ux+51,uy+24,189,21},8);
- c.Gradient({ux+56,uy+28,179*playerHealth_.trail,13},{.82f,.59f,.24f,1},{.43f,.23f,.08f,1});
- c.Gradient({ux+56,uy+28,179*std::clamp(s.Health()/s.MaxHealth(),0.f,1.f),13},
-   {.49f,.76f,.22f,1},{.12f,.31f,.075f,1});
+ c.Vitality({ux+51,uy+24,189,21},s.Health()/s.MaxHealth(),playerHealth_.trail);
  c.Center(ux+55,uy+28,181,std::to_string(int(s.Health()))+" / "+std::to_string(int(s.MaxHealth()))+
    (s.Barrier()>0?"  [+"+Number(s.Barrier())+"]":""),11);
  // Reserve belongs to the unit frame. Keep the middle of the battlefield open.
@@ -1195,10 +1242,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   const float tx=anchors.target.x,ty=anchors.target.y;
   regions_.push_back({{tx,ty,257,70},{},false});
   c.Banner({tx+1,ty,202,21},target.Name(),13); c.Portrait(tx+227,ty+33,s,&target);
-  c.Skin({tx+2,ty+24,203,21},8);
-  c.Gradient({tx+7,ty+28,193*targetHealth_.trail,13},{.90f,.69f,.32f,1},{.49f,.29f,.10f,1});
-  c.Gradient({tx+7,ty+28,193*std::clamp(target.health/target.MaxHealth(),0.f,1.f),13},
-    {.47f,.69f,.24f,1},{.13f,.29f,.075f,1});
+  c.Vitality({tx+2,ty+24,203,21},target.health/target.MaxHealth(),targetHealth_.trail);
   c.Center(tx+7,ty+28,193,std::to_string(int(std::ceil(target.health)))+" / "+std::to_string(int(target.MaxHealth()))+
     "  ("+std::to_string(int(std::ceil(100*std::clamp(target.health/target.MaxHealth(),0.f,1.f))))+"%)",11);
   const auto distance=std::to_string(int(std::ceil(std::hypot(s.Player().x-target.position.x,s.Player().z-target.position.z))));
@@ -1236,6 +1280,8 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Center(tx+7,ty+29,192,"FRIENDLY / NON-COMBAT",11,{.60f,.90f,.53f,1});
   c.Center(tx+7,ty+51,192,"Approach and press E to interact",10,muted);
  }
+ {
+ HudSection section(c,regions_,mouseX_,mouseY_,mapTransform);
  c.Oval(1170,94,81,81,{.025f,.04f,.02f,1});
  Atlas(c,s,{1096,20,148,148},true,hasWaypoint,waypoint);
  c.Ring(1170,94,77,{.30f,.33f,.10f,1},5); c.Ring(1170,94,80,gold,1.5f); c.Ring(1170,94,74,gold,1);
@@ -1247,6 +1293,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  c.Banner({1057,3,209,25},s.Map().AreaName(s.Player()),13);
  c.Banner({1118,158,104,23},"Atlas  [M]",12);
  regions_.push_back({{1090,13,160,168},{Action::Map},true});
+ }
  if (!inventoryOpen || panel!=Panel::None) {
   const auto lines=c.Lines(231,s.Objective(),13);
   const float textHeight=std::min(120.f,float(lines.size())*17);
@@ -1292,6 +1339,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  c.Skin({0,704,1280,16},7,{.65f,.64f,.57f,1});
  const float xp=s.Level()==rpg::levelCap?1.f:float(s.Experience()-s.LevelStartExperience())/(s.NextLevelExperience()-s.LevelStartExperience());
  const auto drawHotbars=[&]() {
+ HudSection section(c,regions_,mouseX_,mouseY_,actionTransform);
  c.Window({344,648,592,62}); c.Scroll(329,676,-1,1.5f); c.Scroll(951,676,1,1.5f);
  c.Window({344,592,592,57});
  c.RectFill({442,650,397,2},border); c.RectFill({442,650,397*xp,2},{.55f,.63f,.29f,1});
@@ -1313,7 +1361,12 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   if(cooldown>0) {
     const float fraction=std::clamp(cooldown/(rpg::ValidSpell(i)?s.AbilityCooldown(i):3.f),0.f,1.f);
     c.CooldownSweep({x+4,y+4,46,43},fraction);
-    c.Center(x,y+19,54,Seconds(cooldown),19,ink);
+    if(cooldown<=1) {
+      const float returning=1-cooldown;
+      c.Gradient({x+4,y+4,46,43},{1,.56f,.12f,.12f+returning*.16f},{.60f,.24f,.05f,0});
+      c.Line(x+5,y+48,x+49,y+48,1,{1,.73f,.24f,.45f+returning*.4f});
+    }
+    c.Center(x,y+19,54,Seconds(cooldown),19,cooldown<=1?Color{1,.86f,.52f,1}:ink);
   }
   if(hover) c.RectFill({x+3,y+3,48,45},{.85f,.65f,.3f,(pointerHeld_?.23f:.12f)*std::min(1.f,hoverTime_*8+.15f)});
   if(i>=0 && !CapturesMovement() && !dragging_) {
@@ -1350,6 +1403,8 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  }
  };
  drawHotbars();
+ {
+ HudSection section(c,regions_,mouseX_,mouseY_,castTransform);
  if(s.ChainSteps()>0 && !HasPanels()) {
    c.Gradient({480,518,290,16},{.06f,.04f,.025f,.82f},{.06f,.04f,.025f,.24f});
    c.FitText(486,520,278,(s.ChainSteps()>=2?"CHAIN READY":"CHAIN STARTED")+std::string(" / ")+std::to_string(s.ChainSteps())+" / "+Seconds(s.ChainSeconds())+"s",10,gold);
@@ -1364,15 +1419,17 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  if(cast.ability>=0 || receipt>0) {
    const int ability=cast.ability>=0?cast.ability:castReceipt_.ability;
    const bool preparing=cast.ability>=0;
-   c.Skin({475,534,330,21},8);
+   const float opacity=preparing?1.f:receipt;
+   c.Skin({475,534,330,21},8,{1,1,1,opacity});
    const Color castColor=!preparing?(castReceipt_.interrupted?Color{.72f,.19f,.12f,receipt}:Color{1,.82f,.41f,receipt}):
      ability==3?Color{.55f,.64f,.35f,1}:classAccent;
    c.Gradient({480,538,320*(preparing?cast.progress:1),13},castColor,{castColor.x*.35f,castColor.y*.35f,castColor.z*.35f,castColor.w});
    if(preparing)c.Line(480+320*cast.progress,537,480+320*cast.progress,552,1.5f,{1,.89f,.62f,.9f});
-   c.Button({445,530,28,28});AbilityArtwork(c,{448,533,22,22},ability,s.Class());
-   c.FitText(486,538,preparing?238.f:174.f,s.Spell(ability).name,11,ink);
-   c.Center(preparing?740.f:668.f,538,preparing?57.f:129.f,preparing?Seconds(cast.remaining)+"s":castReceipt_.interrupted?"Interrupted":"Released",11,ink);
+   c.Skin({445,530,28,28},8,{1,1,1,opacity});AbilityArtwork(c,{448,533,22,22},ability,s.Class(),opacity);
+   c.FitText(486,538,preparing?238.f:174.f,s.Spell(ability).name,11,{ink.x,ink.y,ink.z,opacity});
+   c.Center(preparing?740.f:668.f,538,preparing?57.f:129.f,preparing?Seconds(cast.remaining)+"s":castReceipt_.interrupted?"Interrupted":"Released",11,{ink.x,ink.y,ink.z,opacity});
    regions_.push_back({{445,530,360,28},{},false});
+ }
  }
  // Keep the combat center for casts and abilities. Utility navigation belongs
  // on the lower edge, as in the PvE reference, outside the action rows.
@@ -2075,9 +2132,13 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    const int ability=HotbarSpell(it->event.value,s.Class());if(ability<0) break; const bool potion=ability==4;
    const std::string detail=potion?"Restores up to 40 health.":SpellEffect(s,ability);
    const std::string status=potion?(s.Health()<=0?"DEFEATED":s.Potions()==0?"NO POTIONS":s.Health()>=s.MaxHealth()?"FULL HEALTH":s.PotionCooldown()>0?"COOLDOWN":"READY"):s.AbilityStatus(ability);
-   // Anchor above the action bar, away from the pointer and navigation row.
-   const float x=std::clamp(it->rect.x-120,345.f,605.f);
-   const float lift=combatLayout?-175.f:-60.f;
+   // Use the hovered row's actual placement. The old fixed card floated in
+   // the battlefield after the action bar became compact.
+   const float slotX=(it->rect.x-actionTransform.x)/actionTransform.scale;
+   const float slotY=(it->rect.y-actionTransform.y)/actionTransform.scale;
+   HudSection section(c,regions_,mouseX_,mouseY_,actionTransform);
+   const float x=std::clamp(slotX-120,345.f,605.f);
+   const float lift=slotY-621;
    c.Window({x,403+lift,330,210});
    AbilityArtwork(c,{x+14,417+lift,36,36},ability,s.Class());
    c.FitText(x+61,416+lift,253,potion?"Healing draught":s.Spell(ability).name,18,gold);
@@ -2097,8 +2158,12 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   break;
  }
  if(dragging_ && dragSpell_>=0) {
+   {
+   // Retain the pointer as the pivot so the carried icon does not jump.
+   HudSection section(c,regions_,mouseX_,mouseY_,HudTransform::At(float(renderer.Width()),float(renderer.Height()),mouseX_,mouseY_));
    c.Frame({mouseX_-23,mouseY_-23,46,46},dark,gold);
    AbilityArtwork(c,{mouseX_-20,mouseY_-20,40,40},dragSpell_,s.Class());
+   }
    if(dragHotbar_>=0 && !PointerOverUi()) {
      const float x=std::clamp(mouseX_-115,8.f,1042.f),y=std::clamp(mouseY_+27,8.f,688.f);
      c.Frame({x,y,230,24},{.12f,.035f,.02f,.95f},gold);

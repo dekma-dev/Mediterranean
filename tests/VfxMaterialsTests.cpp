@@ -146,6 +146,66 @@ void InterruptChecks(Renderer& r,const std::filesystem::path& out) {
   Check(r.EffectVertices()==0 && r.EndFrame(false),"Preparation fabricated a successful interrupt");
  }
 }
+void ContactSequences(Renderer& r,const std::filesystem::path& out) {
+ Check(r.Resize(960,600),"Contact review resolution");
+ const std::pair<ClassId,int> spells[]={{ClassId::Warrior,1},{ClassId::Scout,1},
+  {ClassId::Mage,1},{ClassId::Mage,5},{ClassId::Mage,13},{ClassId::Mage,14},{ClassId::Priest,1},{ClassId::Priest,6}};
+ for(const auto& spell:spells)for(int view=0;view<3;++view) {
+  CombatVisualEvent e{K::HeavyHit,{0,0},1.2f,.4f,100};e.school=spell.first;e.ability=spell.second;e.heavy=true;
+  const float angle=.4f+view*1.5707963f;
+  const auto begin=[&]{r.BeginFrame();r.SetCamera({-std::sin(angle)*7,3,-std::cos(angle)*7},{0,1.2f,0});
+   r.DrawMesh(visual::Mesh::Box,{0,-.1f,0},{9,.18f,9},{.22f,.23f,.22f,1},visual::Material::Stone);};
+  const auto stem=std::to_string(int(spell.first))+"-"+std::to_string(spell.second)+"-view"+std::to_string(view);
+  begin();const auto empty=Capture(r,out/("empty-"+stem+".png"));Pixels previous;
+  int phase=0;
+  for(float age:{.045f,.16f,.36f,.60f}) {
+   begin();spellvfx::Contact(r,e,age);
+   Check(r.EffectVertices()<1500,"Contact form exceeds its isolated budget");
+   const auto pixels=Capture(r,out/("sequence-"+stem+"-"+std::to_string(phase++)+".png"));
+   if(age<.4f)Check(Difference(empty,pixels)>.008,"Contact disappears from an ordinary combat angle");
+   if(!previous.empty())Check(Difference(previous,pixels)>.003,"Contact phases are visually frozen");
+   previous=pixels;
+  }
+  begin();spellvfx::Contact(r,e,spellvfx::ContactLifetime(e));
+  Check(r.EffectVertices()==0 && r.EndFrame(false),"Contact remains after expiry");
+ }
+ for(auto school:{ClassId::Warrior,ClassId::Scout,ClassId::Mage,ClassId::Priest}){
+  CombatVisualEvent event{K::HeavyHit,{0,0},1.2f,.4f,100};event.school=school;event.ability=1;event.heavy=true;
+  for(int invalid=0;invalid<7;++invalid){auto e=event;float age=.1f;
+   if(invalid==0)e.kind=K::SpellCast;
+   if(invalid==1)e.position.x=NAN;
+   if(invalid==2)e.position.z=INFINITY;
+   if(invalid==3)e.height=NAN;
+   if(invalid==4)e.facing=NAN;
+   if(invalid==5)age=NAN;
+   if(invalid==6)age=-.1f;
+   r.BeginFrame();classfx::Impact(r,e,age);
+   Check(r.EffectVertices()==0 && r.EndFrame(false),"Invalid/unconfirmed contact submitted geometry");
+  }
+ }
+ // Main spell spectacle belongs to one accepted contact. Area victims retain
+ // a local receipt rather than each repeating the large shaft/crest/seal.
+ for(auto school:{ClassId::Mage,ClassId::Priest}){
+  CombatVisualEvent e{K::HeavyHit,{0,0},1.2f,.4f,100};e.school=school;e.ability=1;e.heavy=true;
+  r.BeginFrame();spellvfx::Contact(r,e,.16f);const auto full=r.EffectVertices();Check(r.EndFrame(false),"Primary contact");
+  e.primary=false;r.BeginFrame();spellvfx::Contact(r,e,.16f);
+  Check(r.EffectVertices()>0 && r.EffectVertices()<full && r.EndFrame(false),"Area victim repeated primary spectacle or lost contact");
+ }
+ for(float age:{.045f,.16f,.24f,.36f,.60f}){
+  CombatVisualEvent events[6];unsigned sum=0;
+  const int abilities[]={8,9,11,14,5,6};
+  const auto begin=[&]{r.BeginFrame();r.SetCamera({0,4,-10},{0,1,0});};
+  for(int n=0;n<6;++n){auto& e=events[n];e.kind=K::HeavyHit;e.school=n<4?ClassId::Mage:ClassId::Priest;
+   e.ability=abilities[n];e.heavy=true;e.position={float(n%3-1)*1.8f,float(n/3)*1.8f};e.height=1.2f;e.actor=100+n;
+   e.source={0,-3};e.sourceHeight=0;
+   begin();spellvfx::Contact(r,e,age);sum+=r.EffectVertices();Check(r.EndFrame(false),"Isolated crowd contact");
+  }
+  // Leave at least 1,000 vertices for hostile ground warnings and other cues.
+  Check(sum<Renderer::maxEffectVertices-1000,"Six major contacts leave no telegraph allowance");
+  begin();for(const auto& e:events)spellvfx::Contact(r,e,age);
+  Check(r.EffectVertices()==sum && r.EndFrame(false),"Mixed contact set silently truncated geometry");
+ }
+}
 void AftermathChecks(Renderer& r,const std::filesystem::path& out) {
  const auto advance=[](CombatEffects& fx,float duration,int hz){float t=0;while(t<duration-1e-6f){const float dt=std::min(1.f/hz,duration-t);fx.Advance(dt);t+=dt;}};
  for(int ability:{1,5,13,14,6}) {
@@ -236,6 +296,9 @@ void World(Renderer& r,const std::filesystem::path& out){
   Check(hit,"World attack never contacted");tick(.12f);
   if(id==ClassId::Mage || id==ClassId::Priest)Check(game.Effects().ResidueCount()==1,"Actual accepted spell contact did not create its primary aftermath");
   const auto saved=game.State().Save();r.BeginFrame();game.Render(r);Capture(r,out/("world-contact-"+stem+".png"));
+  for(int angle=0;angle<2;++angle){game.SetCameraOrbit(angle?2.7f:1.1f,.48f,11.5f);
+   r.BeginFrame();game.Render(r,false);Capture(r,out/("world-contact-overview-"+stem+"-"+std::to_string(angle)+".png"));}
+  game.SetCameraOrbit(1.1f,.32f,6.5f);
   Check(game.State().Save()==saved,"VFX rendering changed gameplay");tick(1.0f);
   r.BeginFrame();game.Render(r);Capture(r,out/("world-residue-"+stem+".png"));
   if(id==ClassId::Mage || id==ClassId::Priest) {
@@ -253,7 +316,8 @@ int main(int argc,char** argv){try{
  const auto out=argc>1?std::filesystem::path(argv[1]):std::filesystem::path("vfx-material-review");std::filesystem::create_directories(out);
  Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),960,600,L"VFX material review",false),"Native window");
  Renderer r;Check(r.Initialize(window.GetHandle(),960,600),"Native renderer");
+ if(argc>2 && std::string(argv[2])=="--contacts"){ContactSequences(r,out);Check(r.ValidateDebugMessages(),"Contact sequence DirectX warnings");std::cout<<"PASS: contact phase/angle review.\n";return 0;}
  if(argc>2 && std::string(argv[2])=="--workload"){Workload(r,out);std::cout<<"PASS: bounded native VFX workload; see workload.txt.\n";return 0;}
- Rendering(r,out);Lifetimes(r,out);InterruptChecks(r,out);AftermathChecks(r,out);World(r,out);Check(r.ValidateDebugMessages(),"Native VFX warnings");
+ Rendering(r,out);Lifetimes(r,out);InterruptChecks(r,out);ContactSequences(r,out);AftermathChecks(r,out);World(r,out);Check(r.ValidateDebugMessages(),"Native VFX warnings");
  std::cout<<"PASS: original atlas, alpha ordering, soft depth, fixed budgets, lifecycle, equal-time contacts and actual world attacks. Atlas bytes: "<<r.EffectTextureBytes()<<'\n';
  }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

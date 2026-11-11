@@ -30,6 +30,8 @@ public:
   bool HasRecovery() const;
   bool NeedsPose() const;
   std::size_t TrailCount() const;
+  std::size_t WeaponSampleCount(rpg::EntityId actor) const;
+  float WeaponHistorySeconds(rpg::EntityId actor) const;
   static DirectX::XMFLOAT3 SpellTracePoint(DirectX::XMFLOAT3 origin,rpg::Vec2 destination,float progress,float arc=.16f,float targetHeight=1.25f);
   void Render(Renderer& renderer,const castfx::Attachments* caster=nullptr) const;
   void Illuminate(Renderer& renderer,const rpg::Simulation& state,const castfx::Attachments& caster) const;
@@ -45,6 +47,9 @@ private:
     rpg::ClassId school=rpg::ClassId::Warrior;
     std::array<Sample,trailSamples> samples{};
     std::size_t count=0;
+    DirectX::XMFLOAT3 previousRoot{},previousTip{};
+    float sampledAt=0,pending=0;
+    bool tracked=false,liveEndpoint=false;
   };
   struct WakeSample { DirectX::XMFLOAT3 position; float age=0,strength=0; };
   struct Wake {

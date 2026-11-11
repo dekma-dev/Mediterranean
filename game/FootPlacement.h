@@ -191,7 +191,7 @@ private:
   }
   void AdvanceSwing(Step& foot,int i,float dt,rpg::Vec2 position,float yaw,rpg::Vec2 velocity,const Sample& sample) {
     foot.age=std::min(foot.duration,foot.age+dt);
-    const float width=.18f-.055f*Unit(sample.runBlend)*Unit(sample.gaitWeights[0]);
+    const float width=.145f-.030f*Unit(sample.runBlend)*Unit(sample.gaitWeights[0]);
     auto desired=Neutral(position,yaw,i,width);
     // Carry the landing prediction through abrupt input changes. A raw zero
     // velocity removed the entire lead inside one render extrapolation and
@@ -282,7 +282,7 @@ private:
       const int i=(next_+order)%2;
       auto& foot=feet_[i];
       if (foot.stepping) continue;
-      const float width=.18f-.055f*Unit(sample.runBlend)*Unit(sample.gaitWeights[0]);
+      const float width=.145f-.030f*Unit(sample.runBlend)*Unit(sample.gaitWeights[0]);
       const auto neutral=Neutral(position,yaw,i,width);
       const float error=std::hypot(foot.goal.x-neutral.x,foot.goal.z-neutral.z);
       const float angle=std::abs(motion::AngleDelta(foot.point.yaw,yaw));
@@ -353,7 +353,7 @@ private:
           AdvanceSwing(foot,i,std::max(dt,foot.duration-foot.age),position,yaw,velocity,sample);
           foot.stepping=false;foot.point=foot.goal;
       }
-      const float width=.18f-.055f*Unit(sample.runBlend)*Unit(sample.gaitWeights[0]);
+      const float width=.145f-.030f*Unit(sample.runBlend)*Unit(sample.gaitWeights[0]);
       const auto neutral=Neutral(position,yaw,i,width);
       const float supportReach=std::hypot(foot.goal.x-neutral.x,foot.goal.z-neutral.z);
       // An abrupt start or reversal can exhaust the support leg before the

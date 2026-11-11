@@ -420,6 +420,8 @@ animation::Sample CharacterSelection::PreviewBody() const {
   pose.authoredStrike=previewWeapon_.frame;pose.authoredStrikeWeight=previewWeapon_.weight;
   pose.authoredStrikePhase=previewWeapon_.phase;pose.authoredStrikeHeavy=previewWeapon_.heavy;
   pose.authoredAccent=previewWeapon_.accent;pose.authoredReady=previewWeapon_.ready;
+  pose.authoredMechanics=previewWeapon_.mechanics;pose.authoredMechanicsTracked=true;
+  pose.authoredEntryReady=previewWeapon_.entryReady;
   if(actionTime_>=0 && previewAbility_!=2 && previewAbility_!=3 && !animation::RangedClass(class_)) {
     pose.attackSeconds=actionTime_;pose.heavyAttack=PreviewHeavy();
   }
@@ -521,7 +523,7 @@ CharacterSelection::Action CharacterSelection::Update(float seconds,const Input&
     const auto outfit=PreviewOutfit();
     const auto pose=BuildCharacterPose(0,0,outfit.shield,PreviewBody(),form);
     const auto world=[&](DirectX::XMFLOAT3 p) {return DirectX::XMFLOAT3{std::cos(yaw_)*p.x+std::sin(yaw_)*p.z,p.y,-std::sin(yaw_)*p.x+std::cos(yaw_)*p.z};};
-    effects_->TrackWeapon(0,world(pose.WeaponPoint(0)),world(pose.WeaponPoint(.8f)));
+    effects_->TrackWeapon(0,world(pose.WeaponPoint(rpg::weaponTraceRoot)),world(pose.WeaponPoint(rpg::WeaponTraceTip(form))));
   }
   const bool resized=width_!=input.Width() || height_!=input.Height();width_=input.Width();height_=input.Height();
   if(resized || input.Pressed(VK_F11)) {

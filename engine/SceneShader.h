@@ -53,6 +53,17 @@ VOut VSMain(VIn i) {
  VOut o; o.p=mul(float4(i.p,1),wvp); o.wp=i.n; o.n=i.n;
  o.tint=i.tint; o.shadow=o.detailShadow=0; o.material=0; o.tp=o.tn=0; o.cloudLight=1; o.receiverPlane=1; o.bodyStyle=0; return o;
 }
+float3 CloakPoint(float3 p,float4 surface,float3 hem,float3 ripple) {
+ float t=saturate(-p.y/.88),t2=t*t,t3=t2*t;
+ float2 mid=float2(surface.z,surface.w-.001);
+ float2 edge=hem.xy;
+ float2 bend=(8*mid-edge)*t2+(2*edge-8*mid)*t3;
+ float wave=hem.z*t2*(sin(ripple.x-7*t+9*p.x)+.35*sin(2*ripple.x-11*t-13*p.x));
+ p.x+=bend.x+ripple.y*t2*sin(5*p.x);
+ p.z-=max(0,bend.y)+wave+ripple.y*t2*p.x;
+ p.y+=hem.z*.18*t2*sin(ripple.x-5*t+8*p.x);
+ return p;
+}
 float3 FaceDisplacement(float3 p,float blink,float expression) {
  // Express the fitted facial regions in metres, independent of the taller
  // normalized neck envelope used by the exported mesh.
@@ -75,7 +86,7 @@ float3 FaceDisplacement(float3 p,float blink,float expression) {
  float dz=blink*orbitMask*exp(-closure*closure*closure*closure)*smoothstep(.075,.085,q.z)*max(0,cover-q.z);
  return float3(0,dy/.42,dz/.26);
 }
-void DeformCloth(inout float3 p,inout float3 n,float4 surface,float partMaterial,float3 bend) {
+void DeformCloth(inout float3 p,inout float3 n,float4 surface,float partMaterial,float3 bend,float3 ripple) {
  [branch] if(surface.w==-6) {
   float t=saturate(p.y+.5),k=surface.z;
   float u=t<k?t/k:(1-t)/(1-k),direction=t<k?1/k:-1/(1-k);
@@ -105,15 +116,17 @@ void DeformCloth(inout float3 p,inout float3 n,float4 surface,float partMaterial
   p+=FaceDisplacement(p,blink,expression);
  }
  [branch] if (surface.w>0) {
-  float t=saturate(-p.y/.82),side=surface.z,back=surface.w-.001;
-  p.x+=side*t*t; p.z-=back*t*t;
-  // Inverse transpose of the quadratic bend; no extra vertex buffers.
-  n.y+=2*t/.82*(side*n.x-back*n.z);
+  float e=.0005;
+  float3 dx=(CloakPoint(p+float3(e,0,0),surface,bend,ripple)-CloakPoint(p-float3(e,0,0),surface,bend,ripple))/(2*e);
+  float3 dy=(CloakPoint(p+float3(0,e,0),surface,bend,ripple)-CloakPoint(p-float3(0,e,0),surface,bend,ripple))/(2*e);
+  float3 dz=float3(0,0,1);
+  n=n.x*cross(dy,dz)+n.y*cross(dz,dx)+n.z*cross(dx,dy);
+  p=CloakPoint(p,surface,bend,ripple);
  }
 }
 float4 VSShadow(InstanceIn i) : SV_POSITION {
  float4x4 object=float4x4(i.w0,i.w1,i.w2,i.w3);
- DeformCloth(i.p,i.n,i.surface,i.tint.w,i.n3.xyz);
+ DeformCloth(i.p,i.n,i.surface,i.tint.w,i.n3.xyz,float3(i.n0.w,i.n1.w,i.n2.w));
  return mul(mul(float4(i.p,1),object),wvp);
 }
 VOut VSWorld(InstanceIn i) {
@@ -122,7 +135,7 @@ VOut VSWorld(InstanceIn i) {
  float4x4 object=float4x4(i.w0,i.w1,i.w2,i.w3);
  float4x4 normals=float4x4(i.n0,i.n1,i.n2,i.n3);
  float3 undeformed=i.p,undeformedNormal=i.n;
- DeformCloth(i.p,i.n,i.surface,i.tint.w,i.n3.xyz);
+ DeformCloth(i.p,i.n,i.surface,i.tint.w,i.n3.xyz,float3(i.n0.w,i.n1.w,i.n2.w));
  float4 position=mul(float4(i.p,1),object);
  o.wp=position.xyz; o.p=mul(position,wvp);
  o.n=normalize(mul(float4(i.n,0),normals).xyz);

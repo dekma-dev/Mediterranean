@@ -180,10 +180,25 @@ void Captures() {
     }
     game.ChooseCharacter(root/"patrol.save");
     Input input;Input::Frame frame;frame.focused=true;frame.width=1280;frame.height=720;
-    const ui::Layout layout(1280,720);const auto rect=ui::CharacterSelection::Bounds(ui::CharacterSelection::Control(int(ui::CharacterSelection::Control::Class0)+i));
-    frame.client={LONG(layout.x+(rect.x+rect.w/2)*layout.scale),LONG(layout.y+(rect.y+rect.h/2)*layout.scale)};
-    input.Update(frame);game.Update(.016,input,0);frame.down[VK_LBUTTON]=true;input.Update(frame);game.Update(.016,input,0);
-    frame.down[VK_LBUTTON]=false;input.Update(frame);game.Update(.016,input,0);
+    const ui::Layout layout(1280,720);
+    const auto click=[&](ui::CharacterSelection::Control control) {
+      Check(game.Selection().Enabled(control),"Roster capture control disabled");
+      const auto rect=ui::CharacterSelection::Bounds(control);
+      frame.client={LONG(layout.x+(rect.x+rect.w/2)*layout.scale),LONG(layout.y+(rect.y+rect.h/2)*layout.scale)};
+      input.Update(frame);game.Update(.016,input,0);frame.down[VK_LBUTTON]=true;input.Update(frame);game.Update(.016,input,0);
+      frame.down[VK_LBUTTON]=false;input.Update(frame);game.Update(.016,input,0);
+    };
+    // The roster contains saved profiles, not the class-creation controls.
+    // Select the exact fixture and page to it when all eleven classes exist.
+    int profile=-1;
+    for(int n=0;n<game.Selection().ProfileCount();++n)
+      if(game.Selection().SavedProfile(n).file==path)profile=n;
+    Check(profile>=0,"Class fixture missing from roster");
+    while(profile>=game.Selection().ProfileOffset()+ui::CharacterSelection::profilesPerPage) {
+      const int previous=game.Selection().ProfileOffset();click(ui::CharacterSelection::Control::NextProfiles);
+      Check(game.Selection().ProfileOffset()>previous,"Roster capture page did not advance");
+    }
+    click(ui::CharacterSelection::Control(int(ui::CharacterSelection::Control::Profile0)+profile-game.Selection().ProfileOffset()));
     Check(game.Selection().Hero().Class()==id,"Roster capture selected wrong class");
     renderer.BeginFrame();game.Render(renderer);
     Check(renderer.Capture((root/(std::to_string(i)+"-roster.png")).wstring()) && renderer.EndFrame(false),"Class roster capture");

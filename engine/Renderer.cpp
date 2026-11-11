@@ -503,14 +503,30 @@ void Renderer::DrawMesh(visual::Mesh mesh,const XMFLOAT3& p,const XMFLOAT3& s,co
  Queue(mesh,XMMatrixScaling(s.x,s.y,s.z)*XMMatrixRotationX(pitch)*XMMatrixRotationZ(roll)*XMMatrixRotationY(yaw)*
   XMMatrixTranslation(p.x,p.y,p.z),color,material,shadow,maxDetail);
 }
-void Renderer::DrawCloak(const XMFLOAT3& shoulder,float yaw,float pitch,float roll,float side,float back,bool guard,const XMFLOAT4& tint) {
+void Renderer::DrawCloak(const XMFLOAT3& shoulder,float yaw,float pitch,float roll,float side,float back,bool guard,const XMFLOAT4& tint,const XMFLOAT4& profile,const XMFLOAT3& ripple) {
  const auto mesh=guard?visual::Mesh::GuardCloak:visual::Mesh::Cloak;
  DrawMesh(mesh,shoulder,{1,1,1},tint,(tint.x==1&&tint.y==1&&tint.z==1)?visual::Material::Cloth:visual::Material::WornCloth,yaw,pitch,visual::ShadowMode::Cast,roll);
  auto& item=world_[static_cast<unsigned>(mesh)].back();
  item.instance.surface.z=std::isfinite(side)?std::clamp(side,-.20f,.20f):0;
  // Positive w identifies cloth. Both shadow and color use the same deformation.
  item.instance.surface.w=.001f+(std::isfinite(back)?std::clamp(back,0.f,.35f):0);
- item.radius+=.41f;
+ if(ripple.x>0 && std::isfinite(ripple.x) && std::isfinite(ripple.y) && std::isfinite(ripple.z) &&
+    std::isfinite(profile.x) && std::isfinite(profile.y) && std::isfinite(profile.z) && std::isfinite(profile.w)) {
+  item.instance.surface.z=std::clamp(profile.x,-.10f,.10f);
+  item.instance.surface.w=.001f+std::clamp(profile.y,0.f,.16f);
+  item.instance.normal._41=std::clamp(profile.z,-.20f,.20f);
+  item.instance.normal._42=std::clamp(profile.w,0.f,.39f);
+  item.instance.normal._43=std::clamp(ripple.x,0.f,.04f);
+  item.instance.normal._14=ripple.y;item.instance.normal._24=std::clamp(ripple.z,-.055f,.055f);
+  item.instance.normal._34=1;
+ } else {
+  item.instance.normal._41=item.instance.surface.z;
+  item.instance.normal._42=item.instance.surface.w-.001f;
+  item.instance.normal._43=0;
+  item.instance.surface.z*=.25f;item.instance.surface.w=.001f+(item.instance.surface.w-.001f)*.25f;
+  item.instance.normal._14=item.instance.normal._24=0;item.instance.normal._34=1;
+ }
+ item.radius+=.54f; // Covers hem bend, side lag, twist and flutter together.
 }
 void Renderer::DrawBow(visual::Mesh mesh,const XMMATRIX& transform,float draw,float arrow) {
  Queue(mesh,transform,{1,1,1,1},visual::Material::Count,visual::ShadowMode::Cast,2);

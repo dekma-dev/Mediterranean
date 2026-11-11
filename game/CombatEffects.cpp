@@ -233,22 +233,44 @@ bool CombatEffects::Tracking(rpg::EntityId actor) const {
 }
 void CombatEffects::TrackWeapon(rpg::EntityId actor,XMFLOAT3 root,XMFLOAT3 tip) {
   for (auto& trail : trails_) if (trail.actor==actor && trail.age<.24f) {
-    // A dash/teleport must not stretch a blade trail across the map.
-    if (trail.count) {
-      const auto delta=XMLoadFloat3(&tip)-XMLoadFloat3(&trail.samples[trail.count-1].tip);
-      if (XMVectorGetX(XMVector3LengthSq(delta))>4) { trail=Trail{}; return; }
+    if(!std::isfinite(root.x+root.y+root.z+tip.x+tip.y+tip.z)){trail={};return;}
+    const auto blade=XMLoadFloat3(&tip)-XMLoadFloat3(&root);
+    const float length=XMVectorGetX(XMVector3Length(blade));
+    if(length<.02f || length>3){trail={};return;}
+    const auto append=[&](Sample sample){
+      if(trail.count==trail.samples.size()){
+        std::move(trail.samples.begin()+1,trail.samples.end(),trail.samples.begin());--trail.count;
+      }
+      trail.samples[trail.count++]=sample;
+    };
+    const float dt=trail.age-trail.sampledAt;
+    if(!trail.tracked || !trail.count || dt>.06f){
+      trail.count=0;append({root,tip,0});trail.pending=0;trail.liveEndpoint=false;
+    }else{
+      const auto oldRoot=XMLoadFloat3(&trail.previousRoot),oldTip=XMLoadFloat3(&trail.previousTip);
+      const auto rootDelta=XMLoadFloat3(&root)-oldRoot,tipDelta=XMLoadFloat3(&tip)-oldTip;
+      // Both endpoints matter: a malformed grip must not leave a huge ribbon
+      // even when the tip happens to stay near the previous sample.
+      if(XMVectorGetX(XMVector3LengthSq(rootDelta))>4 || XMVectorGetX(XMVector3LengthSq(tipDelta))>4){trail={};return;}
+      if(dt<=1e-7f){trail.samples[trail.count-1]={root,tip,0};trail.previousRoot=root;trail.previousTip=tip;return;}
+      if(trail.liveEndpoint && trail.count)--trail.count;
+      const auto oldBlade=oldTip-oldRoot;const float oldLength=XMVectorGetX(XMVector3Length(oldBlade));
+      if(XMVectorGetX(XMVector3Dot(oldBlade/oldLength,blade/length))<-.95f){trail={};return;}
+      // Fixed 120 Hz samples reconstruct the measured sweep. Interpolating
+      // direction and length keeps a turning blade from shrinking to a chord.
+      constexpr float interval=1.f/120;
+      float offset=interval-trail.pending,last=-1;
+      for(;offset<=dt+1e-6f;offset+=interval){const float t=Unit(offset/dt);Sample sample;
+        const auto at=oldRoot+rootDelta*t;
+        const auto axis=XMVector3Normalize(XMVectorLerp(oldBlade/oldLength,blade/length,t));
+        XMStoreFloat3(&sample.root,at);XMStoreFloat3(&sample.tip,at+axis*(oldLength+(length-oldLength)*t));
+        sample.age=std::max(0.f,dt-offset);append(sample);last=offset;
+      }
+      trail.pending=std::clamp(interval-(offset-dt),0.f,interval);
+      trail.liveEndpoint=last<dt-1e-6f;
+      if(trail.liveEndpoint)append({root,tip,0});
     }
-    // Retain a live endpoint but space committed samples by time, not frames.
-    // Otherwise >200 Hz updates fill all 32 slots before the 160 ms trail ends.
-    constexpr float sampleInterval=1.f/120;
-    if (trail.count>=2 && trail.samples[trail.count-2].age<sampleInterval) {
-      trail.samples[trail.count-1]={root,tip,0};
-      return;
-    }
-    if (trail.count==trail.samples.size()) {
-      std::move(trail.samples.begin()+1,trail.samples.end(),trail.samples.begin()); --trail.count;
-    }
-    trail.samples[trail.count++]={root,tip,0};
+    trail.previousRoot=root;trail.previousTip=tip;trail.sampledAt=trail.age;trail.tracked=true;
     return;
   }
 }
@@ -295,6 +317,14 @@ std::size_t CombatEffects::BurstCount() const {
 }
 std::size_t CombatEffects::TrailCount() const {
   return std::count_if(trails_.begin(),trails_.end(),[](const Trail& trail) { return trail.age<sweepLife || trail.count>1; });
+}
+std::size_t CombatEffects::WeaponSampleCount(rpg::EntityId actor)const{
+  for(const auto& trail:trails_)if(trail.actor==actor && trail.tracked)return trail.count;
+  return 0;
+}
+float CombatEffects::WeaponHistorySeconds(rpg::EntityId actor)const{
+  for(const auto& trail:trails_)if(trail.actor==actor && trail.tracked && trail.count)return trail.samples[0].age;
+  return 0;
 }
 bool CombatEffects::HasRecovery() const {
   return std::any_of(bursts_.begin(),bursts_.end(),[](const Burst& b){return b.event.kind==K::Mend && b.age<BurstLife(b.event);});
@@ -407,19 +437,32 @@ void CombatEffects::Render(Renderer& renderer,const castfx::Attachments* caster)
     }
   }
   for (const auto& trail : trails_) {
-    if (trail.age<sweepLife) {
+    if (!trail.tracked && trail.age<sweepLife) {
       Crescent(renderer,trail.origin,trail.facing,trail.age,trail.kind==K::HeavyStrike,trail.kind==K::EnemySwing,false,trail.school);
       if (trail.kind==K::HeavyStrike) Crescent(renderer,trail.origin,trail.facing,trail.age,true,false,true,trail.school);
     }
-    auto color=Tint(trail.kind); color.w=trail.kind==K::HeavyStrike?.8f:.48f;
+    const bool heavy=trail.kind==K::HeavyStrike,hostile=trail.kind==K::EnemySwing;
+    auto color=Tint(trail.kind); color.w=heavy?.58f:.38f;
+    if(trail.school==rpg::ClassId::Warrior && !hostile)color=heavy?XMFLOAT4{.39f,.67f,.91f,.58f}:XMFLOAT4{.72f,.79f,.83f,.38f};
     if(trail.kind!=K::EnemySwing && trail.school!=rpg::ClassId::Warrior) color=classfx::Color(trail.school,color.w);
     for (std::size_t i=1;i<trail.count;++i) {
       const auto& a=trail.samples[i-1]; const auto& b=trail.samples[i];
-      renderer.DrawEffectRibbon(a.root,a.tip,b.tip,b.root,color,
+      const auto delta=XMLoadFloat3(&b.tip)-XMLoadFloat3(&a.tip);
+      const float travel=XMVectorGetX(XMVector3Length(delta)),dt=std::max(.0001f,a.age-b.age);
+      if(travel<.0001f)continue;
+      const float intensity=Unit(travel/dt/3.5f);
+      const auto point=[](const Sample& s,float at){XMFLOAT3 p;XMStoreFloat3(&p,XMVectorLerp(XMLoadFloat3(&s.root),XMLoadFloat3(&s.tip),at));return p;};
+      auto body=color;body.w*=intensity;
+      // Fade across the blade as well as through history; the pale cutting
+      // edge stays on the actual tip while a restrained veil supplies width.
+      auto veil=body;veil.w*=.22f;
+      renderer.DrawEffectRibbon(point(a,.45f),point(a,1.10f),point(b,1.10f),point(b,.45f),veil,
+        std::pow(Unit(1-a.age/trailLife),2.f),std::pow(Unit(1-b.age/trailLife),2.f));
+      renderer.DrawEffectRibbon(point(a,.18f),a.tip,b.tip,point(b,.18f),body,
         std::pow(Unit(1-a.age/trailLife),2.f),std::pow(Unit(1-b.age/trailLife),2.f));
       if(trail.school==rpg::ClassId::Warrior && trail.kind!=K::EnemySwing){
         const auto edge=[](const Sample& s){return XMFLOAT3{s.tip.x+(s.root.x-s.tip.x)*.12f,s.tip.y+(s.root.y-s.tip.y)*.12f,s.tip.z+(s.root.z-s.tip.z)*.12f};};
-        renderer.DrawEffectRibbon(edge(a),a.tip,b.tip,edge(b),{.77f,.88f,1,.55f},
+        renderer.DrawEffectRibbon(edge(a),a.tip,b.tip,edge(b),{.82f,.92f,1,.65f*intensity},
           std::pow(Unit(1-a.age/trailLife),3.f),std::pow(Unit(1-b.age/trailLife),3.f));
       }
     }

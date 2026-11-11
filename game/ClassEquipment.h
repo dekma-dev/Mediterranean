@@ -28,6 +28,10 @@ inline constexpr std::array<ClassWeapon,int(ClassId::Count)> classWeapons={{
 }};
 inline const ClassWeapon& WeaponFor(ClassId id) { return classWeapons[ValidClass(id)?int(id):0]; }
 inline bool PhysicalLauncher(WeaponForm form) { return form==WeaponForm::Handbow || form==WeaponForm::Pistol; }
+// Presentation sampling uses the same held span in gameplay and the creation
+// rehearsal. These distances do not alter weapon geometry or melee reach.
+inline float WeaponTraceTip(WeaponForm form) { return form==WeaponForm::Mace?.67f:form==WeaponForm::Cleaver?.80f:.96f; }
+inline constexpr float weaponTraceRoot=.22f;
 inline bool StaffWeapon(WeaponForm form) {
   return form==WeaponForm::GroveStaff || form==WeaponForm::AstralStaff || form==WeaponForm::AshStaff;
 }

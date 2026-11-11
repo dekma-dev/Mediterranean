@@ -11,6 +11,44 @@
 
 namespace {
 void Check(bool value,const char* message) { if(!value) throw std::runtime_error(message); }
+void DensityChecks(Renderer& renderer) {
+ for(auto size:{std::pair<int,int>{960,600},{1280,720},{1920,1080},{2560,1080}}) {
+  Check(renderer.Resize(size.first,size.second),"Density resize");
+  const ui::Layout layout(float(size.first),float(size.second));
+  const auto bars=ui::HudTransform::At(float(size.first),float(size.second),640,710);
+  Check(bars.scale<=1 && bars.scale>=.68f,"Unbounded combat density");
+  Check(size.second<1080?bars.scale==1:54*bars.scale*layout.scale<56,"Desktop action slots still inflate with the panel canvas");
+  Check(std::abs(bars.X(640)-640)<.001f && std::abs(bars.Y(710)-710)<.001f,"Bottom-center action anchor drifted");
+  rpg::Simulation state;ui::Interface hud;const auto save=state.Save();
+  for(int slot=0;slot<20;++slot)hud.AssignHotbar(0,slot,state.Class());
+  const auto render=[&]{renderer.BeginFrame();hud.Render(renderer,state,0,false);Check(renderer.EndFrame(false),"Density frame");};
+  const auto pointer=[&](int slot,bool press,bool held,bool release,bool right=false) {
+   const float x=bars.X(377+(slot%10)*58.f),y=bars.Y(slot<10?678.f:622.f);
+   return hud.Pointer(layout.x+x*layout.scale,layout.y+y*layout.scale,float(size.first),float(size.second),press,right,held,release);
+  };
+  render();
+  for(int slot=0;slot<20;++slot) {
+   pointer(slot,false,false,false,true);
+   Check(hud.HotbarSpell(slot,state.Class())==-1,"Compact hotbar hit missed its own slot");
+   if(slot<19)Check(hud.HotbarSpell(slot+1,state.Class())==0,"Compact picking cleared a neighbour");
+  }
+  hud.AssignHotbar(0,0,state.Class());render();
+  pointer(0,true,true,false);pointer(19,false,true,false);pointer(19,false,false,true);
+  Check(hud.HotbarSpell(0,state.Class())==-1 && hud.HotbarSpell(19,state.Class())==0,"Compact cross-row drag missed");
+  render();pointer(19,true,true,false);
+  hud.Pointer(layout.x+640*layout.scale,layout.y+350*layout.scale,float(size.first),float(size.second),false,false,true,false);
+  hud.Pointer(layout.x+640*layout.scale,layout.y+350*layout.scale,float(size.first),float(size.second),false,false,false,true);
+  Check(hud.HotbarSpell(19,state.Class())==-1,"Compact drag into the world did not unbind");
+  const auto map=ui::HudTransform::At(float(size.first),float(size.second),1280,0);
+  const auto event=hud.Pointer(layout.x+map.X(1170)*layout.scale,layout.y+map.Y(94)*layout.scale,float(size.first),float(size.second),true,false);
+  Check(event.action==ui::Action::Map,"Compact minimap hit is detached from the artwork");
+  hud.AssignHotbar(0,0,state.Class());render();pointer(0,true,true,false);
+  hud.Pointer(600,650,float(size.first+1),float(size.second),false,false,false,true);
+  Check(!hud.Dragging() && hud.HotbarSpell(0,state.Class())==0,"Resize removed a spell using stale density bounds");
+  Check(state.Save()==save,"Layout or binding edits changed gameplay");
+ }
+ Check(renderer.Resize(1920,1080),"Restore density renderer");
+}
 void CombatTextChecks() {
   rpg::CombatFeedback feedback{{1,2},rpg::FeedbackKind::Damage,72,.3f,9};
   const auto before=ui::ReadCombatText(feedback);
@@ -256,6 +294,30 @@ void PreparationChecks(Renderer& renderer) {
  }
  Check(fire!=frost,"Fire and frost preparations must have different silhouettes");
 }
+void CastFadeCaptures(Renderer& renderer,const std::filesystem::path& output) {
+ for(auto school:{rpg::ClassId::Mage,rpg::ClassId::Scout,rpg::ClassId::Priest}) {
+  auto game=std::make_unique<Game>();game->Initialize();
+  auto& state=const_cast<rpg::Simulation&>(game->State());state.CreateCharacter(school,"Cast finish");
+  for(auto& enemy:const_cast<std::vector<rpg::Enemy>&>(state.Enemies())){
+   enemy.position=enemy.home={state.Player().x,state.Player().z+2};enemy.attackCooldown=100;
+  }
+  ui::Interface hud;ui::CastReceipt receipt;
+  rpg::Command command;command.selectActor=100;command.ability=1;
+  game->ExecuteCommand(command,.01f);hud.UpdateCombatFeedback(.01f,state);receipt.Update(.01f,state);
+  for(int tick=0;tick<200 && receipt.Opacity()==0;++tick){
+   game->ExecuteCommand({},.01f);hud.UpdateCombatFeedback(.01f,state);receipt.Update(.01f,state);
+  }
+  Check(receipt.Opacity()>0 && !receipt.interrupted,"Cast fade fixture never released");
+  game->SetCameraOrbit(.12f,.50f,9);
+  for(int phase=0;phase<4;++phase) {
+   const auto save=state.Save();renderer.BeginFrame();game->Render(renderer,false);hud.Render(renderer,state,float(phase),false);
+   Check(renderer.Capture((output/("cast-fade-"+std::to_string(int(school))+"-"+std::to_string(phase)+".png")).wstring()) && renderer.EndFrame(false),"Cast fade native capture");
+   Check(save==state.Save(),"Cast fade render changed gameplay");
+   for(int tick=0;tick<10;++tick){game->ExecuteCommand({},.01f);hud.UpdateCombatFeedback(.01f,state);receipt.Update(.01f,state);}
+  }
+  Check(receipt.Opacity()==0,"Finished cast receipt did not drain");
+ }
+}
 }
 
 int main(int argc,char** argv) {
@@ -269,10 +331,12 @@ int main(int argc,char** argv) {
   Win32Window window;Renderer renderer;
   Check(window.Create(GetModuleHandleW(nullptr),1920,1080,L"Combat HUD review",false),"Hidden review window");
   Check(renderer.Initialize(window.GetHandle(),1920,1080),"Native review renderer");
+  DensityChecks(renderer);
   TargetReceiptChecks(renderer,output);
   AbilityFeedbackChecks(&renderer,output);
   WorldPickChecks(renderer);
   PreparationChecks(renderer);
+  CastFadeCaptures(renderer,output);
   for(auto id:{rpg::ClassId::Warrior,rpg::ClassId::Mage,rpg::ClassId::Scout}) {
    Game game;game.Initialize();
    auto& state=const_cast<rpg::Simulation&>(game.State());

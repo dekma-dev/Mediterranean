@@ -411,7 +411,7 @@ Geometry BuildMesh(Mesh mesh) {
     const bool guard=mesh==Mesh::GuardCloak;
     // One continuous flared sheet, shared smooth normals and a separate back
     // surface. Coordinates are metres from the pinned shoulder seam.
-    const unsigned columns=guard?32:16,rows=columns,stride=columns+1,sideVertices=stride*(rows+1);
+    const unsigned columns=guard?48:32,rows=48,stride=columns+1,sideVertices=stride*(rows+1);
     for (unsigned side=0;side<2;++side) {
       for (unsigned row=0;row<=rows;++row) for (unsigned column=0;column<=columns;++column) {
         const float t=float(row)/rows,u=2.f*column/columns-1;
@@ -421,7 +421,7 @@ Geometry BuildMesh(Mesh mesh) {
         // Keep the pinned seam against the shoulders, then drape outside the
         // fitted doublet's upper back instead of cutting through its volume.
         const float backClearance=guard?.040f*std::sin(t*3.14159265f):0;
-        const XMFLOAT3 p{u*(.22f+t*(guard?.11f:.14f)),-(guard?.88f:.82f)*t+hem,-.025f-.115f*t-fold-.035f*u*u-backClearance};
+        const XMFLOAT3 p{u*(.22f+t*(guard?.11f:.14f)),-(guard?.88f:.82f)*t+hem,-.025f-.115f*t*t-fold-.035f*u*u-backClearance};
         const bool trim=column==0 || column==columns || row==rows;
         const float shade=1-.18f*t-.12f*edge;
         auto color=trim?XMFLOAT4{.66f,.48f,.22f,1}:XMFLOAT4{.13f*shade,.28f*shade,.39f*shade,1};

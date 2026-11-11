@@ -48,7 +48,7 @@ public:
     const DirectX::XMFLOAT4& color,visual::Material material,float yaw = 0,float pitch = 0,
     visual::ShadowMode shadow = visual::ShadowMode::Cast,float roll = 0,unsigned maxDetail=2);
   void DrawCloak(const DirectX::XMFLOAT3& shoulder,float yaw,float pitch,float roll,float side,float back,bool guard=false,
-    const DirectX::XMFLOAT4& tint={1,1,1,1});
+                 const DirectX::XMFLOAT4& tint={1,1,1,1},const DirectX::XMFLOAT4& profile={},const DirectX::XMFLOAT3& ripple={});
   void DrawBow(visual::Mesh mesh,const DirectX::XMMATRIX& transform,float draw,float arrow);
   void DrawCoatPanel(visual::Mesh mesh,DirectX::XMFLOAT3 hem,DirectX::XMFLOAT3 waist,DirectX::XMFLOAT3 knee,
     float width,float depth,DirectX::XMFLOAT3 facing,const DirectX::XMFLOAT4& paint={1,1,1,1});

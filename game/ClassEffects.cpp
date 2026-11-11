@@ -136,6 +136,9 @@ void Projectile(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,floa
   if(e.empowered || e.signature) Arc(r,head,.23f,age*12,pi*1.5f,.014f,Color(e.school,fade*.55f));
 }
 void Impact(Renderer& r,const rpg::CombatVisualEvent& e,float age) {
+  if((e.kind!=rpg::CombatVisualKind::Hit && e.kind!=rpg::CombatVisualKind::HeavyHit) ||
+    !std::isfinite(age) || age<0 || age>=spellvfx::ContactLifetime(e) || !std::isfinite(e.position.x) ||
+    !std::isfinite(e.position.z) || !std::isfinite(e.height) || !std::isfinite(e.facing))return;
   spellvfx::Contact(r,e,age);
   // The dedicated elemental contact owns the whole Mage impact. The legacy
   // orange generic burst otherwise paints fire over frost/arcane contacts.

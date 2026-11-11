@@ -6,6 +6,7 @@
 #include "game/ActionClips.h"
 #include "engine/PlayerClips.h"
 #include "game/AuthoredWeapon.h"
+#include "game/CloakMotion.h"
 #include <array>
 
 // Presentation-only channels; no collision, combat timing or durable save data.
@@ -34,6 +35,7 @@ struct Sample {
   float takeoff=0,bank=0;
   float landingSeconds=-1; // Accepted landing clock for authored clip sampling.
   float support=0,clothSide=0,clothBack=0;
+  CloakSample cloak;
   std::array<Foot,2> departureFeet{};
   std::array<float,2> departureReachWeight{1,1};
   float departure=0,departureSupport=0;
@@ -50,9 +52,11 @@ struct Sample {
   playerclips::Equipment authoredEquipment=playerclips::Equipment::None;
   playerclips::Frame authoredStrike{};
   float authoredStrikeWeight=0,authoredStrikePhase=0;
-  float authoredReady=0;
+  float authoredReady=0,authoredEntryReady=-1;
   bool authoredStrikeHeavy=false;
   CombatWeight authoredAccent{};
+  CombatWeight authoredMechanics{};
+  bool authoredMechanicsTracked=false;
   facial::Pose face;
   ActionChannels action;
   bool retreat=false;
@@ -149,6 +153,7 @@ struct State {
   float castAge=2,leanVelocity=0,riseVelocity=0,travelVelocity=0;
   float bankVelocity=0;
   float clothSideVelocity=0,clothBackVelocity=0;
+  CloakMotion cloakMotion;
   float flightAge=1,departureLanding=0,departureLandingSeconds=-1,armRecoveryAge=1;
   float departureArmWeight=0;
   bool wasAirborne=false,hasDeparture=false;
@@ -292,6 +297,7 @@ struct State {
       std::clamp(.025f+flow*.24f+Signed(velocity/motion::jumpSpeed)*.05f,.005f,.32f),14.f,dt);
     motion::Spring(pose.clothSide,clothSideVelocity,
       -Signed(pose.bank)*.12f+std::sin(phase*3)*flow*.025f+std::sin(phase*.5f)*.008f,12.f,dt);
+    pose.cloak=cloakMotion.Update(dt,travel/dt,velocity,pose.bank);
     restWeight=(1-travelBlend)*(1-Unit(strike))*(1-pose.air);
     RefreshRecoil();
   }

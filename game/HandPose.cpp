@@ -15,7 +15,9 @@ XMMATRIX WeaponFrame(const CharacterPose& pose) {
   // Project that axis instead of crossing a forward vector: the old frame
   // inverted when the blade passed through the forward-facing pole.
   const auto lateral=XMLoadFloat3(&across);
-  const auto right=XMVector3Normalize(lateral-up*XMVector3Dot(lateral,up));
+  const auto heldRight=XMLoadFloat3(&pose.weaponRight);
+  const auto right=XMVectorGetX(XMVector3LengthSq(heldRight))>.5f?heldRight:
+    XMVector3Normalize(lateral-up*XMVector3Dot(lateral,up));
   const auto origin=pose.WeaponPoint(0);
   return {right,up,XMVector3Cross(right,up),XMVectorSetW(XMLoadFloat3(&origin),1)};
 }

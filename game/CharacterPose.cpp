@@ -24,11 +24,11 @@ LimbPose Solve(XMFLOAT3 root,XMFLOAT3 target,XMFLOAT3 bend,float upper,float low
 LimbPose SolveArm(XMFLOAT3 root,XMFLOAT3 target,XMFLOAT3 authoredBend) {
   const auto delta=XMLoadFloat3(&target)-XMLoadFloat3(&root);
   const auto axis=XMVector3Normalize(delta);
-  // Transport the resting elbow plane with the reach direction. A fixed pole
-  // becomes parallel to the arm during a bow draw and flips the elbow through
-  // the shoulder. This frame has its singularity above the shoulder, outside
-  // the authored reach range, instead of inside the playable draw/carry arc.
-  auto q=XMVectorSet(-XMVectorGetZ(axis),0,XMVectorGetX(axis),1-XMVectorGetY(axis));
+  // Transport from an outward/downward reference. Its opposite lies inward
+  // and above the shoulder, outside the authored reach. Transporting from
+  // straight down put the singularity directly in the overhead sword arc.
+  const auto reference=XMVectorSet(root.x>=0?.70710678f:-.70710678f,-.70710678f,0,0);
+  auto q=XMVectorSetW(XMVector3Cross(reference,axis),1+XMVectorGetX(XMVector3Dot(reference,axis)));
   const auto base=XMVectorGetX(XMVector4LengthSq(q))>.000001f?
     XMVector3Rotate(XMVectorSet(0,0,-1,0),XMQuaternionNormalize(q)):XMVectorSet(0,0,-1,0);
   auto desired=XMLoadFloat3(&authoredBend);desired-=axis*XMVector3Dot(desired,axis);
@@ -197,7 +197,16 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     dynamics.authoredEquipment==playerclips::Equipment::Sword?playerclips::Clip::SwordGuard:bow?playerclips::Clip::BowGuard:playerclips::Clip::Idle,dynamics.authoredClock/4);
   const auto carryClip=playerclips::Sample(dynamics.authoredEquipment==playerclips::Equipment::Staff?playerclips::Clip::StaffCarry:
     dynamics.authoredEquipment==playerclips::Equipment::Sword?playerclips::Clip::SwordCarry:bow?playerclips::Clip::BowCarry:playerclips::Clip::Idle,dynamics.authoredClock/4);
-  const float ready=animation::Unit(dynamics.authoredReady);
+  float ready=animation::Unit(dynamics.authoredReady);
+  if(newStrike&&dynamics.authoredEquipment==playerclips::Equipment::Sword&&dynamics.authoredEntryReady>=0) {
+    // The wind-up departs from the actual incoming carry. Raising its base
+    // toward guard at the same time doubled the first attack's acceleration.
+    // Bring that base to combat guard only through the recovery after contact.
+    const float contact=playerclips::Collection()[unsigned(heavy?playerclips::Clip::Overhead:playerclips::Clip::Slash)].contact;
+    const float recovery=animation::SmoothStep((dynamics.authoredStrikePhase-contact)/(1-contact));
+    const float entry=animation::Unit(dynamics.authoredEntryReady);
+    ready=entry+(ready-entry)*recovery;
+  }
   auto idleClip=playerclips::Blend(carryClip,guardClip,ready);
   const auto blendDirection=[](XMFLOAT3 from,XMFLOAT3 to,float amount) {
     const auto a=XMVector3Normalize(XMLoadFloat3(&from)),b=XMVector3Normalize(XMLoadFloat3(&to));
@@ -307,7 +316,8 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   if(newStrike && (dynamics.authoredEquipment==playerclips::Equipment::Sword || bow)) {
     const auto clip=bow?(heavy?playerclips::Clip::BowPowerRelease:playerclips::Clip::BowRelease):(heavy?playerclips::Clip::Overhead:playerclips::Clip::Slash);
     const float contact=playerclips::Collection()[unsigned(clip)].contact;
-    const auto motion=animation::AttackWeight(bow,heavy,dynamics.authoredStrikePhase,contact);
+    const auto motion=dynamics.authoredMechanicsTracked?dynamics.authoredMechanics:
+      animation::AttackWeight(bow,heavy,dynamics.authoredStrikePhase,contact);
     const float weight=stroke.weight*(1-air)*(1-burst)*(1-hit);
     pose.upperPitch+=motion.pitch*weight;pose.upperYaw+=motion.yaw*weight;pose.upperRoll+=motion.roll*weight;
     pose.bodyLift+=motion.lift*weight;pose.bodyShift+=motion.side*weight;pose.bodyForward+=motion.forward*weight;
@@ -502,6 +512,8 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   // The archery layer fades in from an upright bow, not the sword's lowered
   // blade. Otherwise spawning or enabling authored locomotion flips the bow.
   if(bow)weapon=carryClip.weapon;
+  if(dynamics.authoredGait&&dynamics.authoredEquipment==playerclips::Equipment::Sword)
+    weapon=carryClip.weapon;
   if(dynamics.authoredGait&&dynamics.authoredEquipment!=playerclips::Equipment::None) {
     const XMFLOAT3 carry{idleClip.weapon.x*(1-gaitAmount)+gaitClip.weapon.x,
       idleClip.weapon.y*(1-gaitAmount)+gaitClip.weapon.y,idleClip.weapon.z*(1-gaitAmount)+gaitClip.weapon.z};
@@ -556,9 +568,45 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   // the forearm to that point, keeping the authored handle path as a socket.
   const auto shaftUp=XMLoadFloat3(&pose.weaponDirection);
   const auto across=pose.UpperDirection({1,0,0});const auto lateral=XMLoadFloat3(&across);
-  const auto shaftRight=XMVector3Normalize(lateral-shaftUp*XMVector3Dot(lateral,shaftUp));
-  const auto shaftForward=XMVector3Cross(shaftRight,shaftUp);
-  const auto wristOffset=-shaftRight*.055f+shaftForward*.043f;
+  auto shaftRight=XMVector3Normalize(lateral-shaftUp*XMVector3Dot(lateral,shaftUp));
+  auto shaftForward=XMVector3Cross(shaftRight,shaftUp);
+  auto wristOffset=-shaftRight*.055f+shaftForward*.043f;
+  const bool bladeGrip=pose.hasGripSocket &&
+    (form==rpg::WeaponForm::Blade || form==rpg::WeaponForm::Mace || form==rpg::WeaponForm::Cleaver);
+  if(bladeGrip) {
+    // A cutting grip closes across the handle while the knuckles continue
+    // the forearm. Fixing this axis to torso +X bent the wrist sideways and
+    // presented the broad blade edge-on, like a fencing foil.
+    const auto socket=XMLoadFloat3(&pose.arms[1].end);
+    // Parallel-transport the grip from forward instead of projecting +X.
+    // Carry-to-guard can sweep across +X; projection collapses at that point
+    // and otherwise turns a continuous blade path into a wrist flip.
+    const auto frontPoint=pose.UpperDirection({0,0,1});
+    const auto front=XMLoadFloat3(&frontPoint);
+    const auto transport=XMVectorSetW(XMVector3Cross(front,shaftUp),1+XMVectorGetX(XMVector3Dot(front,shaftUp)));
+    if(XMVectorGetX(XMVector4LengthSq(transport))>.000001f)
+      shaftRight=XMVector3Rotate(lateral,XMQuaternionNormalize(transport));
+    shaftForward=XMVector3Cross(shaftRight,shaftUp);
+    const auto forearm=XMVector3Normalize(socket-XMLoadFloat3(&pose.arms[1].joint));
+    // Follow the forearm's roll without exchanging sides of the handle when
+    // its projection becomes parallel or crosses the blade's local axis.
+    const auto radial=forearm-shaftUp*XMVector3Dot(forearm,shaftUp);
+    const float acrossGrip=XMVectorGetX(XMVector3Dot(radial,shaftRight));
+    const float aroundGrip=XMVectorGetX(XMVector3Dot(radial,shaftForward));
+    // A crossing forearm must not exchange the two sides of the handle. Use a
+    // smooth positive denominator for wrist pronation instead of normalizing
+    // a radial sum that can cancel and flip the palm through half a turn.
+    // Preserve the relaxed carrying alignment. Bracing a loaded cut widens
+    // the regularization smoothly, preventing a rapid roll at the crossover.
+    const float rollSupport=.12f+.23f*animation::SmoothStep(stroke.weight/.35f);
+    const float offset=acrossGrip-rollSupport;
+    const float supported=rollSupport+.5f*(offset+std::sqrt(offset*offset+.0004f));
+    const float roll=std::atan2(aroundGrip,supported);
+    shaftRight=shaftRight*std::cos(roll)+shaftForward*std::sin(roll);
+    shaftForward=XMVector3Cross(shaftRight,shaftUp);
+    wristOffset=-shaftRight*.055f+shaftForward*.043f;
+  }
+  XMStoreFloat3(&pose.weaponRight,shaftRight);
   if(pose.hasGripSocket) {
     XMFLOAT3 wrist;XMStoreFloat3(&wrist,XMLoadFloat3(&pose.arms[1].end)+wristOffset);
     pose.arms[1]=SolveArm(pose.arms[1].root,wrist,elbowPoles[1]);

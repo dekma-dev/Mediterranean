@@ -26,6 +26,7 @@ struct CharacterPose {
   DirectX::XMFLOAT3 weaponDirection;
   // Authored clips target the handle, whereas the arm solver targets the wrist.
   DirectX::XMFLOAT3 weaponGrip{};
+  DirectX::XMFLOAT3 weaponRight{}; // Grip roll follows the loaded forearm.
   bool hasGripSocket=false;
   // Match BodyBindPose: knee (.17,.53,0), ankle (.18,.17,0).
   // The former .40 m shin stretched the 36 cm bind bone and forced a crouch.

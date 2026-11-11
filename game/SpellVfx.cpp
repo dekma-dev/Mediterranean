@@ -18,6 +18,30 @@ Element School(int ability){return ability==14?Element::Thermal:ability==10 || a
 // Soft attack / slow decay rather than a one-frame billboard at full opacity.
 float Envelope(float age,float life,float rise=.025f){return Unit(age/rise)*std::pow(Unit(1-age/life),1.35f);}
 XMFLOAT3 Ground(rpg::Vec2 p,float lift=.12f){return {p.x,rpg::WorldMap::Height(p)+lift,p.z};}
+// All contact geometry is expressed in the accepted attack frame. Rotation of
+// the camera does not flatten a burst, and changing target cannot steer it.
+struct ContactFrame {
+ XMFLOAT3 origin;float sn,cs;
+ ContactFrame(XMFLOAT3 p,float facing):origin(p),sn(std::sin(facing)),cs(std::cos(facing)){}
+ XMFLOAT3 At(float right,float up,float forward)const {
+  return Add(origin,{cs*right+sn*forward,up,-sn*right+cs*forward});
+ }
+};
+template<class Path> void ContactRibbon(Renderer& r,const Path& path,float width,XMFLOAT4 color,
+ XMFLOAT3 normal={0,1,0},int segments=12){
+ const auto edge=[&](float u){const auto a=path(std::max(0.f,u-.005f)),b=path(std::min(1.f,u+.005f));
+  auto side=XMVector3Cross(XMLoadFloat3(&normal),XMLoadFloat3(&b)-XMLoadFloat3(&a));
+  if(XMVectorGetX(XMVector3LengthSq(side))<1e-8f)side=XMVectorSet(1,0,0,0);
+  XMFLOAT3 result;XMStoreFloat3(&result,XMVector3Normalize(side)*(width*(1-u*.72f)));return result;};
+ const auto opacity=[](float u){return combat::Smooth(u/.10f)*combat::Smooth((1-u)/.20f);};
+ auto a=path(0.f),x=edge(0.f);
+ for(int n=0;n<segments;++n){
+  const float u=float(n)/segments,v=float(n+1)/segments;
+  const auto b=path(v),y=edge(v);
+  r.DrawEffectRibbon(Add(a,{-x.x,-x.y,-x.z}),Add(a,x),Add(b,y),Add(b,{-y.x,-y.y,-y.z}),color,opacity(u),opacity(v));
+  a=b;x=y;
+ }
+}
 void Stamp(Renderer& r,rpg::Vec2 p,float radius,float spin,XMFLOAT4 color){
  const auto corner=[&](float x,float z){return Ground({p.x+(std::cos(spin)*x-std::sin(spin)*z)*radius,p.z+(std::sin(spin)*x+std::cos(spin)*z)*radius},.045f);};
  r.DrawEffectSurface(Art::Seal,corner(-1,-1),corner(-1,1),corner(1,1),corner(1,-1),color);
@@ -68,48 +92,70 @@ void Release(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float a
 void MageContact(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 p,float age,float size){
  const auto element=School(e.ability);const bool frost=element==Element::Frost,arcane=element==Element::Arcane,mixed=element==Element::Thermal;
  const float fade=Envelope(age,ContactLifetime(e)),burst=Envelope(age,.20f,.008f);
+ const ContactFrame frame(p,e.facing);
  if(arcane){
-  for(int n=0;n<2;++n){const float radius=(.15f+age*(n?.75f:1.4f))*size;
-   r.DrawEffectSprite(Art::Arcane,p,radius,radius,age*(n?-2.f:2.8f)+n*pi,{.85f,.72f,1,fade*(n?.28f:.65f)});}
-  r.DrawEffectSprite(Art::Seal,p,(.25f+age*.8f)*size,(.25f+age*.8f)*size,-age*.7f,{.8f,.58f,1,fade*.48f});
-  if(e.ability==13) {
-   // The mobile prism fractures into three offset planes. The central gap
-   // keeps the struck actor visible; this is distinct from the interrupt orb.
-   for(int n=0;n<3;++n) {
-    const float angle=e.facing+n*tau/3+age*.65f,opening=combat::Smooth(age/.22f);
-    const XMFLOAT3 side{std::cos(angle),0,-std::sin(angle)};
-    const auto at=[&](float x,float y){return Add(p,{side.x*(x+opening*.40f)*size,y*size,side.z*(x+opening*.40f)*size});};
-    const auto a=at(-.16f,-.35f),b=at(-.22f,.35f),c=at(.16f,.62f),d=at(.22f,-.22f);
-    r.DrawEffectSurface(Art::Arcane,a,b,c,d,{.51f,.37f,1,fade*.38f});
-    r.DrawEffectStreak(a,b,.012f,{.78f,.88f,1,fade*.72f});
-    r.DrawEffectStreak(b,c,.012f,{.89f,.76f,1,fade*.78f});
-   }
+  // Split the arriving sphere into folding glass and curved pressure paths.
+  // The empty middle is intentional: the hit actor must remain legible.
+  const float open=combat::Smooth(age/.23f),fold=combat::Smooth((age-.16f)/.45f);
+  for(int n=0;n<3;++n){
+   const float angle=n*tau/3+age*.8f,cs=std::cos(angle),sn=std::sin(angle);
+   const auto at=[&](float x,float y,float z){return frame.At((cs*x-sn*z)*size,y*size,(sn*x+cs*z)*size);};
+   const float radius=.12f+open*.52f,w=.12f+(1-fold)*.16f;
+   const auto a=at(radius-w,-.40f+fold*.25f,-.10f),b=at(radius-w*.6f,.45f,-.14f-fold*.20f);
+   const auto c=at(radius+w*.5f,.64f-fold*.20f,.12f),d=at(radius+w,-.28f,.14f+fold*.20f);
+   r.DrawEffectSurface(Art::Arcane,a,b,c,d,{.47f,.30f,1,fade*.35f});
+   r.DrawEffectStreak(a,b,.014f*size,{.68f,.86f,1,fade*.72f});
+   r.DrawEffectStreak(b,c,.019f*size,{.92f,.77f,1,fade*.8f});
+   if(e.primary)ContactRibbon(r,[&](float u){
+    const float t=angle+u*2.0f,radius=(.12f+open*.62f)*(1-u*.35f);
+    return frame.At(std::cos(t)*radius*size,(u-.5f)*1.15f*size,std::sin(t)*radius*size);
+   },.055f*size,{.62f,.46f,1,Envelope(age,.55f,.018f)*.65f});
   }
+  r.DrawEffectSprite(Art::Arcane,p,.38f*size,.48f*size,age*.7f,{.63f,.49f,1,burst*.52f});
+  if(e.ability==13)r.DrawEffectSprite(Art::Seal,p,(.22f+age*.9f)*size,(.22f+age*.9f)*size,-age*.7f,{.73f,.65f,1,fade*.28f});
  }else{
   const unsigned seed=e.actor*37u+unsigned(std::max(e.ability,0))*71u;
-  for(unsigned n=0;n<6;++n){
-   const float a=n*tau/6+Rand(seed+n)*.35f,speed=.55f+Rand(seed+n*17)*.75f;
+  const unsigned count=frost?10:6;
+  for(unsigned n=0;n<count;++n){
+   const float a=n*tau/count+Rand(seed+n)*.35f,speed=.8f+Rand(seed+n*17)*1.25f;
    const bool ice=frost || (mixed && n%2==0);
-   auto at=Add(p,{std::cos(a)*age*speed*size,ice?std::sin(a)*age*speed*size-1.3f*age*age:age*(.35f+speed*.3f),std::sin(a)*age*.38f*size});
    if(ice){
-    const float shard=(.14f+Rand(seed+n*3)*.12f)*size;
-    r.DrawEffectSprite(Art::Ice,at,shard*.33f,shard*(1+age*.25f),a+age*.6f,{.6f,.85f,1,fade*.78f});
+    const auto shardAt=[&](float t){const float spread=.10f+speed*t*1.25f;
+     return frame.At(std::cos(a)*spread*size,std::sin(a)*spread*size-1.8f*t*t,
+      -t*(.4f+Rand(seed+n*11)*2.8f)*size);};
+    const auto centre=shardAt(age);const ContactFrame shard(centre,e.facing+a+age*(n%2?2.f:-2.f));
+    const float length=(.17f+Rand(seed+n*3)*.18f)*size,w=length*.30f;
+    // Two crossing fractured surfaces retain thickness from side/rear views.
+    for(int side=0;side<2;++side){const auto at=[&](float x,float y){return side?shard.At(0,y,x):shard.At(x,y,0);};
+     r.DrawEffectSurface(Art::Ice,at(-w,-length*.5f),at(-w*.35f,length),at(w*.30f,length*.75f),at(w,-length*.6f),{.37f,.69f,1,fade*.62f});}
+    r.DrawEffectStreak(shardAt(std::max(0.f,age-.045f)),centre,.012f*size,{.74f,.94f,1,fade*.7f});
    }else{
-    const float radius=(.20f+age*.43f)*size;
-    r.DrawEffectSprite(Art::Flame,at,radius*.62f,radius, std::sin(a+age*3)*.22f,{1,.86f,.63f,fade*.68f},true);
+    const auto at=frame.At(std::cos(a)*age*speed*size,age*(.6f+speed*.35f),-age*(.35f+std::sin(a)*.25f)*size);
+    const auto tip=frame.At(std::cos(a)*(.25f+age*speed)*size,age*(.6f+speed*.35f)+.40f,-age*(.35f+std::sin(a)*.25f)*size-.10f);
+    const float radius=(.24f+age*.48f)*size;
+    r.DrawEffectSprite(Art::Flame,at,radius*.78f,radius*1.35f,Roll(r,at,tip),{1,.79f,.45f,fade*.78f},true);
    }
+  }
+  if(!frost && e.primary){
+   // A rapid, curled detonation opens towards the incoming projectile. The
+   // moving crest dies before the slower flame/smoke; it is not a static star.
+   const float expand=1-std::pow(1-Unit(age/.34f),3.f),crest=Envelope(age,.40f,.012f);
+   for(int lobe=0;lobe<3;++lobe)ContactRibbon(r,[&](float u){
+    const float angle=lobe*tau/3+u*1.40f+age*1.6f,radius=(.12f+expand*.78f*u)*size;
+    return frame.At(std::cos(angle)*radius,std::sin(angle)*radius+age*.22f,-(.08f+u*.35f)*expand*size);
+   },.10f*size,{1,.41f,.06f,crest*.8f},{frame.sn,0,frame.cs});
   }
   const float residue=Envelope(age-.09f,ContactLifetime(e)-.09f,.09f);
   for(int n=0;n<2;++n){
-   const auto smoke=Add(p,{(n?1.f:-1.f)*age*.30f,age*.52f,age*.10f});
+   const auto smoke=frame.At((n?1.f:-1.f)*age*.30f,age*.52f,-age*.10f);
    const float radius=(.12f+age*.55f)*size;
    r.DrawEffectSprite(Art::Smoke,smoke,radius,radius*.75f,n*2.f+age*.12f,
      frost?XMFLOAT4{.64f,.78f,.88f,residue*.24f}:XMFLOAT4{.30f,.26f,.23f,residue*.24f},true);
   }
  }
  r.DrawEffectSprite(frost?Art::Ice:Art::Sparks,p,.38f*size,.38f*size,.7f,
-   frost?XMFLOAT4{.52f,.85f,1,burst*.9f}:XMFLOAT4{1,.85f,.62f,burst*.8f});
- if(e.heavy || e.chain>=2){
+   frost?XMFLOAT4{.52f,.85f,1,burst*.9f}:arcane?XMFLOAT4{.72f,.80f,1,burst*.75f}:XMFLOAT4{1,.85f,.62f,burst*.8f});
+ if(e.primary && (e.heavy || e.chain>=2)){
   const auto c=arcane?XMFLOAT4{.75f,.42f,1,fade*.25f}:frost || mixed?XMFLOAT4{.42f,.80f,1,fade*.23f}:XMFLOAT4{1,.62f,.23f,fade*.20f};
   Stamp(r,e.position,(.45f+age*.42f)*size,e.facing+age*.18f,c);
  }
@@ -152,8 +198,9 @@ void MajorContact(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 p,float a
   }
  }else if(e.school==C::Mage && e.ability==14){
   // Thermal rupture meets hot and cold material in two opposite swept lobes.
-  for(int side:{-1,1})for(int n=0;n<6;++n){const float angle=e.facing+side*(n*.30f+age*2.2f),radius=.35f+age*2.1f;
-   const auto at=Add(p,{std::cos(angle)*radius,std::sin(angle)*radius*.65f,side*.20f});
+  const ContactFrame frame(p,e.facing);
+  for(int side:{-1,1})for(int n=0;n<6;++n){const float angle=side*(n*.30f+age*2.2f),radius=.35f+age*2.1f;
+   const auto at=frame.At(std::cos(angle)*radius,std::sin(angle)*radius*.65f,side*.20f);
    const float size=(.24f+age*.20f)*(1-n*.065f);
    r.DrawEffectSprite(side<0?Art::Ice:Art::Flame,at,side<0?size*.4f:size*.8f,size*1.6f,angle,
     side<0?XMFLOAT4{.52f,.83f,1,bloom*.75f}:XMFLOAT4{1,.79f,.47f,bloom*.75f},side>0);}
@@ -304,80 +351,42 @@ XMFLOAT3 ProjectilePosition(const rpg::CombatVisualEvent& e,XMFLOAT3 origin,floa
  return CombatEffects::SpellTracePoint(origin,e.destination,t,e.school==C::Mage?.28f:0.f,e.destinationHeight);
 }
 void Contact(Renderer& r,const rpg::CombatVisualEvent& e,float age){
- if(!std::isfinite(age)||age<0 || age>=ContactLifetime(e))return;
+ if((e.kind!=K::Hit && e.kind!=K::HeavyHit) || !std::isfinite(age)||age<0 || age>=ContactLifetime(e) ||
+   !std::isfinite(e.position.x) || !std::isfinite(e.position.z) || !std::isfinite(e.height) || !std::isfinite(e.facing))return;
  const XMFLOAT3 p{e.position.x-std::sin(e.facing)*.36f,e.height,e.position.z-std::cos(e.facing)*.36f};
  MajorContact(r,e,p,age);
- const float power=(e.heavy?1.15f:.72f)*(e.empowered?1.15f:1)*(e.chain>=2?1.12f:1);
+ const float power=(e.heavy?1.15f:.72f)*(e.empowered?1.15f:1)*(e.chain>=2?1.12f:1)*(e.primary?1.f:.62f);
  if(e.school==C::Mage){
   MageContact(r,e,p,age,power*(e.heavy?1.8f:1.4f));
-  const float blast=Envelope(age,.24f,.012f);const auto element=School(e.ability);
-  const XMFLOAT4 color=element==Element::Frost?XMFLOAT4{.48f,.80f,1,blast*.68f}:element==Element::Arcane?XMFLOAT4{.72f,.49f,1,blast*.6f}:XMFLOAT4{1,.64f,.28f,blast*.58f};
-  for(int n=0;n<8;++n){const float angle=n*tau/8,reach=(.25f+age*4.5f)*power;
-   const auto tip=Add(p,{std::cos(angle)*reach,std::sin(angle)*reach,std::sin(angle*2+e.facing)*reach*.55f});
-   r.DrawEffectStreak(p,tip,.035f*power,color);}
-  if(e.heavy){
-   if(e.primary){
-    // A textured pressure skirt expands through volume rather than laying
-    // another bright circle on the floor. Gaps retain the target silhouette.
-    const float pressure=Envelope(age,.42f,.016f);
-    const auto color=element==Element::Frost?XMFLOAT4{.49f,.76f,.9f,pressure*.30f}:
-      element==Element::Arcane?XMFLOAT4{.66f,.40f,.94f,pressure*.32f}:XMFLOAT4{1,.63f,.29f,pressure*.34f};
-    for(int n=0;n<12;++n){
-     const auto at=[&](float u,bool top){const float a=(n+u)*tau/12+e.facing;
-      const float radius=(.20f+age*4.8f)*power*(top?.48f:1.f);
-      const float y=top?.28f+age*.7f:-.24f-age*.7f;
-      return Add(p,{std::cos(a)*radius,y,std::sin(a)*radius});};
-     r.DrawEffectSurface(element==Element::Arcane?Art::Arcane:Art::Smoke,at(.08f,false),at(.08f,true),at(.92f,true),at(.92f,false),color);
-    }
-   }
-   const float bloom=Envelope(age,.64f,.045f);
-   for(unsigned n=0;n<4;++n){
-    const float a=n*tau/4+e.facing,spread=(.16f+age*1.25f)*power;
-    auto plume=Add(p,{std::cos(a)*spread,age*.75f,std::sin(a)*spread});
-    const float radius=(.24f+age*.50f)*power;
-    if(element==Element::Frost)
-     r.DrawEffectSprite(Art::Smoke,plume,radius*1.35f,radius,.3f*n,{.55f,.73f,.88f,bloom*.23f},true);
-    else if(element==Element::Arcane)
-     r.DrawEffectSprite(Art::Arcane,plume,radius,radius,age*2+n,{.69f,.40f,1,bloom*.33f});
-    else
-     r.DrawEffectSprite(Art::Flame,plume,radius*.75f,radius*1.5f,a*.17f,{1,.73f,.40f,bloom*.58f},true);
-   }
-  }
-  r.DrawEffectSprite(Art::Sparks,p,.75f*power,.75f*power,0,{1,.92f,.77f,blast*.65f});return;
+  return;
  }
  if(e.school==C::Priest){
   const float fade=Envelope(age,.88f,.025f),flash=Envelope(age,.22f,.008f),size=power*(e.signature?1.25f:1.f);
-  const float sx=std::sin(e.facing),cx=std::cos(e.facing);
-  const auto plane=[&](float x,float y){return Add(p,{cx*x,y,-sx*x});};
-  r.DrawEffectSurface(Art::Slash,plane(-.24f*size,-.70f*size),plane(-.24f*size,1.25f*size),plane(.24f*size,1.25f*size),plane(.24f*size,-.70f*size),{1,.90f,.57f,fade*.75f});
-  r.DrawEffectSprite(Art::Seal,p,(.35f+age*.8f)*size,(.35f+age*.8f)*size,-age*.35f,{1,.83f,.39f,fade*.58f});
-  for(int n=0;n<8;++n){const float a=n*tau/8,reach=(.30f+age*1.6f)*size;
-   r.DrawEffectStreak(plane(std::cos(a)*.14f,std::sin(a)*.14f),plane(std::cos(a)*reach,std::sin(a)*reach),.025f,{1,.94f,.72f,fade*.6f});}
-  Stamp(r,e.position,.8f*size,0,{1,.82f,.35f,fade*.32f});
-  if(e.heavy)for(int n=-1;n<=1;++n){
-   // Three descending curtains end at the accepted target, with a warm gold
-   // outer veil and a narrow ivory core. No full-screen exposure flash.
-   const float x=n*.34f*size,descent=Unit(age/.16f);
-   const float lower=(1-descent)*1.8f*size,upper=(2.2f-age*.45f)*size;
-   const float alpha=Envelope(age,.62f,.025f)*(n?.32f:.52f);
-   r.DrawEffectSurface(Art::Slash,plane(x-.10f*size,lower),plane(x-.10f*size,upper),
-    plane(x+.10f*size,upper),plane(x+.10f*size,lower),{1,.91f,.64f,alpha});
+  const ContactFrame frame(p,e.facing);
+  // Staggered shafts descend, then open into vaulted ribs. Crossed surfaces
+  // preserve volume at side angles without hiding the victim behind a disc.
+  const int shafts=e.heavy && e.primary?3:1;
+  for(int n=0;n<shafts;++n){
+   const float t=age-n*.026f;if(t<=0)continue;
+   const float side=n==0?0:n==1?-.38f:.38f,alpha=Envelope(t,.55f,.012f)*(n?.40f:.66f);
+   const float lower=(-.60f+(1-combat::Smooth(t/.105f))*1.4f)*size,upper=(e.heavy?2.7f:1.3f)*size-t*.7f;
+   const float width=(n?.08f:.12f)*size;
+   for(int axis=0;axis<2;++axis){const auto at=[&](float x,float y){return frame.At(side*size+(axis?0:x),y,axis?x:0);};
+    r.DrawEffectSurface(Art::Slash,at(-width,lower),at(-width,upper),at(width,upper),at(width,lower),{1,.88f,.48f,alpha});}
+   r.DrawEffectStreak(frame.At(side*size,lower,0),frame.At(side*size,upper,0),width*.18f,{1,.97f,.83f,alpha*.75f});
   }
-  if(e.heavy && e.primary) {
-   // Open gold/ivory vanes around the contact form a volume from side views,
-   // where the original single-plane descending curtains become edge-on.
-   const float opening=combat::Smooth(age/.20f),glow=Envelope(age,.72f,.025f);
-   for(int n=0;n<6;++n) {
-    const float a=e.facing+n*tau/6,radial=(.26f+opening*.66f)*size;
-    const float y=-.18f+age*.62f,span=(.30f+opening*.36f)*size;
-    const XMFLOAT3 base=Add(p,{std::sin(a)*radial,y,std::cos(a)*radial});
-    const XMFLOAT3 up=Add(base,{std::sin(a)*.24f*size,span,std::cos(a)*.24f*size});
-    const XMFLOAT3 edge{std::cos(a)*.12f*size,0,-std::sin(a)*.12f*size};
-    r.DrawEffectSurface(Art::Slash,Add(base,{-edge.x,0,-edge.z}),Add(up,{-edge.x*.28f,0,-edge.z*.28f}),
-      Add(up,{edge.x*.28f,0,edge.z*.28f}),Add(base,edge),{1,.86f,.43f,glow*.44f});
-    r.DrawEffectStreak(base,up,.014f*size,{1,.97f,.79f,glow*.65f});
+  if(e.primary){
+   const float open=combat::Smooth(age/.24f),glow=Envelope(age-.035f,.64f,.04f);
+   for(int n=0;n<4;++n){const float a=n*tau/4+pi*.25f;
+    ContactRibbon(r,[&](float u){const float angle=u*pi,radial=(.20f+open*.80f)*std::sin(angle)*size;
+     return frame.At(std::cos(a)*radial,(-.52f+u*2.15f)*size,std::sin(a)*radial);
+    },.055f*size,{1,.71f,.20f,glow*.62f},{frame.cs*std::sin(a)-frame.sn*std::cos(a),0,-frame.sn*std::sin(a)-frame.cs*std::cos(a)});
    }
+   for(int n=0;n<6;++n){const float a=n*tau/6+age*.45f,radial=(.3f+age*.6f)*size;
+    const auto at=frame.At(std::cos(a)*radial,(-.5f+age*(1+n*.12f))*size,std::sin(a)*radial);
+    r.DrawEffectSprite(Art::Slash,at,.055f*size,.19f*size,0,{1,.94f,.68f,glow*.45f});}
   }
+  if(e.heavy && e.primary)Stamp(r,e.position,.8f*size,0,{1,.82f,.35f,fade*.24f});
   r.DrawEffectSprite(Art::Sparks,p,.65f*size,.65f*size,0,{1,.96f,.83f,flash*.8f});return;
  }
  const float flash=Envelope(age,.18f,.008f),fade=Envelope(age,.32f);
@@ -386,21 +395,30 @@ void Contact(Renderer& r,const rpg::CombatVisualEvent& e,float age){
   const int cuts=e.ability==14 || e.signature?2:1;
   for(int n=0;n<cuts;++n){
    const float tilt=(n?-.65f:.65f)+(e.ability==12?pi:0),cs=std::cos(e.facing),sn=std::sin(e.facing);
+   const float travel=combat::Smooth(age/.13f),length=.36f+travel*.46f;
    const auto surface=[&](float x,float y){const float right=(x*std::cos(tilt)-y*std::sin(tilt))*power;
     const float up=(x*std::sin(tilt)+y*std::cos(tilt))*power;
     return Add(p,{cs*right,up,-sn*right});};
-   r.DrawEffectSurface(Art::Slash,surface(-.62f,-.42f),surface(-.62f,.42f),surface(.62f,.42f),surface(.62f,-.42f),color);
+   const float centre=-.24f+travel*.48f;
+   r.DrawEffectSurface(Art::Slash,surface(centre-length,-.24f),surface(centre-length,.24f),surface(centre+length,.24f),surface(centre+length,-.24f),color);
   }
   r.DrawEffectSprite(Art::Sparks,p,.38f*power,.38f*power,e.facing,{1,.75f,.42f,flash*.9f});
   // A brief blade flash yields to gravity-driven metal fragments, not a ball
   // of light glued to the victim for the whole recovery.
+  const ContactFrame frame(p,e.facing);
   for(unsigned n=0;n<(e.heavy?7u:4u);++n){const float a=Rand(e.actor+n*43u)*tau,speed=.8f+Rand(n*23u+e.actor)*1.8f;
-   const auto at=[&](float t){return Add(p,{std::cos(a)*speed*t,std::sin(a)*speed*t-3.6f*t*t,std::sin(e.facing)*t*.4f});};
+   const auto at=[&](float t){return frame.At(std::cos(a)*speed*t,std::sin(a)*speed*t-3.6f*t*t,-t*.4f);};
    r.DrawEffectStreak(at(std::max(0.f,age-.025f)),at(age),.009f,{1,.68f,.29f,Envelope(age,.42f,.008f)*.8f});}
   if(e.heavy)Dust(r,Ground(e.position,.18f),age,power,e.actor,true);
  }else if(e.school==C::Scout || e.school==C::Engineer){
   r.DrawEffectSprite(Art::Sparks,p,.19f*power,.28f*power,e.facing,{.86f,.76f,.48f,flash*.75f});
   Dust(r,p,age,power*.70f,e.actor+unsigned(e.ability));
+  if(e.school==C::Scout){const ContactFrame frame(p,e.facing);
+   for(unsigned n=0;n<(e.heavy?6u:3u);++n){const float a=n*tau/6+Rand(e.actor+n)*.3f;
+    const auto at=[&](float t){return frame.At(std::cos(a)*t*.70f,std::sin(a)*t*.85f-2.5f*t*t,-t*(.9f+Rand(e.actor+n*11)));};
+    r.DrawEffectStreak(at(std::max(0.f,age-.035f)),at(age),.013f,{.65f,.52f,.32f,Envelope(age,.36f,.009f)*.8f});
+   }
+  }
   if(e.ability==9 || e.ability==11 || e.ability==14)
    r.DrawEffectSprite(Art::Slash,p,.42f,.16f,-.4f,{.65f,.76f,.72f,fade*.32f});
  }else{

@@ -30,6 +30,7 @@ Simulation Hero(ClassId id){
  auto save=s.Save();const auto at=save.find("PROFILE ");save.replace(at,save.find('\n',at)-at,"PROFILE "+std::to_string(int(id))+" \"Tester\" 7 0 3");Check(s.Load(save) && s.Level()==10,"Level-ten fixture");return s;
 }
 void Motion(){
+ float maximumHandSpeed=0;
  for(int ability:{8,11,14}){
   animation::AuthoredWeaponController wide;wide.Update(.001f,combat::Contact(true),true,false,true,1,false,ability,0);
   const auto expected=playerclips::Sample(playerclips::Clip::Slash,playerclips::Collection()[unsigned(playerclips::Clip::Slash)].contact);
@@ -50,31 +51,42 @@ void Motion(){
  Check(a.x*b.x+a.y*b.y+a.z*b.z<-.000001f,"Backhand still crosses in the normal direction");
  for(int style=0;style<4;++style)for(int ability:{0,1,5,6,8,9,11,12,13,14})for(bool cancel:{false,true}){
   const bool heavy=ability!=0 && ability!=12,bow=style==1,staff=style>=2;
-  animation::AuthoredWeaponController control;CharacterPose previous;float speed=0,shift=0;
+  animation::AuthoredWeaponController control;CharacterPose previous;float speed=0,shift=0,peakTime=0;int peakSide=0;
   for(int n=0;n<1800;++n){const float t=n*.001f,end=cancel?.13f:combat::Duration(heavy);
    control.Update(.001f,t<end?t:-1,heavy,staff,true,1,bow,ability,style);
    animation::Sample s;s.authoredGait=true;s.authoredEquipment=style==3?playerclips::Equipment::None:bow?playerclips::Equipment::Bow:staff?playerclips::Equipment::Staff:playerclips::Equipment::Sword;
    s.authoredStrike=control.frame;s.authoredStrikePhase=control.phase;s.authoredStrikeWeight=control.weight;s.authoredStrikeHeavy=control.heavy;s.authoredAccent=control.accent;
+   s.authoredReady=control.ready;s.authoredEntryReady=control.entryReady;
+   s.authoredMechanics=control.mechanics;s.authoredMechanicsTracked=true;
    s.feetActive=true;s.feet[0].x=-.18f;s.feet[1].x=.18f;
    const auto pose=BuildCharacterPose(0,0,false,s,style==3?WeaponForm::Scepter:bow?WeaponForm::Handbow:staff?WeaponForm::AstralStaff:WeaponForm::Blade);
    for(int side=0;side<2;++side){Check(Distance(pose.legs[side].end,{side?.18f:-.18f,.17f,0})<.0001f,"Ability accent moved a planted foot");
-    if(n)speed=std::max(speed,Distance(pose.arms[side].end,previous.arms[side].end)*1000);}
+    if(n){const float current=Distance(pose.arms[side].end,previous.arms[side].end)*1000;
+     if(current>speed){speed=current;peakTime=t;peakSide=side;}}}
    shift=std::max(shift,std::abs(control.accent.pitch)+std::abs(control.accent.yaw));previous=pose;
   }
+  if(!(speed<13 && shift>.0001f && control.weight==0))std::cerr<<"Motion case: style="<<style<<" ability="<<ability
+   <<" cancelled="<<cancel<<" peak hand speed="<<speed<<" at "<<peakTime<<" s, side "<<peakSide<<" accent="<<shift<<" final weight="<<control.weight<<'\n';
   Check(speed<13 && shift>.0001f && control.weight==0,"Ability choreography discontinuity or lost settling");
+  maximumHandSpeed=std::max(maximumHandSpeed,speed);
  }
  for(int hz:{30,60,144,1000}){
-  animation::AuthoredWeaponController c;CharacterPose previous;float worst=0;
+  animation::AuthoredWeaponController c;CharacterPose previous;float worst=0,peakTime=0;
   for(int n=0;n<hz*4;++n){const float time=float(n)/hz,cycle=std::fmod(time,.58f);const int ability=int(time/.58f)%2?12:0;
    c.Update(1.f/hz,cycle<combat::Duration(false)?cycle:-1,false,false,true,1,false,ability,0);
    animation::Sample s;s.authoredGait=true;s.authoredEquipment=playerclips::Equipment::Sword;s.authoredStrike=c.frame;
-   s.authoredStrikeWeight=c.weight;s.authoredStrikePhase=c.phase;s.authoredAccent=c.accent;
+   s.authoredStrikeWeight=c.weight;s.authoredStrikePhase=c.phase;s.authoredAccent=c.accent;s.authoredReady=c.ready;s.authoredEntryReady=c.entryReady;
+   s.authoredMechanics=c.mechanics;s.authoredMechanicsTracked=true;
    const auto pose=BuildCharacterPose(0,0,false,s,WeaponForm::Blade);
-   if(n)worst=std::max(worst,Distance(pose.arms[1].end,previous.arms[1].end)*hz);
+   if(n){const float current=Distance(pose.arms[1].end,previous.arms[1].end)*hz;
+    if(current>worst){worst=current;peakTime=time;}}
    previous=pose;
   }
+  if(worst>=13)std::cerr<<"Alternating motion: hz="<<hz<<" peak="<<worst<<" at "<<peakTime<<" s\n";
   Check(worst<13,"Alternating normal/backhand attacks snapped at recovery");
+  std::cout<<"Alternating cuts at "<<hz<<" Hz: "<<worst<<" m/s peak wrist speed\n";
  }
+ std::cout<<"Single/cancelled actions: "<<maximumHandSpeed<<" m/s maximum wrist speed\n";
 }
 void Native(Renderer& r,const std::filesystem::path& out){
  for(int ability:{8,12,14})for(int ordinal=0;ordinal<3;++ordinal){
@@ -91,7 +103,12 @@ void Native(Renderer& r,const std::filesystem::path& out){
    begin();fx.Render(r);Check(r.EffectVertices()>0 && r.EffectVertices()<1800,"Signature contact budget");
    auto p=Capture(r,out/("contact-"+std::to_string(int(school))+"-"+std::to_string(ability)+"-"+std::to_string(hz)+".png"));
    if(hz==30)primary=p;else Check(Difference(primary,p)<.04,"Signature changed with refresh rate");
-   for(int n=0;n<20;++n)fx.Advance(.05f);begin();fx.Render(r);Check(r.EffectVertices()==0 && r.EndFrame(false),"Signature never expired");}
+   for(int n=0;n<20;++n)fx.Advance(.05f);
+   Check(fx.BurstCount()==0,"Signature burst never expired");
+   // Ground aftermath has its own longer lifetime; it is not a stuck contact.
+   begin();fx.Render(r);Check(r.EffectVertices()<=180 && r.EndFrame(false),"Expired signature retained more than its ground aftermath");
+   for(int n=0;n<44;++n)fx.Advance(.05f);
+   begin();fx.Render(r);Check(fx.ResidueCount()==0 && r.EffectVertices()==0 && r.EndFrame(false),"Signature aftermath never expired");}
   e.primary=false;begin();spellvfx::Contact(r,e,.24f);auto secondary=Capture(r,out/("secondary-"+std::to_string(int(school))+"-"+std::to_string(ability)+".png"));
   std::cout<<"Contact "<<int(school)<<'/'<<ability<<" primary difference "<<Difference(primary,secondary)<<'\n';
   // A narrow returning beam changes fewer pixels than a ground explosion.
@@ -108,8 +125,16 @@ void Native(Renderer& r,const std::filesystem::path& out){
 }
 void Live(Renderer& r,const std::filesystem::path& out){
  Check(r.Resize(1600,900),"World resolution");
- for(auto id:{ClassId::Warrior,ClassId::Scout,ClassId::Mage,ClassId::Priest})for(int ability:id==ClassId::Mage?std::vector<int>{8,9,11,14}:id==ClassId::Priest?std::vector<int>{5,6}:id==ClassId::Warrior?std::vector<int>{6,12,14}:std::vector<int>{8,9,11}){
-  Game g;g.Initialize();Check(g.RestoreSnapshot(Hero(id).Save()),"World fixture");g.SetCameraOrbit(.95f,.42f,9.f);
+ for(auto id:{ClassId::Warrior,ClassId::Scout,ClassId::Mage,ClassId::Priest})for(int ability:id==ClassId::Mage?std::vector<int>{8,9,11,14}:id==ClassId::Priest?std::vector<int>{5,6}:id==ClassId::Warrior?std::vector<int>{0,1,6,12,14}:std::vector<int>{8,9,11}){
+  Game g;g.Initialize();Check(g.RestoreSnapshot(Hero(id).Save()),"World fixture");
+  // Inspect the cut itself, not a camera retracted into the hero by a tree.
+  // Use this clear orbit for both the phase sequence and the wider contact.
+  float clearance=0,viewYaw=0,viewPitch=0;
+  for(float pitch:{.20f,.40f,.65f,.85f,1.05f})for(int n=0;n<32;++n){const float yaw=n*6.2831853f/32;
+   const auto d=g.State().CameraDistance(g.State().Player(),g.State().WorldHeight()+1.4f,{-std::sin(yaw)*std::cos(pitch),-std::cos(yaw)*std::cos(pitch)},std::sin(pitch),10.f);
+   if(d>clearance){clearance=d;viewYaw=yaw;viewPitch=pitch;}}
+  Check(clearance>=5,"World fixture lacks a clear review orbit");
+  g.SetCameraOrbit(viewYaw,viewPitch,5.5f);
   Command c;c.selectActor=210;g.ExecuteCommand(c,.001f);
   // Earn reserve through real accepted contacts on the immortal practice dummy.
   for(int attempt=0;attempt<8 && !g.State().EmpoweredReady();++attempt) {c={};c.ability=0;g.ExecuteCommand(c,.001f);for(int n=0;n<240;++n)g.ExecuteCommand({},.01f);}
@@ -124,6 +149,9 @@ void Live(Renderer& r,const std::filesystem::path& out){
     if(e.kind==K::SpellCast || e.kind==K::HeavyStrike || e.kind==K::Strike)release=true;
     if(e.kind==K::Hit || e.kind==K::HeavyHit){contact=true;if(e.primary)++primaries;else ++secondaries;}}
    motion|=g.PlayerAnimation().authoredStrikeWeight>.1f && std::abs(g.PlayerAnimation().authoredAccent.pitch)+std::abs(g.PlayerAnimation().authoredAccent.yaw)>.001f;
+   if(id==ClassId::Warrior && (n==12 || n==24 || n==36)) {
+    r.BeginFrame();g.Render(r);Capture(r,out/("world-cut-"+std::to_string(ability)+"-"+std::to_string(n)+".png"));
+   }
    if(release && !contact && n%12==0){r.BeginFrame();g.Render(r);Capture(r,out/("world-flight-"+std::to_string(int(id))+"-"+std::to_string(ability)+".png"));}}
   if(!contact || !release || primaries!=1 || !motion)std::cerr<<"contact="<<contact<<" release="<<release<<" primary="<<primaries<<" motion="<<motion<<'\n';
   Check(contact && release && primaries==1 && motion,"Action lost its single primary contact/release or body motion");
@@ -133,23 +161,23 @@ void Live(Renderer& r,const std::filesystem::path& out){
   for(int n=0;n<24;++n)g.ExecuteCommand({},.01f);
   const auto save=g.State().Save();r.BeginFrame();g.Render(r);const auto image=Capture(r,out/("world-contact-"+std::to_string(int(id))+"-"+std::to_string(ability)+".png"));
   r.BeginFrame();g.Render(r);Check(image==Capture(r,out/"repeat.png") && save==g.State().Save(),"Rendering mutated choreography");
-  // Find an actually clear orbit through the yard, rather than labelling a
-  // camera pushed into foliage as a distant readability capture.
-  float clearance=0,viewYaw=0,viewPitch=0;
-  for(float pitch:{.20f,.40f,.65f,.85f,1.05f})for(int n=0;n<32;++n){const float yaw=n*6.2831853f/32;
-   const auto d=g.State().CameraDistance(g.State().Player(),g.State().WorldHeight()+1.4f,{-std::sin(yaw)*std::cos(pitch),-std::cos(yaw)*std::cos(pitch)},std::sin(pitch),10.f);
-   if(d>clearance){clearance=d;viewYaw=yaw;viewPitch=pitch;}}
-  Check(clearance>=5,"World fixture lacks a clear review orbit");
   g.SetCameraOrbit(viewYaw,viewPitch,10.f);r.BeginFrame();g.Render(r);
   Capture(r,out/("world-wide-"+std::to_string(int(id))+"-"+std::to_string(ability)+".png"));
   Check(g.RestoreSnapshot(Hero(id).Save()) && g.Effects().BurstCount()==0 && g.PlayerAnimation().authoredStrikeWeight==0,"Load retained signature motion/effects");
  }
 }
 }
-int main(){try{
- Check(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"COM");Motion();
+int main(int argc,char** argv){try{
+ Check(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"COM");
+ if(argc>1 && std::string(argv[1])=="--motion"){Motion();std::cout<<"PASS: motion continuity and anchored feet.\n";return 0;}
+ // Report independent native/event failures even if the pose-only audit fails.
+ // The suite still fails at the end; no motion assertion is relaxed/skipped.
+ std::string motionFailure;
+ try{Motion();}catch(const std::exception& e){motionFailure=e.what();std::cerr<<"Motion audit: "<<motionFailure<<'\n';}
  const std::filesystem::path out="signature-review";std::filesystem::create_directories(out);
  Win32Window w;Check(w.Create(GetModuleHandleW(nullptr),960,600,L"Signature checks",false),"Window");Renderer r;Check(r.Initialize(w.GetHandle(),960,600),"Renderer");
  Native(r,out);Live(r,out);Check(r.ValidateDebugMessages(),"D3D diagnostics");
+ std::cout<<"PASS: native signatures, area contacts/audio, actual four-class combat and load isolation.\n";
+ Check(motionFailure.empty(),motionFailure.c_str());
  std::cout<<"PASS: ability choreography, anchored feet, distinct native signatures, meteor endpoint, fan arrows, one primary area event/audio, actual four-class combat and load isolation.\n";
  }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

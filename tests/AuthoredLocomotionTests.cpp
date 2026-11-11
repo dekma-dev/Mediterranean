@@ -55,7 +55,7 @@ void LibraryChecks(){
       walkPeak=std::max(walkPeak,playerclips::SwingHeight(w,0,side,i/100.f));
       runPeak=std::max(runPeak,playerclips::SwingHeight(w,1,side,i/100.f));
     }
-    Check(walkPeak>.025f&&runPeak>walkPeak+.10f&&runPeak<=.48f,"Walk/run need different bounded recovery heights");
+    Check(walkPeak>.025f&&walkPeak<.09f&&runPeak>walkPeak+.07f&&runPeak<=.23f,"Economical recovery must clear the ground without a high-stepping gait");
     Check(playerclips::SwingHeight(w,1,0,0)==0&&playerclips::SwingHeight(w,1,1,1)==0,"Contact endpoints must be flat");
   }
   const auto rejected=[](std::string data){try{playerclips::Decode(data);return false;}catch(const std::exception&){return true;}};
@@ -190,7 +190,7 @@ void AuthoredLegChecks(){
     }
   }
   Check(recoveryPitch>.65f&&livePitch>.65f,"Source ankle recovery was lost between Blender and native playback");
-  Check(liveHeight>.48f&&liveHeight<.68f,"Recovery must fold behind the hip without a high-knee march");
+  Check(liveHeight>.32f&&liveHeight<.45f,"Running ankle recovery must remain compact instead of reaching half a metre");
   auto sample=runner.state.pose;sample.feetActive=true;
   sample.feet[0]={-.13f,.42f,.12f,0,0};sample.feet[1]={.13f,.20f,-.08f,0,0};
   sample.authoredMotion.knees[0]={0,0,1};
@@ -209,6 +209,33 @@ void AuthoredLegChecks(){
   Check(std::abs(Distance(recovery.legs[0].root,recovery.legs[0].joint)-CharacterPose::thigh)<1e-5f&&
     std::abs(Distance(recovery.legs[0].joint,recovery.legs[0].end)-CharacterPose::shin)<1e-5f,"Free leg reach correction stretched a bone");
   std::cout<<"Authored legs: recovery pitch "<<livePitch<<", ankle height "<<liveHeight<<'\n';
+}
+void CuttingGripChecks(){
+  float worstAlignment=1,worstRollStep=0;
+  for(float speed:{0.f,1.4f,6.f}) {
+    animation::State state;XMFLOAT3 previous{};
+    for(int tick=0;tick<2400;++tick) {
+      constexpr float dt=.001f;
+      state.Update(dt,0,0,speed*dt,true,0);
+      state.locomotion.Update(dt,speed*dt,1,0,0,true,0,0,true);
+      animation::ApplyAuthoredLocomotion(state,dt,playerclips::Equipment::Sword);
+      const auto pose=BuildCharacterPose(0,0,false,state.pose,rpg::WeaponForm::Blade);
+      const auto frame=WeaponFrame(pose);
+      const auto forearm=XMVector3Normalize(XMLoadFloat3(&pose.arms[1].end)-XMLoadFloat3(&pose.arms[1].joint));
+      if(tick>500) {
+        worstAlignment=std::min(worstAlignment,XMVectorGetX(XMVector3Dot(frame.r[0],forearm)));
+        worstRollStep=std::max(worstRollStep,Distance(previous,pose.weaponRight));
+        Check(pose.weaponDirection.y<-.6f&&pose.weaponDirection.z<-.15f,
+          "Travelling swordsman points the blade forward instead of carrying it down and clear");
+        Check(Distance(BuildHandPose(pose,1,true,false,0).Point({0,-.055f,-.043f}),pose.arms[1].end)<1e-5f,
+          "Cutting grip detached the wrist from the forearm");
+      }
+      previous=pose.weaponRight;
+    }
+  }
+  Check(worstAlignment>.7f,"Carried sword forces the knuckles sideways across the forearm");
+  Check(worstRollStep<.003f,"Carried sword rolls abruptly at a grip-frame pole");
+  std::cout<<"Cutting grip: forearm alignment "<<worstAlignment<<", maximum roll-vector change per ms "<<worstRollStep<<'\n';
 }
 void ContinuousCycleChecks(){
   // Directional source support must survive retargeting. Forward running has
@@ -513,7 +540,8 @@ void GroundedMotionChecks(){
     for(int tick=0;tick<1500;++tick) {
       const float t=tick*.001f;controller.Update(.001f,t<combat::Duration(heavy)?t:-1,heavy,cls==2,true,1,cls==1);
       animation::Sample s;s.authoredGait=true;s.authoredEquipment=cls==0?playerclips::Equipment::Sword:cls==1?playerclips::Equipment::Bow:playerclips::Equipment::Staff;
-      s.authoredReady=ready?1:controller.ready;s.authoredStrike=controller.frame;s.authoredStrikeWeight=controller.weight;s.authoredStrikePhase=controller.phase;s.authoredStrikeHeavy=heavy;
+      s.authoredReady=ready?1:controller.ready;s.authoredEntryReady=ready?1:controller.entryReady;
+      s.authoredStrike=controller.frame;s.authoredStrikeWeight=controller.weight;s.authoredStrikePhase=controller.phase;s.authoredStrikeHeavy=heavy;
       s.feetActive=true;s.feet[0].x=-.18f;s.feet[1].x=.18f;
       const auto pose=BuildCharacterPose(0,0,false,s,cls==0?rpg::WeaponForm::Blade:cls==1?rpg::WeaponForm::Handbow:rpg::WeaponForm::AstralStaff);
       const auto tip=pose.WeaponPoint(.96f),hip=pose.PelvisPoint({0,.93f,0});
@@ -713,7 +741,7 @@ int main(int argc,char** argv){try{
   if(argc==2&&std::string_view(argv[1])=="--capture-only") {Captures();return 0;}
   if(argc==2&&std::string_view(argv[1])=="--flight-only") {LibraryChecks();EquippedFlightChecks();return 0;}
   if(argc==2&&std::string_view(argv[1])=="--bow-only") {LibraryChecks();BowMotionChecks();WeaponCarryChecks();EquippedFlightChecks();std::cout<<"PASS: archery draw, release, carry and flight\n";return 0;}
-  LibraryChecks();GroundedMotionChecks();NaturalGaitChecks();AuthoredLegChecks();ContinuousCycleChecks();LateralClearanceChecks();RecoveryTimingChecks();FlightClockChecks();ContactsAndTransitions();WeaponMotionChecks();LoadedArmRunningChecks();BowMotionChecks();WeaponCarryChecks();EquippedFlightChecks();
+  LibraryChecks();GroundedMotionChecks();NaturalGaitChecks();AuthoredLegChecks();CuttingGripChecks();ContinuousCycleChecks();LateralClearanceChecks();RecoveryTimingChecks();FlightClockChecks();ContactsAndTransitions();WeaponMotionChecks();LoadedArmRunningChecks();BowMotionChecks();WeaponCarryChecks();EquippedFlightChecks();
   if(!(argc==2&&std::string_view(argv[1])=="--motion-only"))Captures();
   std::cout<<"PASS: imported gait loops, directional weapon carry, equipped jumps, combat guards, contacts, transition continuity, gameplay isolation and native comparison\n";}
 catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

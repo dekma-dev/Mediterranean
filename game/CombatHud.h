@@ -5,6 +5,20 @@
 #include <cmath>
 
 namespace ui {
+// Keep combat controls close to their native pixel size on desktop displays.
+// Small windows retain the original layout; large windows gain world space.
+// The same affine map is used for drawing, picking and collision reservations.
+struct HudTransform {
+  float scale=1,x=0,y=0;
+  static HudTransform At(float width,float height,float anchorX,float anchorY) {
+    const float canvas=std::min(width/1280.f,height/720.f);
+    const float density=std::isfinite(canvas) && canvas>0?std::clamp(1/canvas,.68f,1.f):1.f;
+    return {density,anchorX*(1-density),anchorY*(1-density)};
+  }
+  float X(float value) const {return x+value*scale;}
+  float Y(float value) const {return y+value*scale;}
+  template<class T> T Map(T rect) const {return {X(rect.x),Y(rect.y),rect.w*scale,rect.h*scale};}
+};
 struct HudAnchor { float x,y; };
 struct CombatHudLayout {
   HudAnchor player,target;

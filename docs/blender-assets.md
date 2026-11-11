@@ -1,8 +1,20 @@
 # Blender collection in the native renderer
 
+## Sword grip, economical recovery and cloak inertia (2026-11-11, v20)
+
+The current motion source is `assets/authored/player-motion-v20.blend`.
+Thirty-seven existing actions revise sword grip/cutting and leg recovery.
+Native presentation retains the incoming carry during attack preparation,
+transports the grip and elbow frames continuously, and animates the cloak's
+middle and hem separately. Six existing sword/bow/staff collections have
+denser geometry and refined surface treatment; the other 27 equipment records
+and garment weights are unchanged. Faces and all thirteen user-created models
+remain frozen. See [the v20 record](player-grip-cloak-v20.md) for references,
+preservation, limitations and the native before/after comparison.
+
 ## Loaded weapon arms and recovery (2026-11-11, v19)
 
-The current motion source is `assets/authored/player-motion-v19.blend`.
+The preceding motion source is `assets/authored/player-motion-v19.blend`.
 Twenty-one sword/staff/bow arm actions have revised running articulation,
 jump load response and attack follow-through. Equipped flight blends more
 gradually; attacks retain their contact clock and have longer presentation
@@ -10,6 +22,10 @@ recovery. All native non-arm channels and headers, all Blender non-arm curves,
 36 complete records and twenty-one frozen sources are preserved. See
 [the v19 weapon-arm record](player-weighted-arms-v19.md) for the changes,
 measurement limits and twelve-scenario local video comparison.
+All twelve selected motion/art suites pass in Release and Debug, including
+the corrected saved-profile capture fixture. All six game outputs embed the
+current resources and pass fixture-save smoke launches; face/scalp data and
+shading remain frozen.
 
 ## Running support and compact jump recovery (2026-11-11, v18)
 
