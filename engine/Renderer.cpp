@@ -98,6 +98,8 @@ bool Renderer::Resize(int width, int height) {
  if (width<=0 || height<=0 || (width==width_ && height==height_)) return true;
  ID3D11ShaderResourceView* empty=nullptr;context_->PSSetShaderResources(15,1,&empty);
  context_->OMSetRenderTargets(0,nullptr,nullptr); target_.Reset(); depth_.Reset();effectDepthView_.Reset();effectDepthResource_.Reset();
+ ID3D11ShaderResourceView* noGlow=nullptr;context_->PSSetShaderResources(16,1,&noGlow);
+ for(auto& view:glowViews_)view.Reset();for(auto& target:glowTargets_)target.Reset();glowWidth_=glowHeight_=0;
  if (!Check(swapChain_->ResizeBuffers(0,width,height,DXGI_FORMAT_UNKNOWN,0),L"Resize swap chain")) return false;
  return CreateTargets(width,height);
 }
@@ -182,6 +184,8 @@ bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
  if (!Check(device_->CreateBuffer(&b,&data,indices_.GetAddressOf()),L"Create mesh indices")) return false;
  b={}; b.ByteWidth=sizeof(Constants); b.Usage=D3D11_USAGE_DEFAULT; b.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
  if (!Check(device_->CreateBuffer(&b,nullptr,constants_.GetAddressOf()),L"Create constants")) return false;
+ b.ByteWidth=sizeof(spellVolumes_);
+ if(!Check(device_->CreateBuffer(&b,nullptr,spellVolumeConstants_.GetAddressOf()),L"Create spell volumes"))return false;
  b.ByteWidth=sizeof(visual::TransientLightBlock);
  const visual::TransientLightBlock emptyLights{};
  D3D11_SUBRESOURCE_DATA lightData{};lightData.pSysMem=&emptyLights;
@@ -347,6 +351,8 @@ void Renderer::BeginFrame() {
  gpuTimer_.Begin(context_.Get());
  hud_.clear();
  effects_.clear(); groundMarks_.clear();cloudSprites_.clear();cloudVertices_.clear(); effectVertices_=0;
+ spellVolumeCount_=0;spellVolumeCoverage_=0;
+ spellGlowPasses_=0;
  for (auto& batch : world_) batch.clear();
  bodyCount_=handCount_=0;
  bodyLodCounts_={}; bodyLodHistory_.BeginFrame();
@@ -911,18 +917,73 @@ void Renderer::DrawEffectSprite(EffectArt art,XMFLOAT3 center,float width,float 
  if(cloud)cloudSprites_.push_back({{va,vb,vc,va,vc,vd},clip.w});
  else effects_.insert(effects_.end(),{va,vb,vc,va,vc,vd});
 }
+void Renderer::DrawSpellVolume(SpellMedium medium,XMFLOAT3 center,XMFLOAT3 direction,XMFLOAT3 radii,
+ float phase,XMFLOAT4 tint,unsigned seed) {
+ const auto finite=[](XMFLOAT3 v){return std::isfinite(v.x)&&std::isfinite(v.y)&&std::isfinite(v.z);};
+ if((portrait_ && !portraitEffects_) || int(medium)<0 || int(medium)>3 || !finite(center) || !finite(direction) ||
+    !finite(radii) || !std::isfinite(phase) || !std::isfinite(tint.x) || !std::isfinite(tint.y) ||
+    !std::isfinite(tint.z) || !std::isfinite(tint.w) || tint.w<=0 || std::min({radii.x,radii.y,radii.z})<.003f ||
+    std::max({radii.x,radii.y,radii.z})>3.5f || spellVolumeCount_>=maxSpellVolumes || cloudSprites_.size()>=96 || EffectVertices()+6>maxEffectVertices)return;
+ auto axis=XMLoadFloat3(&direction);const float directionLength=XMVectorGetX(XMVector3LengthSq(axis));
+ if(!std::isfinite(directionLength) || directionLength<1e-8f)return;
+ axis=XMVector3Normalize(axis);
+ const auto reference=std::abs(XMVectorGetY(axis))>.95f?XMVectorSet(1,0,0,0):XMVectorSet(0,1,0,0);
+ const auto right=XMVector3Normalize(XMVector3Cross(reference,axis)),up=XMVector3Cross(axis,right);
+ const auto origin=XMLoadFloat3(&center),toEye=XMLoadFloat3(&eye_)-origin;
+ const float distance=XMVectorGetX(XMVector3Length(toEye));
+ const float bound=std::sqrt(radii.x*radii.x+radii.y*radii.y+radii.z*radii.z);
+ // A conservative front proxy permits proper depth clipping *inside* the
+ // medium. Never ray-march a screen-filling volume around/behind the lens.
+ if(!std::isfinite(distance) || distance<=bound+.16f)return;
+ tint.w*=std::clamp((distance-bound-.16f)/(.35f+bound*.3f),0.f,1.f);
+ XMFLOAT4 clip;XMStoreFloat4(&clip,XMVector4Transform(XMVectorSet(center.x,center.y,center.z,1),XMLoadFloat4x4(&viewProjection_)));
+ if(clip.w<=bound+.10f)return;
+ const auto matrix=XMLoadFloat4x4(&viewProjection_);
+ float minX=2,minY=2,maxX=-2,maxY=-2,nearDepth=1;
+ // Project the enclosing oriented box. A sphere proxy around a narrow shaft
+ // wasted pixels in empty corners and exhausted the crowd budget prematurely.
+ for(float x:{-1.f,1.f})for(float y:{-1.f,1.f})for(float z:{-1.f,1.f}){
+  const auto p=XMVectorSetW(origin+right*(x*radii.x)+up*(y*radii.y)+axis*(z*radii.z),1);
+  XMFLOAT4 q;XMStoreFloat4(&q,XMVector4Transform(p,matrix));if(q.w<=.10f)return;
+  minX=std::min(minX,q.x/q.w);maxX=std::max(maxX,q.x/q.w);minY=std::min(minY,q.y/q.w);maxY=std::max(maxY,q.y/q.w);
+  nearDepth=std::min(nearDepth,q.z/q.w);
+ }
+ minX=std::max(-1.f,minX);maxX=std::min(1.f,maxX);minY=std::max(-1.f,minY);maxY=std::min(1.f,maxY);
+ const float coverage=std::max(0.f,maxX-minX)*std::max(0.f,maxY-minY)*.25f;
+ if(coverage<=0 || spellVolumeCoverage_+coverage>1.25f)return;
+ const auto inverse=XMMatrixInverse(nullptr,matrix);
+ const auto corner=[&](float x,float y){XMFLOAT3 result;XMStoreFloat3(&result,XMVector3TransformCoord(XMVectorSet(x,y,nearDepth,1),inverse));return result;};
+ const auto a=corner(minX,minY),b=corner(minX,maxY),c=corner(maxX,maxY),d=corner(maxX,minY);
+ auto& volume=spellVolumes_[spellVolumeCount_];
+ volume.centerKind={center.x,center.y,center.z,float(medium)};
+ XMStoreFloat4(&volume.rightRadius,right);volume.rightRadius.w=radii.x;
+ XMStoreFloat4(&volume.upRadius,up);volume.upRadius.w=radii.y;
+ XMStoreFloat4(&volume.axisRadius,axis);volume.axisRadius.w=radii.z;
+ volume.clock={std::fmod(phase,120.f),float(seed%1024),coverage>.025f?20.f:12.f,0};volume.tint=tint;
+ // Transmittance belongs in the sorted alpha pass. Additive-only integration
+ // bleaches the entire fire body white against a bright daytime background.
+ const float material=32.f+spellVolumeCount_;
+ const Vertex va{a,{0,0,material},{1,1,1,1}},vb{b,{0,1,material},{1,1,1,1}},
+   vc{c,{1,1,material},{1,1,1,1}},vd{d,{1,0,material},{1,1,1,1}};
+ cloudSprites_.push_back({{va,vb,vc,va,vc,vd},clip.w});
+ ++spellVolumeCount_;spellVolumeCoverage_+=coverage;
+}
 bool Renderer::FlushEffects() {
  if(groundMarks_.empty() && effects_.empty() && cloudSprites_.empty())return true;
+ const bool glow=spellGlowEnabled_ && (!effects_.empty() || !cloudSprites_.empty());
+ if(glow){if(!CreateSpellGlow())return false;const float black[4]={};context_->ClearRenderTargetView(glowTargets_[0].Get(),black);}
  // Read-only DSV allows soft intersections to sample the same depth safely.
  context_->OMSetRenderTargets(1,target_.GetAddressOf(),effectDepthView_.Get());
  context_->PSSetShaderResources(14,1,effectAtlas_.GetAddressOf());
  context_->PSSetShaderResources(15,1,effectDepthResource_.GetAddressOf());
  context_->PSSetSamplers(2,1,fontSampler_.GetAddressOf());
+ if(spellVolumeCount_)context_->UpdateSubresource(spellVolumeConstants_.Get(),0,nullptr,spellVolumes_.data(),0,0);
+ context_->PSSetConstantBuffers(5,1,spellVolumeConstants_.GetAddressOf());
  std::sort(cloudSprites_.begin(),cloudSprites_.end(),[](const CloudSprite& a,const CloudSprite& b){return a.depth>b.depth;});
  cloudVertices_.clear();
  for(const auto& sprite:cloudSprites_)cloudVertices_.insert(cloudVertices_.end(),sprite.vertices.begin(),sprite.vertices.end());
  cloudSprites_.clear();
- const auto flush=[&](std::vector<Vertex>& vertices,ID3D11BlendState* blend) {
+ const auto flush=[&](std::vector<Vertex>& vertices,ID3D11BlendState* blend,bool luminous) {
   if(vertices.empty())return true;
   const UINT stride=sizeof(Vertex),offset=0,count=static_cast<UINT>(vertices.size());
   D3D11_MAPPED_SUBRESOURCE mapped{};
@@ -936,11 +997,13 @@ bool Renderer::FlushEffects() {
   context_->RSSetState(effectRasterizer_.Get());context_->OMSetDepthStencilState(effectDepth_.Get(),0);
   context_->OMSetBlendState(blend,nullptr,0xffffffff);
   context_->Draw(count,0);++drawCalls_;triangles_+=count/3;effectVertices_+=count;
+  if(glow && luminous)EmitSpellGlow(count);
   context_->RSSetState(rasterizer_.Get());context_->OMSetBlendState(nullptr,nullptr,0xffffffff);
   vertices.clear();return true;
  };
  // Dark terrain marks precede luminous particles; both retain depth testing.
- const bool ok=flush(groundMarks_,hudBlend_.Get()) && flush(cloudVertices_,hudBlend_.Get()) && flush(effects_,effectBlend_.Get());
+ const bool ok=flush(groundMarks_,hudBlend_.Get(),false) && flush(cloudVertices_,hudBlend_.Get(),true) && flush(effects_,effectBlend_.Get(),true);
+ if(ok && glow)CompositeSpellGlow();
  ID3D11ShaderResourceView* empty=nullptr;context_->PSSetShaderResources(15,1,&empty);
  context_->OMSetRenderTargets(1,target_.GetAddressOf(),depth_.Get());
  return ok;

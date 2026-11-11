@@ -203,6 +203,7 @@ void ContactSequences(Renderer& r,const std::filesystem::path& out) {
   // Leave at least 1,000 vertices for hostile ground warnings and other cues.
   Check(sum<Renderer::maxEffectVertices-1000,"Six major contacts leave no telegraph allowance");
   begin();for(const auto& e:events)spellvfx::Contact(r,e,age);
+  if(r.EffectVertices()!=sum)std::cerr<<"Contact crowd age "<<age<<": isolated "<<sum<<", combined "<<r.EffectVertices()<<", media "<<r.SpellVolumeCount()<<'\n';
   Check(r.EffectVertices()==sum && r.EndFrame(false),"Mixed contact set silently truncated geometry");
  }
 }

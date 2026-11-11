@@ -43,7 +43,7 @@ set(scene_shader_header "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>/SceneBy
 add_custom_command(OUTPUT "${scene_shader_header}"
   COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>"
   COMMAND $<TARGET_FILE:SceneShaderCompiler> "${scene_shader_header}"
-  DEPENDS SceneShaderCompiler engine/SceneShader.h
+  DEPENDS SceneShaderCompiler engine/SceneShader.h engine/SpellVolumeShader.inc engine/SpellGlowShader.inc
   COMMENT "Compiling embedded DirectX 11 shaders"
   VERBATIM)
 
@@ -133,7 +133,9 @@ add_library(MediterraneanClient STATIC
   engine/AcousticDesign.cpp
   engine/RecordedAudio.cpp
   engine/Renderer.cpp
+  engine/RendererGlow.cpp
   game/SpellVfx.cpp
+  game/SpellFlight.cpp
   game/CastEffects.cpp
   game/SustainedEffects.cpp
   engine/AuthoredAssets.cpp
@@ -349,6 +351,12 @@ if (BUILD_TESTING)
   target_link_libraries(VfxMaterialsTests PRIVATE MediterraneanClient)
   add_test(NAME VfxMaterialsTests COMMAND VfxMaterialsTests)
   set_tests_properties(VfxMaterialsTests PROPERTIES TIMEOUT 120)
+  add_executable(SpellVolumeTests tests/SpellVolumeTests.cpp)
+  target_link_libraries(SpellVolumeTests PRIVATE MediterraneanClient)
+  add_test(NAME SpellVolumeTests COMMAND SpellVolumeTests)
+  set_tests_properties(SpellVolumeTests PROPERTIES TIMEOUT 120)
+  add_executable(SpellMotionReview tools/SpellMotionReview.cpp)
+  target_link_libraries(SpellMotionReview PRIVATE MediterraneanClient mfplat mfreadwrite mfuuid)
   add_executable(SustainedEffectsTests tests/SustainedEffectsTests.cpp)
   target_link_libraries(SustainedEffectsTests PRIVATE MediterraneanClient)
   add_test(NAME SustainedEffectsTests COMMAND SustainedEffectsTests)

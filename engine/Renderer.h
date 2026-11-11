@@ -113,6 +113,15 @@ public:
   void DrawEffectRing(DirectX::XMFLOAT3 center,float radius,DirectX::XMFLOAT4 color);
   void DrawEffectStreak(DirectX::XMFLOAT3 from,DirectX::XMFLOAT3 to,float width,DirectX::XMFLOAT4 color);
   enum class EffectArt { Flame, Smoke, Dust, Ice, Arcane, Slash, Sparks, Seal };
+  enum class SpellMedium { Fire, Frost, Arcane, Holy };
+  // Oriented participating media, evaluated along the viewing ray rather than
+  // painted onto a camera-facing image. The proxy shares the effect batch.
+  void DrawSpellVolume(SpellMedium medium,DirectX::XMFLOAT3 center,DirectX::XMFLOAT3 direction,
+    DirectX::XMFLOAT3 radii,float phase,DirectX::XMFLOAT4 tint,unsigned seed=0);
+  unsigned SpellVolumeCount() const { return spellVolumeCount_; }
+  void SetSpellGlowEnabled(bool enabled) { spellGlowEnabled_=enabled; }
+  unsigned SpellGlowPasses() const { return spellGlowPasses_; }
+  std::size_t SpellGlowBytes() const { return std::size_t(glowWidth_)*glowHeight_*8*3; }
   // Half extents in metres. Cloud sprites use sorted alpha; luminous sprites
   // share the additive batch. All share the existing per-frame vertex ceiling.
   void DrawEffectSprite(EffectArt art,DirectX::XMFLOAT3 center,float width,float height,float rotation,
@@ -161,6 +170,16 @@ private:
   void PrepareCloudLight();
   bool FlushWorld();
   bool FlushEffects();
+  bool CreateSpellGlow();
+  void EmitSpellGlow(UINT vertices);
+  void CompositeSpellGlow();
+  bool spellGlowEnabled_=true;
+  unsigned spellGlowPasses_=0,glowWidth_=0,glowHeight_=0;
+  std::array<Microsoft::WRL::ComPtr<ID3D11RenderTargetView>,3> glowTargets_;
+  std::array<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>,3> glowViews_;
+  Microsoft::WRL::ComPtr<ID3D11Buffer> glowConstants_;
+  Microsoft::WRL::ComPtr<ID3D11VertexShader> glowVertex_;
+  Microsoft::WRL::ComPtr<ID3D11PixelShader> glowSource_,glowHorizontal_,glowVertical_,glowComposite_;
   void EffectQuad(DirectX::XMFLOAT3 a,DirectX::XMFLOAT3 b,DirectX::XMFLOAT3 c,DirectX::XMFLOAT3 d,
     DirectX::XMFLOAT4 color,float startAlpha,float endAlpha,float radial);
   void EffectBillboard(DirectX::XMFLOAT3 center,float radius,DirectX::XMFLOAT4 color,float shape);
@@ -199,6 +218,14 @@ private:
   std::vector<visual::Vertex> groundMarks_;
   struct CloudSprite {std::array<visual::Vertex,6> vertices;float depth;};
   std::vector<CloudSprite> cloudSprites_;
+  struct SpellVolume {
+    DirectX::XMFLOAT4 centerKind,rightRadius,upRadius,axisRadius,clock,tint;
+  };
+  static constexpr unsigned maxSpellVolumes=24;
+  std::array<SpellVolume,maxSpellVolumes> spellVolumes_{};
+  unsigned spellVolumeCount_=0;
+  float spellVolumeCoverage_=0;
+  Microsoft::WRL::ComPtr<ID3D11Buffer> spellVolumeConstants_;
   std::vector<visual::Vertex> cloudVertices_;
   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> effectAtlas_;
   std::size_t effectTextureBytes_=0;

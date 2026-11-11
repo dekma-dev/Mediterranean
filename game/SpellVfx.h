@@ -21,5 +21,6 @@ DirectX::XMFLOAT3 ProjectilePosition(const rpg::CombatVisualEvent&,DirectX::XMFL
 void Contact(Renderer&,const rpg::CombatVisualEvent&,float age);
 void Interrupt(Renderer&,const rpg::CombatVisualEvent&,float age);
 void Flight(Renderer&,const rpg::CombatVisualEvent&,DirectX::XMFLOAT3 origin,float age);
+void MagicFlight(Renderer&,const rpg::CombatVisualEvent&,DirectX::XMFLOAT3 origin,float age);
 void EnemyContact(Renderer&,const rpg::CombatVisualEvent&,float age,bool fullDetail=true,const DirectX::XMFLOAT3* origin=nullptr);
 }

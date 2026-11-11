@@ -56,10 +56,6 @@ void Dust(Renderer& r,XMFLOAT3 p,float age,float size,unsigned seed,bool stone=f
     stone?XMFLOAT4{.38f,.35f,.31f,opacity*.30f}:XMFLOAT4{.64f,.55f,.42f,opacity*.34f},true);
  }
 }
-float Roll(Renderer& r,XMFLOAT3 a,XMFLOAT3 b){
- XMFLOAT2 from,to;if(!r.Project(a,from)||!r.Project(b,to))return 0;
- return std::atan2(from.x-to.x,from.y-to.y);
-}
 // A release plane faces along the accepted trajectory, not the camera. It
 // remains attached to the sampled launch socket even when selection changes.
 void Release(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float age){
@@ -81,7 +77,10 @@ void Release(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float a
   // Brief material ignition at the real socket; the larger translucent body
   // survives the bright core so a release is readable at a normal camera zoom.
   const float body=Envelope(age,.18f,.015f),core=Envelope(age,.085f,.004f),size=e.heavy?.82f:.58f;
+  if(!holy && !cold && !arcane)r.DrawSpellVolume(Renderer::SpellMedium::Fire,local(0,0,age*.4f),{sx,0,cx},
+    {size*.34f,size*.34f,size*.50f},age,{1,1,1,body*.85f},e.actor+unsigned(std::max(0,e.ability)));
   for(int n=0;n<3;++n){const float a=n*tau/3+age*4;
+   if(!holy && !cold && !arcane)continue;
    const auto p=local(std::cos(a)*age*2.2f,std::sin(a)*age*2.2f,-age*.4f);
    r.DrawEffectSprite(holy?Art::Slash:cold?Art::Ice:arcane?Art::Arcane:Art::Flame,p,size*.42f,size*.68f,a*.15f,
     holy?XMFLOAT4{1,.89f,.56f,body*.47f}:cold?XMFLOAT4{.46f,.79f,1,body*.62f}:arcane?XMFLOAT4{.70f,.43f,1,body*.52f}:XMFLOAT4{1,.80f,.43f,body*.7f},!holy&&!cold&&!arcane);
@@ -94,6 +93,8 @@ void MageContact(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 p,float ag
  const float fade=Envelope(age,ContactLifetime(e)),burst=Envelope(age,.20f,.008f);
  const ContactFrame frame(p,e.facing);
  if(arcane){
+  r.DrawSpellVolume(Renderer::SpellMedium::Arcane,p,{frame.sn,0,frame.cs},{.50f*size,.58f*size,.35f*size},age,
+    {1,1,1,fade*.55f},e.actor);
   // Split the arriving sphere into folding glass and curved pressure paths.
   // The empty middle is intentional: the hit actor must remain legible.
   const float open=combat::Smooth(age/.23f),fold=combat::Smooth((age-.16f)/.45f);
@@ -133,7 +134,8 @@ void MageContact(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 p,float ag
     const auto at=frame.At(std::cos(a)*age*speed*size,age*(.6f+speed*.35f),-age*(.35f+std::sin(a)*.25f)*size);
     const auto tip=frame.At(std::cos(a)*(.25f+age*speed)*size,age*(.6f+speed*.35f)+.40f,-age*(.35f+std::sin(a)*.25f)*size-.10f);
     const float radius=(.24f+age*.48f)*size;
-    r.DrawEffectSprite(Art::Flame,at,radius*.78f,radius*1.35f,Roll(r,at,tip),{1,.79f,.45f,fade*.78f},true);
+    if(n%2==0)r.DrawSpellVolume(Renderer::SpellMedium::Fire,at,{tip.x-at.x,tip.y-at.y,tip.z-at.z},
+      {radius*.82f,radius*.82f,radius*1.35f},age+n*.13f,{1,1,1,fade*.86f},seed+n);
    }
   }
   if(!frost && e.primary){
@@ -167,6 +169,28 @@ void GroundWave(Renderer& r,rpg::Vec2 centre,float radius,float age,XMFLOAT4 col
   r.DrawEffectRibbon(at(float(n),-width),at(float(n),width),at(float(n+1),width),at(float(n+1),-width),color);
  }
 }
+void PressureCrown(Renderer& r,rpg::Vec2 centre,float radius,float age,XMFLOAT4 color){
+ // A travelling, torn sheet rather than a static circular stamp. The front
+ // conforms to terrain; the raised rim rolls over before collapsing.
+ const float life=Envelope(age,.46f,.018f),height=.12f+.78f*std::sin(combat::Smooth(age/.46f)*pi);
+ color.w*=life;
+ const auto at=[&](float a,bool top){const float torn=.64f+.23f*std::sin(a*7+age*9)+.13f*std::sin(a*13-age*5);
+  const float distance=radius+(top?-.10f:.12f);
+  return Ground({centre.x+std::sin(a)*distance,centre.z+std::cos(a)*distance},.065f+(top?height*torn:0));};
+ for(int n=0;n<32;++n){const float a=n*tau/32,b=(n+1)*tau/32;
+  r.DrawEffectRibbon(at(a,false),at(a,true),at(b,true),at(b,false),color,1,1);}
+}
+void ImpactCrystal(Renderer& r,XMFLOAT3 base,float angle,float height,float width,float fade){
+ const XMFLOAT3 tip=Add(base,{std::cos(angle)*height*.27f,height,std::sin(angle)*height*.27f});
+ const XMFLOAT3 tail=Add(base,{0,-.035f,0});
+ for(int face=0;face<4;++face){
+  const float a=angle+face*pi*.5f,b=a+pi*.5f;
+  const auto p=Add(base,{std::cos(a)*width,height*.24f,std::sin(a)*width});
+  const auto q=Add(base,{std::cos(b)*width,height*.24f,std::sin(b)*width});
+  r.DrawEffectSurface(Art::Ice,tail,p,tip,q,{.35f,.71f,1,fade*.65f});
+  if(face%2==0)r.DrawEffectStreak(p,tip,.012f,{.77f,.95f,1,fade*.8f});
+ }
+}
 void MajorContact(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 p,float age){
  if(!e.primary)return;
  const auto floor=Ground(e.position);const float bloom=Envelope(age,.86f,.028f);
@@ -174,6 +198,7 @@ void MajorContact(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 p,float a
   const bool frost=e.ability==8,storm=e.ability==11;
   const float radius=(storm?4.5f:3.f)*combat::Smooth(age/(frost?.48f:.38f));
   GroundWave(r,e.position,std::max(.1f,radius),age,frost?XMFLOAT4{.43f,.80f,1,bloom*.55f}:XMFLOAT4{1,.48f,.10f,bloom*.52f});
+  if(!frost && age<.46f)PressureCrown(r,e.position,std::max(.15f,radius),age,{1,.48f,.13f,.47f});
   const int count=storm?10:8;
   for(int n=0;n<count;++n){
    const float a=n*tau/count+e.facing,delay=(n%3)*.025f,t=age-delay;
@@ -182,14 +207,18 @@ void MajorContact(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 p,float a
    const auto base=Ground({e.position.x+std::cos(a)*spread,e.position.z+std::sin(a)*spread});
    if(frost){
     const float h=(.50f+(n%3)*.25f)*combat::Smooth(t/.12f);
-    const auto top=Add(base,{std::cos(a)*.2f,h,std::sin(a)*.2f});
-    r.DrawEffectSprite(Art::Ice,Add(base,{0,h*.45f,0}),.16f,h*.66f,a*.12f,{.51f,.80f,1,fade*.82f});
-    r.DrawEffectStreak(base,top,.024f,{.82f,.96f,1,fade*.65f});
+    ImpactCrystal(r,base,a,h,.13f,fade);
    }else{
-    const float height=(storm?1.1f:1.35f)+(n%3)*.35f;
-    const auto at=Add(base,{std::sin(t*3+a)*.12f,height*.48f+t*.3f,0});
-    r.DrawEffectSprite(Art::Flame,at,.30f+t*.26f,height*.64f,.12f*std::sin(a+t*2),{1,.79f,.43f,fade*.76f},true);
-    r.DrawEffectSprite(Art::Smoke,Add(at,{0,.35f,0}),.35f+t*.4f,.4f+t*.3f,a,{.28f,.24f,.20f,fade*.22f},true);
+    const float launch=combat::Smooth(t/.10f),height=((storm?1.7f:2.1f)+(n%3)*.35f)*launch*(1-.55f*combat::Smooth(t/.78f));
+    const auto at=Add(base,{std::sin(t*3+a)*.16f,height*.48f+t*.3f,0});
+    if(n%3==0)r.DrawSpellVolume(Renderer::SpellMedium::Fire,at,{std::cos(a)*.26f,1,std::sin(a)*.26f},
+      {.24f+t*.30f,.24f+t*.30f,height*.58f},t,{1,1,1,fade*.82f},e.actor+n*23);
+    // Thin torn tongues follow the outward blast and curl upwards. The body
+    // is animated 3D density; no duplicate flat flame images are stacked here.
+    const ContactFrame frame(at,a);
+    ContactRibbon(r,[&](float u){return frame.At(std::sin(u*4+t*7)*.12f*u,(u-.5f)*height,-u*u*.45f);},
+      .045f,{1,.62f,.18f,fade*.54f},{frame.sn,0,frame.cs},8);
+    r.DrawEffectSprite(Art::Smoke,Add(at,{0,.35f,0}),.35f+t*.65f,.4f+t*.6f,a,{.25f,.24f,.23f,fade*.32f},true);
    }
   }
   if(!frost){
@@ -202,8 +231,9 @@ void MajorContact(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 p,float a
   for(int side:{-1,1})for(int n=0;n<6;++n){const float angle=side*(n*.30f+age*2.2f),radius=.35f+age*2.1f;
    const auto at=frame.At(std::cos(angle)*radius,std::sin(angle)*radius*.65f,side*.20f);
    const float size=(.24f+age*.20f)*(1-n*.065f);
-   r.DrawEffectSprite(side<0?Art::Ice:Art::Flame,at,side<0?size*.4f:size*.8f,size*1.6f,angle,
-    side<0?XMFLOAT4{.52f,.83f,1,bloom*.75f}:XMFLOAT4{1,.79f,.47f,bloom*.75f},side>0);}
+   if(side<0)ImpactCrystal(r,at,angle,size*1.6f,size*.4f,bloom);
+   else if(n%3==0)r.DrawSpellVolume(Renderer::SpellMedium::Fire,at,{frame.sn,.45f,frame.cs},
+     {size,size*.75f,size*1.6f},age,{1,1,1,bloom*.8f},e.actor+n);}
   r.DrawEffectSprite(Art::Smoke,Add(p,{0,age*.7f,0}),.6f+age,.5f+age*.6f,age*.3f,{.64f,.72f,.77f,bloom*.26f},true);
  }else if(e.school==C::Priest && e.ability==6){
   GroundWave(r,e.position,.25f+1.5f*combat::Smooth(age/.50f),age,{1,.86f,.48f,bloom*.55f});
@@ -217,16 +247,18 @@ void MajorContact(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 p,float a
   }
   for(int n=-1;n<=1;++n){const auto base=Add(floor,{cs*n*.5f,0,-sn*n*.5f});
    r.DrawEffectStreak(Add(base,{0,3.5f,0}),Add(base,{0,.3f,0}),n?.08f:.14f,{1,.96f,.78f,bloom*(n?.4f:.65f)});}
+  const float descent=combat::Smooth(age/.13f),collapse=1-combat::Smooth((age-.25f)/.55f);
+  for(int side:{-1,1})r.DrawSpellVolume(Renderer::SpellMedium::Holy,Add(floor,{cs*side*.52f,2.6f-descent*.85f,-sn*side*.52f}),{0,1,0},
+   {.18f+age*.16f,.18f+age*.16f,1.60f*std::max(.01f,collapse)},age,{1,1,1,bloom*.64f},e.actor+side+1);
  }else if(e.school==C::Priest && e.ability==5){
   const XMFLOAT3 end{e.source.x,e.sourceHeight+1.15f,e.source.z};
-  for(int side:{-1,1})for(int n=0;n<12;++n){
-   const auto at=[&](float u){const float wave=std::sin(u*pi);return XMFLOAT3{p.x+(end.x-p.x)*u+std::cos(e.facing)*side*.28f*wave,p.y+(end.y-p.y)*u+.40f*wave,p.z+(end.z-p.z)*u-std::sin(e.facing)*side*.28f*wave};};
-   const float u=n/12.f,v=(n+1)/12.f,front=combat::Smooth(age/.38f);
-   if(u>front)continue;
-   const auto a=at(u),b=at(std::min(v,front));
-   r.DrawEffectStreak(a,b,.085f,{1,.67f,.19f,bloom*.32f});
-   r.DrawEffectStreak(a,b,.032f,{1,.95f,.74f,bloom*.78f});
-   if(n%3==0)r.DrawEffectSprite(Art::Sparks,a,.11f,.11f,age*2,{1,.89f,.52f,bloom*.32f});
+  const float front=combat::Smooth(age/.38f);
+  for(int side:{-1,1}){
+   const auto at=[&](float s){const float u=s*front,wave=std::sin(u*pi);return XMFLOAT3{p.x+(end.x-p.x)*u+std::cos(e.facing)*side*.28f*wave,p.y+(end.y-p.y)*u+.40f*wave,p.z+(end.z-p.z)*u-std::sin(e.facing)*side*.28f*wave};};
+   ContactRibbon(r,at,.085f,{1,.67f,.19f,bloom*.35f});
+   ContactRibbon(r,at,.022f,{1,.95f,.74f,bloom*.83f});
+   for(int n=0;n<3;++n){const float u=std::fmod(age*2.3f+n/3.f,1.f);
+    r.DrawEffectGlow(at(u),.06f,{1,.91f,.61f,bloom*.6f*std::sin(u*pi)});}
   }
  }
 }
@@ -363,6 +395,9 @@ void Contact(Renderer& r,const rpg::CombatVisualEvent& e,float age){
  if(e.school==C::Priest){
   const float fade=Envelope(age,.88f,.025f),flash=Envelope(age,.22f,.008f),size=power*(e.signature?1.25f:1.f);
   const ContactFrame frame(p,e.facing);
+  r.DrawSpellVolume(Renderer::SpellMedium::Holy,frame.At(0,.25f*size,0),{0,1,0},
+    {(.22f+age*.25f)*size,(.22f+age*.25f)*size,(e.heavy?1.20f:.65f)*size},age,
+    {1,1,1,Envelope(age,.50f,.012f)*.72f},e.actor);
   // Staggered shafts descend, then open into vaulted ribs. Crossed surfaces
   // preserve volume at side angles without hiding the victim behind a disc.
   const int shafts=e.heavy && e.primary?3:1;
@@ -435,10 +470,12 @@ float ArrowProgress(int ability,int ordinal,float age,float flight){
 }
 void Flight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float age){
  if((e.school!=C::Mage && e.school!=C::Scout && e.school!=C::Priest) || !std::isfinite(age) || !std::isfinite(e.flight) || e.flight<=0 || age<0 || age>=e.flight+.16f)return;
+ if(e.kind!=K::SpellCast || !std::isfinite(origin.x) || !std::isfinite(origin.y) || !std::isfinite(origin.z) ||
+    !std::isfinite(e.destination.x) || !std::isfinite(e.destination.z) || !std::isfinite(e.destinationHeight) || !std::isfinite(e.facing))return;
  Release(r,e,origin,age);
- const float t=Unit(age/e.flight),after=std::max(0.f,age-e.flight),fade=1-combat::Smooth(after/.16f);
+ const float t=Unit(age/e.flight),after=std::max(0.f,age-e.flight);
  const auto point=[&](float u){return ProjectilePosition(e,origin,u);};
- const auto head=point(t);const float power=e.heavy?1.25f:1.f;
+ const auto head=point(t);
  const float length=std::max(.01f,std::sqrt(std::pow(e.destination.x-origin.x,2.f)+std::pow(e.destination.z-origin.z,2.f)+std::pow(rpg::WorldMap::Height(e.destination)+e.destinationHeight-origin.y,2.f)));
  const float sx=std::sin(e.facing),cx=std::cos(e.facing);
  if(e.school==C::Scout){
@@ -457,135 +494,7 @@ void Flight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float ag
   if(e.ability==13)r.DrawEffectSprite(Art::Sparks,head,.075f,.075f,age*5,{.65f,.75f,.28f,arrowFade*.5f});
   return;
  }
- if(e.school==C::Mage && e.ability==9){
-  const float glow=combat::Smooth(t/.18f)*(1-combat::Smooth(after/.035f));
-  const auto trailing=point(std::max(0.f,t-.14f));
-  const float roll=Roll(r,trailing,head);
-  r.DrawEffectSprite(Art::Flame,head,.48f,.76f,roll,{1,.79f,.45f,glow*.95f},true);
-  r.DrawEffectSprite(Art::Sparks,head,.26f,.35f,roll,{1,.95f,.74f,glow*.7f});
-  for(int n=1;n<=6;++n){const float u=t-n*.035f;if(u<0)continue;const float tailFade=glow*(1-n/7.f);
-   r.DrawEffectSprite(Art::Flame,point(u),.45f+n*.025f,.56f,roll,{1,.60f,.20f,tailFade*.62f},true);
-   r.DrawEffectSprite(Art::Smoke,point(u),.44f,.48f,n*.7f,{.24f,.21f,.19f,tailFade*.22f},true);}
-  return;
- }
- if(e.school==C::Priest){
-  const bool absolution=e.ability==5,sanctuary=e.ability==6,guiding=e.ability==7;
-  const float front=1-combat::Smooth(after/.035f);
-  const float wakeLength=guiding?3.8f:absolution?3.2f:sanctuary?3.6f:e.heavy?2.8f:2.1f;
-  const float tail=std::max(0.f,t-wakeLength*(1-combat::Smooth(after/.16f))/length);
-  // A luminous flight path grows only behind the accepted projectile head.
-  // It is not an instant caster-to-victim beam and never announces an early hit.
-  if(t>tail+.00001f)for(int strand=0;strand<(absolution?2:1);++strand) {
-   const auto at=[&](float u){const float s=(u-tail)/(t-tail),phase=u*length*3.2f-age*3+strand*pi;
-    const float radius=absolution?.18f*std::sin(s*pi):0.f;
-    return Add(point(u),{cx*std::cos(phase)*radius,std::sin(phase)*radius,-sx*std::cos(phase)*radius});};
-   for(int n=0;n<16;++n) {
-    const float a=tail+(t-tail)*n/16,b=tail+(t-tail)*(n+1)/16,taper=(n+1)/16.f;
-    r.DrawEffectStreak(at(a),at(b),(.045f+.045f*taper)*power,{1,.67f,.18f,fade*taper*.28f});
-    r.DrawEffectStreak(at(a),at(b),(.008f+.010f*taper)*power,{1,.98f,.85f,fade*taper*.86f});
-    if(n%4==0)r.DrawEffectSprite(Art::Sparks,at(b),.075f,.075f,age,{1,.9f,.61f,fade*taper*.32f});
-   }
-  }
-  r.DrawEffectSprite(Art::Seal,head,(guiding?.19f:.32f)*power,(guiding?.19f:.32f)*power,age*2,{1,.88f,.48f,front*.7f});
-  if(sanctuary)for(int n=0;n<6;++n) {
-   // Six open, swept vanes identify the full-Faith spell in flight, not only
-   // after contact. Leave gaps so the enemy and hostile warnings remain legible.
-   const float a=n*tau/6+age*.7f;
-   const XMFLOAT3 wing{cx*std::cos(a)*.48f,std::sin(a)*.48f,-sx*std::cos(a)*.48f};
-   const auto root=Add(head,{-sx*.8f,0,-cx*.8f}),tip=Add(head,wing);
-   r.DrawEffectSurface(Art::Slash,root,Add(root,wing),tip,head,{1,.88f,.51f,front*.34f});
-   r.DrawEffectStreak(root,tip,.018f,{1,.98f,.86f,front*.72f});
-  }
-  if(e.heavy){
-   // A tapering reliquary lance has volume from side and overhead cameras.
-   // Its point stays at the accepted projectile head throughout the flight.
-   const auto previous=point(std::max(0.f,t-.3f));
-   const XMFLOAT3 axis{head.x-previous.x,head.y-previous.y,head.z-previous.z};
-   const float norm=std::sqrt(axis.x*axis.x+axis.y*axis.y+axis.z*axis.z);
-   const XMFLOAT3 direction=norm>.0001f?XMFLOAT3{axis.x/norm,axis.y/norm,axis.z/norm}:XMFLOAT3{sx,0,cx};
-   const auto back=Add(head,{-direction.x*.95f*power,-direction.y*.95f*power,-direction.z*.95f*power});
-   for(int n=0;n<4;++n){const float a=n*pi*.5f;
-    const XMFLOAT3 wing{cx*std::cos(a)*.25f*power,std::sin(a)*.25f*power,-sx*std::cos(a)*.25f*power};
-    r.DrawEffectSurface(Art::Slash,back,Add(back,wing),head,Add(back,{-wing.x,-wing.y,-wing.z}),{1,.91f,.60f,front*.46f});
-   }
-  }
-  for(int side:{-1,1})for(int n=0;n<6;++n){const float u=float(n)/6,v=float(n+1)/6;
-   const auto swept=[&](float a){const float back=a*.75f*power,wing=side*std::sin(a*pi)*.32f*power;
-    return Add(head,{cx*wing-sx*back,.08f*std::sin(a*pi),-sx*wing-cx*back});};
-   r.DrawEffectStreak(swept(u),swept(v),(.035f+.045f*(1-u))*power,{1,.82f,.32f,front*(1-u)*.55f});}
-  for(int n=0;n<4;++n){const float a=n*pi*.5f,side=std::cos(a)*.40f*power;const auto tip=Add(head,{cx*side,std::sin(a)*.40f*power,-sx*side});r.DrawEffectStreak(head,tip,.025f,{1,.96f,.78f,front*.7f});}
-  return;
- }
- const auto element=School(e.ability);const bool frost=element==Element::Frost,arcane=element==Element::Arcane,mixed=element==Element::Thermal;
- if(e.ability==13) {
-  // A refracting core with three braided light trails, sampled directly from
-  // accepted flight time. No extra hits, homing, target changes or new textures.
-  const float visible=1-combat::Smooth(after/.12f),tail=std::max(0.f,t-2.8f/length);
-  for(int strand=0;strand<3;++strand) {
-   const auto at=[&](float u){const float phase=u*length*5-age*4+strand*tau/3;
-    const float width=.14f*std::sin(Unit((u-tail)/std::max(.0001f,t-tail))*pi);
-    return Add(point(u),{cx*std::sin(phase)*width,std::cos(phase)*width,-sx*std::sin(phase)*width});};
-   for(int n=0;n<12 && t>tail+.00001f;++n) {
-    const float u=tail+(t-tail)*n/12,v=tail+(t-tail)*(n+1)/12;
-    const auto a=at(u),b=at(v);const float taper=(n+1)/12.f;
-    r.DrawEffectStreak(a,b,.047f,{.50f,.26f,1,visible*taper*.28f});
-    r.DrawEffectStreak(a,b,.011f,{.82f,.83f,1,visible*taper*.82f});
-   }
-  }
-  const float core=1-combat::Smooth(after/.025f);
-  for(int n=0;n<3;++n) {
-   const float angle=n*tau/3+age*3;
-   const XMFLOAT3 side{cx*std::cos(angle)*.23f,std::sin(angle)*.23f,-sx*std::cos(angle)*.23f};
-   const auto front=Add(head,{sx*.26f,0,cx*.26f}),back=Add(head,{-sx*.32f,0,-cx*.32f});
-   const auto a=Add(head,side),b=Add(head,{-side.x,-side.y,-side.z});
-   r.DrawEffectSurface(Art::Arcane,back,a,front,b,{.69f,.53f,1,core*.48f});
-   r.DrawEffectStreak(back,a,.013f,{.83f,.89f,1,core*.8f});
-   r.DrawEffectStreak(a,front,.013f,{.92f,.83f,1,core*.9f});
-  }
-  r.DrawEffectSprite(Art::Sparks,head,.22f,.22f,age*2,{.86f,.86f,1,core*.7f});
-  return;
- }
- const auto tint=[&](bool ice,float alpha)->XMFLOAT4{return ice?XMFLOAT4{.40f,.76f,1,alpha}:arcane?XMFLOAT4{.70f,.38f,1,alpha}:XMFLOAT4{1,.43f,.09f,alpha};};
- // Fixed world length: a nearby projectile is no longer a tiny dot while a
- // distant shot stretches into a several-metre stripe. Advect and drain its
- // wake after arrival; the head stops at the authoritative contact.
- const float span=std::min(1.f,(frost?.85f:arcane?1.05f:1.35f)*power/length);
- const float tail=std::max(0.f,t-span*(1-combat::Smooth(after/.16f)));
- for(int strand=0;strand<(mixed?2:1);++strand){
-  const bool ice=frost || (mixed && strand==1);
-  const auto at=[&](float u){auto p=point(u);const float phase=u*length*7-age*5+strand*pi;
-   const float radius=std::sin(Unit((u-tail)/std::max(.0001f,t-tail))*pi)*(mixed?.10f:arcane?.075f:.035f);
-   return Add(p,{cx*std::sin(phase)*radius,std::cos(phase)*radius,-sx*std::sin(phase)*radius});};
-  if(t>tail+.00001f)for(int n=0;n<14;++n){
-   const float a=tail+(t-tail)*n/14,b=tail+(t-tail)*(n+1)/14;
-   const float taper=(n+.5f)/14;
-   r.DrawEffectStreak(at(a),at(b),(.008f+taper*.028f)*power,tint(ice,fade*taper*.64f));
-  }
-  for(int n=1;n<=7;++n){
-   const float u=t-span*n/8;if(u<0)continue;
-   const float opacity=fade*(1-float(n)/9);auto p=point(u);p.y+=after*.38f;
-   const float size=(.23f+after*.17f)*power*(1-float(n)/10);
-   if(ice)r.DrawEffectSprite(Art::Ice,p,size*.4f,size,age*2+n*.8f,{.55f,.80f,1,opacity*.48f});
-   else r.DrawEffectSprite(arcane?Art::Arcane:Art::Flame,p,size,size*1.35f,n*.55f+age*.8f,
-    arcane?XMFLOAT4{.73f,.45f,1,opacity*.38f}:XMFLOAT4{1,.83f,.54f,opacity*.65f},!arcane);
-  }
- }
- const float headFade=1-combat::Smooth(after/.025f);if(headFade<=0)return;
- const float roll=Roll(r,point(t-.10f/length),head);
- if(frost){
-  const int count=e.ability==12?3:1;
-  for(int n=0;n<count;++n){const float offset=(n-(count-1)*.5f)*.09f*std::sin(t*pi);
-   r.DrawEffectSprite(Art::Ice,Add(head,{cx*offset,0,-sx*offset}),.10f*power,.39f*power,roll,{.67f,.88f,1,headFade*.95f});}
-  for(int n=0;n<4;++n){const float a=n*pi*.5f+age*3;const auto at=Add(head,{cx*std::sin(a)*.19f*power,std::cos(a)*.19f*power,-sx*std::sin(a)*.19f*power});
-   r.DrawEffectSprite(Art::Ice,at,.045f*power,.18f*power,roll+a*.12f,{.55f,.80f,1,headFade*.65f});}
- }else if(arcane){
-  r.DrawEffectSprite(Art::Arcane,head,.47f*power,.47f*power,age*5,{.86f,.66f,1,headFade*.85f});
-  for(int n=0;n<2;++n)r.DrawEffectSprite(Art::Seal,head,(.55f+n*.14f)*power,.17f*power,(n?1.f:-1.f)*age*3,{.67f,.42f,1,headFade*.4f});
- }else {r.DrawEffectSprite(Art::Flame,head,.39f*power,.56f*power,roll,{1,.85f,.60f,headFade*.95f},true);
-  for(int n=0;n<3;++n){const float a=n*tau/3+age*7;const auto at=Add(head,{cx*std::sin(a)*.19f*power,std::cos(a)*.19f*power,-sx*std::sin(a)*.19f*power});
-   r.DrawEffectSprite(Art::Flame,at,.22f*power,.33f*power,roll+a*.12f,{1,.71f,.32f,headFade*.66f},true);}
-  if(mixed)r.DrawEffectSprite(Art::Ice,head,.075f*power,.23f*power,roll+.35f,{.55f,.82f,1,headFade*.85f});}
- r.DrawEffectGlow(head,.035f*power,{.9f,.92f,1,headFade*.6f});
+ MagicFlight(r,e,origin,age);
 }
 void EnemyContact(Renderer& r,const rpg::CombatVisualEvent& e,float age,bool fullDetail,const XMFLOAT3* origin){
  if(!std::isfinite(age)||age<0 || age>=.72f)return;

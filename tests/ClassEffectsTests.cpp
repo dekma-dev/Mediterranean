@@ -72,6 +72,14 @@ void Stage(Renderer& r,ClassId id,bool release,bool restore=false) {
 }
 void DefensiveContacts(Renderer& r,const std::filesystem::path& root) {
   std::vector<Pixels> schools;
+  const auto begin=[&](float facing) {
+    r.BeginFrame();r.SetCamera({-std::sin(facing)*4,1.8f,-std::cos(facing)*4},{0,1.2f,0});
+    // Keep the receiver neutral while rotating the effect/camera together.
+    // Subtracting a bright sky does not undo additive saturation or alpha
+    // blending against changing clouds, so it cannot isolate shape changes.
+    r.DrawMesh(visual::Mesh::Box,{std::sin(facing)*2,1.2f,std::cos(facing)*2},
+      {20,20,.1f},{.055f,.055f,.055f,1},visual::Material::Glow,facing,0,visual::ShadowMode::None);
+  };
   for(auto id:{ClassId::Warrior,ClassId::Mage,ClassId::Scout,ClassId::Priest}) {
     CombatVisualEvent event{K::BarrierHit,{0,0},1.2f,0,0};event.school=id;event.evaded=id==ClassId::Scout;
     Pixels reference,visibleReference;
@@ -84,11 +92,8 @@ void DefensiveContacts(Renderer& r,const std::filesystem::path& root) {
     };
     for(int view=0;view<4;++view) {
       event.facing=view*1.5707963f;
-      const auto begin=[&]{r.BeginFrame();r.SetCamera({-std::sin(event.facing)*4,1.8f,-std::cos(event.facing)*4},{0,1.2f,0});};
-      // Rotate the world-space sky too, then remove that view's empty baseline.
-      // Otherwise this check measures changing clouds rather than hit geometry.
-      begin();const auto base=Capture(r,root/("defense-base-"+std::to_string(int(id))+"-"+std::to_string(view)+".png"));
-      begin();
+      begin(event.facing);const auto base=Capture(r,root/("defense-base-"+std::to_string(int(id))+"-"+std::to_string(view)+".png"));
+      begin(event.facing);
       classfx::BarrierContact(r,event,.10f);
       Check(r.EffectVertices()>0 && r.EffectVertices()<=300,"Defensive contact geometry budget");
       const auto pixels=Capture(r,root/("defense-"+std::to_string(int(id))+"-"+std::to_string(view)+".png"));
@@ -96,11 +101,11 @@ void DefensiveContacts(Renderer& r,const std::filesystem::path& root) {
       if(view==0){reference=pixels;visibleReference=visible;}
       else Check(relativeDifference(visibleReference,visible)<.08,"Defensive contact changed shape under joint camera/attack rotation");
     }
-    r.BeginFrame();r.SetCamera({0,1.8f,-4},{0,1.2f,0});
+    begin(0);
     const auto empty=Capture(r,root/("defense-empty-"+std::to_string(int(id))+".png"));
     Check(VisiblePixels(reference,empty)>100,"Defensive class contact is invisible");
     if(id==ClassId::Scout) {
-      event.evaded=false;event.facing=0;r.BeginFrame();r.SetCamera({0,1.8f,-4},{0,1.2f,0});
+      event.evaded=false;event.facing=0;begin(0);
       classfx::BarrierContact(r,event,.10f);const auto ward=Capture(r,root/"scout-absorbed-contact.png");
       Check(VisiblePixels(ward,empty)>100 && VisiblePixels(ward,reference)>100,"Scout ward impact is indistinguishable from actual evasion");
     }

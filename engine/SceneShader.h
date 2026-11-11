@@ -28,6 +28,8 @@ Texture2DArray surfaceNormal : register(t11);
 cbuffer CloudField : register(b3) { float4 cloudField; };
 struct CombatLight { float4 positionRadius; float4 colorPower; };
 cbuffer CombatLights : register(b4) { float4 combatLightCount; CombatLight combatLights[4]; };
+struct SpellVolume { float4 centerKind; float4 rightRadius; float4 upRadius; float4 axisRadius; float4 clock; float4 tint; };
+cbuffer SpellVolumes : register(b5) { SpellVolume spellVolumes[24]; };
 SamplerState fontSampler : register(s2);
 SamplerState surfaceSampler : register(s0);
 SamplerComparisonState shadowSampler : register(s1);
@@ -758,13 +760,18 @@ float4 PSMain(VOut i) : SV_TARGET {
  return float4(DisplayDaylight(result),1);
 }
 )" R"(
-struct EffectOut { float4 p : SV_POSITION; float3 uv : TEXCOORD0; float4 tint : COLOR; float fog : TEXCOORD1; float viewDepth : TEXCOORD2; };
+struct EffectOut { float4 p : SV_POSITION; float3 uv : TEXCOORD0; float4 tint : COLOR; float fog : TEXCOORD1; float viewDepth : TEXCOORD2; float3 wp : TEXCOORD3; };
 EffectOut VSEffect(VIn i) {
  EffectOut o; o.p=mul(float4(i.p,1),wvp); o.uv=i.n; o.tint=i.tint;
- o.fog=eyeAndHud.w<0?1:AirTransmission(eyeAndHud.xyz,i.p);o.viewDepth=o.p.w; return o;
+ o.fog=eyeAndHud.w<0?1:AirTransmission(eyeAndHud.xyz,i.p);o.viewDepth=o.p.w;o.wp=i.p; return o;
 }
-float4 PSEffect(EffectOut i) : SV_TARGET {
- if(i.uv.z>=7.5) {
+)"
+#include "engine/SpellVolumeShader.inc"
+R"(
+float4 EffectColor(EffectOut i) {
+ float4 result=0;
+ [branch] if(i.uv.z>=31.5) result=SpellRadiance(i);
+ else if(i.uv.z>=7.5) {
   uint tile=(uint)round(i.uv.z)-8u;
   float2 local=saturate(i.uv.xy),cell=float2(tile&3u,tile>>2);
   float2 uv=(cell+lerp(float2(.008,.008),float2(.992,.992),local))/float2(4,2);
@@ -775,8 +782,8 @@ float4 PSEffect(EffectOut i) : SV_TARGET {
   float farPlane=eyeAndHud.w<0?20.0:280.0;
   float sceneDistance=(.1*farPlane)/max(.0001,farPlane-z*(farPlane-.1));
   float soft=saturate((sceneDistance-i.viewDepth)/(tile==1 || tile==2?.24:.065));
-  return float4(texel.rgb*i.tint.rgb,saturate(texel.a*i.tint.a)*border*soft*i.fog);
- }
+  result=float4(texel.rgb*i.tint.rgb,saturate(texel.a*i.tint.a)*border*soft*i.fog);
+ } else {
  float2 p=i.uv.xy*2-1;
  float radius=length(p),edge=saturate(1-abs(p.y)),mask=0,core=0;
  if (i.uv.z<.5) {
@@ -799,8 +806,11 @@ float4 PSEffect(EffectOut i) : SV_TARGET {
  // Contact flashes can still request a pale tint explicitly.
  float3 hot=min(float3(1,1,1),i.tint.rgb*1.25+.04);
  float3 luminous=lerp(i.tint.rgb,hot,core*(i.uv.z<.5?.30:.55));
- return float4(luminous,saturate(i.tint.a)*mask*i.fog);
+ result=float4(luminous,saturate(i.tint.a)*mask*i.fog);
+ }
+ return result;
 }
+float4 PSEffect(EffectOut i) : SV_TARGET {return EffectColor(i);}
 struct SkyOut { float4 p : SV_POSITION; float2 uv : TEXCOORD0; };
 SkyOut VSSky(uint id : SV_VertexID) {
  SkyOut o; o.uv=float2((id<<1)&2,id&2); o.p=float4(o.uv*float2(2,-2)+float2(-1,1),1,1); return o;
@@ -837,4 +847,6 @@ float4 PSSky(SkyOut i) : SV_TARGET {
  radiance=lerp(radiance,SkyRadiance(float3(0,1,0))*.6+Daylight()*.45,veil*clouds.a);
  return float4(DisplayDaylight(radiance),1);
 }
-)";
+)"
+#include "engine/SpellGlowShader.inc"
+;

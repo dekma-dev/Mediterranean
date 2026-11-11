@@ -153,6 +153,8 @@ void PrepareAction(Renderer& r,C id,int ability,bool heavy,float seconds,float r
   return;
  }
  if(id==C::Priest){
+  r.DrawSpellVolume(Renderer::SpellMedium::Holy,a.focus,{0,1,0},
+    {.16f+power*.14f,.16f+power*.14f,.24f+power*.28f},age,{1,1,1,power*.65f},unsigned(std::max(0,ability)));
   if(ability==5) {
    // Absolution gathers two prayer paths through the moving hands, then
    // joins them at the same focus that will release the paired projectile.
@@ -224,7 +226,8 @@ void PrepareAction(Renderer& r,C id,int ability,bool heavy,float seconds,float r
    r.DrawEffectStreak(Local(a,a.focus,std::cos(angle)*radius*.55f,std::sin(angle)*radius*.55f),
     Local(a,a.focus,std::cos(angle)*radius*1.25f,std::sin(angle)*radius*1.25f),.010f,{.55f,.84f,1,power*.68f});}
  }
- else if(mage && !arcane){r.DrawEffectSprite(Art::Flame,a.focus,radius*.8f,radius*1.2f,.1f*std::sin(age*2),{1,.85f,.57f,power*.85f},true);
+ else if(mage && !arcane){r.DrawSpellVolume(Renderer::SpellMedium::Fire,a.focus,{0,1,0},
+   {radius*.82f,radius*.82f,radius*1.18f},age,{1,1,1,power*.88f},unsigned(std::max(0,ability)));
   if(thermal)Panel(r,a,Art::Ice,a.focus,radius*.32f,radius*1.25f,-age*.5f,{.56f,.84f,1,power*.8f});}
  else {
   Panel(r,a,Art::Seal,a.focus,radius,radius,-age*.65f,{color.x,color.y,color.z,power*.8f});

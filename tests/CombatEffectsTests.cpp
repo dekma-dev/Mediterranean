@@ -268,12 +268,17 @@ int main() {
   scene(); renderer.DrawEffectGlow({0,1,1},.3f,{1,.7f,.2f,1}); const auto hidden=Capture(renderer,L"effects-occluded.png");
   Require(Difference(base,hidden)==0,"Opaque scenery must occlude effects completely");
   scene(); renderer.DrawEffectGlow({0,1,-1},.3f,{1,.7f,.2f,1}); const auto visible=Capture(renderer,L"effects-visible.png");
-  Require(Difference(base,visible)>80 && renderer.LastDrawCalls()-renderer.CloudLightUpdates()==baseDraws+1,"Visible effects need one additional batched draw");
+  Require(Difference(base,visible)>80 && renderer.LastDrawCalls()-renderer.CloudLightUpdates()-renderer.SpellGlowPasses()==baseDraws+1,
+    "Visible effects need one geometry batch plus the bounded glare passes");
   scene(); renderer.DrawEffectRing({0,1,1},.4f,{.1f,.6f,1,1}); const auto hiddenRing=Capture(renderer,L"effects-ring-occluded.png");
   Require(Difference(base,hiddenRing)==0,"Shock rings must obey opaque depth just like sparks");
   scene(); renderer.DrawEffectRing({0,1,-1},.4f,{.1f,.6f,1,1}); const auto ring=Capture(renderer,L"effects-ring-visible.png");
   const auto ringCenter=(size_t(ring.height/2)*ring.width+ring.width/2)*4;
-  Require(Difference(base,ring)>40 && std::equal(base.pixels.begin()+ringCenter,base.pixels.begin()+ringCenter+4,ring.pixels.begin()+ringCenter),
+  // Glare may scatter inside the hole; the underlying geometry must still
+  // retain its transparent centre. Check that contract without post glare.
+  renderer.SetSpellGlowEnabled(false);scene();renderer.DrawEffectRing({0,1,-1},.4f,{.1f,.6f,1,1});
+  const auto sharpRing=Capture(renderer,L"effects-ring-sharp.png");renderer.SetSpellGlowEnabled(true);
+  Require(Difference(base,ring)>40 && std::equal(base.pixels.begin()+ringCenter,base.pixels.begin()+ringCenter+4,sharpRing.pixels.begin()+ringCenter),
     "A shock ring needs a visible rim and a transparent center");
   const auto overlap=[&](bool reverse,const wchar_t* path) {
     scene();
