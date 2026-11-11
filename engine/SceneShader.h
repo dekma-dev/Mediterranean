@@ -62,6 +62,14 @@ float3 CloakPoint(float3 p,float4 surface,float3 hem,float3 ripple) {
  p.x+=bend.x+ripple.y*t2*sin(5*p.x);
  p.z-=max(0,bend.y)+wave+ripple.y*t2*p.x;
  p.y+=hem.z*.18*t2*sin(ripple.x-5*t+8*p.x);
+ // The hem rises along an arc as it trails; horizontal displacement must not
+ // stretch a hanging sheet to a longer length. Keep a smooth back envelope
+ // around the torso/hips while preserving the pinned shoulder seam.
+ p.y+=(.88-sqrt(max(.40,.88*.88-dot(edge,edge))))*t2;
+ float envelope=-.025-.070*sin(t*3.14159265)-.025*t2;
+ float clear=max(.006-abs(p.z-envelope),0)/.006;
+ float outside=min(p.z,envelope)-.0015*clear*clear;
+ p.z=lerp(p.z,outside,smoothstep(0,.20,t)*(1-smoothstep(.18,.34,abs(p.x))));
  return p;
 }
 float3 FaceDisplacement(float3 p,float blink,float expression) {
@@ -584,9 +592,14 @@ float4 PSMain(VOut i) : SV_TARGET {
   // The 256-square weight map shares authored routes with the atlas and cover.
   // WorldMap survey bounds: 240 x 256 m playable land, plus a 4 m paper gutter.
   float2 groundUV=float2((i.wp.x+124)/248,(132-i.wp.z)/264);
-  float3 groundWeights=terrainSurface.Sample(fontSampler,groundUV).rgb;
+  float4 groundWeights=terrainSurface.Sample(fontSampler,groundUV);
   float2 routes=groundWeights.rg;
   routes*=all(groundUV>=0) && all(groundUV<=1);
+  float woodland=groundWeights.a*(1-routes.x-routes.y);
+  // Shared canopy coverage makes trunks grow out of litter and moss rather
+  // than the same lawn as an open meadow. The mask is baked once on the CPU.
+  float3 litter=lerp(float3(.22,.205,.15),float3(.27,.285,.19),fine)*groundDetail;
+  albedo=lerp(albedo,litter,woodland*.82);
   float3 soil=float3(.34,.285,.225)*(.87+fine*.18)*groundDetail;
   float2 tile=i.wp.xz*float2(2.2,3.3);
   tile+=.10*sin(tile.yx*float2(2.9,3.7));
@@ -609,16 +622,22 @@ float4 PSMain(VOut i) : SV_TARGET {
   float relief=routes.y*(.042*mortar*(.7+stoneVariation*.3)+.002*chips*mortar);
   heightDerivative+=float2(ddx(relief),ddy(relief));
   roughness=lerp(.96,lerp(.93,.68+.14*stoneVariation,mortar),routes.y);
-  cavity=lerp(1,lerp(.65,1,mortar),routes.y)*(1-groundWeights.b);
-  // Exposed ridge faces use weathered rock, while gentle slopes retain heath.
-  float escarpment=1-smoothstep(.38,.78,geometric.y);
-  albedo=lerp(albedo,lerp(float3(.24,.25,.235),float3(.39,.365,.31),fine),escarpment);
+  cavity=lerp(1,lerp(.65,1,mortar),routes.y)*(1-groundWeights.b)*(1-woodland*.22);
+  // Traversable banks never reach the old 39-degree rock threshold. Expose
+  // broken strata on their actual grades, leaving worn routes continuous.
+  float grade=length(geometric.xz)/max(geometric.y,.1);
+  float escarpment=smoothstep(.16,.44,grade)*smoothstep(.28,.66,broad)*(1-routes.x-routes.y);
+  float strata=.5+.5*sin(i.wp.y*8+Noise(i.wp.xz*.85)*3);
+  float3 bank=lerp(float3(.255,.25,.205),float3(.40,.385,.33),fine*.65+strata*.35)*groundDetail;
+  albedo=lerp(albedo,bank,escarpment*.85);
+  float bankRelief=escarpment*strata*.009;
+  heightDerivative+=float2(ddx(bankRelief),ddy(bankRelief));
   heightDerivative*=.58;
  }
  if (i.material==8) {
   float age=Noise(i.wp.xz*.32);
   float luminance=dot(albedo,float3(.2126,.7152,.0722));
-  albedo=lerp(luminance.xxx,albedo,.64)*lerp(float3(.70,.77,.72),float3(.89,.86,.72),age);
+  albedo=lerp(luminance.xxx,albedo,.72)*lerp(float3(.80,.88,.78),float3(.92,.91,.77),age);
   roughness=max(roughness,.86);
  }
  if (i.material==5) {

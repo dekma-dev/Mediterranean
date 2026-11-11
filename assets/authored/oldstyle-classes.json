@@ -71,12 +71,12 @@
       "name": "WarriorSword",
       "lods": [
         {
-          "vertices": 32440,
-          "triangles": 15254
+          "vertices": 32817,
+          "triangles": 15916
         },
         {
-          "vertices": 9138,
-          "triangles": 4153
+          "vertices": 9440,
+          "triangles": 4318
         }
       ]
     },
@@ -84,12 +84,12 @@
       "name": "WarriorVeteranSword",
       "lods": [
         {
-          "vertices": 31030,
-          "triangles": 14776
+          "vertices": 31528,
+          "triangles": 15468
         },
         {
-          "vertices": 8715,
-          "triangles": 4013
+          "vertices": 8985,
+          "triangles": 4161
         }
       ]
     },
@@ -162,12 +162,12 @@
       "name": "ScoutBow",
       "lods": [
         {
-          "vertices": 7872,
-          "triangles": 14826
+          "vertices": 8214,
+          "triangles": 15398
         },
         {
-          "vertices": 2491,
-          "triangles": 3966
+          "vertices": 2581,
+          "triangles": 4114
         }
       ]
     },
@@ -175,12 +175,12 @@
       "name": "ScoutVeteranBow",
       "lods": [
         {
-          "vertices": 7872,
-          "triangles": 14826
+          "vertices": 8214,
+          "triangles": 15398
         },
         {
-          "vertices": 2498,
-          "triangles": 3966
+          "vertices": 2588,
+          "triangles": 4114
         }
       ]
     },
@@ -253,12 +253,12 @@
       "name": "MageStaff",
       "lods": [
         {
-          "vertices": 6832,
-          "triangles": 13504
+          "vertices": 8528,
+          "triangles": 15356
         },
         {
-          "vertices": 2182,
-          "triangles": 3628
+          "vertices": 2559,
+          "triangles": 4128
         }
       ]
     },
@@ -266,12 +266,12 @@
       "name": "MageVeteranStaff",
       "lods": [
         {
-          "vertices": 7912,
-          "triangles": 15456
+          "vertices": 9608,
+          "triangles": 17308
         },
         {
-          "vertices": 2574,
-          "triangles": 4148
+          "vertices": 2951,
+          "triangles": 4648
         }
       ]
     },
@@ -433,8 +433,8 @@
     }
   ],
   "bytes": 28467932,
-  "sha256": "159df53e22e0870398f244cf1ea06fcee5a1652b2571ae89e432e6bd39a00523",
-  "blend_sha256": "fe7ac027d94a3e559114d0506b7651ff7d7a11d4d2a961f43c9967296540b4f9",
+  "sha256": "0d05e95a1f657a818b98e842c9a19dad1d03f972e8ae81e820c05959638f7d96",
+  "blend_sha256": "dc557b430ce04e8c660b8da694d17338108e380080d1427de5dfa5281b0fd67c",
   "cloth_revision": "Reference 3: tailored starter/veteran clothing and waist-bound weighted hems",
   "garment_weights_sha256": "14407a84b9c63f6f5901deb17dd1a3d9a31eb24712545909ae85658869b4fc15",
   "preserved_parts": [
@@ -483,5 +483,5 @@
     "bytes": 10478304,
     "sha256": "14407a84b9c63f6f5901deb17dd1a3d9a31eb24712545909ae85658869b4fc15"
   },
-  "weapon_revision": "v20: six refined original weapon collections; other records and garment weights retained"
+  "weapon_revision": "v21: fitted short sword hilts, flat leather wraps, forged guards and feather vanes; other records and garment weights retained"
 }

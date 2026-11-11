@@ -5,7 +5,7 @@
 
 namespace visual {
 // Shared source for the visible sun, directional illumination and both shadow maps.
-inline const DirectX::XMFLOAT4 daylightSun{-30,51,-24,.00465f}; // xyz light position, w angular radius
+inline const DirectX::XMFLOAT4 daylightSun{-36,32,-22,.00465f}; // xyz light position, w angular radius
 // A fixed whole-island map plus a fixed-size detail region. Only the latter's
 // origin moves, in whole light-space texels; orbiting cannot rotate its grid.
 inline std::array<DirectX::XMFLOAT4X4,shadowLayers> ShadowProjections(DirectX::XMFLOAT3 focus) {

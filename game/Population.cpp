@@ -121,7 +121,7 @@ std::string Simulation::SaveWilderness() const {
     <<int(e.state)<<' '<<e.looted<<' '<<e.attackCooldown<<' '<<e.windup<<' '<<e.facing<<' '<<e.respawn<<'\n';
   return out.str();
 }
-bool Simulation::LoadWilderness(const std::string& data) {
+bool Simulation::LoadWilderness(const std::string& data,int savedVersion) {
   std::istringstream in(data);std::string tag;
   constexpr std::uint64_t all=(std::uint64_t(1)<<36)-1;
   if(!(in>>tag>>beastKills_>>beastLoot_>>trackedHunt_) || tag!="WILDERNESS" ||
@@ -135,8 +135,11 @@ bool Simulation::LoadWilderness(const std::string& data) {
   const auto valid=[](float n,float low,float high){return std::isfinite(n)&&n>=low&&n<=high;};
   for(auto& e:beasts_) {
     EntityId id=0;int state=0,looted=0;
-    if(!(in>>id>>e.position.x>>e.position.z>>e.health>>state>>looted>>e.attackCooldown>>e.windup>>e.facing>>e.respawn) ||
-      id!=e.id || !map_.CanStand(e.position,.45f) || Distance(e.position,e.home)>28 ||
+    if(!(in>>id>>e.position.x>>e.position.z>>e.health>>state>>looted>>e.attackCooldown>>e.windup>>e.facing>>e.respawn))return false;
+    // Preserve the leash validation before relocating a newly covered save.
+    if(!std::isfinite(e.position.x) || !std::isfinite(e.position.z) || Distance(e.position,e.home)>28)return false;
+    map_.RecoverOldSceneryPosition(e.position,.45f,savedVersion);
+    if(id!=e.id || !map_.CanStand(e.position,.45f) || Distance(e.position,e.home)>28 ||
       !valid(e.health,0,e.MaxHealth()) || state<0 || state>3 || looted<0 || looted>1 ||
       ((state==3)!=(e.health==0)) || (looted && e.health>0) ||
       !valid(e.attackCooldown,0,4) || !valid(e.windup,0,e.WindupDuration()) || !valid(e.facing,-3.142f,3.142f) ||

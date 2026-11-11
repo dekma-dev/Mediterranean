@@ -1,8 +1,20 @@
 # Blender collection in the native renderer
 
+## Fitted grasp, walking support and cloth response (2026-11-11, v21)
+
+The current motion source is `assets/authored/player-motion-v21.blend`.
+The sword hand now fits the actual oval hilt, with coordinated palm and arm IK
+offsets. Thirty-seven existing actions refine elbow/knee tracking and walking
+arms. Forward walking uses heel acceptance and toe push-off; the cloak responds
+to acceleration with separate middle/hem inertia and a local back envelope.
+Six existing weapon collections have revised grips, guards, fullers and vanes.
+Faces, the thirteen collection models, twenty complete motion records, the other
+27 equipment records and garment weights are preserved. See
+[the v21 record](player-grip-cloak-v21.md) for references, limits and review.
+
 ## Sword grip, economical recovery and cloak inertia (2026-11-11, v20)
 
-The current motion source is `assets/authored/player-motion-v20.blend`.
+The preceding motion source is `assets/authored/player-motion-v20.blend`.
 Thirty-seven existing actions revise sword grip/cutting and leg recovery.
 Native presentation retains the incoming carry during attack preparation,
 transports the grip and elbow frames continuously, and animates the cloak's

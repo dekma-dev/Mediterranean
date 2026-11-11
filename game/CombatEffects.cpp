@@ -319,7 +319,7 @@ std::size_t CombatEffects::TrailCount() const {
   return std::count_if(trails_.begin(),trails_.end(),[](const Trail& trail) { return trail.age<sweepLife || trail.count>1; });
 }
 std::size_t CombatEffects::WeaponSampleCount(rpg::EntityId actor)const{
-  for(const auto& trail:trails_)if(trail.actor==actor && trail.tracked)return trail.count;
+  for(const auto& trail:trails_)if(trail.actor==actor && trail.tracked && trail.count)return trail.count;
   return 0;
 }
 float CombatEffects::WeaponHistorySeconds(rpg::EntityId actor)const{

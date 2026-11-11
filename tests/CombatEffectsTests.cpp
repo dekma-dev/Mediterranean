@@ -112,6 +112,8 @@ int main() {
       "Blade sampling must retain the same density and duration across update rates");
     for(int n=0;n<4;++n)blade.Advance(.05f);
     Require(blade.WeaponSampleCount(0)==0 && blade.TrailCount()==0,"Measured blade wake never drains");
+    blade.Emit({K::Strike,{0,0},0,0});blade.TrackWeapon(0,{0,.8f,-1},{0,1.2f,-1});
+    Require(blade.WeaponSampleCount(0)==1,"Expired actor history hides a new trail in another pool slot");
   }
   auto injured=fresh.Save();
   const auto healthPosition=injured.find(" 100 ");

@@ -89,7 +89,7 @@ public:
         visible[i].x+=c*shift;visible[i].z-=s*shift;
         const float pitch=visible[i].pitch;
         visible[i].y=std::max(visible[i].y,rpg::WorldMap::Height({visible[i].x,visible[i].z})+
-          .17f*std::cos(pitch)+.185f*std::abs(std::sin(pitch)));
+          SoleHeight(pitch));
       }
     }
     for (int i=0;i<2;++i) {
@@ -175,6 +175,22 @@ private:
     // recovery to the walking lead held the pelvis below its authored height.
     return .58f-.16f*Unit(sample.runBlend)*Unit(sample.gaitWeights[0]);
   }
+  static float SoleHeight(float pitch) {
+    return .17f*std::cos(pitch)+(pitch<0?.115f:.185f)*std::abs(std::sin(pitch));
+  }
+  static float HeelLanding(const Sample& sample) {
+    if(!sample.authoredGait)return 0;
+    float amount=0;for(float w:sample.gaitWeights)amount+=Unit(w);
+    return -.15f*(1-Unit(sample.runBlend))*Unit(sample.gaitWeights[0])/
+      std::max(.001f,amount)*Unit(amount/.3f);
+  }
+  static void PivotSole(Step& foot,float pitch) {
+    const float pivot=pitch<0?-.115f:.185f,s=std::sin(pitch),c=std::cos(pitch);
+    const float dz=pivot*(1-c)+.17f*s;
+    foot.point=foot.goal;foot.point.pitch=pitch;
+    foot.point.x+=std::sin(foot.goal.yaw)*dz;foot.point.z+=std::cos(foot.goal.yaw)*dz;
+    foot.point.y+=pivot*s-.17f*(1-c);
+  }
   static float AuthoredDuty(const Sample& sample) {
     const auto& tracks=playerclips::Collection();
     float duty=0,total=0;const float run=Unit(sample.runBlend);
@@ -226,6 +242,7 @@ private:
     foot.goal.z=motion::Ease(foot.goal.z+goalVelocity.z*dt,desired.z,24,dt);
     foot.goal.y=rpg::WorldMap::Height({foot.goal.x,foot.goal.z})+.17f;
     foot.goal.yaw=motion::FollowAngle(foot.goal.yaw,yaw,24,dt);
+    foot.goal.pitch=motion::Ease(foot.goal.pitch,HeelLanding(sample),16,dt);
     const float t=foot.age/foot.duration;
     // Recover relative to the moving pelvis. World-space interpolation between
     // a fixed takeoff and a moving goal left the foot far behind the body.
@@ -248,26 +265,30 @@ private:
       foot.from.z+(position.z-foot.root.z)*(1-u)+(foot.goal.z-foot.from.z)*u+foot.velocity.z*tangent,
       foot.from.yaw+motion::AngleDelta(foot.from.yaw,foot.goal.yaw)*u};
     // Toe clearance through recovery, followed by a restrained heel approach.
-    // Flat, locked contacts remain unchanged at the two endpoints.
+    // The outgoing pitch blends into the next heel approach below.
     foot.point.pitch=sample.authoredGait?playerclips::SwingPitch(sample.gaitWeights,sample.runBlend,i,t,foot.from.pitch):
       foot.from.pitch*(1-u)+.24f*std::sin(t*motion::tau)*std::sin(t*motion::tau*.5f);
+    // Prepare heel contact before touchdown. The flat anchor remains fixed;
+    // the ankle arrives on the same heel pivot used while accepting weight.
+    const float approach=SmoothStep((t-.70f)/.30f),landPitch=foot.goal.pitch;
+    foot.point.pitch+=landPitch*approach;
+    const float landingZ=-.115f*(1-std::cos(landPitch))+.17f*std::sin(landPitch);
+    foot.point.x+=std::sin(foot.goal.yaw)*landingZ*approach;
+    foot.point.z+=std::cos(foot.goal.yaw)*landingZ*approach;
+    foot.point.y+=(-.115f*std::sin(landPitch)-.17f*(1-std::cos(landPitch)))*approach;
     // The ankle must also clear the rotated sole's front and heel corners.
     const float floor=rpg::WorldMap::Height({foot.point.x,foot.point.z});
-    foot.point.y=std::max(foot.point.y,floor+.17f*std::cos(foot.point.pitch)+.185f*std::abs(std::sin(foot.point.pitch)));
-    if(foot.age>=foot.duration){foot.point=foot.goal;foot.stepping=false;}
+    foot.point.y=std::max(foot.point.y,floor+SoleHeight(foot.point.pitch));
+    if(foot.age>=foot.duration){PivotSole(foot,foot.goal.pitch);foot.stepping=false;}
   }
-  static void RollSupport(Step& foot,float dt,rpg::Vec2 position,rpg::Vec2 velocity) {
+  static void RollSupport(Step& foot,float dt,rpg::Vec2 position,rpg::Vec2 velocity,float heel=0) {
     // The toe remains fixed in world space while the heel rises. Storing the
     // flat contact separately also lets a stopped or interrupted step settle
     // without either sliding the sole or snapping the ankle to its flat pose.
     const float forward=velocity.x*std::sin(foot.goal.yaw)+velocity.z*std::cos(foot.goal.yaw);
     const float behind=(position.x-foot.goal.x)*std::sin(foot.goal.yaw)+(position.z-foot.goal.z)*std::cos(foot.goal.yaw);
-    const float target=.62f*SmoothStep((behind-.08f)/.34f)*Unit(forward/.8f);
-    const float pitch=motion::Ease(foot.point.pitch,target,24,dt),s=std::sin(pitch),c=std::cos(pitch);
-    const float dz=.185f*(1-c)+.17f*s;
-    foot.point=foot.goal;foot.point.pitch=pitch;
-    foot.point.x+=std::sin(foot.goal.yaw)*dz;foot.point.z+=std::cos(foot.goal.yaw)*dz;
-    foot.point.y+=.185f*s-.17f*(1-c);
+    const float target=heel+.62f*SmoothStep((behind-.08f)/.34f)*Unit(forward/.8f)*(1-Unit(-heel/.08f));
+    PivotSole(foot,motion::Ease(foot.point.pitch,target,24,dt));
   }
   void Tick(float dt,rpg::Vec2 position,float yaw,rpg::Vec2 velocity,const Sample& sample) {
     const float speed=std::hypot(velocity.x,velocity.z);
@@ -351,7 +372,7 @@ private:
           // that anchor. Both legs use the same cycle rather than each waiting
           // for an unrelated reach threshold to fire.
           AdvanceSwing(foot,i,std::max(dt,foot.duration-foot.age),position,yaw,velocity,sample);
-          foot.stepping=false;foot.point=foot.goal;
+          foot.stepping=false;
       }
       const float width=.145f-.030f*Unit(sample.runBlend)*Unit(sample.gaitWeights[0]);
       const auto neutral=Neutral(position,yaw,i,width);
@@ -361,7 +382,8 @@ private:
       // cycle rather than dragging its planted anchor past anatomical reach.
       const float releaseReach=.48f+.12f*Unit(sample.runBlend)*Unit(sample.gaitWeights[0]);
       if(!foot.stepping&&((q<duty&&supportReach<releaseReach)||speed<=.1f)){
-        RollSupport(foot,dt,position,velocity);
+        const float heel=speed>.1f?foot.goal.pitch*(1-SmoothStep(q/std::max(.01f,duty*.30f))):0;
+        RollSupport(foot,dt,position,velocity,heel);
         continue;
       }
       if(!foot.stepping) {

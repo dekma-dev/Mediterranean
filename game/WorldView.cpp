@@ -5,6 +5,8 @@
 #include "game/CourtView.h"
 #include "game/ExpeditionView.h"
 #include "game/PopulationView.h"
+#include "game/LocationView.h"
+#include "game/Grove.h"
 #include "engine/Renderer.h"
 #include "engine/Landscape.h"
 #include <cmath>
@@ -25,6 +27,7 @@ void DrawScenery(Renderer& r,const rpg::WorldMap& map) {
   courtview::Plates(r);
   expeditionview::CampDetails(r);
   populationview::Scenery(r);
+  locationview::Details(r,map);
   // Low coastal strata remain outside the walkable rectangle. They extend
   // the cliff silhouette without introducing invisible collision in the meadow.
   for(int n=0;n<15;++n) {
@@ -41,35 +44,31 @@ void DrawScenery(Renderer& r,const rpg::WorldMap& map) {
       r.DrawAuthoredAsset(plant,{cover.position.x,0,cover.position.z},{scale,scale,scale},cover.yaw);
     } else {
       const bool meadow=cover.position.z<-19;
-      r.DrawMesh(M::Grass,{cover.position.x,0,cover.position.z},{scale,(meadow?.9f:.65f)*scale,scale},
+      r.DrawMesh(M::Grass,{cover.position.x,0,cover.position.z},{scale,(meadow?.55f:.42f)*scale,scale},
         meadow?XMFLOAT4{.40f,.37f,.25f,1}:XMFLOAT4{.29f,.34f,.23f,1},S::Leaves,cover.yaw,0,visual::ShadowMode::None);
       // Low, offset tufts make irregular patches instead of evenly spaced spikes.
       const bool outer=std::abs(cover.position.x)>68 || std::abs(cover.position.z)>76;
       for(int tuft=0;tuft<(outer?1:2);++tuft) {
         const float a=cover.yaw+tuft*2.4f;
-        const rpg::Vec2 p{cover.position.x+std::sin(a)*.26f,cover.position.z+std::cos(a)*.26f};
+        const rpg::Vec2 p{cover.position.x+std::sin(a)*.40f,cover.position.z+std::cos(a)*.40f};
         const auto surface=map.SurfaceAt(p);
         if(map.CanStand(p,.35f) && surface.dirt+surface.paving<.06f)
-          r.DrawMesh(M::Grass,{p.x,0,p.z},{scale*.75f,scale*.32f,scale*.75f},
+          r.DrawMesh(M::Grass,{p.x,map.Height(p)-map.Height(cover.position),p.z},{scale*.85f,scale*.24f,scale*.85f},
             {.33f,.34f,.24f,1},S::Leaves,a,0,visual::ShadowMode::None);
-      }
-      if(meadow && !outer) {
-        r.DrawMesh(M::Grass,{cover.position.x+.22f,0,cover.position.z-.18f},{scale*.6f,scale*.52f,scale*.6f},
-          {.33f,.40f,.20f,1},S::Leaves,cover.yaw+1.7f,0,visual::ShadowMode::None);
-        for(int stem=0;stem<3;++stem) r.DrawMesh(M::Feature,
-          {cover.position.x+(stem-1)*.14f,.25f*scale,cover.position.z+float(stem%2)*.13f},
-          {.065f,.035f,.065f},{.65f,.58f,.37f,1},S::Leaves,cover.yaw,0,visual::ShadowMode::None);
       }
     }
   }
-  // Small verge stones follow the same route segments as the ground and atlas.
+  // Sparse, low chips complement stone groups. They no longer form an evenly
+  // spaced bright dotted line on both sides of every footpath.
   for (const auto& trail : map.Trails()) {
     const float dx=trail.to.x-trail.from.x,dz=trail.to.z-trail.from.z,length=std::hypot(dx,dz);
-    for (int i=0;i<int(length/1.4f);++i) {
-      const float t=(i+.5f)*1.4f/length,side=i%2?-1.f:1.f,offset=trail.halfWidth+.35f;
+    for (int i=0;i<int(length/2.3f);++i) {
+      const float seed=std::sin(trail.from.x*12.31f+trail.from.z*7.17f+i*13.67f);
+      if(seed<.3f)continue;
+      const float t=(i+.3f+seed*.35f)*2.3f/length,side=i%2?-1.f:1.f,offset=trail.halfWidth+.4f+seed*.5f;
       const rpg::Vec2 p{trail.from.x+dx*t+dz/length*offset*side,trail.from.z+dz*t-dx/length*offset*side};
       if (!map.CanStand(p,.25f) || map.SurfaceAt(p).paving>.2f) continue;
-      r.DrawMesh(M::Rock,{p.x,map.Height(p)+.025f,p.z},{.21f+i%3*.045f,.095f,.25f+i%2*.07f},rock,S::Stone,float(i));
+      r.DrawMesh(M::Rock,{p.x,map.Height(p)-.015f,p.z},{.18f+seed*.12f,.07f,.23f+seed*.12f},{.34f,.33f,.29f,1},S::Stone,float(i));
     }
   }
   for (const auto& o : map.Obstacles()) {
@@ -85,21 +84,10 @@ void DrawScenery(Renderer& r,const rpg::WorldMap& map) {
     if(o.kind==rpg::PropKind::SurveyStone) continue; // Detailed marker assembly below.
     if (o.kind==rpg::PropKind::Counter) { DrawSupplyStall(r,o); continue; }
     if (o.kind==rpg::PropKind::Tree) {
-      const bool mist=x<-65 && z<-60;
-      auto tree=(mist && int(std::abs(x+z))%3==0) || z>20?authored::Asset::DeadTree:
-        x>0 || mist?authored::Asset::Pine:authored::Asset::Oak;
-      if(o.introducedVersion==22) {
-        int district=0;float nearest=10000;
-        for(int d=0;d<rpg::population::districtCount;++d) {
-          const auto p=rpg::population::districts[d].habitat;const float distance=std::hypot(x-p.x,z-p.z);
-          if(distance<nearest){nearest=distance;district=d;}
-        }
-        tree=district==3?authored::Asset::DeadTree:district==0 || district==4?authored::Asset::Oak:authored::Asset::Pine;
-      }
-      const auto& bounds=authored::Collection()[unsigned(tree)*authored::lodCount].bounds;
-      const float radius=std::max({std::abs(bounds.minimum.x),std::abs(bounds.maximum.x),std::abs(bounds.minimum.z),std::abs(bounds.maximum.z)});
-      const float scale=std::min((o.CameraHeight()-.1f)/bounds.maximum.y,1.9f/radius);
-      r.DrawAuthoredAsset(tree,{x,0,z},{scale,scale,scale});
+      const auto profile=rpg::grove::Tree(o);const auto scale=rpg::grove::Size(o);
+      const auto tree=authored::Asset(unsigned(authored::Asset::Oak)+unsigned(profile.species));
+      const int variety=int(std::abs(x*7+z*11));
+      r.DrawAuthoredAsset(tree,{x,-.04f,z},{scale.width,scale.height,scale.width},variety*.618034f);
       continue;
     }
     if (o.kind==rpg::PropKind::Ruin) {
@@ -191,6 +179,7 @@ void WorldView::Draw(Renderer& r,const rpg::WorldMap& map,float time,bool sparri
   // Reactive training props stay outside the immutable cache. Sparring no
   // longer rebuilds the entire village just to hide its first training post.
   r.DrawStaticScene(scenery_,[&] { DrawScenery(r,map); });
+  locationview::Lanterns(r,map,observer,time);
   for(unsigned i=0;i<training.size();++i) {
     if(sparring && i==0)continue;
     const rpg::Vec2 position{12,-2.f+i*3.f};

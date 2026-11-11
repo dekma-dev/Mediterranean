@@ -4,6 +4,7 @@
 #include "game/CharacterView.h"
 #include "game/Game.h"
 #include "game/HandPose.h"
+#include "game/WeaponGrip.h"
 #include "engine/Renderer.h"
 #include "platform/Win32Window.h"
 #include <filesystem>
@@ -99,6 +100,36 @@ struct Walker {
     feet.Update(dt,position,0,true,true,state.pose);
   }
 };
+void HeelAcceptanceChecks(){
+  for(int hz:{30,60,144}){
+    Walker walker;std::array<XMFLOAT3,2> previous{};bool supported[2]={},heelPivot[2]={};
+    int heels=0,flat=0,toes=0;float slip=0,lowest=1;
+    for(int tick=0;tick<hz*5;++tick){
+      walker.Update(1.f/hz,1.4f,1,0);
+      const auto pose=BuildCharacterPose(0,0,false,walker.state.pose);
+      for(int side=0;side<2;++side){
+        const bool heel=pose.footPitch[side]<0;
+        auto contact=pose.FootPoint(side,{0,-.17f,heel?-.115f:.185f});
+        contact.x+=walker.position.x;contact.z+=walker.position.z;
+        const bool support=walker.feet.Planted(side);
+        if(tick>hz){
+          lowest=std::min(lowest,contact.y-rpg::WorldMap::Height({contact.x,contact.z}));
+          if(support){
+            heels+=pose.footPitch[side]<-.04f;
+            flat+=std::abs(pose.footPitch[side])<.02f;
+            toes+=pose.footPitch[side]>.12f;
+            if(supported[side]&&heelPivot[side]==heel)slip=std::max(slip,Distance(contact,previous[side]));
+          }
+        }
+        previous[side]=contact;supported[side]=support;heelPivot[side]=heel;
+      }
+    }
+    std::cout<<"Heel acceptance "<<hz<<" Hz: heel/flat/toe "<<heels<<'/'<<flat<<'/'<<toes<<", slip "<<slip<<", floor "<<lowest<<'\n';
+    Check(heels>hz/8&&flat>hz/8&&toes>hz/8,"Walking lacks heel acceptance, flat support or toe push-off");
+    Check(slip<.002f,"Heel/toe support pivot slides while accepting body weight");
+    Check(lowest>-.002f,"Walking sole penetrates the floor during heel acceptance");
+  }
+}
 void FlightCarryBlendChecks(){
   // Changing the outgoing carry must retain half its effect halfway into
   // flight. A second fade before the flight blend reduced this to a quarter
@@ -519,7 +550,9 @@ void LoadedArmRunningChecks(){
         // Isolate arm motion from the unchanged planted-leg pelvis response.
         const auto acceleration=(XMLoadFloat3(&relative)-2*XMLoadFloat3(&previous)+XMLoadFloat3(&before))/(dt*dt);
         accelerationSquared+=XMVectorGetX(XMVector3LengthSq(acceleration));++samples;
-        Check(Distance(BuildHandPose(pose,1,true,false,0).Point({0,0,0}),pose.WeaponPoint(0))<.0001f,"Running weapon detached from palm");
+        const XMFLOAT3 socket=pose.fittedBladeGrip?
+          XMFLOAT3{-weapongrip::swordAlong,0,-weapongrip::swordPalmInset}:XMFLOAT3{};
+        Check(Distance(BuildHandPose(pose,1,true,false,0).Point(socket),pose.WeaponPoint(0))<.0001f,"Running weapon detached from its fitted palm socket");
       }
       before=previous;previous=relative;
     }
@@ -741,7 +774,7 @@ int main(int argc,char** argv){try{
   if(argc==2&&std::string_view(argv[1])=="--capture-only") {Captures();return 0;}
   if(argc==2&&std::string_view(argv[1])=="--flight-only") {LibraryChecks();EquippedFlightChecks();return 0;}
   if(argc==2&&std::string_view(argv[1])=="--bow-only") {LibraryChecks();BowMotionChecks();WeaponCarryChecks();EquippedFlightChecks();std::cout<<"PASS: archery draw, release, carry and flight\n";return 0;}
-  LibraryChecks();GroundedMotionChecks();NaturalGaitChecks();AuthoredLegChecks();CuttingGripChecks();ContinuousCycleChecks();LateralClearanceChecks();RecoveryTimingChecks();FlightClockChecks();ContactsAndTransitions();WeaponMotionChecks();LoadedArmRunningChecks();BowMotionChecks();WeaponCarryChecks();EquippedFlightChecks();
+  LibraryChecks();GroundedMotionChecks();NaturalGaitChecks();AuthoredLegChecks();CuttingGripChecks();HeelAcceptanceChecks();ContinuousCycleChecks();LateralClearanceChecks();RecoveryTimingChecks();FlightClockChecks();ContactsAndTransitions();WeaponMotionChecks();LoadedArmRunningChecks();BowMotionChecks();WeaponCarryChecks();EquippedFlightChecks();
   if(!(argc==2&&std::string_view(argv[1])=="--motion-only"))Captures();
   std::cout<<"PASS: imported gait loops, directional weapon carry, equipped jumps, combat guards, contacts, transition continuity, gameplay isolation and native comparison\n";}
 catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

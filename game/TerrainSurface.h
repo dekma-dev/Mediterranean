@@ -4,5 +4,5 @@
 #include <vector>
 
 inline constexpr unsigned terrainSurfaceSize=256;
-// RGBA: dirt weight, paving weight, reserved, opaque. Extent matches the atlas.
+// RGBA data: dirt, paving, ambient shelter, woodland litter. Extent matches atlas.
 std::vector<std::uint8_t> BuildTerrainSurface(const rpg::WorldMap& map);

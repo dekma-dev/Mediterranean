@@ -216,8 +216,9 @@ int main() {
     const auto moving=clothScene(true,.20f,.35f,L"cloth-shadow-moving.png");
     const auto centroid=[&](const Image& image) {
       float weight=0,x=0,z=0;
-      for(int row=0;row<28;++row) for(int column=0;column<36;++column) {
-        const XMFLOAT3 p{.05f+column*.035f,0,-.18f+row*.035f};
+      // Cover the complete cloth projection under the lower environment sun.
+      for(int row=0;row<56;++row) for(int column=0;column<72;++column) {
+        const XMFLOAT3 p{-.45f+column*.04f,0,-.55f+row*.04f};
         const auto probe=screen(p);
         const float shade=std::max(0.f,empty.At(probe,0)-image.At(probe,0)-8);
         weight+=shade; x+=p.x*shade; z+=p.z*shade;
@@ -235,7 +236,8 @@ int main() {
     Check(MaximumDifference(empty,removed)==0,"Unequipping cloth must clear its geometry and shadow");
   }
   floor();
-  const auto postProbe=screen({.95f,0,.76f}),stepProbe=screen({.55f,0,.54f});
+  const auto sun=visual::daylightSun;
+  const auto postProbe=screen({-1.6f*sun.x/sun.y,0,-1.6f*sun.z/sun.y}),stepProbe=screen({.55f,0,.54f});
   const auto lit=Capture(renderer,L"shadow-lit.png");
   floor(); renderer.DrawMesh(M::Box,{0,1,0},{.5f,2,.5f},white,S::Stone);
   const auto stone=Capture(renderer,L"shadow-stone.png");
@@ -273,7 +275,7 @@ int main() {
     const auto reference=Capture(renderer,L"shadow-thin-reference.png");
     floor(); renderer.DrawMesh(M::Box,{shift,1,0},{.035f,2,.035f},white,S::Plain);
     const auto thin=Capture(renderer,L"shadow-thin.png");
-    const auto probe=screen({shift+30.f/51,0,24.f/51});
+    const auto probe=screen({shift-sun.x/sun.y,0,-sun.z/sun.y});
     const float drop=reference.At(probe,0)-thin.At(probe,0);
     minimumThin=std::min(minimumThin,drop); totalThin+=drop;
   }
@@ -334,11 +336,12 @@ int main() {
   offscreenFloor(); const auto offscreenProbe=screen({.7f,0,.76f});
   const auto offscreenLit=Capture(renderer,L"shadow-offscreen-lit.png");
   offscreenFloor();
-  for (float x : {-4.5f,-3.5f}) for (float y : {7.5f,8.5f}) for (float z : {-3.5f,-2.5f}) {
+  const XMFLOAT3 caster{.7f+8*sun.x/sun.y,8,.76f+8*sun.z/sun.y};
+  for (float x : {caster.x-.5f,caster.x+.5f}) for (float y : {7.5f,8.5f}) for (float z : {caster.z-.5f,caster.z+.5f}) {
     XMFLOAT2 unused;
     Require(!renderer.Project({x,y,z},unused),"Offscreen fixture caster became visible.");
   }
-  renderer.DrawMesh(M::Box,{-4,8,-3},{1,1,1},white,S::Stone);
+  renderer.DrawMesh(M::Box,caster,{1,1,1},white,S::Stone);
   const auto offscreen=Capture(renderer,L"shadow-offscreen.png");
   Check(offscreenLit.At(offscreenProbe)-offscreen.At(offscreenProbe)>25,"An offscreen caster must still shade a visible receiver.");
   offscreenFloor(); const auto noCasters=Capture(renderer,L"shadow-no-casters.png");
@@ -348,7 +351,7 @@ int main() {
   for (const auto size : {std::pair<int,int>{960,720},{1280,720},{960,600}}) {
     Require(renderer.Resize(size.first,size.second),"Shadow resize failed.");
     for (float shift : {-.3f,0.f,.3f}) {
-      floor(); const auto probe=screen({shift+.95f,0,.76f});
+      floor(); const auto probe=screen({shift-1.6f*sun.x/sun.y,0,-1.6f*sun.z/sun.y});
       const auto reference=Capture(renderer,L"shadow-moving-lit.png");
       floor(); renderer.DrawMesh(M::Box,{shift,1,0},{.5f,2,.5f},white,S::Stone);
       const auto moving=Capture(renderer,L"shadow-moving.png");

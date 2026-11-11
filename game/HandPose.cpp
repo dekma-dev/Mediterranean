@@ -1,4 +1,5 @@
 #include "game/HandPose.h"
+#include "game/WeaponGrip.h"
 #include <algorithm>
 #include <cmath>
 
@@ -42,12 +43,14 @@ HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool 
   const float staffGrip=side||shield||!weapon?0:animation::Unit(pose.staffGripWeight);
   const float bowGrip=!side&&weapon&&!shield?pose.bowDraw*(1.1f-.1f*pose.bowDraw):0;
   const bool gripping=side?weapon:shield||staffGrip>0||bowGrip>0;
+  const bool fitted=side&&weapon&&pose.fittedBladeGrip;
   const auto& arm=pose.arms[side];
   const auto forearm=XMVector3Normalize(XMLoadFloat3(&arm.end)-XMLoadFloat3(&arm.joint));
   XMMATRIX frame;
   if(side && weapon) {
     const auto blade=WeaponFrame(pose);
     frame={blade.r[1],blade.r[0],-blade.r[2],blade.r[3]};
+    if(fitted)frame.r[3]+=frame.r[0]*weapongrip::swordAlong+frame.r[2]*weapongrip::swordPalmInset;
   } else if(!side && shield) {
     const auto plate=ShieldFrame(pose);
     frame={plate.r[1],-plate.r[0],plate.r[2],plate.r[3]};
@@ -112,7 +115,8 @@ HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool 
     constexpr float closedAngles[3]={.70f,1.66f,2.79f};
     for(unsigned bone=0;bone<3;++bone) {
       constexpr float littleAngles[3]={.70f,1.30f,1.90f};
-      const float angle=.07f+result.curl*((finger==3?littleAngles[bone]:closedAngles[bone])-.07f);
+      const float closed=fitted?weapongrip::swordCurl[finger][bone]:finger==3?littleAngles[bone]:closedAngles[bone];
+      const float angle=.07f+result.curl*(closed-.07f);
       const auto direction=XMVector3TransformNormal(XMVectorSet(0,std::cos(angle),std::sin(angle),0),XMMatrixRotationZ(splay));
       XMStoreFloat3(&chain.joints[bone+1],XMLoadFloat3(&chain.joints[bone])+direction*lengths[finger][bone]);
     }
@@ -123,9 +127,10 @@ HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool 
   // the handle. Rotate fixed-length bones to preserve volume while opening.
   const XMFLOAT3 opened[]={{mirror*.76f,.55f,.20f},{mirror*.48f,.84f,.20f},{mirror*.16f,.97f,.18f}};
   const XMFLOAT3 closed[]={{mirror*.35f,-.10f,.93f},{-mirror*.60f,.05f,.80f},{-mirror*.95f,.22f,.19f}};
+  const XMFLOAT3 fittedThumb[]={{mirror*.35f,.05f,.935f},{-mirror*.60f,.40f,.69f},{-mirror*.96f,.28f,-.04f}};
   constexpr float thumbLengths[]={.035f,.030f,.024f};
   for(unsigned bone=0;bone<3;++bone) {
-    const auto direction=XMVector3Normalize(XMVectorLerp(XMLoadFloat3(&opened[bone]),XMLoadFloat3(&closed[bone]),result.curl));
+    const auto direction=XMVector3Normalize(XMVectorLerp(XMLoadFloat3(&opened[bone]),XMLoadFloat3(&(fitted?fittedThumb:closed)[bone]),result.curl));
     XMStoreFloat3(&thumb.joints[bone+1],XMLoadFloat3(&thumb.joints[bone])+direction*thumbLengths[bone]);
   }
   return result;

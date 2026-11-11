@@ -1,5 +1,6 @@
 #include "game/HandPose.h"
 #include "game/CharacterView.h"
+#include "game/WeaponGrip.h"
 #include "engine/Renderer.h"
 #include "platform/Win32Window.h"
 #include <cmath>
@@ -13,6 +14,40 @@ void Check(bool ok,const char* message) { if(!ok) { std::cerr<<message<<'\n'; st
 float Distance(XMFLOAT3 a,XMFLOAT3 b) { return XMVectorGetX(XMVector3Length(XMLoadFloat3(&a)-XMLoadFloat3(&b))); }
 XMFLOAT3 Transform(XMFLOAT3 p,const XMMATRIX& frame) {
   XMFLOAT3 result; XMStoreFloat3(&result,XMVector3TransformCoord(XMLoadFloat3(&p),frame)); return result;
+}
+void FittedSwordGrip() {
+  animation::Sample sample;sample.authoredGait=true;sample.authoredBlend=1;
+  sample.authoredEquipment=playerclips::Equipment::Sword;
+  const auto pose=BuildCharacterPose(0,0,false,sample,rpg::WeaponForm::Blade);
+  Check(pose.fittedBladeGrip,"Authored sword did not select its fitted palm socket");
+  const auto hand=BuildHandPose(pose,1,true,false,0);
+  const auto inverse=XMMatrixInverse(nullptr,WeaponFrame(pose));
+  const auto gap=[](float x,float z) {
+    float closest=1;
+    for(int k=0;k<720;++k) {
+      const float angle=k*DirectX::XM_2PI/720;
+      closest=std::min(closest,std::hypot(x-weapongrip::swordAcross*std::cos(angle),
+        z-weapongrip::swordDepth*std::sin(angle)));
+    }
+    return (x*x/(weapongrip::swordAcross*weapongrip::swordAcross)+
+      z*z/(weapongrip::swordDepth*weapongrip::swordDepth)<1?-1:1)*closest;
+  };
+  for(unsigned f=0;f<4;++f) {
+    const auto tip=Transform(hand.Point(hand.fingers[f].joints[3]),inverse);
+    const float pad=(f==3?.0085f:.0097f)*.8f;
+    Check(std::abs(gap(tip.x,tip.z)-pad)<.003f,"Fingertip pad floats away from the actual oval sword handle");
+    Check(tip.y>-.055f&&tip.y<.101f,"Fingers close outside the usable hilt");
+  }
+  Check(Distance(hand.Point({0,-.055f,-.043f}),pose.arms[1].end)<1e-5f,"Fitted palm detached from arm IK");
+  const auto palette=BuildHandRig(hand);const auto& mesh=visual::CharacterHand(0,hand.mirrored);
+  float penetration=0;
+  for(std::size_t i=0;i<mesh.mesh.vertices.size();++i) {
+    const auto vertex=visual::SkinHandVertex(mesh.mesh.vertices[i],mesh.influences[i],palette);
+    const auto p=Transform(vertex.position,inverse);
+    if(p.y>-.052f&&p.y<.097f)penetration=std::max(penetration,-gap(p.x,p.z));
+  }
+  std::cout<<"Fitted sword maximum skin/handle penetration: "<<penetration<<'\n';
+  Check(penetration<.0025f,"Skinned palm or finger intersects the fitted sword handle");
 }
 void Structure() {
   float largestTipStep=0,smallestLateral=1;
@@ -79,6 +114,7 @@ void Structure() {
 }
 int main() {
   Structure();
+  FittedSwordGrip();
   Check(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"Hand COM");
   Win32Window window; Check(window.Create(GetModuleHandle(nullptr),960,720,L"Hand and weapon checks",false),"Hidden hand window");
   Renderer renderer; Check(renderer.Initialize(window.GetHandle(),960,720),"Hand renderer");

@@ -255,8 +255,8 @@ int main() {
     const auto pixels=BuildTerrainSurface(map);
     Require(pixels.size()==terrainSurfaceSize*terrainSurfaceSize*4,"Invalid ground weight texture dimensions.");
     for (std::size_t i=0;i<pixels.size();i+=4)
-      Require(unsigned(pixels[i])+pixels[i+1]<=255 && pixels[i+2]<=90 && pixels[i+3]==255,
-        "Ground weights must survive quantization without negative grass weights or transparency.");
+      Require(unsigned(pixels[i])+pixels[i+1]<=255 && pixels[i+2]<=90,
+        "Ground weights must survive quantization without negative grass weights or unbounded shelter.");
     // A vertically inverted upload would put the paved village at the enemy camp.
     const auto sample=[&](float x,float z,int channel) {
       const auto col=unsigned((x/rpg::WorldMap::surveyWidth+.5f)*terrainSurfaceSize),

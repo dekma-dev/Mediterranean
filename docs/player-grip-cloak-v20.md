@@ -95,7 +95,7 @@ The audit compares the saved pre-pass files against the final source/export:
   timing remain unchanged.
 
 Authoring scripts, intermediate files and review captures remain in the ignored
-`.blender-local/motion-v20-20261111` directory. Nothing was committed or pushed.
+`.blender-local/motion-v20-20261111` directory and remain ignored by Git.
 
 ## Review and checks
 
@@ -120,3 +120,18 @@ the user rejected. Existing weapon/wrist continuity limits were retained.
 
 Detailed machine-readable records are stored locally in `preservation.json`,
 `source-preservation.json`, `gear-validation.json` and `validation-summary.json`.
+
+The final native pose passed all 12 selected regression suites in both Release
+and Debug (24 suite runs). These include full native motion captures, hands,
+foot placement, animation state, skinning, equipment, bodies, faces and authored
+assets. The carrying-grip regression rejects a positive-axis roll clamp: that
+clamp improved some raised poses but turned the relaxed palm across the forearm.
+The final implementation regularizes only near axial alignment.
+
+All six game executables were rebuilt. Their embedded PCL5, KIT1 and GWT2 data
+match the current authored files byte for byte.
+All six also passed the hidden native smoke launch with an isolated test save,
+including device/shader initialization, resize, world/UI drawing and capture.
+The review was recaptured after the final grip correction, including the
+actual game update/render path; the short run video was encoded and decoded
+at 1280x720, 30 fps.

@@ -10,6 +10,16 @@ void Require(bool value,const char* message) {
   if (!value) { std::cerr<<message<<'\n'; std::exit(1); }
 }
 void CloakInertiaChecks() {
+  // Equal speed with different acceleration must load the cloth differently.
+  // The response is integrated, never a one-frame displacement of the hem.
+  animation::CloakMotion accelerating,coasting;
+  animation::CloakSample accelerated,coasted;
+  for(int i=0;i<24;++i){
+    accelerated=accelerating.Update(1.f/120,3,0,0,8);
+    coasted=coasting.Update(1.f/120,3,0,0,0);
+  }
+  Require(accelerated.midBack>coasted.midBack+.001f && accelerated.hemBack>coasted.hemBack,
+    "Cloak ignores acceleration load at the same travel speed");
   // A heavy hem must follow the middle of the cloth, then continue moving
   // after braking. Compare the same forcing at three render rates.
   std::array<animation::CloakSample,3> samples{};

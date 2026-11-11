@@ -77,7 +77,9 @@ float Simulation::CameraDistance(Vec2 origin,float originY,Vec2 direction,float 
       // the player's torso. In that case retain trunk collision and allow the
       // boom to leave the foliage volume; solid walls still block normally.
       const float focusY=originY-ground;
-      const bool focusInCrown=o.kind==PropKind::Tree && focusY>=1.65f && focusY<o.CameraHeight() &&
+      // Include a shoulder-height focus just below the leaves: an upward boom
+      // can otherwise enter the enlarged crown before it has room to leave it.
+      const bool focusInCrown=o.kind==PropKind::Tree && focusY>=1.2f && focusY<o.CameraHeight() &&
         std::abs(origin.x-o.center.x)<o.CameraHalfX()+.15f && std::abs(origin.z-o.center.z)<o.CameraHalfZ()+.15f;
       const bool belowCrown=o.kind==PropKind::Tree && (y<1.65f || focusInCrown);
       const float halfX=belowCrown?o.halfX:o.CameraHalfX();
@@ -1458,7 +1460,7 @@ std::string Simulation::Save() const {
     Simulation campaign=*this;campaign.RestoreCampaignEncounter();return campaign.Save();
   }
   std::ostringstream out;
-  out << std::setprecision(9) << "MEDITERRANEAN 23\n" << "PROFILE " << int(class_) << ' ' << std::quoted(nickname_) << ' ' << frontierCompleted_ << ' ' << frontierActive_ << ' ' << legacyLoot_ << '\n' << player_.x << ' ' << player_.z << ' '
+  out << std::setprecision(9) << "MEDITERRANEAN 24\n" << "PROFILE " << int(class_) << ' ' << std::quoted(nickname_) << ' ' << frontierCompleted_ << ' ' << frontierActive_ << ' ' << legacyLoot_ << '\n' << player_.x << ' ' << player_.z << ' '
     << health_ << ' ' << facing_ << ' ' << static_cast<int>(quest_) << ' ' << gold_ << '\n';
   out << Potions() << ' ' << HasRewardWeapon() << ' ' << RewardWeaponEquipped() << ' ' << potionCooldown_ << '\n';
   out << static_cast<int>(anchorQuest_) << '\n';
@@ -1492,7 +1494,7 @@ bool Simulation::Load(const std::string& data) {
   std::istringstream input(data);
   std::string magic; int version=0, quest=0,potions=2,owned=0,equipped=0;
   Simulation candidate;
-  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>23) return false;
+  if (!(input >> magic >> version) || magic!="MEDITERRANEAN" || version<1 || version>WorldMap::sceneryVersion) return false;
   if(version>=11) {
     std::string tag,name;int id=0,completed=0,active=0,looted=0;
     if(!(input>>tag>>id>>std::quoted(name)>>completed>>active>>looted) || tag!="PROFILE" ||
@@ -1503,30 +1505,10 @@ bool Simulation::Load(const std::string& data) {
   }
   if(version>=22) {
     const auto wilderness=data.find("\nWILDERNESS ");
-    if(wilderness==std::string::npos || !candidate.LoadWilderness(data.substr(wilderness+1)))return false;
+    if(wilderness==std::string::npos || !candidate.LoadWilderness(data.substr(wilderness+1),version))return false;
   }
-  // Recover only old saved positions covered by a versioned new footprint.
-  // Current-version positions inside geometry remain invalid.
-  const auto migrateNewProps=[&](Vec2& position,float radius) {
-    if (!std::isfinite(position.x) || !std::isfinite(position.z) || candidate.map_.CanStand(position,radius)) return;
-    for (const auto& prop : candidate.map_.Obstacles()) {
-      if (!(version<5 && prop.kind==PropKind::Counter) && !(prop.introducedVersion>version)) continue;
-      const Vec2 nearest{std::clamp(position.x,prop.center.x-prop.halfX,prop.center.x+prop.halfX),
-        std::clamp(position.z,prop.center.z-prop.halfZ,prop.center.z+prop.halfZ)};
-      if (Length(Difference(position,nearest))>=radius) continue;
-      const float x=prop.halfX+radius+.01f,z=prop.halfZ+radius+.01f;
-      const Vec2 edges[]={{prop.center.x-x,position.z},{prop.center.x+x,position.z},
-        {position.x,prop.center.z-z},{position.x,prop.center.z+z}};
-      Vec2 result=position; float distance=100;
-      for (const auto edge : edges) {
-        const float delta=Length(Difference(position,edge));
-        if (delta<distance && candidate.map_.CanStand(edge,radius)) { result=edge; distance=delta; }
-      }
-      position=result;
-    }
-  };
   if (!(input >> candidate.player_.x >> candidate.player_.z >> candidate.health_ >> candidate.facing_ >> quest >> candidate.gold_)) return false;
-  migrateNewProps(candidate.player_,.4f);
+  candidate.map_.RecoverOldSceneryPosition(candidate.player_,.4f,version);
   auto valid=[](float value,float min,float max) { return std::isfinite(value) && value>=min && value<=max; };
   if (!valid(candidate.player_.x,-WorldMap::halfWidth,WorldMap::halfWidth) || !valid(candidate.player_.z,-WorldMap::halfDepth,WorldMap::halfDepth) ||
     !candidate.CanStand(candidate.player_) || !std::isfinite(candidate.health_) || candidate.health_<0 ||
@@ -1552,7 +1534,7 @@ bool Simulation::Load(const std::string& data) {
       if (!(input >> id) || id!=enemy.id) return false;
     }
     if (!(input >> enemy.position.x >> enemy.position.z >> enemy.health >> enemy.attackCooldown)) return false;
-    migrateNewProps(enemy.position,.45f);
+    candidate.map_.RecoverOldSceneryPosition(enemy.position,.45f,version);
     if (!valid(enemy.position.x,-WorldMap::halfWidth,WorldMap::halfWidth) || !valid(enemy.position.z,-WorldMap::halfDepth,WorldMap::halfDepth) || !candidate.CanStand(enemy.position,.45f) ||
       !valid(enemy.health,0,version<3?80.f:enemy.MaxHealth()) ||
       !valid(enemy.attackCooldown,0,version<3?1.4f:version>=11?std::max(1.5f,enemy.AttackInterval()):enemy.AttackInterval())) return false;
@@ -1686,7 +1668,7 @@ bool Simulation::Load(const std::string& data) {
   }
   if(version>=22) {
     std::string wilderness;std::getline(input>>std::ws,wilderness,'\0');
-    if(!candidate.LoadWilderness(wilderness))return false;
+    if(!candidate.LoadWilderness(wilderness,version))return false;
   }
   input >> std::ws;
   if (!input.eof()) return false;

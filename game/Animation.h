@@ -297,7 +297,7 @@ struct State {
       std::clamp(.025f+flow*.24f+Signed(velocity/motion::jumpSpeed)*.05f,.005f,.32f),14.f,dt);
     motion::Spring(pose.clothSide,clothSideVelocity,
       -Signed(pose.bank)*.12f+std::sin(phase*3)*flow*.025f+std::sin(phase*.5f)*.008f,12.f,dt);
-    pose.cloak=cloakMotion.Update(dt,travel/dt,velocity,pose.bank);
+    pose.cloak=cloakMotion.Update(dt,travel/dt,velocity,pose.bank,forwardAcceleration);
     restWeight=(1-travelBlend)*(1-Unit(strike))*(1-pose.air);
     RefreshRecoil();
   }

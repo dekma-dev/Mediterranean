@@ -24,8 +24,21 @@ std::vector<std::uint8_t> BuildTerrainSurface(const rpg::WorldMap& map) {
       }
       shelter+=horizon;
     }
-    pixels[offset+2]=static_cast<std::uint8_t>(std::lround(std::min(.35f,shelter*.1f)*255));
-    pixels[offset+3]=255;
+    float woodland=0,contact=0;
+    for(const auto& o:map.Obstacles()) {
+      if(o.kind==rpg::PropKind::Tree) {
+        const float radius=o.canopyRadius+1.7f,dx=p.x-o.center.x,dz=p.z-o.center.z;
+        if(std::abs(dx)>radius || std::abs(dz)>radius)continue;
+        const float w=std::max(0.f,1-(dx*dx+dz*dz)/(radius*radius));
+        woodland=std::min(1.f,woodland+w*w*.65f);
+      } else if(o.kind==rpg::PropKind::Building || o.kind==rpg::PropKind::Dressing || o.kind==rpg::PropKind::Ruin) {
+        const float x=std::max(0.f,std::abs(p.x-o.center.x)-o.halfX),z=std::max(0.f,std::abs(p.z-o.center.z)-o.halfZ);
+        contact=std::max(contact,std::max(0.f,1-(x*x+z*z)/3.24f)*.16f);
+      }
+    }
+    pixels[offset+2]=static_cast<std::uint8_t>(std::lround(std::min(.35f,shelter*.1f+contact)*255));
+    // Alpha is data, not transparency: bounded litter/understory coverage.
+    pixels[offset+3]=static_cast<std::uint8_t>(std::lround(woodland*255));
   }
   return pixels;
 }

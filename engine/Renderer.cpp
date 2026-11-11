@@ -37,7 +37,7 @@ using Vertex = visual::Vertex;
 struct Constants {
  XMFLOAT4X4 world,wvp,normalWorld,shadowVP[visual::shadowLayers]; XMFLOAT4 color,eyeAndHud;
  XMFLOAT4 sun=visual::daylightSun;
- XMFLOAT4 atmosphere{0,.85f,.006f,.53f}; // cloud phase, exposure, haze density, cloud threshold
+ XMFLOAT4 atmosphere{0,.90f,.0032f,.53f}; // cloud phase, exposure, haze density, cloud threshold
 };
 static_assert(sizeof(Constants)==384,"Keep the HLSL Scene layout and offscreen shader diagnostics in sync.");
 static_assert(visual::shadowLayers==2,"The scene shader uses a whole-island and a detail shadow layer.");
@@ -705,7 +705,10 @@ bool Renderer::FlushWorld() {
    const auto p=item.center;
    const float distance=std::sqrt((p.x-eye_.x)*(p.x-eye_.x)+(p.y-eye_.y)*(p.y-eye_.y)+(p.z-eye_.z)*(p.z-eye_.z));
    const float pixels=item.radius*2*projectionScale*height_*.5f/std::max(.1f,distance);
-   const unsigned level=item.reserved || portrait_?0:authored::SelectLod(pixels);
+   // Dense crowns need not promote 90k-triangle leaf geometry merely because
+   // their bounding sphere is tall. Keep authored LODs; change only selection.
+   const bool tree=a>=unsigned(authored::Asset::Oak) && a<=unsigned(authored::Asset::DeadTree);
+   const unsigned level=item.reserved || portrait_?0:authored::SelectLod(pixels*(tree?.55f:1.f));
    if(level) world_[slot+level].push_back(item);else batch[retained++]=item;
   }
   batch.resize(retained);

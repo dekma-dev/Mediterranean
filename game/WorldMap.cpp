@@ -118,6 +118,7 @@ WorldMap::WorldMap(bool) {
     if(!service && CanStand(p,2.1f) && SurfaceAt(p).dirt<.01f)
       obstacles_.push_back({p,.4f,.4f,5.4f,PropKind::Tree,BuildingRole::Homestead,22});
   }
+  BuildLocation();
   // Reconnect paths around solid authored set dressing. Rendering and navigation
   // share the resulting segments, so a drawn road never passes through a cart.
   std::vector<Trail> routed;
@@ -131,48 +132,7 @@ WorldMap::WorldMap(bool) {
     }
   }
   trails_=std::move(routed);
-  // Stable decoration, generated once. Keep routes, services and the arena clear.
-  const auto hash=[](int x,int z) {
-    std::uint32_t h=std::uint32_t(x)*374761393u+std::uint32_t(z)*668265263u;
-    h=(h^(h>>13))*1274126177u; return float(h^(h>>16))/4294967295.f;
-  };
-  unsigned shrubs=0;
-  for (int z=-14;z<=14;++z) for (int x=-12;x<=12;++x) {
-    const float seed=hash(x,z);
-    if (seed<.64f || cover_.size()>=180) continue;
-    const Vec2 p{x*1.3f+(seed-.5f)*.6f,z*1.25f+(hash(z,x)-.5f)*.6f};
-    const auto surface=SurfaceAt(p);
-    if (!CanStand(p,.8f) || surface.dirt+surface.paving>.06f ||
-      std::hypot(p.x-trainingPost.x,p.z-trainingPost.z)<4.3f ||
-      std::hypot(p.x-questGiver.x,p.z-questGiver.z)<2.1f ||
-      std::hypot(p.x-quartermaster.x,p.z-quartermaster.z)<2.1f ||
-      std::hypot(p.x-astralAnchor.x,p.z-astralAnchor.z)<3.1f ||
-      (p.x<dockMax.x+.6f && p.x>dockMin.x-.6f && p.z>dockMin.z-.6f && p.z<dockMax.z+.6f)) continue;
-    const bool shrub=seed>.94f && shrubs<18;
-    if (shrub) ++shrubs;
-    cover_.push_back({p,.7f+hash(x+17,z-3)*.5f,seed*6.2831853f,shrub});
-  }
-  // A separately bounded scatter keeps the original village cover intact.
-  for(int z=-75;z<=75;z+=3) for(int x=-67;x<=67;x+=3) {
-    if(std::abs(x)<17 && std::abs(z)<19) continue;
-    const float seed=hash(x+91,z-53);if(seed<.67f || cover_.size()>=maxCover) continue;
-    const Vec2 p{float(x)+(seed-.5f)*.5f,float(z)};
-    bool service=false;
-    for(const auto& npc:residents) service|=std::hypot(p.x-npc.position.x,p.z-npc.position.z)<2;
-    for(const auto site:surveySites) service|=std::hypot(p.x-site.x,p.z-site.z)<1.5f;
-    if(service || !CanStand(p,.8f) || SurfaceAt(p).dirt+SurfaceAt(p).paving>.06f) continue;
-    const bool shrub=seed>.94f && shrubs<maxShrubs;if(shrub) ++shrubs;
-    cover_.push_back({p,.7f+seed*.4f,seed*6.2831853f,shrub});
-  }
-  for(int z=-120;z<=120;z+=5) for(int x=-110;x<=110;x+=5) {
-    if(std::abs(x)<70 && std::abs(z)<78) continue;
-    const float seed=hash(x+43,z+67);if(seed<.70f || cover_.size()>=maxCover)continue;
-    const Vec2 p{float(x),float(z)};bool service=false;
-    for(const auto& npc:residents)service|=std::hypot(x-npc.position.x,z-npc.position.z)<3;
-    if(service || std::hypot(x-ritualSite.x,z-ritualSite.z)<5 || !CanStand(p,1) || SurfaceAt(p).dirt>.01f)continue;
-    const bool shrub=seed>.92f && shrubs<maxShrubs;if(shrub)++shrubs;
-    cover_.push_back({p,.8f+seed*.5f,seed*6.2831853f,shrub});
-  }
+  BuildGroundCover();
 }
 
 GroundSurface WorldMap::SurfaceAt(Vec2 p) const {

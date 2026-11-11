@@ -367,7 +367,7 @@ private:
   int WildernessGold() const;
   int WildernessExperience() const;
   std::string SaveWilderness() const;
-  bool LoadWilderness(const std::string& data);
+  bool LoadWilderness(const std::string& data,int savedVersion);
   int replayChapter_=-1;
   std::vector<Enemy> campaignEnemies_;
   ExpeditionReport replayReport_;

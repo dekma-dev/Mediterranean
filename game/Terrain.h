@@ -29,6 +29,23 @@ inline float NaturalHeight(float x,float z) {
 }
 inline float Sculpt(float x,float z) {
   float height=NaturalHeight(x,z);
+  // Low banks divide the original flat clearing into a village, wooded verges
+  // and a northern approach. Compact support leaves the outer province intact.
+  const auto bank=[&](float cx,float cz,float sx,float sz,float rise) {
+    const float u=(x-cx)/sx,v=(z-cz)/sz,edge=std::max(0.f,1-u*u-v*v);
+    return rise*edge*edge;
+  };
+  float relief=bank(-16,8,8,11,3.2f)+bank(7,13,7,12,2.5f)+bank(-10,24,10,9,4.0f)
+    +bank(28,13,9,13,3.8f)+bank(-29,-18,11,10,3.1f)+bank(21,-22,10,10,3.0f);
+  // Keep actual foundations/deck and the market floor level, not the entire
+  // 60 x 64 m settlement. A two-cell apron prevents triangle interpolation from
+  // lifting doorsteps. Feet, collision, camera, minimap and mesh use this grid.
+  constexpr float clearings[][4]={{0,-10,12,7},{-10,3,3.5f,3.5f},{10,1,4,4},
+    {-24,6,4,4},{25,-1,4,4},{12,22,3.5f,3.5f},{0,15,4,3},{0,29,4,3},
+    {-11.5f,-1,3.5f,4},{12,-2,4,6}};
+  float preserve=1;
+  for(const auto& c:clearings) preserve=std::min(preserve,Smooth(std::max(std::abs(x-c[0])-c[2],std::abs(z-c[1])-c[3])/4));
+  height+=relief*preserve;
   // Terraced foundations under the four new buildings. The apron eases back
   // into the surrounding slope; render and collision sample this same grid.
   for(const auto& p:foundationPads) {

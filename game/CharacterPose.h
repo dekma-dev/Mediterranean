@@ -28,6 +28,7 @@ struct CharacterPose {
   DirectX::XMFLOAT3 weaponGrip{};
   DirectX::XMFLOAT3 weaponRight{}; // Grip roll follows the loaded forearm.
   bool hasGripSocket=false;
+  bool fittedBladeGrip=false;
   // Match BodyBindPose: knee (.17,.53,0), ankle (.18,.17,0).
   // The former .40 m shin stretched the 36 cm bind bone and forced a crouch.
   static constexpr float upperArm=.28f,forearm=.27f,thigh=.40f,shin=.36013886f;

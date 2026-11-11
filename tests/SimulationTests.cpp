@@ -18,8 +18,10 @@ int main() {
   Require(game.CanStand({0,0}),"Main path must remain walkable");
   Require(game.CameraDistance({0,-8},1.4f,{-1,0},0,10)<6,"Camera must pull forward before entering a building");
   Require(game.CameraDistance({0,-8},5.7f,{-1,0},0,10)<5,"Camera must avoid the pitched roof above the wall bounds");
-  Require(game.CameraDistance({10,10},3.2f,{1,0},0,6)<2.2f,"Camera must avoid the tree crown, not only its trunk");
-  const float belowCrown=game.CameraDistance({10,10},1.4f,{1,0},0,6);
+  // The old east clearing is now a sloping bank. Isolate trunk/crown collision
+  // at the still-level southern verge, rather than intersecting the new ground.
+  Require(game.CameraDistance({-10,-14},2.2f,{-1,0},0,6)<2.2f,"Camera must avoid the tree crown, not only its trunk");
+  const float belowCrown=game.CameraDistance({-10,-14},1.4f,{-1,0},0,6);
   Require(belowCrown>3 && belowCrown<4,"Below foliage the camera must avoid the trunk without colliding with empty air");
   Require(game.CameraDistance({12,-3.8f},1.4f,{0,-std::cos(.45f)},std::sin(.45f),7)>6.5f,
     "Training-post camera must be able to retreat underneath the tree crown");

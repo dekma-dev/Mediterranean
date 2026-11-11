@@ -1,6 +1,7 @@
 #include "game/CharacterPose.h"
 #include "engine/PlayerClips.h"
 #include "game/CombatWeight.h"
+#include "game/WeaponGrip.h"
 #include <algorithm>
 #include <cmath>
 
@@ -573,6 +574,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   auto wristOffset=-shaftRight*.055f+shaftForward*.043f;
   const bool bladeGrip=pose.hasGripSocket &&
     (form==rpg::WeaponForm::Blade || form==rpg::WeaponForm::Mace || form==rpg::WeaponForm::Cleaver);
+  pose.fittedBladeGrip=pose.hasGripSocket&&form==rpg::WeaponForm::Blade;
   if(bladeGrip) {
     // A cutting grip closes across the handle while the knuckles continue
     // the forearm. Fixing this axis to torso +X bent the wrist sideways and
@@ -591,22 +593,19 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     // Follow the forearm's roll without exchanging sides of the handle when
     // its projection becomes parallel or crosses the blade's local axis.
     const auto radial=forearm-shaftUp*XMVector3Dot(forearm,shaftUp);
-    const float acrossGrip=XMVectorGetX(XMVector3Dot(radial,shaftRight));
-    const float aroundGrip=XMVectorGetX(XMVector3Dot(radial,shaftForward));
-    // A crossing forearm must not exchange the two sides of the handle. Use a
-    // smooth positive denominator for wrist pronation instead of normalizing
-    // a radial sum that can cancel and flip the palm through half a turn.
-    // Preserve the relaxed carrying alignment. Bracing a loaded cut widens
-    // the regularization smoothly, preventing a rapid roll at the crossover.
-    const float rollSupport=.12f+.23f*animation::SmoothStep(stroke.weight/.35f);
-    const float offset=acrossGrip-rollSupport;
-    const float supported=rollSupport+.5f*(offset+std::sqrt(offset*offset+.0004f));
-    const float roll=std::atan2(aroundGrip,supported);
-    shaftRight=shaftRight*std::cos(roll)+shaftForward*std::sin(roll);
+    // Stabilize only near an axial forearm. A global positive-axis clamp
+    // reverses the relaxed down/back grip and bends the wrist sideways.
+    const float radialLength=XMVectorGetX(XMVector3Length(radial));
+    const float gripSupport=.12f*(1-animation::SmoothStep((radialLength-.05f)/.25f));
+    const auto held=radial+shaftRight*gripSupport;
+    if(XMVectorGetX(XMVector3LengthSq(held))>.000001f)
+      shaftRight=XMVector3Normalize(held);
     shaftForward=XMVector3Cross(shaftRight,shaftUp);
     wristOffset=-shaftRight*.055f+shaftForward*.043f;
   }
   XMStoreFloat3(&pose.weaponRight,shaftRight);
+  if(pose.fittedBladeGrip)
+    wristOffset+=shaftUp*weapongrip::swordAlong-shaftForward*weapongrip::swordPalmInset;
   if(pose.hasGripSocket) {
     XMFLOAT3 wrist;XMStoreFloat3(&wrist,XMLoadFloat3(&pose.arms[1].end)+wristOffset);
     pose.arms[1]=SolveArm(pose.arms[1].root,wrist,elbowPoles[1]);

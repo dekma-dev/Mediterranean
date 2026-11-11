@@ -25,13 +25,17 @@ void Geometry(const CharacterPose& pose) {
   Require(pose.WeaponPoint(.96f).y>.03f,"Pelvis compensation must keep the resting sword above ground");
 }
 animation::Sample Walk(int hz,float speed,bool curved=false) {
-  animation::FootPlacement feet; feet.Reset({0,0},0); animation::Sample sample;
+  // This regression measures flat-ground contact. The village's new banks
+  // occupy the former curved route; keep this fixture in the level clearing.
+  constexpr float startZ=-18;
+  animation::FootPlacement feet; feet.Reset({0,startZ},0); animation::Sample sample;
   std::array<XMFLOAT3,2> previous{};
   bool planted[2]={false,false}; float previousYaw[2]={};
   float worstSlip=0,minShift=0,maxShift=0; int contacts=0,lifts=0;
   for (int frame=1;frame<=hz*2;++frame) {
     const float t=float(frame)/hz,yaw=curved?t*.8f:0;
-    const rpg::Vec2 root=curved?rpg::Vec2{speed/.8f*(1-std::cos(yaw)),speed/.8f*std::sin(yaw)}:rpg::Vec2{0,t*speed};
+    const rpg::Vec2 root=curved?rpg::Vec2{speed/.8f*(1-std::cos(yaw)),startZ+speed/.8f*std::sin(yaw)}:rpg::Vec2{0,startZ+t*speed};
+    Require(std::abs(rpg::WorldMap::Height(root))<1e-6f,"Flat-ground fixture entered uneven terrain");
     feet.Update(1.f/hz,root,yaw,true,true,sample);
     const auto pose=BuildCharacterPose(0,0,false,sample); Geometry(pose);
     minShift=std::min(minShift,pose.bodyShift); maxShift=std::max(maxShift,pose.bodyShift);
@@ -104,21 +108,21 @@ int main() {
     Walk(60,speed,true);
   }
   animation::FootPlacement feet; animation::Sample sample;
-  feet.Reset({0,0},0);
-  for (int i=1;i<=120;++i) feet.Update(1.f/60,{0,float(i)*4.4f/60},0,true,true,sample);
-  for (int i=0;i<120;++i) feet.Update(1.f/60,{0,8.8f},0,true,true,sample);
+  feet.Reset({0,-18},0);
+  for (int i=1;i<=120;++i) feet.Update(1.f/60,{0,-18+float(i)*4.4f/60},0,true,true,sample);
+  for (int i=0;i<120;++i) feet.Update(1.f/60,{0,-9.2f},0,true,true,sample);
   for (int i=0;i<2;++i) Require(feet.Planted(i) && std::abs(sample.feet[i].z)<.066f,"Stopping must settle into a quiet stance without ongoing steps");
   const auto still=sample;
   Require(std::abs(sample.support)<.001f,"Standing after a stop must settle its weight transfer");
-  for (int i=0;i<120;++i) feet.Update(1.f/60,{0,8.8f},0,true,true,sample);
+  for (int i=0;i<120;++i) feet.Update(1.f/60,{0,-9.2f},0,true,true,sample);
   for (int i=0;i<2;++i) Require(sample.feet[i].x==still.feet[i].x && sample.feet[i].z==still.feet[i].z &&
     sample.feet[i].y==still.feet[i].y,"Idle must not keep shuffling after settling");
   for (int i=1;i<=120;++i) {
-    feet.Update(1.f/60,{0,8.8f},float(i)*motion::tau/120,true,true,sample);
+    feet.Update(1.f/60,{0,-9.2f},float(i)*motion::tau/120,true,true,sample);
     Geometry(BuildCharacterPose(0,0,false,sample));
   }
-  feet.Update(.02f,{0,8.8f},0,false,true,sample); Require(!sample.feetActive && sample.support==0,"Jumping must release world contacts and support lean");
-  feet.Update(.02f,{0,8.8f},0,true,true,sample);
+  feet.Update(.02f,{0,-9.2f},0,false,true,sample); Require(!sample.feetActive && sample.support==0,"Jumping must release world contacts and support lean");
+  feet.Update(.02f,{0,-9.2f},0,true,true,sample);
   Require(sample.feetActive && feet.Planted(0) && feet.Planted(1) && std::abs(sample.feet[0].z)<.001f,"Landing must establish fresh local contacts");
   feet.Update(.02f,{10,-20},1,true,true,sample);
   Require(std::abs(sample.feet[0].x+.18f)<.001f && std::abs(sample.feet[0].z)<.001f,"Teleport must discard the old support anchors");

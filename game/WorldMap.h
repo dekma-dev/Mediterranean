@@ -10,6 +10,8 @@ struct Vec2 { float x = 0, z = 0; };
 struct Trail { Vec2 from,to; float halfWidth; bool paved; };
 struct GroundSurface { float dirt=0,paving=0; };
 struct GroundCover { Vec2 position; float scale,yaw; bool shrub; };
+enum class LandscapeKind { Boulder,Barrel,Crate,Cart,Well,Bench,Logs,Sacks,Fence,Lantern,Stump };
+struct LandscapeDetail {LandscapeKind kind;Vec2 position;float scale=1,yaw=0;};
 struct Resident { const char* name; const char* greeting; Vec2 position; };
 enum class PropKind { Building, Tree, Ruin,Counter,SurveyStone,Dressing };
 enum class BuildingRole { Homestead,WatchHall,Storehouse,TrainingHall };
@@ -19,11 +21,12 @@ struct Obstacle {
   PropKind kind = PropKind::Building;
   BuildingRole role = BuildingRole::Homestead;
   int introducedVersion = 0;
+  float canopyRadius=2.f;
   float RoofHeight() const { return halfX*.75f; }
   // Camera bounds include the art silhouette; actors still collide with trunks
   // and wall footprints so they can walk underneath foliage and roof overhangs.
-  float CameraHalfX() const { return kind==PropKind::Tree?2.f:halfX+(kind==PropKind::SurveyStone?.05f:.35f); }
-  float CameraHalfZ() const { return kind==PropKind::Tree?2.f:halfZ+(kind==PropKind::Building?.45f:kind==PropKind::SurveyStone?.05f:.35f); }
+  float CameraHalfX() const { return kind==PropKind::Tree?canopyRadius:halfX+(kind==PropKind::SurveyStone?.05f:.35f); }
+  float CameraHalfZ() const { return kind==PropKind::Tree?canopyRadius:halfZ+(kind==PropKind::Building?.45f:kind==PropKind::SurveyStone?.05f:.35f); }
   float CameraHeight() const { return kind==PropKind::Counter?3.1f:
     height+(kind==PropKind::Dressing?0:kind==PropKind::Building?RoofHeight()+1.f:kind==PropKind::Tree?.5f:kind==PropKind::SurveyStone?.15f:1.f); }
 };
@@ -34,7 +37,8 @@ public:
   WorldMap();
   static constexpr float halfWidth = terrain::halfWidth, halfDepth = terrain::halfDepth;
   static constexpr float surveyWidth=2*(halfWidth+4),surveyDepth=2*(halfDepth+4);
-  static constexpr unsigned maxCover=1200,maxShrubs=120;
+  static constexpr unsigned maxCover=1700,maxShrubs=360;
+  static constexpr int sceneryVersion=24;
   static constexpr Vec2 spawn{0,-10}, questGiver{-3,-10};
   static constexpr Vec2 astralAnchor{0,12.8f};
   static constexpr Vec2 trainingPost{12,-2};
@@ -65,6 +69,7 @@ public:
   const std::vector<Obstacle>& Obstacles() const { return obstacles_; }
   const std::vector<Trail>& Trails() const { return trails_; }
   const std::vector<GroundCover>& Cover() const { return cover_; }
+  const std::vector<LandscapeDetail>& Details() const {return details_;}
   GroundSurface SurfaceAt(Vec2 position) const;
   float GroundTraction(Vec2 position) const;
   static float Height(Vec2 p) {return terrain::Height(p.x,p.z);}
@@ -72,11 +77,15 @@ public:
   bool CanTravel(Vec2 from, Vec2 to, float radius) const;
   Vec2 MoveAndSlide(Vec2 from,Vec2 displacement,float radius) const;
   std::vector<Vec2> FindPath(Vec2 from, Vec2 to, float radius = .45f) const;
+  void RecoverOldSceneryPosition(Vec2& position,float radius,int savedVersion) const;
   const char* AreaName(Vec2 position) const;
 private:
   explicit WorldMap(bool build);
+  void BuildLocation();
+  void BuildGroundCover();
   std::vector<Obstacle> obstacles_;
   std::vector<Trail> trails_;
   std::vector<GroundCover> cover_;
+  std::vector<LandscapeDetail> details_;
 };
 }
