@@ -6,6 +6,22 @@
 #include <cmath>
 
 namespace animation {
+inline DirectX::XMFLOAT3 BlendWeaponAim(DirectX::XMFLOAT3 from,DirectX::XMFLOAT3 to,float weight);
+inline DirectX::XMFLOAT3 BlendSwordReadyAim(DirectX::XMFLOAT3 from,DirectX::XMFLOAT3 to,float weight){
+  using namespace DirectX;
+  if(weight<=0)return from;if(weight>=1)return to;
+  const auto a=XMVector3Normalize(XMLoadFloat3(&from)),b=XMVector3Normalize(XMLoadFloat3(&to));
+  float separation=std::clamp(1-XMVectorGetX(XMVector3Dot(a,b)),0.f,1.f);
+  separation=separation*separation*(3-2*separation);
+  // An outboard spherical arc raises the sword around the right arm. Unlike
+  // adding a direction vector, this cannot cancel a leftward follow-through.
+  // Nearby poses retain their direct interpolation and identical poses stay put.
+  const DirectX::XMFLOAT3 outside{.90630779f,0,.42261826f};
+  const auto first=BlendWeaponAim(from,outside,weight),second=BlendWeaponAim(outside,to,weight);
+  const auto curved=BlendWeaponAim(first,second,weight);
+  if(separation>=1)return curved;
+  return BlendWeaponAim(BlendWeaponAim(from,to,weight),curved,separation);
+}
 inline DirectX::XMFLOAT3 BlendWeaponAim(DirectX::XMFLOAT3 from,DirectX::XMFLOAT3 to,float weight){
   using namespace DirectX;
   if(weight<=0)return from;if(weight>=1)return to;
@@ -84,8 +100,14 @@ struct AuthoredWeaponController {
         // the first contact interval. The source has a separate low-entry cut.
         const auto entry=heavy?playerclips::Clip::SwordCarrySweep:playerclips::Clip::SwordCarryRising;
         const auto carry=playerclips::Sample(entry,playerclips::AttackPhase(entry,clock,start,contact,end));
-        const float prepared=combat::Smooth(entryReady);
-        const auto aim=BlendWeaponAim(carry.weapon,target.weapon,prepared);
+        // Match the carry/guard blend used by CharacterPose at attack entry.
+        // Easing this a second time changes the starting pose at partial ready.
+        const float initial=std::clamp(entryReady,0.f,1.f);
+        // After contact, finish one coherent cut. Continuing to mix opposite
+        // rising/downward recoveries can align the shaft with the forearm.
+        const float destination=initial>=.5f?1.f:0.f;
+        const float prepared=initial+(destination-initial)*combat::Smooth((clock-contact)/.24f);
+        const auto aim=BlendSwordReadyAim(carry.weapon,target.weapon,prepared);
         target=playerclips::Blend(carry,target,prepared);target.weapon=aim;
       }
       if(style==0 && (ability==8 || ability==11 || ability==14)) {

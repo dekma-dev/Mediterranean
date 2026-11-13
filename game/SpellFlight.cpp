@@ -1,5 +1,6 @@
 #include "game/SpellVfx.h"
 #include "game/SpellFlow.h"
+#include "game/SpellTrajectory.h"
 #include "engine/Renderer.h"
 #include <algorithm>
 #include <cmath>
@@ -38,7 +39,7 @@ template<class Path> void Ribbon(Renderer& r,const Path& path,XMFLOAT3 normal,fl
 }
 }
 
-void MagicFlight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float age) {
+void MagicFlight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float age,const FlightPath* path) {
  const bool holy=e.school==rpg::ClassId::Priest;
  const bool frost=!holy && (e.ability==5 || e.ability==6 || e.ability==8 || e.ability==12);
  const bool arcane=!holy && (e.ability==10 || e.ability==13),thermal=!holy && e.ability==14,meteor=!holy && e.ability==9;
@@ -46,8 +47,8 @@ void MagicFlight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,flo
  const float t=Unit(age/e.flight),after=std::max(0.f,age-e.flight);
  const float front=(1-combat::Smooth(after/.025f))*combat::Smooth(age/.018f);
  const float fade=1-combat::Smooth(after/.16f),power=(e.heavy?1.25f:1.f)*(e.empowered?1.12f:1.f);
- const auto point=[&](float u){return ProjectilePosition(e,origin,Unit(u));};
- const float length=std::max(.05f,Length(Sub(point(1),point(0))));
+ const auto point=[&](float u){return path && path->Active()?path->Point(Unit(u)):ProjectilePosition(e,origin,Unit(u));};
+ const float length=std::max(.05f,Length(Sub(ProjectilePosition(e,origin,1),ProjectilePosition(e,origin,0))));
  const auto head=point(t);const Frame frame(head,Sub(point(t+.002f),point(t-.002f)));
  const unsigned seed=e.actor*31u+unsigned(std::max(0,e.ability))*47u;
  const bool fire=!holy && !frost && !arcane;
@@ -109,14 +110,16 @@ void MagicFlight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,flo
    const float birth=birthIndex*interval,particleAge=age-birth;if(particleAge<0 || particleAge>=life)continue;
    const float q=particleAge/life,random=Random(seed+unsigned(birthIndex)*19u);
    const float angle=random*tau,drift=particleAge*(.45f+random);
-   auto p=point(birth/e.flight);p=Add(p,Add(Mul(frame.right,std::cos(angle)*drift),Mul(frame.up,std::sin(angle)*drift)));
+   const float birthProgress=birth/e.flight;
+   const Frame emission(point(birthProgress),Sub(point(birthProgress+.002f),point(birthProgress-.002f)));
+   auto p=emission.At(std::cos(angle)*drift,std::sin(angle)*drift,0);
    p.y+=particleAge*.85f;const float alpha=combat::Smooth(particleAge/.015f)*(1-combat::Smooth(q));
-   if(n%3==0)r.DrawSpellVolume(Medium::Fire,p,frame.axis,{(.10f+q*.12f)*power,(.12f+q*.17f)*power,.25f*power},
+   if(birthIndex%3==0)r.DrawSpellVolume(Medium::Fire,p,emission.axis,{(.10f+q*.12f)*power,(.12f+q*.17f)*power,.25f*power},
       age+birth,{1,.76f,.48f,alpha*.42f},seed+unsigned(birthIndex));
    r.DrawEffectSprite(Art::Smoke,p,(.08f+q*.25f)*power,(.08f+q*.21f)*power,random*4+particleAge,
      {.25f,.21f,.18f,alpha*.20f},true);
-   const auto ember=Add(p,Mul(frame.right,(random-.5f)*q*.44f));
-   r.DrawEffectStreak(Sub(ember,Mul(frame.axis,.035f)),ember,.012f*power,{1,.53f,.09f,alpha*.76f});
+   const auto ember=Add(p,Mul(emission.right,(random-.5f)*q*.44f));
+   r.DrawEffectStreak(Sub(ember,Mul(emission.axis,.035f)),ember,.012f*power,{1,.53f,.09f,alpha*.76f});
   }
  }
  if(frost || thermal){

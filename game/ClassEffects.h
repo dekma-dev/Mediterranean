@@ -4,11 +4,12 @@
 
 class Renderer;
 namespace castfx {struct Attachments;}
+namespace spellvfx {class FlightPath;}
 
 // Stateless, depth-tested shapes. No timers, allocations or gameplay writes.
 namespace classfx {
 DirectX::XMFLOAT4 Color(rpg::ClassId school,float alpha=1);
-void Projectile(Renderer& renderer,const rpg::CombatVisualEvent& event,DirectX::XMFLOAT3 origin,float age);
+void Projectile(Renderer& renderer,const rpg::CombatVisualEvent& event,DirectX::XMFLOAT3 origin,float age,const spellvfx::FlightPath* path=nullptr);
 void Impact(Renderer& renderer,const rpg::CombatVisualEvent& event,float age);
 void Prepare(Renderer& renderer,const rpg::Simulation& state,DirectX::XMFLOAT3 releasePoint,float renderedFacing);
 void Prepare(Renderer& renderer,const rpg::Simulation& state,const castfx::Attachments&);

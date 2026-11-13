@@ -55,25 +55,31 @@ rpg::Simulation Hero(rpg::ClassId id,bool major){
 }
 }
 int wmain(int argc,wchar_t** argv){try{
- if(argc<2 || argc>3 || (argc==3 && std::wstring(argv[2])!=L"--major" && std::wstring(argv[2])!=L"--fields")){std::cerr<<"Usage: SpellMotionReview <output-directory> [--major|--fields]\n";return 2;}
- const bool fields=argc==3 && std::wstring(argv[2])==L"--fields",major=argc==3;const int duration=fields?7:major?4:3;
+ if(argc<2 || argc>3 || (argc==3 && std::wstring(argv[2])!=L"--major" && std::wstring(argv[2])!=L"--fields" && std::wstring(argv[2])!=L"--moving" && std::wstring(argv[2])!=L"--crowded")){std::cerr<<"Usage: SpellMotionReview <output-directory> [--major|--fields|--moving|--crowded]\n";return 2;}
+ const bool fields=argc==3 && std::wstring(argv[2])==L"--fields",moving=argc==3 && std::wstring(argv[2])==L"--moving";
+ const bool crowded=argc==3 && std::wstring(argv[2])==L"--crowded";
+ const bool major=argc==3 && !moving;const int duration=fields || crowded?7:moving?5:major?4:3;
  Hr(CoInitializeEx(nullptr,COINIT_MULTITHREADED));Hr(MFStartup(MF_VERSION));
  const auto out=std::filesystem::absolute(argv[1]);std::filesystem::create_directories(out);
  Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),width,height,L"Native spell motion review",false),"Window");
  Renderer r;Check(r.Initialize(window.GetHandle(),width,height),"Renderer");
  struct Scene{rpg::ClassId school;int ability;const char* name;};
- const std::vector<Scene> scenes=fields?std::vector<Scene>{{rpg::ClassId::Mage,8,"frost-field"},{rpg::ClassId::Mage,9,"ember-ground"},
+ const std::vector<Scene> scenes=crowded?std::vector<Scene>{{rpg::ClassId::Warrior,8,"warrior-crowded"},{rpg::ClassId::Mage,8,"frost-crowded"},
+  {rpg::ClassId::Scout,8,"arrows-crowded"},{rpg::ClassId::Priest,6,"sanctuary-crowded"}}:moving?std::vector<Scene>{{rpg::ClassId::Warrior,0,"warrior-moving"},{rpg::ClassId::Mage,0,"fire-moving"},
+  {rpg::ClassId::Scout,1,"arrow-moving"},{rpg::ClassId::Priest,1,"holy-moving"}}:fields?std::vector<Scene>{{rpg::ClassId::Mage,8,"frost-field"},{rpg::ClassId::Mage,9,"ember-ground"},
   {rpg::ClassId::Priest,6,"holy-ground"},{rpg::ClassId::Mage,13,"arcane-ground"}}:major?std::vector<Scene>{{rpg::ClassId::Mage,0,"fire"},{rpg::ClassId::Mage,1,"heavy-fire"},
   {rpg::ClassId::Mage,8,"frost-bloom"},{rpg::ClassId::Mage,9,"meteor"},{rpg::ClassId::Mage,11,"sun-storm"},
   {rpg::ClassId::Mage,14,"thermal"},{rpg::ClassId::Priest,5,"absolution"},{rpg::ClassId::Priest,6,"sanctuary"}}:
   std::vector<Scene>{{rpg::ClassId::Mage,0,"fire"},{rpg::ClassId::Mage,1,"heavy-fire"},{rpg::ClassId::Mage,5,"frost"},
   {rpg::ClassId::Mage,13,"arcane"},{rpg::ClassId::Mage,14,"thermal"},{rpg::ClassId::Priest,1,"holy"}};
  std::ofstream manifest(out/"events.csv");manifest<<"scene,frame,seconds,event\n";
+ std::ofstream budgets(out/"budgets.csv");budgets<<"scene,max_effect_vertices,max_lights,max_draw_calls\n";
  Movie movie(out/"combat-motion.mp4");unsigned sceneIndex=0;
  for(const auto& scene:scenes){
   Game game;game.Initialize();Check(game.RestoreSnapshot(Hero(scene.school,major).Save()),"Review snapshot");
   auto& enemy=const_cast<rpg::Enemy&>(game.State().Enemies()[0]);enemy.position={-4,11.5f};enemy.home=enemy.position;
   enemy.kind=rpg::EnemyKind::Raider;enemy.health=enemy.MaxHealth();enemy.attackCooldown=100;enemy.rooted=100;enemy.state=rpg::EnemyState::Idle;
+  if(moving){enemy.position=enemy.home={-4,scene.school==rpg::ClassId::Warrior?7.2f:11.5f};enemy.rooted=0;enemy.state=rpg::EnemyState::Pursuing;enemy.attackCooldown=.8f;}
   game.SetCameraOrbit(.35f,.55f,11);
   if(scene.ability==6 || scene.ability==11){
    // Earn the real resource using accepted opening attacks, before recording.
@@ -84,22 +90,42 @@ int wmain(int argc,wchar_t** argv){try{
    for(int tick=0;tick<120;++tick)game.ExecuteCommand({},1.f/fps);
    enemy.health=enemy.MaxHealth();
   }
-  bool released=false,contact=false;int releaseFrame=-1,hitFrame=-1;
+  if(crowded){
+   for(unsigned i=0;i<3;++i){auto& foe=const_cast<rpg::Enemy&>(game.State().Enemies()[i]);
+    foe.kind=i==0?rpg::EnemyKind::Raider:i==1?rpg::EnemyKind::Wraith:rpg::EnemyKind::Captain;
+    foe.rank=1;foe.health=foe.MaxHealth();foe.rooted=foe.stunned=foe.snared=foe.windup=0;
+    foe.position=foe.home={-4.f+(i==1?2.2f:i==2?-2.2f:0.f),(scene.school==rpg::ClassId::Warrior?7.2f:11.5f)+(i?.5f:0.f)};
+    foe.state=rpg::EnemyState::Pursuing;foe.attackCooldown=.3f+i*.3f;foe.path.clear();
+   }
+  }
+  bool released=false,contact=false,prepared=false;int releaseFrame=-1,hitFrame=-1;
+  unsigned peakVertices=0,peakLights=0,peakDraws=0;
   for(int frame=0;frame<duration*fps;++frame){
    rpg::Command command;if(frame==20){command.selectActor=100;command.ability=scene.ability;}
+   if(moving && frame>100 && scene.school!=rpg::ClassId::Warrior)command.movement={.6f,-.6f};
+   if(moving && frame==120){command.selectActor=100;command.ability=0;}
+   if(crowded && frame>150 && frame<280)command.movement={.8f,-.4f};
+   if(crowded && frame==150){command.selectActor=100;command.ability=0;}
    game.ExecuteCommand(command,1.f/fps);
    if(fields)game.SetCameraOrbit(.35f+.8f*combat::Smooth((frame/float(fps)-2.f)/3.f),.55f,11);
    for(std::size_t i=0;i<game.State().VisualEventCount();++i){const auto kind=game.State().VisualEvents()[i].kind;
-    if(kind==rpg::CombatVisualKind::SpellCast){released=true;releaseFrame=frame;manifest<<scene.name<<','<<frame<<','<<(sceneIndex*duration+frame/60.f)<<",release\n";}
+    if(kind==rpg::CombatVisualKind::SpellCast || kind==rpg::CombatVisualKind::Strike || kind==rpg::CombatVisualKind::HeavyStrike){released=true;releaseFrame=frame;manifest<<scene.name<<','<<frame<<','<<(sceneIndex*duration+frame/60.f)<<",release\n";}
     if(kind==rpg::CombatVisualKind::Hit || kind==rpg::CombatVisualKind::HeavyHit){contact=true;hitFrame=frame;manifest<<scene.name<<','<<frame<<','<<(sceneIndex*duration+frame/60.f)<<",contact\n";}
    }
    r.BeginFrame();game.Render(r);
    const auto image=out/L"frame.png";Check(r.Capture(image.wstring()) && r.EndFrame(false),"Motion capture");movie.Write(image);
+   if(r.EffectVertices()>peakVertices){peakVertices=r.EffectVertices();std::filesystem::copy_file(image,out/(std::string(scene.name)+"-dense.png"),std::filesystem::copy_options::overwrite_existing);}
+   peakLights=std::max(peakLights,r.CombatLightCount());peakDraws=std::max(peakDraws,r.LastDrawCalls());
+   if(!prepared && game.State().Attacking() && game.State().AttackSeconds()/combat::StrokeStart(game.State().HeavyAttack())>.70f){
+    prepared=true;std::filesystem::copy_file(image,out/(std::string(scene.name)+"-prepare.png"),std::filesystem::copy_options::overwrite_existing);}
    if(frame==releaseFrame+3 && released)std::filesystem::copy_file(image,out/(std::string(scene.name)+"-flight.png"),std::filesystem::copy_options::overwrite_existing);
+   if(frame==releaseFrame+8 && released)std::filesystem::copy_file(image,out/(std::string(scene.name)+"-travel.png"),std::filesystem::copy_options::overwrite_existing);
    if(frame==hitFrame+5 && contact)std::filesystem::copy_file(image,out/(std::string(scene.name)+"-contact.png"),std::filesystem::copy_options::overwrite_existing);
    if(fields && frame==hitFrame+75 && contact)std::filesystem::copy_file(image,out/(std::string(scene.name)+"-sustain.png"),std::filesystem::copy_options::overwrite_existing);
   }
   Check(released && contact,"Review spell did not produce real release/contact");
+  Check(peakVertices<=Renderer::maxEffectVertices && peakLights<=4,"Review exceeded effects budgets");
+  budgets<<scene.name<<','<<peakVertices<<','<<peakLights<<','<<peakDraws<<'\n';
   std::cout<<scene.name<<": real release/contact recorded at 60 Hz\n"<<std::flush;++sceneIndex;
  }
  movie.Finish();Check(r.ValidateDebugMessages(),"DirectX review warnings");MFShutdown();

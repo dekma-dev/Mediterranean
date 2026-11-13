@@ -11,6 +11,10 @@ The Blender file contains 53 Actions and retains the existing 57 rest bones.
   strikes blend toward the prepared guard using readiness captured at attack
   start. The low-entry source already contains preparation acceleration, so
   playback does not apply another contact-length acceleration to it.
+  Carry-to-guard orientation travels outside the arm. Partial-ready entries use
+  the same orientation path as the visible stance, then select one complete
+  recovery after contact instead of mixing opposing follow-throughs. Regression
+  checks cover 0%, 25%, 50%, 75% and 100% readiness.
 - Sword cuts animate the connected upper arm, forearm and gripping hand.
   Their blade orientation follows the hand frame. This replaces independently
   specified hilt positions and blade directions that could force extreme wrist
@@ -24,8 +28,8 @@ The Blender file contains 53 Actions and retains the existing 57 rest bones.
   Reset clears the angular history along with the existing cloth state.
 - Two existing swords have reconstructed blade sections, a tapered fuller,
   sharpened bevels and localized edge wear. Each has 16,522 near triangles.
-  The existing warrior shield has a rear plank layer, surface cuts and heraldic
-  paint following its camber, with 29,448 near triangles. Reduced distant LODs
+  The existing warrior shield has a rear plank layer, surface cuts and a
+  continuous wood surface following its camber, with 29,448 near triangles. Reduced distant LODs
   remain. KIT1 uses 30,810,180 bytes within the existing 32 MiB budget.
 
 The change does not alter gameplay hit times, movement speed, jump physics or
@@ -69,3 +73,10 @@ Local authoring scripts, captures, source audits and validation logs are under
 native gameplay-rendered sequences and provides frame stepping. The final
 machine-readable results are recorded in `validation-summary.json` after
 validation completes.
+
+Full tests use `build-source-release` and `build-source-debug` in that local
+folder, built from a consistent local `source-snapshot` with a SHA-256 manifest.
+Shared build directories and effect interfaces changed during parallel project
+work; those incomplete or mixed-source attempts are not treated as successful
+validation. The native review uses the same snapshot headers and libraries.
+Integration checks separately inspect and launch the six usual game executables.

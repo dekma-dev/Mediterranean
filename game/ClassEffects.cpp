@@ -70,9 +70,9 @@ XMFLOAT4 Color(C school,float alpha) {
     default:return {1,1,1,alpha};
   }
 }
-void Projectile(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float age) {
+void Projectile(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float age,const spellvfx::FlightPath* path) {
   if(!std::isfinite(age) || age<0)return;
-  spellvfx::Flight(r,e,origin,age);
+  spellvfx::Flight(r,e,origin,age,path);
   if(e.school==C::Mage || e.school==C::Scout || e.school==C::Priest)return; // complete material + geometry path
   const bool physical=e.school==C::Scout || e.school==C::Engineer;
   const float flight=std::max(.01f,e.flight),t=Unit(age/flight);

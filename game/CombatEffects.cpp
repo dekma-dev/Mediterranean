@@ -150,7 +150,7 @@ void Crescent(Renderer& renderer,XMFLOAT3 origin,float facing,float age,bool hea
   }
 }
 }
-void CombatEffects::Reset() { bursts_={}; trails_={}; wake_={}; serial_=0; footprints_={};footprintCursor_=0;residues_={}; }
+void CombatEffects::Reset() { bursts_={}; trails_={}; wake_={}; serial_=0; flights_={}; footprints_={};footprintCursor_=0;residues_={}; }
 void CombatEffects::EmitFootstep(const presentation::CreatureContact& contact,const rpg::WorldMap& map) {
  if(!std::isfinite(contact.position.x+contact.position.y+contact.position.z+contact.strength+contact.facing) || contact.strength<=0)return;
  const auto p=rpg::Vec2{contact.position.x,contact.position.z};const auto surface=map.SurfaceAt(p);
@@ -189,10 +189,55 @@ XMFLOAT3 CombatEffects::SpellTracePoint(XMFLOAT3 origin,rpg::Vec2 destination,fl
   return {origin.x+(destination.x-origin.x)*u,origin.y+(rpg::WorldMap::Height(destination)+targetHeight-origin.y)*u+arc*std::sin(u*3.14159265f),
     origin.z+(destination.z-origin.z)*u};
 }
-void CombatEffects::Emit(const rpg::CombatVisualEvent& event,const XMFLOAT3* spellOrigin) {
+spellvfx::FlightPath* CombatEffects::Path(const Burst& b) {
+  for(auto& flight:flights_)if(flight.seed==b.seed && flight.path.Active())return &flight.path;
+  return nullptr;
+}
+const spellvfx::FlightPath* CombatEffects::Path(const Burst& b) const {
+  for(const auto& flight:flights_)if(flight.seed==b.seed && flight.path.Active())return &flight.path;
+  return nullptr;
+}
+const spellvfx::FlightPath* CombatEffects::ProjectilePath(rpg::EntityId target) const {
+  const Burst* newest=nullptr;
+  for(const auto& b:bursts_)if(b.event.kind==K::SpellCast && b.event.target==target && Path(b) && b.age<BurstLife(b.event) &&
+    (!newest || b.seed>newest->seed))newest=&b;
+  return newest?Path(*newest):nullptr;
+}
+void CombatEffects::TrackProjectiles(const rpg::Simulation& state) {
+  for(auto& b:bursts_) {
+    auto* path=Path(b);
+    if(b.event.kind!=K::SpellCast || !path || path->Age()>=b.event.flight || b.age>=BurstLife(b.event))continue;
+    const rpg::Enemy* target=nullptr;
+    for(const auto& e:state.Combatants())if(e.id==b.event.target)target=&e;
+    for(const auto& e:state.Dummies())if(e.id==b.event.target)target=&e;
+    if(state.Sparring() && state.SparringOpponent().id==b.event.target)target=&state.SparringOpponent();
+    // Never acquire the newly selected target, resurrect a vanished actor or
+    // manufacture an impact. Missing/dead targets retain the last trajectory.
+    auto destination=path->Target();
+    if(target && target->health>0 && target->state!=rpg::EnemyState::Returning)
+      destination={target->position.x,rpg::WorldMap::Height(target->position)+target->ContactHeight(),target->position.z};
+    // If this update crosses arrival without a hit, interpolate to its clock
+    // instead of tracking the target into the unused tail of this update.
+    if(b.age>b.event.flight && b.age>path->Age()) {
+      const float u=Unit((b.event.flight-path->Age())/(b.age-path->Age()));const auto previous=path->Target();
+      destination={previous.x+(destination.x-previous.x)*u,previous.y+(destination.y-previous.y)*u,previous.z+(destination.z-previous.z)*u};
+    }
+    path->Advance(b.event,b.spellOrigin,b.age,destination);
+  }
+}
+void CombatEffects::Emit(const rpg::CombatVisualEvent& incoming,const XMFLOAT3* spellOrigin) {
+  auto event=incoming;
   if(event.kind==K::UiClick || event.kind==K::CastStart || event.kind==K::ReserveReady || event.kind==K::CastCancelled ||
     event.kind==K::EnemyPrepare || event.kind==K::BossPrepare) return;
   const float elapsed=std::isfinite(event.elapsed)?std::clamp(event.elapsed,0.f,.05f):0;
+  if((event.kind==K::Hit || event.kind==K::HeavyHit) && event.primary) {
+    for(auto& b:bursts_)if(b.event.kind==K::SpellCast && Path(b) && b.event.target==event.actor &&
+      b.event.ability==event.ability && b.event.school==event.school && std::abs(b.age-b.event.flight-elapsed)<.051f) {
+      Path(b)->Advance(b.event,b.spellOrigin,b.event.flight,{event.position.x,event.height,event.position.z});
+      const auto tip=Path(b)->Point(1),tail=Path(b)->Point(.98f);
+      if(std::hypot(tip.x-tail.x,tip.z-tail.z)>.001f)event.facing=std::atan2(tip.x-tail.x,tip.z-tail.z);
+    }
+  }
   auto residue=spellvfx::MakeResidue(event);
   residue.order=serial_+1;
   if(residue.kind!=spellvfx::ResidueKind::None) {
@@ -226,6 +271,10 @@ void CombatEffects::Emit(const rpg::CombatVisualEvent& event,const XMFLOAT3* spe
   *slot={event,elapsed,++serial_};
   slot->spellOrigin=spellOrigin && std::isfinite(spellOrigin->x) && std::isfinite(spellOrigin->y) && std::isfinite(spellOrigin->z)?
     *spellOrigin:XMFLOAT3{event.position.x,event.height+1.25f,event.position.z};
+  if(event.kind==K::SpellCast && event.target && (event.school==rpg::ClassId::Mage || event.school==rpg::ClassId::Scout || event.school==rpg::ClassId::Priest)) {
+    auto& tracked=*std::min_element(flights_.begin(),flights_.end(),[](const auto& a,const auto& b){return a.seed<b.seed;});
+    tracked.seed=slot->seed;tracked.path.Reset(event,slot->spellOrigin);
+  }
 }
 bool CombatEffects::Tracking(rpg::EntityId actor) const {
   for (const auto& trail : trails_) if (trail.actor==actor && trail.age<.24f) return true;
@@ -353,7 +402,7 @@ void CombatEffects::Illuminate(Renderer& renderer,const rpg::Simulation& state,c
   const auto& e=b.event;if(b.age>=BurstLife(e) || (e.school!=C::Mage && e.school!=C::Priest))continue;
   const float power=e.heavy?1.35f:1.f;const auto color=tint(e.school,e.ability);
   if(e.kind==K::SpellCast && e.flight>0 && b.age<e.flight){
-   const auto position=spellvfx::ProjectilePosition(e,b.spellOrigin,Unit(b.age/e.flight));
+   const auto position=Path(b)?Path(b)->Point(Unit(b.age/e.flight)):spellvfx::ProjectilePosition(e,b.spellOrigin,Unit(b.age/e.flight));
    renderer.AddCombatLight(position,2.3f*power,color,2.2f*power);
   }else if(e.kind==K::Hit || e.kind==K::HeavyHit){
    renderer.AddCombatLight({e.position.x,e.height,e.position.z},3.1f*power,color,6.f*power*pulse(b.age,.56f));
@@ -485,7 +534,7 @@ void CombatEffects::Render(Renderer& renderer,const castfx::Attachments* caster)
     }
     if(e.kind==K::CastStart) continue;
     if(e.kind==K::SpellCast) {
-      classfx::Projectile(renderer,e,burst.spellOrigin,burst.age);
+      classfx::Projectile(renderer,e,burst.spellOrigin,burst.age,Path(burst));
       continue;
     }
     if(e.kind==K::DisciplineReady || e.kind==K::DisciplineSpent){castfx::DisciplinePulse(renderer,e,burst.age,caster);continue;}

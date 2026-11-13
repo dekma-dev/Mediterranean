@@ -2,6 +2,7 @@
 #include "game/Simulation.h"
 #include "game/CreatureContacts.h"
 #include "game/SpellVfx.h"
+#include "game/SpellTrajectory.h"
 #include <DirectXMath.h>
 #include <array>
 
@@ -14,6 +15,8 @@ public:
   static constexpr std::size_t maxBursts=32,maxTrails=8,trailSamples=32;
   void Reset();
   void Advance(float dt);
+  void TrackProjectiles(const rpg::Simulation& state);
+  const spellvfx::FlightPath* ProjectilePath(rpg::EntityId target) const;
   void Emit(const rpg::CombatVisualEvent& event,const DirectX::XMFLOAT3* spellOrigin=nullptr);
   void EmitFootstep(const presentation::CreatureContact& contact,const rpg::WorldMap& map);
   std::size_t FootprintCount() const;
@@ -37,6 +40,12 @@ public:
   void Illuminate(Renderer& renderer,const rpg::Simulation& state,const castfx::Attachments& caster) const;
 private:
   struct Burst { rpg::CombatVisualEvent event; float age=1; unsigned seed=0; DirectX::XMFLOAT3 spellOrigin{}; };
+  // Simulation permits one committed player action. Keep its flight and the
+  // outgoing tail separately instead of adding histories to all 32 bursts.
+  struct TrackedFlight { spellvfx::FlightPath path; unsigned seed=0; };
+  std::array<TrackedFlight,2> flights_{};
+  spellvfx::FlightPath* Path(const Burst& burst);
+  const spellvfx::FlightPath* Path(const Burst& burst) const;
   struct Sample { DirectX::XMFLOAT3 root,tip; float age=0; };
   struct Trail {
     rpg::EntityId actor=0;

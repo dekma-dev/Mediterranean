@@ -1,4 +1,6 @@
 #include "game/SpellVfx.h"
+#include "game/SpellTrajectory.h"
+#include "game/SpellFlow.h"
 #include "game/CombatEffects.h"
 #include "game/ClassEffects.h"
 #include "engine/Renderer.h"
@@ -68,7 +70,14 @@ void Release(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float a
  const XMFLOAT4 tint=holy?XMFLOAT4{1,.88f,.51f,fade*.7f}:physical?XMFLOAT4{.70f,.83f,.72f,fade*.35f}:cold?XMFLOAT4{.45f,.78f,1,fade*.7f}:
   arcane?XMFLOAT4{.68f,.38f,1,fade*.7f}:XMFLOAT4{1,.47f,.12f,fade*.65f};
  const float radius=(physical?.09f:.25f)+age*(physical?1.f:3.4f);
- r.DrawEffectSurface(physical?Art::Slash:cold?Art::Ice:Art::Seal,local(-radius,-radius),local(-radius,radius),local(radius,radius),local(radius,-radius),tint);
+ const bool fire=!physical&&!holy&&!cold&&!arcane;
+ if(!fire)r.DrawEffectSurface(physical?Art::Slash:cold?Art::Ice:Art::Seal,local(-radius,-radius),local(-radius,radius),local(radius,radius),local(radius,-radius),tint);
+ else for(int petal=0;petal<3;++petal){
+  const float angle=petal*tau/3,open=combat::Smooth(age/.10f);
+  FlameStream(r,[&](float u){const float turn=angle+u*1.7f,rr=std::sin(u*pi)*(.12f+open*.38f);
+   return local(std::cos(turn)*rr,std::sin(turn)*rr,-u*(.12f+open*.36f));
+  },{sx,0,cx},.14f,.75f,age+petal*.23f,{1,1,1,fade*.75f},6);
+ }
  if(!physical)for(int n=0;n<5;++n){
   const float a=n*tau/5+e.ability*.4f;const auto p=local(std::cos(a)*age*1.3f,std::sin(a)*age*1.3f,-age*.65f);
   r.DrawEffectStreak(p,local(std::cos(a)*age*.75f,std::sin(a)*age*.75f,-age*.3f),.012f,tint);
@@ -134,18 +143,37 @@ void MageContact(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 p,float ag
     const auto at=frame.At(std::cos(a)*age*speed*size,age*(.6f+speed*.35f),-age*(.35f+std::sin(a)*.25f)*size);
     const auto tip=frame.At(std::cos(a)*(.25f+age*speed)*size,age*(.6f+speed*.35f)+.40f,-age*(.35f+std::sin(a)*.25f)*size-.10f);
     const float radius=(.24f+age*.48f)*size;
-    if(n%2==0)r.DrawSpellVolume(Renderer::SpellMedium::Fire,at,{tip.x-at.x,tip.y-at.y,tip.z-at.z},
-      {radius*.82f,radius*.82f,radius*1.35f},age+n*.13f,{1,1,1,fade*.86f},seed+n);
+    if(n%2==0){
+     auto centre=at;XMFLOAT3 axis{tip.x-at.x,tip.y-at.y,tip.z-at.z},radii{radius*.82f,radius*.82f,radius*1.35f};
+     float opacity=fade*.86f;
+     if(n==0 && !mixed){
+      // Morph the arriving heart into the first plume instead of spending an
+      // additional crowd-volume slot or popping a new plume in at its expiry.
+      const float spread=combat::Smooth(age/.11f),depth=(.32f-.26f*spread)*size;
+      const float open=combat::Smooth((age-.045f)/.15f);
+      const auto mix=[](XMFLOAT3 a,XMFLOAT3 b,float t){return XMFLOAT3{a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t,a.z+(b.z-a.z)*t};};
+      centre=mix(frame.At(0,0,-depth),at,open);axis=mix({frame.sn,0,frame.cs},axis,open);
+      radii=mix({(.25f+.53f*spread)*size,(.25f+.40f*spread)*size,depth},radii,open);
+      opacity=Envelope(age,.20f,.005f)*.90f*(1-open)+opacity*open;
+     }
+     r.DrawSpellVolume(Renderer::SpellMedium::Fire,centre,axis,radii,age+n*.13f,{1,1,1,opacity},seed+n);
+    }
    }
   }
   if(!frost && e.primary){
    // A rapid, curled detonation opens towards the incoming projectile. The
    // moving crest dies before the slower flame/smoke; it is not a static star.
    const float expand=1-std::pow(1-Unit(age/.34f),3.f),crest=Envelope(age,.40f,.012f);
-   for(int lobe=0;lobe<3;++lobe)ContactRibbon(r,[&](float u){
+   for(int lobe=0;lobe<3;++lobe)FlameStream(r,[&](float u){
     const float angle=lobe*tau/3+u*1.40f+age*1.6f,radius=(.12f+expand*.78f*u)*size;
     return frame.At(std::cos(angle)*radius,std::sin(angle)*radius+age*.22f,-(.08f+u*.35f)*expand*size);
-   },.10f*size,{1,.41f,.06f,crest*.8f},{frame.sn,0,frame.cs});
+   },{frame.sn,0,frame.cs},.26f*size,1.4f*size,age+lobe*.23f,{1,1,1,crest*.78f},8);
+   // Detached ballistic embers retain their own trajectories after the flash.
+   for(unsigned n=0;n<9;++n){const float a=Rand(seed+n*29)*tau,speed=1.2f+Rand(seed+n*53)*2.8f;
+    const auto at=[&](float t){return frame.At(std::cos(a)*t*speed*size,
+     std::sin(a)*t*speed*size+t*.8f-2.1f*t*t,-t*(.3f+Rand(seed+n*11))*size);};
+    r.DrawEffectStreak(at(std::max(0.f,age-.024f)),at(age),.009f*size,{1,.65f,.16f,Envelope(age,.56f,.012f)*.75f});
+   }
   }
   const float residue=Envelope(age-.09f,ContactLifetime(e)-.09f,.09f);
   for(int n=0;n<2;++n){
@@ -411,13 +439,13 @@ float ArrowProgress(int ability,int ordinal,float age,float flight){
  const float delay=std::min(flight*.45f,ability==12?ordinal*.063f:ability==14?ordinal*.035f:0.f);
  return age<delay?-1:Unit((age-delay)/(flight-delay));
 }
-void Flight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float age){
+void Flight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float age,const FlightPath* path){
  if((e.school!=C::Mage && e.school!=C::Scout && e.school!=C::Priest) || !std::isfinite(age) || !std::isfinite(e.flight) || e.flight<=0 || age<0 || age>=e.flight+.16f)return;
  if(e.kind!=K::SpellCast || !std::isfinite(origin.x) || !std::isfinite(origin.y) || !std::isfinite(origin.z) ||
     !std::isfinite(e.destination.x) || !std::isfinite(e.destination.z) || !std::isfinite(e.destinationHeight) || !std::isfinite(e.facing))return;
  Release(r,e,origin,age);
  const float t=Unit(age/e.flight),after=std::max(0.f,age-e.flight);
- const auto point=[&](float u){return ProjectilePosition(e,origin,u);};
+ const auto point=[&](float u){return path && path->Active()?path->Point(u):ProjectilePosition(e,origin,u);};
  const auto head=point(t);
  const float length=std::max(.01f,std::sqrt(std::pow(e.destination.x-origin.x,2.f)+std::pow(e.destination.z-origin.z,2.f)+std::pow(rpg::WorldMap::Height(e.destination)+e.destinationHeight-origin.y,2.f)));
  const float sx=std::sin(e.facing),cx=std::cos(e.facing);
@@ -437,7 +465,7 @@ void Flight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float ag
   if(e.ability==13)r.DrawEffectSprite(Art::Sparks,head,.075f,.075f,age*5,{.65f,.75f,.28f,arrowFade*.5f});
   return;
  }
- MagicFlight(r,e,origin,age);
+ MagicFlight(r,e,origin,age,path);
 }
 void EnemyContact(Renderer& r,const rpg::CombatVisualEvent& e,float age,bool fullDetail,const XMFLOAT3* origin){
  if(!std::isfinite(age)||age<0 || age>=.72f)return;

@@ -133,6 +133,7 @@ struct CombatVisualEvent {
   bool discipline=false; // accepted class opportunity, not speculative input
   bool primary=true; // One main spectacle/sound per action; secondary victims retain local hits.
   bool evaded=false; // Confirmed evasion, distinct from an absorbed defensive hit.
+  EntityId target=0; // Committed victim; later UI selection cannot redirect flight.
 };
 
 class Simulation {

@@ -216,7 +216,9 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
       (a*std::sin((1-amount)*angle)+b*std::sin(amount*angle))/std::sin(angle):a);
     return result;
   };
-  idleClip.weapon=blendDirection(carryClip.weapon,guardClip.weapon,ready);
+  idleClip.weapon=dynamics.authoredEquipment==playerclips::Equipment::Sword?
+    animation::BlendSwordReadyAim(carryClip.weapon,guardClip.weapon,ready):
+    blendDirection(carryClip.weapon,guardClip.weapon,ready);
   // Retain the authored directional swing while bringing the carry towards
   // guard. The blend is presentation state, never a second combat timer.
   const float readyGait=ready*gaitAmount;

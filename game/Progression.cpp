@@ -118,6 +118,7 @@ void Simulation::EmitVisual(CombatVisualKind kind,Vec2 position,float height,flo
     const bool attack=kind==CombatVisualKind::SpellCast || kind==CombatVisualKind::Strike ||
       kind==CombatVisualKind::HeavyStrike || kind==CombatVisualKind::Hit || kind==CombatVisualKind::HeavyHit;
     event.ability=attack?attackAbility_:-1;
+    if(attack)event.target=attackTarget_;
     if(kind==CombatVisualKind::CastStart)event.ability=Attacking()?attackAbility_:CastingRecovery()?3:-1;
     event.opening=attack && OpeningAttack();event.signature=attack && SignatureAttack();event.technique=attack && TechniqueAttack();event.heavy=attack && HeavyAttack();event.empowered=attack && attackEmpowered_;
     event.discipline=attack && attackConfluence_;

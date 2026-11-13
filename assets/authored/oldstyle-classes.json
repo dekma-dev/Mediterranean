@@ -433,8 +433,8 @@
     }
   ],
   "bytes": 28467932,
-  "sha256": "8da3600122c69c8a0bc1432ad59d4926c07bf0b4ede4834909773d5222366bce",
-  "blend_sha256": "6cf89dc21ed266432a1f1072f6db49bde065b95c4030f61d085f6930bc9f3722",
+  "sha256": "35d1ca66d74556d3fb7cbc20d67319001284916c84a96c1ec62c64a3996b99e7",
+  "blend_sha256": "07830eaea709938af529f19ed68fd1abf3fdf28fe8d158d3d680c0b6c4cc3106",
   "cloth_revision": "Reference 3: tailored starter/veteran clothing and waist-bound weighted hems",
   "garment_weights_sha256": "14407a84b9c63f6f5901deb17dd1a3d9a31eb24712545909ae85658869b4fc15",
   "preserved_parts": [

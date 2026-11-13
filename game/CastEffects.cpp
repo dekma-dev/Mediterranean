@@ -33,7 +33,13 @@ void Seal(Renderer& r,const Attachments& a,float radius,float phase,XMFLOAT4 tin
 }
 void Stream(Renderer& r,const Attachments& a,XMFLOAT3 from,XMFLOAT3 to,float bend,float phase,float opacity,XMFLOAT4 color,int segments=12){
  const auto at=[&](float t){auto p=Mix(from,to,t);return Local(a,p,std::sin(t*pi)*std::sin(t*7+phase)*bend,std::sin(t*pi)*bend);};
- const auto edge=[&](float u,float side){return Local(a,at(u),side*(.012f+.012f*opacity),0);};
+ const XMFLOAT3 normal{std::sin(a.facing),0,std::cos(a.facing)};
+ const auto edge=[&](float u,float sign){
+  const auto lo=at(std::max(0.f,u-.004f)),hi=at(std::min(1.f,u+.004f)),p=at(u);
+  auto side=XMVector3Cross(XMLoadFloat3(&hi)-XMLoadFloat3(&lo),XMLoadFloat3(&normal));
+  if(XMVectorGetX(XMVector3LengthSq(side))<1e-8f)side=XMVectorSet(std::cos(a.facing),0,-std::sin(a.facing),0);
+  XMFLOAT3 result;XMStoreFloat3(&result,XMLoadFloat3(&p)+XMVector3Normalize(side)*(sign*(.012f+.012f*opacity)));return result;
+ };
  color.w*=opacity;
  for(int n=0;n<segments;++n){const float u=float(n)/segments,v=float(n+1)/segments;
   r.DrawEffectRibbon(edge(u,-1),edge(u,1),edge(v,1),edge(v,-1),color,std::sin(u*pi),std::sin(v*pi));}
@@ -234,13 +240,13 @@ void PrepareAction(Renderer& r,C id,int ability,bool heavy,float seconds,float r
   const XMFLOAT3 forward{std::sin(a.facing),0,std::cos(a.facing)};
   r.DrawSpellVolume(Renderer::SpellMedium::Fire,a.focus,forward,
    {radius*.82f,radius*.82f,radius*(.70f+.48f*power)},age,{1,1,1,power*.88f},unsigned(std::max(0,ability)));
-  for(int stream=0;stream<3;++stream){
-   const auto hand=stream==0?a.left:a.right;const float angle=stream*tau/3+age*1.8f;
+  for(int stream=0;stream<2;++stream){
+   const auto hand=stream==0?a.left:a.right;const float angle=stream*pi+age*1.2f;
    const auto path=[&](float u){const auto centre=Mix(hand,a.focus,u);
-    const float spread=std::sin(u*pi)*(.20f+.10f*power)*scale;
-    return Local(a,centre,std::cos(angle+u*4)*spread,std::sin(angle+u*4)*spread,-std::sin(u*pi)*.10f);
+    const float spread=std::sin(u*pi)*(.10f+.06f*power)*scale;
+    return Local(a,centre,std::cos(angle+u*2.2f)*spread,std::sin(angle+u*2.2f)*spread,-std::sin(u*pi)*.10f);
    };
-   spellvfx::FlameStream(r,path,forward,.14f*scale,1.1f,age+stream*.31f,{1,1,1,power*.65f},8);
+   spellvfx::FlameStream(r,path,forward,.10f*scale,1.1f,age+stream*.31f,{1,1,1,power*.48f},18);
   }
   if(thermal)Panel(r,a,Art::Ice,a.focus,radius*.32f,radius*1.25f,-age*.5f,{.56f,.84f,1,power*.8f});}
  else {
@@ -256,7 +262,7 @@ void PrepareAction(Renderer& r,C id,int ability,bool heavy,float seconds,float r
   const auto footColor=thermal?cool:color;
   Seal(r,a,.62f+power*.33f,age*.15f,{footColor.x,footColor.y,footColor.z,power*.32f});
   for(int band=0;band<2;++band)Orbit(r,a,.50f+power*.18f,.24f+band*.45f,age*(band?-1.f:1.f)+band*pi,pi*1.15f,.019f,
-    {band && thermal?cool.x:color.x,band && thermal?cool.y:color.y,band && thermal?cool.z:color.z,power*.36f},18);
+    {band && thermal?cool.x:color.x,band && thermal?cool.y:color.y,band && thermal?cool.z:color.z,power*.36f},fire?14:18);
  }
 }
 void Discipline(Renderer& r,const rpg::Simulation& s,const Attachments& a,float clock){

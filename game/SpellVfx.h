@@ -4,6 +4,7 @@
 class Renderer;
 // Original texture layers over accepted combat clocks; never owns gameplay.
 namespace spellvfx {
+class FlightPath;
 enum class ResidueKind {None,Ember,Frost,Arcane,Holy,Thermal};
 struct Residue {
   rpg::Vec2 position{};
@@ -22,7 +23,7 @@ float ArrowProgress(int ability,int ordinal,float age,float flight);
 DirectX::XMFLOAT3 ProjectilePosition(const rpg::CombatVisualEvent&,DirectX::XMFLOAT3 origin,float progress);
 void Contact(Renderer&,const rpg::CombatVisualEvent&,float age);
 void Interrupt(Renderer&,const rpg::CombatVisualEvent&,float age);
-void Flight(Renderer&,const rpg::CombatVisualEvent&,DirectX::XMFLOAT3 origin,float age);
-void MagicFlight(Renderer&,const rpg::CombatVisualEvent&,DirectX::XMFLOAT3 origin,float age);
+void Flight(Renderer&,const rpg::CombatVisualEvent&,DirectX::XMFLOAT3 origin,float age,const FlightPath* path=nullptr);
+void MagicFlight(Renderer&,const rpg::CombatVisualEvent&,DirectX::XMFLOAT3 origin,float age,const FlightPath* path=nullptr);
 void EnemyContact(Renderer&,const rpg::CombatVisualEvent&,float age,bool fullDetail=true,const DirectX::XMFLOAT3* origin=nullptr);
 }

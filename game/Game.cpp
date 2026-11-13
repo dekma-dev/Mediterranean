@@ -331,6 +331,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
       effects_.Emit(event,&origin);
     } else effects_.Emit(event);
   }
+  effects_.TrackProjectiles(simulation_);
   const auto dashPosition=simulation_.Player();
   effects_.TrackDash({dashPosition.x,simulation_.WorldHeight(),dashPosition.z},simulation_.Dashing(),dt,
     simulation_.Dashing()?motion::DashSpeed(simulation_.DashPhase()):0);

@@ -25,6 +25,14 @@ float Difference(const playerclips::Frame& a,const playerclips::Frame& b){
 void LibraryChecks(){
   const auto bytes=playerclips::EmbeddedBytes();const auto clips=playerclips::Decode(bytes);
   Check(clips.size()==59&&bytes.size()<2*1024*1024,"Authored actions and compatibility tracks must fit the motion budget");
+  for(float ready : {0.f,.25f,.5f,.75f,1.f}) {
+    animation::AuthoredWeaponController controller;controller.ready=ready;
+    controller.Update(.001f,0,false,false,true);
+    const auto carry=playerclips::Sample(playerclips::Clip::SwordCarry,0);
+    const auto guard=playerclips::Sample(playerclips::Clip::SwordGuard,0);
+    const auto expected=animation::BlendSwordReadyAim(carry.weapon,guard.weapon,ready);
+    Check(Distance(controller.frame.weapon,expected)<.001f,"Partial-ready attack changed its incoming blade orientation");
+  }
   for(auto entry : {playerclips::Clip::SwordCarryRising,playerclips::Clip::SwordCarrySweep}) {
     const auto start=playerclips::Sample(entry,0);
     const auto carry=playerclips::Sample(playerclips::Clip::SwordCarry,0);
@@ -584,14 +592,15 @@ void GroundedMotionChecks(){
   std::filesystem::create_directories("grounded-review");
   std::ofstream csv("grounded-review/trajectories.csv");
   csv<<"class,heavy,ready,t,tip_x,tip_y,tip_z,hip_x,hip_y,hip_z,pelvis_yaw,chest_yaw,elbow_x,elbow_y,elbow_z\n";
-  for(int cls=0;cls<3;++cls)for(bool heavy:{false,true})for(bool ready:{false,true}) {
+  for(int cls=0;cls<3;++cls)for(bool heavy:{false,true})for(float ready:{0.f,.25f,.5f,.75f,1.f}) {
+    if(cls!=0 && ready>0 && ready<1)continue;
     animation::AuthoredWeaponController controller;CharacterPose previous;
-    if(ready){controller.ready=1;controller.restAge=0;}
+    controller.ready=ready;controller.restAge=ready>0?0:4;
     float tipSpeed=0,handSpeed=0,elbowSpeed=0,tipAt=0,handAt=0,elbowAt=0,pelvisTurn=0,wristAlignment=1;
     for(int tick=0;tick<1500;++tick) {
       const float t=tick*.001f;controller.Update(.001f,t<combat::Duration(heavy)?t:-1,heavy,cls==2,true,1,cls==1);
       animation::Sample s;s.authoredGait=true;s.authoredEquipment=cls==0?playerclips::Equipment::Sword:cls==1?playerclips::Equipment::Bow:playerclips::Equipment::Staff;
-      s.authoredReady=ready?1:controller.ready;s.authoredEntryReady=ready?1:controller.entryReady;
+      s.authoredReady=controller.ready;s.authoredEntryReady=controller.entryReady;
       s.authoredStrike=controller.frame;s.authoredStrikeWeight=controller.weight;s.authoredStrikePhase=controller.phase;s.authoredStrikeHeavy=heavy;
       s.feetActive=true;s.feet[0].x=-.18f;s.feet[1].x=.18f;
       const auto pose=BuildCharacterPose(0,0,false,s,cls==0?rpg::WeaponForm::Blade:cls==1?rpg::WeaponForm::Handbow:rpg::WeaponForm::AstralStaff);

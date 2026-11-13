@@ -1,6 +1,7 @@
 #include "engine/Renderer.h"
 #include "game/ClassEffects.h"
 #include "game/CombatEffects.h"
+#include "game/SpellVfx.h"
 #include "platform/Win32Window.h"
 #include <wincodec.h>
 #include <filesystem>
@@ -27,6 +28,24 @@ double Difference(const Pixels& a,const Pixels& b){Check(a.size()==b.size(),"Pix
 std::size_t ChangedPixels(const Pixels& a,const Pixels& b){std::size_t count=0;
  for(std::size_t n=0;n<a.size();n+=4)if(std::max({std::abs(int(a[n])-int(b[n])),std::abs(int(a[n+1])-int(b[n+1])),std::abs(int(a[n+2])-int(b[n+2]))})>=3)++count;
  return count;}
+void FlameSheets(Renderer& r,const std::filesystem::path& out){
+ const auto begin=[&]{r.BeginFrame();r.SetCamera({0,1,-5},{0,1,0});};
+ const auto sheet=[&](int parts,float age){for(int n=0;n<parts;++n){
+  const float u=float(n)/parts,v=float(n+1)/parts,x=-1.5f+3*u,y=-1.5f+3*v;
+  r.DrawFlameRibbon({x,.6f,0},{x,1.4f,0},{y,1.4f,0},{y,.6f,0},u*3,v*3,age,{1,1,1,.8f});
+ }};
+ begin();sheet(1,.18f);const auto whole=Capture(r,out/"flame-sheet.png");
+ begin();sheet(19,.18f);const auto split=Capture(r,out/"flame-sheet-split.png");
+ Check(Difference(whole,split)<.02,"Flame material restarts at geometry joins");
+ begin();sheet(19,.33f);Check(ChangedPixels(split,Capture(r,out/"flame-sheet-flow.png"))>500,"Flame sheet does not flow");
+ begin();sheet(19,.18f);Check(split==Capture(r,out/"flame-sheet-repeat.png"),"Flame material depends on draw history");
+ const auto wall=[&]{begin();r.DrawMarkerBox({0,1,-.3f},{4,2,.15f},{.2f,.2f,.2f,1});};
+ wall();const auto hidden=Capture(r,out/"flame-sheet-wall.png");wall();sheet(19,.18f);
+ Check(hidden==Capture(r,out/"flame-sheet-hidden.png"),"Flame sheet/glare escapes opaque occlusion");
+ begin();r.DrawFlameRibbon({-1,0,0},{-1,1,0},{1,1,0},{1,0,0},0,1,NAN,{1,1,1,1});
+ r.DrawFlameRibbon({NAN,0,0},{-1,1,0},{1,1,0},{1,0,0},0,1,.2f,{1,1,1,1});
+ Check(r.EffectVertices()==0 && r.EndFrame(false),"Invalid flame sheet submitted");
+}
 void Fields(Renderer& r,const std::filesystem::path& out){
  using Field=Renderer::SpellField;std::array<float,25> ground{};
  const auto begin=[&]{r.BeginFrame();r.SetCamera({0,4,-5},{0,0,0});r.DrawMarkerBox({0,-.16f,0},{9,.3f,9},{.20f,.18f,.15f,1});};
@@ -96,6 +115,16 @@ void Native(Renderer& r,const std::filesystem::path& out){
 void Flights(Renderer& r,const std::filesystem::path& out){
  using namespace rpg;
  const auto begin=[&]{r.BeginFrame();r.SetCamera({5,6,-9},{0,2,1});};
+ // Crossing an emission tick must not replace older puffs with different
+ // particles. The fresh particle starts transparent; existing ones persist.
+ CombatVisualEvent fire;fire.kind=CombatVisualKind::SpellCast;fire.school=ClassId::Mage;fire.ability=0;
+ fire.destination={2,3};fire.destinationHeight=1.2f;fire.flight=.4f;
+ for(int birth:{7,10,13,16}){
+  const auto draw=[&](float age){begin();spellvfx::MagicFlight(r,fire,{-2,1.2f,-1},age);return Capture(r,out/"emission-boundary.png");};
+  const auto before=draw(birth/60.f-.000002f),after=draw(birth/60.f+.000002f);
+  const double change=Difference(before,after);std::cout<<"Emission tick "<<birth<<" pixel difference "<<change<<'\n';
+  Check(change<.008,"A new emission replaced already living flame puffs");
+ }
  for(auto school:{ClassId::Mage,ClassId::Priest})for(int ability:{0,1,5,6,9,13,14}){
   if(school==ClassId::Priest && ability>=8)continue;
   CombatVisualEvent e;e.kind=CombatVisualKind::SpellCast;e.school=school;e.ability=ability;e.heavy=ability==1 || ability>=5;
@@ -185,7 +214,7 @@ int main(int argc,char** argv){try{
  Check(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"COM");
  const auto out=argc>1?std::filesystem::path(argv[1]):std::filesystem::path("spell-volume-check");std::filesystem::create_directories(out);
  Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),960,600,L"Spell volume checks",false),"Window");
- Renderer r;Check(r.Initialize(window.GetHandle(),960,600),"Renderer");Fields(r,out);Glow(r,out);Native(r,out);Flights(r,out);Cost(r,out);
+ Renderer r;Check(r.Initialize(window.GetHandle(),960,600),"Renderer");FlameSheets(r,out);Fields(r,out);Glow(r,out);Native(r,out);Flights(r,out);Cost(r,out);
  Check(r.ValidateDebugMessages(),"DirectX volume binding/depth hazard");
  std::cout<<"PASS: animated media from three views, in-volume opaque clipping, bounded submission, portrait/resize, equal-age flight and expiry.\n";
  }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}
