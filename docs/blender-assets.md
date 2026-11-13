@@ -1,8 +1,18 @@
 # Blender collection in the native renderer
 
+## Connected sword cuts, closer gait and turning cloak (2026-11-13, v22)
+
+The current motion source is `assets/authored/player-motion-v22.blend`, with
+53 Blender Actions and 59 native tracks. First cuts have separate entries from
+low carry. Sword attacks now animate a connected arm/hand chain, and the cloak
+responds to shoulder rotation and facing changes. Forward foot lanes and thigh
+plate fit are narrower. Two sword blades and the warrior shield are refined;
+faces, collection models and all other equipment records are preserved.
+See [the v22 record](player-motion-v22.md) for sources, limits and verification.
+
 ## Fitted grasp, walking support and cloth response (2026-11-11, v21)
 
-The current motion source is `assets/authored/player-motion-v21.blend`.
+The preceding motion source is `assets/authored/player-motion-v21.blend`.
 The sword hand now fits the actual oval hilt, with coordinated palm and arm IK
 offsets. Thirty-seven existing actions refine elbow/knee tracking and walking
 arms. Forward walking uses heel acceptance and toe push-off; the cloak responds

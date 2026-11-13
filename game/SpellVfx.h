@@ -15,6 +15,8 @@ struct Residue {
 Residue MakeResidue(const rpg::CombatVisualEvent&);
 float ResidueLifetime(ResidueKind);
 void Aftermath(Renderer&,const Residue&);
+void GroundField(Renderer&,rpg::Vec2,float radius,float age,ResidueKind,float opacity,unsigned seed=0);
+void FrostField(Renderer&,rpg::Vec2,float age,float remaining);
 float ContactLifetime(const rpg::CombatVisualEvent& event);
 float ArrowProgress(int ability,int ordinal,float age,float flight);
 DirectX::XMFLOAT3 ProjectilePosition(const rpg::CombatVisualEvent&,DirectX::XMFLOAT3 origin,float progress);

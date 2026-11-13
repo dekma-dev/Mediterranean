@@ -767,10 +767,12 @@ EffectOut VSEffect(VIn i) {
 }
 )"
 #include "engine/SpellVolumeShader.inc"
+#include "engine/SpellFieldShader.inc"
 R"(
 float4 EffectColor(EffectOut i) {
  float4 result=0;
- [branch] if(i.uv.z>=31.5) result=SpellRadiance(i);
+ [branch] if(i.uv.z>=63.5) result=FieldRadiance(i);
+ else if(i.uv.z>=31.5) result=SpellRadiance(i);
  else if(i.uv.z>=7.5) {
   uint tile=(uint)round(i.uv.z)-8u;
   float2 local=saturate(i.uv.xy),cell=float2(tile&3u,tile>>2);
@@ -783,6 +785,21 @@ float4 EffectColor(EffectOut i) {
   float sceneDistance=(.1*farPlane)/max(.0001,farPlane-z*(farPlane-.1));
   float soft=saturate((sceneDistance-i.viewDepth)/(tile==1 || tile==2?.24:.065));
   result=float4(texel.rgb*i.tint.rgb,saturate(texel.a*i.tint.a)*border*soft*i.fog);
+ } else if(i.uv.z>=3.5) {
+  // Advected, torn flame sheets. U is continuous along the whole curve, so
+  // material motion and tongues cross joins instead of repeating each quad.
+  float x=i.uv.x,y=i.uv.y*2-1;
+  float n=Noise(float2(x*.85,y*1.7)),fine=Noise(float2(x*2.2+17,y*3.8));
+  float curl=sin(x*2.1+n*3.2)*.16;
+  float edge=.40+n*.40+fine*.13-abs(y+curl);
+  float aa=max(.025,fwidth(edge));
+  float mask=smoothstep(-aa,aa,edge)*saturate(1-y*y);
+  float heat=saturate(1-abs(y+curl)*1.6+(n-.5)*.60);
+  float3 flame=lerp(float3(.85,.035,.004),float3(1,.40,.025),smoothstep(.10,.65,heat));
+  flame=lerp(flame,float3(1,.86,.38),smoothstep(.70,.98,heat));
+  float z=effectSceneDepth.Load(int3((int2)i.p.xy,0)),farPlane=eyeAndHud.w<0?20:280;
+  float sceneDepth=(.1*farPlane)/max(.0001,farPlane-z*(farPlane-.1));
+  result=float4(flame*i.tint.rgb,mask*saturate(i.tint.a)*saturate((sceneDepth-i.viewDepth)/.08)*i.fog);
  } else {
  float2 p=i.uv.xy*2-1;
  float radius=length(p),edge=saturate(1-abs(p.y)),mask=0,core=0;

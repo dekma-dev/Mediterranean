@@ -1,4 +1,5 @@
 #include "game/CastEffects.h"
+#include "game/SpellFlow.h"
 #include "game/ClassEffects.h"
 #include "game/HandPose.h"
 #include "game/ActorPresentation.h"
@@ -32,8 +33,10 @@ void Seal(Renderer& r,const Attachments& a,float radius,float phase,XMFLOAT4 tin
 }
 void Stream(Renderer& r,const Attachments& a,XMFLOAT3 from,XMFLOAT3 to,float bend,float phase,float opacity,XMFLOAT4 color,int segments=12){
  const auto at=[&](float t){auto p=Mix(from,to,t);return Local(a,p,std::sin(t*pi)*std::sin(t*7+phase)*bend,std::sin(t*pi)*bend);};
+ const auto edge=[&](float u,float side){return Local(a,at(u),side*(.012f+.012f*opacity),0);};
+ color.w*=opacity;
  for(int n=0;n<segments;++n){const float u=float(n)/segments,v=float(n+1)/segments;
-  auto c=color;c.w*=opacity*std::sin((u+v)*pi*.5f);r.DrawEffectStreak(at(u),at(v),.012f+.012f*opacity,c);}
+  r.DrawEffectRibbon(edge(u,-1),edge(u,1),edge(v,1),edge(v,-1),color,std::sin(u*pi),std::sin(v*pi));}
 }
 void Orbit(Renderer& r,const Attachments& a,float radius,float height,float phase,float span,float width,XMFLOAT4 color,int segments=20){
  const auto at=[&](float u,float edge){const float angle=phase+span*u;
@@ -210,13 +213,14 @@ void PrepareAction(Renderer& r,C id,int ability,bool heavy,float seconds,float r
  // Converging material fragments come from the solved other hand. The focus
  // remains the exact socket used by Game for projectile release.
  Stream(r,a,a.right,a.focus,.13f,age*3,power*.65f,color);
- for(int n=0;n<(thermal?8:6);++n){
+ const bool fire=mage && !frost && !arcane;
+ for(int n=0;n<(thermal?8:fire?0:6);++n){
   const float u=std::fmod(age*1.2f+n/(thermal?8.f:6.f),1.f),angle=n*2.4f+age*.9f;
   const float radius=(.38f-.23f*u)*scale;
   const auto p=Local(a,a.focus,std::cos(angle)*radius,std::sin(angle)*radius,-.12f*(1-u));
   const bool ice=frost || (thermal && n%2);auto tint=ice?cool:color;tint.w*=power*std::sin(u*pi);
   if(ice)r.DrawEffectSprite(Art::Ice,p,.035f*scale,.12f*scale,-angle,tint);
-  else if(mage && !arcane)r.DrawEffectSprite(Art::Flame,p,.07f*scale,.12f*scale,-angle*.12f,{1,.84f,.55f,tint.w*.85f},true);
+  else if(fire)continue;
   else r.DrawEffectSprite(Art::Arcane,p,.065f*scale,.065f*scale,angle,tint);
  }
  const float radius=(mage?.18f+.29f*power:.09f+.13f*power)*scale;
@@ -226,8 +230,18 @@ void PrepareAction(Renderer& r,C id,int ability,bool heavy,float seconds,float r
    r.DrawEffectStreak(Local(a,a.focus,std::cos(angle)*radius*.55f,std::sin(angle)*radius*.55f),
     Local(a,a.focus,std::cos(angle)*radius*1.25f,std::sin(angle)*radius*1.25f),.010f,{.55f,.84f,1,power*.68f});}
  }
- else if(mage && !arcane){r.DrawSpellVolume(Renderer::SpellMedium::Fire,a.focus,{0,1,0},
-   {radius*.82f,radius*.82f,radius*1.18f},age,{1,1,1,power*.88f},unsigned(std::max(0,ability)));
+ else if(fire){
+  const XMFLOAT3 forward{std::sin(a.facing),0,std::cos(a.facing)};
+  r.DrawSpellVolume(Renderer::SpellMedium::Fire,a.focus,forward,
+   {radius*.82f,radius*.82f,radius*(.70f+.48f*power)},age,{1,1,1,power*.88f},unsigned(std::max(0,ability)));
+  for(int stream=0;stream<3;++stream){
+   const auto hand=stream==0?a.left:a.right;const float angle=stream*tau/3+age*1.8f;
+   const auto path=[&](float u){const auto centre=Mix(hand,a.focus,u);
+    const float spread=std::sin(u*pi)*(.20f+.10f*power)*scale;
+    return Local(a,centre,std::cos(angle+u*4)*spread,std::sin(angle+u*4)*spread,-std::sin(u*pi)*.10f);
+   };
+   spellvfx::FlameStream(r,path,forward,.14f*scale,1.1f,age+stream*.31f,{1,1,1,power*.65f},8);
+  }
   if(thermal)Panel(r,a,Art::Ice,a.focus,radius*.32f,radius*1.25f,-age*.5f,{.56f,.84f,1,power*.8f});}
  else {
   Panel(r,a,Art::Seal,a.focus,radius,radius,-age*.65f,{color.x,color.y,color.z,power*.8f});

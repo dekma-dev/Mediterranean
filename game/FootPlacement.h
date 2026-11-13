@@ -170,6 +170,11 @@ private:
     const float x=position.x+std::cos(yaw)*offset,z=position.z-std::sin(yaw)*offset;
     return {x,rpg::WorldMap::Height({x,z})+.17f,z,yaw};
   }
+  static float TravelWidth(const Sample& sample) {
+    // Keep separate boot lanes while reducing the wide standing stance.
+    // Strafing retains its existing lateral clearance.
+    return .145f-(.040f+.020f*Unit(sample.runBlend))*Unit(sample.gaitWeights[0]);
+  }
   static float ContactLead(const Sample& sample) {
     // Fast forward travel lands close to the centre of mass. Extending the
     // recovery to the walking lead held the pelvis below its authored height.
@@ -207,7 +212,7 @@ private:
   }
   void AdvanceSwing(Step& foot,int i,float dt,rpg::Vec2 position,float yaw,rpg::Vec2 velocity,const Sample& sample) {
     foot.age=std::min(foot.duration,foot.age+dt);
-    const float width=.145f-.030f*Unit(sample.runBlend)*Unit(sample.gaitWeights[0]);
+    const float width=TravelWidth(sample);
     auto desired=Neutral(position,yaw,i,width);
     // Carry the landing prediction through abrupt input changes. A raw zero
     // velocity removed the entire lead inside one render extrapolation and
@@ -303,7 +308,7 @@ private:
       const int i=(next_+order)%2;
       auto& foot=feet_[i];
       if (foot.stepping) continue;
-      const float width=.145f-.030f*Unit(sample.runBlend)*Unit(sample.gaitWeights[0]);
+      const float width=TravelWidth(sample);
       const auto neutral=Neutral(position,yaw,i,width);
       const float error=std::hypot(foot.goal.x-neutral.x,foot.goal.z-neutral.z);
       const float angle=std::abs(motion::AngleDelta(foot.point.yaw,yaw));
@@ -374,7 +379,7 @@ private:
           AdvanceSwing(foot,i,std::max(dt,foot.duration-foot.age),position,yaw,velocity,sample);
           foot.stepping=false;
       }
-      const float width=.145f-.030f*Unit(sample.runBlend)*Unit(sample.gaitWeights[0]);
+      const float width=TravelWidth(sample);
       const auto neutral=Neutral(position,yaw,i,width);
       const float supportReach=std::hypot(foot.goal.x-neutral.x,foot.goal.z-neutral.z);
       // An abrupt start or reversal can exhaust the support leg before the

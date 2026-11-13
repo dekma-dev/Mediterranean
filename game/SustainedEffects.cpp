@@ -2,6 +2,7 @@
 #include "game/ClassEffects.h"
 #include "game/CastEffects.h"
 #include "game/ActorPresentation.h"
+#include "game/SpellVfx.h"
 #include "engine/Renderer.h"
 #include <algorithm>
 #include <cmath>
@@ -58,23 +59,9 @@ void Evasion(Renderer& r,const rpg::Simulation& s,float weight,float age,float f
     r.DrawEffectStreak(at(n/10.f),at((n+1)/10.f),.018f,{.58f,.77f,.68f,weight*.27f*std::sin((n+.5f)*pi/10)});
   }
 }
-void Field(Renderer& r,const rpg::Simulation& s,float time){
+void Field(Renderer& r,const rpg::Simulation& s){
   if(s.FrostFieldSeconds()<=0 || s.Health()<=0)return;
-  const auto p=s.FrostFieldPosition();const float age=5-s.FrostFieldSeconds();
-  const float fade=Unit(age/.15f)*Unit(s.FrostFieldSeconds()/.45f);
-  Ring(r,p,rpg::Simulation::frostFieldRadius-.025f,0,tau,.025f,{.34f,.67f,.91f,.38f*fade},64);
-  // The fixed three-metre boundary matches simulation; only interior wisps move.
-  for(int n=0;n<8;++n){
-    const float a=n*2.39996f,phase=std::fmod(time*.27f+n*.173f,1.f);
-    const auto at=Polar(p,a,.55f+n*.27f,.12f+phase*.30f);
-    r.DrawEffectSprite(Art::Smoke,at,.56f+phase*.32f,.23f+phase*.12f,a,
-      {.52f,.72f,.86f,fade*std::sin(phase*pi)*.27f},true);
-    const auto crystal=Polar(p,a,2.45f,.17f);
-    r.DrawEffectSprite(Art::Ice,crystal,.10f,.31f,a*.12f,{.56f,.80f,1,fade*.66f});
-    for(int j=0;j<3;++j)r.DrawEffectStreak(Polar(p,a+.035f*std::sin(j*3.f),.45f+j*.63f),
-      Polar(p,a+.035f*std::sin((j+1)*3.f),1.08f+j*.63f),.018f,{.48f,.72f,.91f,fade*.32f});
-  }
-  Seal(r,p,1.55f,.2f,{.45f,.72f,.94f,fade*.28f});
+  spellvfx::FrostField(r,s.FrostFieldPosition(),5-s.FrostFieldSeconds(),s.FrostFieldSeconds());
 }
 }
 
@@ -125,10 +112,10 @@ void SustainedEffects::Update(const rpg::Simulation& s,float dt){
   }
   actors_=next;
 }
-void SustainedEffects::Render(Renderer& r,const rpg::Simulation& s,float time,float facing) const {
+void SustainedEffects::Render(Renderer& r,const rpg::Simulation& s,float /*time*/,float facing) const {
   if(s.Health()<=0 || s.Class()!=school_)return;
   const auto start=r.EffectVertices();
-  Barrier(r,s,player_[0].weight,player_[0].age,facing);Evasion(r,s,player_[1].weight,player_[1].age,facing);Field(r,s,time);
+  Barrier(r,s,player_[0].weight,player_[0].age,facing);Evasion(r,s,player_[1].weight,player_[1].age,facing);Field(r,s);
   for(const auto& a:actors_){
     if(!a.id || r.EffectVertices()-start>1700)continue;
     const bool beast=a.kind==rpg::EnemyKind::Boar || a.kind==rpg::EnemyKind::Wolf;

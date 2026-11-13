@@ -40,10 +40,17 @@ float4 SpellRadiance(EffectOut i) {
   float turbulence=n*.72+fine*.28;
   float density=0;float3 emission=0;
   if(v.centerKind.w<.5) {
-   float radius=length(p.xy+float2(n-.5,fine-.5)*.18);
-   float envelope=saturate(1-radius*1.24-abs(p.z)*.24);
-   density=saturate(envelope*1.4+(turbulence-.55)*3.5)*boundary;
-   float hot=saturate(1.1-radius*1.5-abs(p.z)*.25+(turbulence-.5)*.9);
+   // A hot leading heart sheds rolling tongues down the local axis. Domain
+   // warping changes the silhouette as well as brightness; no smooth glowing
+   // ellipsoid containing a scrolling noise picture.
+   float turn=p.z*4.3+phase*5+seed;
+   float2 curl=float2(sin(turn),cos(turn*1.13))*(.12+.12*(1-p.z));
+   float radius=length(p.xy+curl+float2(n-.5,fine-.5)*.30);
+   float heart=1-length(float3(p.xy*1.65,(p.z-.22)*1.35));
+   float tongues=saturate(1-radius*(1.45-.28*p.z)-abs(p.z)*.25);
+   float torn=saturate(tongues*1.5+(turbulence-.57)*4.2);
+   density=(torn*.85+saturate(heart)*.90)*boundary;
+   float hot=saturate(heart*1.2+(turbulence-.42)*.65);
    emission=lerp(float3(1,.065,.008),float3(1,.46,.035),smoothstep(.12,.65,hot));
    emission=lerp(emission,float3(1,.90,.55),smoothstep(.70,.98,hot));
   } else if(v.centerKind.w<1.5) {

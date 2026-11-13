@@ -24,7 +24,20 @@ float Difference(const playerclips::Frame& a,const playerclips::Frame& b){
 }
 void LibraryChecks(){
   const auto bytes=playerclips::EmbeddedBytes();const auto clips=playerclips::Decode(bytes);
-  Check(clips.size()==57&&bytes.size()<2*1024*1024,"Fifty-one authored actions and six compatibility tracks must fit the motion budget");
+  Check(clips.size()==59&&bytes.size()<2*1024*1024,"Authored actions and compatibility tracks must fit the motion budget");
+  for(auto entry : {playerclips::Clip::SwordCarryRising,playerclips::Clip::SwordCarrySweep}) {
+    const auto start=playerclips::Sample(entry,0);
+    const auto carry=playerclips::Sample(playerclips::Clip::SwordCarry,0);
+    Check(Distance(start.hands[1],carry.hands[1])<.001f && Distance(start.weapon,carry.weapon)<.001f,
+      "First cut begins at an unrelated high guard instead of the carried sword");
+    const bool heavy=entry==playerclips::Clip::SwordCarrySweep;
+    const float contact=combat::Contact(heavy);
+    const float phase=playerclips::AttackPhase(entry,contact,contact*.4f,contact,contact+1.35f);
+    Check(std::abs(phase-clips[unsigned(entry)].contact)<1e-5f,"Low-entry cut misses the authoritative contact time");
+    const auto hit=playerclips::Sample(entry,phase);
+    Check(hit.weapon.z>.25f && hit.hands[1].z-start.hands[1].z+hit.weapon.z*.96f>.5f,
+      "Low-entry cut never delivers the blade in front of the body");
+  }
   for(auto clip:{playerclips::Clip::RunForward,playerclips::Clip::RunBackward,playerclips::Clip::RunLeft,playerclips::Clip::RunRight,
       playerclips::Clip::SwordRun,playerclips::Clip::SwordRunBackward,playerclips::Clip::SwordRunLeft,playerclips::Clip::SwordRunRight,
       playerclips::Clip::StaffRun,playerclips::Clip::StaffRunBackward,playerclips::Clip::StaffRunLeft,playerclips::Clip::StaffRunRight,
@@ -198,7 +211,7 @@ void NaturalGaitChecks(){
   // short compression can absorb contact without authorizing a constant squat.
   Check(compression<.12f&&hipSum/count>-.045,"Steady run collapsed into a persistent crouch");
   Check(highestHip>.005f&&highestHip+compression>.08f,"Pelvis smoothing erased the authored flight rise");
-  Check(footWidth<.31f,"Forward running retained the wide standing stance");
+  Check(footWidth<.22f,"Forward running retained the wide standing stance");
   Check(covariance<-.002,"Running arm failed to oppose its same-side leg");
 }
 void AuthoredLegChecks(){
@@ -256,7 +269,9 @@ void CuttingGripChecks(){
       if(tick>500) {
         worstAlignment=std::min(worstAlignment,XMVectorGetX(XMVector3Dot(frame.r[0],forearm)));
         worstRollStep=std::max(worstRollStep,Distance(previous,pose.weaponRight));
-        Check(pose.weaponDirection.y<-.6f&&pose.weaponDirection.z<-.15f,
+        // Forward torso lean shallows the world-space angle at full run.
+        // The blade must remain down and strongly behind the gripping hand.
+        Check(pose.weaponDirection.y<-.4f&&pose.weaponDirection.z<-.65f,
           "Travelling swordsman points the blade forward instead of carrying it down and clear");
         Check(Distance(BuildHandPose(pose,1,true,false,0).Point({0,-.055f,-.043f}),pose.arms[1].end)<1e-5f,
           "Cutting grip detached the wrist from the forearm");
@@ -264,7 +279,7 @@ void CuttingGripChecks(){
       previous=pose.weaponRight;
     }
   }
-  Check(worstAlignment>.7f,"Carried sword forces the knuckles sideways across the forearm");
+  Check(worstAlignment>.85f,"Carried sword forces the knuckles sideways across the forearm");
   Check(worstRollStep<.003f,"Carried sword rolls abruptly at a grip-frame pole");
   std::cout<<"Cutting grip: forearm alignment "<<worstAlignment<<", maximum roll-vector change per ms "<<worstRollStep<<'\n';
 }
@@ -458,12 +473,14 @@ void WeaponMotionChecks(){
   float worstGrip=0,worstStep=0,worstFinger=0;
   for(bool staff:{false,true})for(bool heavy:{false,true})for(int hz:{30,60,144,1000}) {
     animation::AuthoredWeaponController controller;CharacterPose previous;bool havePrevious=false;
+    controller.ready=1;controller.restAge=0;
     XMFLOAT3 first{};float excursion=0;
     for(int tick=0;tick<hz*2;++tick) {
       const float t=float(tick)/hz;
       controller.Update(1.f/hz,t<combat::Duration(heavy)?t:-1,heavy,staff,true);
       animation::Sample sample;sample.authoredGait=true;sample.authoredBlend=1;
       sample.authoredReady=1; // Exercise the fully engaged two-hand combat grip.
+      sample.authoredEntryReady=controller.entryReady;
       sample.authoredEquipment=staff?playerclips::Equipment::Staff:playerclips::Equipment::Sword;
       sample.authoredStrike=controller.frame;sample.authoredStrikeWeight=controller.weight;
       sample.authoredStrikePhase=controller.phase;sample.authoredStrikeHeavy=heavy;
@@ -569,7 +586,8 @@ void GroundedMotionChecks(){
   csv<<"class,heavy,ready,t,tip_x,tip_y,tip_z,hip_x,hip_y,hip_z,pelvis_yaw,chest_yaw,elbow_x,elbow_y,elbow_z\n";
   for(int cls=0;cls<3;++cls)for(bool heavy:{false,true})for(bool ready:{false,true}) {
     animation::AuthoredWeaponController controller;CharacterPose previous;
-    float tipSpeed=0,handSpeed=0,elbowSpeed=0,tipAt=0,handAt=0,elbowAt=0,pelvisTurn=0;
+    if(ready){controller.ready=1;controller.restAge=0;}
+    float tipSpeed=0,handSpeed=0,elbowSpeed=0,tipAt=0,handAt=0,elbowAt=0,pelvisTurn=0,wristAlignment=1;
     for(int tick=0;tick<1500;++tick) {
       const float t=tick*.001f;controller.Update(.001f,t<combat::Duration(heavy)?t:-1,heavy,cls==2,true,1,cls==1);
       animation::Sample s;s.authoredGait=true;s.authoredEquipment=cls==0?playerclips::Equipment::Sword:cls==1?playerclips::Equipment::Bow:playerclips::Equipment::Staff;
@@ -578,6 +596,10 @@ void GroundedMotionChecks(){
       s.feetActive=true;s.feet[0].x=-.18f;s.feet[1].x=.18f;
       const auto pose=BuildCharacterPose(0,0,false,s,cls==0?rpg::WeaponForm::Blade:cls==1?rpg::WeaponForm::Handbow:rpg::WeaponForm::AstralStaff);
       const auto tip=pose.WeaponPoint(.96f),hip=pose.PelvisPoint({0,.93f,0});
+      if(cls==0) {
+        const auto forearm=XMVector3Normalize(XMLoadFloat3(&pose.arms[1].end)-XMLoadFloat3(&pose.arms[1].joint));
+        wristAlignment=std::min(wristAlignment,XMVectorGetX(XMVector3Dot(forearm,XMLoadFloat3(&pose.weaponRight))));
+      }
       if(tick){
         const float speed=Distance(tip,previous.WeaponPoint(.96f))*1000;
         if(speed>tipSpeed){tipSpeed=speed;tipAt=t;}
@@ -597,6 +619,7 @@ void GroundedMotionChecks(){
     std::cout<<"Grounded "<<cls<<" heavy "<<heavy<<" ready "<<ready<<": tip "<<tipSpeed<<" @ "<<tipAt<<"; hand "<<handSpeed<<" @ "<<handAt<<"; elbow "<<elbowSpeed<<" @ "<<elbowAt<<" m/s; pelvis turn "<<pelvisTurn<<'\n';
     Check(pelvisTurn>.015f,"Full-body strike lost authored pelvis rotation");
     Check(tipSpeed<22.f&&handSpeed<13.f&&elbowSpeed<13.f,"Retargeted strike has a wrist, elbow or weapon discontinuity");
+    Check(wristAlignment>.64f,"Cutting hand deviates excessively from its forearm");
   }
 }
 void BowMotionChecks(){

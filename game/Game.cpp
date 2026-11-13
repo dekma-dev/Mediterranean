@@ -369,7 +369,8 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
      (velocity.z-previousVelocity.z)*std::cos(playerPose_.facing))/dt;
   playerAnimation_.Update(dt,simulation_.Height(),simulation_.VerticalSpeed(),simulation_.MovementDistance(),
     simulation_.Health()>0,playerPose_.attack,
-    simulation_.LandingSpeed(),simulation_.LandingElapsed(),forwardAcceleration,castStarted);
+    simulation_.LandingSpeed(),simulation_.LandingElapsed(),forwardAcceleration,castStarted,
+    std::remainder(playerPose_.facing-previousFacing,6.2831853f)/dt);
   applyImpacts(playerAnimation_,0,simulation_.Health()>0,playerPose_.facing);
   for(std::size_t i=0;i<dummyAnimations_.size();++i) {
     const auto& dummy=simulation_.Dummies()[i]; auto& reaction=dummyAnimations_[i];

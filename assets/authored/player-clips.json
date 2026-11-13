@@ -1,8 +1,8 @@
 {
   "format": "PCL5",
-  "source": "Fitted sword grip, relaxed walking arms and aligned knee tracking",
-  "source_sha256": "23897a195094aad5b5fe485c74ca97ed8eb0e8bc6680d2010131dab1b6440da0",
-  "editable_source": "player-motion-v21.blend",
+  "source": "Authored low-carry attacks, relaxed sword wrist and narrower forward gait",
+  "source_sha256": "c4a596d2c7749337187ee09be03c1bc72e808bda87e44836ab5b2f328f39ec2c",
+  "editable_source": "player-motion-v22.blend",
   "clips": [
     {
       "clip": "Sword_Attack_Diagonal",
@@ -14,8 +14,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "bf4781bad0e86f4c29f02a8c8acc35376c385590f666d910136f8e22401fe165"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "5ef4c5741e36346f52e0dc80d49464f2ede58bdc5b1f1d602436065865477eaa"
     },
     {
       "clip": "Sword_Attack_Overhead",
@@ -27,8 +27,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "42766bfe1a33f6833559687e222294577e9842a885ed30e9be61891f7a9399d0"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "781f2a25cf1ec720f70bd119745bd207d1e8771eb101fbb4309b84f67c876567"
     },
     {
       "clip": "Jump_Full",
@@ -66,8 +66,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "9815925956e7c022890cbe9403616acf6747ab1187afd2064ce02fb9d28a8ddf"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "bdae2ee4f8a710cb964072456dfea1ce3e89aff38cd0e6cf2a2ec64527998de6"
     },
     {
       "clip": "Walk_Backward",
@@ -79,8 +79,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "d4715e7a39b61831d7b9353f7b9ac43ef68edeb70f0c7f1d055bbc6cc2aa66df"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "8bafd349d923f9c84e0d45a9c0a3daf1323d987217a756fe6326b965886f92fa"
     },
     {
       "clip": "Walk_Left",
@@ -92,8 +92,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "b5a77c0628c1ec3a0d35c9dc66616565c8bf1fc1b2522f711fa7b5144448c4f4"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "c08cb1aff7fcd8a2fb68c2aff9e029ef007536675ff9b466e48477c74ccb1f07"
     },
     {
       "clip": "Walk_Right",
@@ -105,8 +105,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "f2228e5c397cbfc6eedcc9daa87bff34cc6e5c8078d26d74c6d1852483af19ef"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "2f8afff793fc0b091e07d0fa6776834f98ad44bd1b6202c516f129af86f2726d"
     },
     {
       "clip": "Run_Forward",
@@ -118,8 +118,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.2,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "fb8ba12d34b7b8040b0de92c656a0a9d547d7a626089d04790e9f1029d5508f3"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "b46d136612cc25e3f3692d34f5bd35b4935327dfd97e5115edc11467abdfc5b0"
     },
     {
       "clip": "Run_Backward",
@@ -131,8 +131,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "3e71ecabdf4698af0c9e7c7ef4244d661524c6e072c93591891a62075f62cdfb"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "bde0694ce4dd38a105c51766121a1606205ce5101fd050b58690adc133fe095a"
     },
     {
       "clip": "Run_Left",
@@ -144,8 +144,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "de180734c464310cf04794f0c00a8244140c1d17240e4cf2f5dfa89c8b718bf5"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "75eef129804f01f7549bdaac22df4bed0139ef085bd1b0e8fc52897a82b1de22"
     },
     {
       "clip": "Run_Right",
@@ -157,8 +157,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "5ea1fe5051a78044ebdfedee7082c6f08a9bdd636ce15d50a3dd05096e212df5"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "d7cac7a5215e2f7037035e333418a35cfdadc2010efbd5660d9f6466b58e7d65"
     },
     {
       "clip": "Start_Walk",
@@ -222,8 +222,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "edf97c0a6603aafb30a05baa99646247dd20013de1419891444a3202e36fb872"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "f7020df98133ad555d1865e91750969cc1c95a4defb58d6d4143f4fed98f10c7"
     },
     {
       "clip": "Sword_Run",
@@ -235,8 +235,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.2,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "4fbf43c1af1f547fe30ce65798540acd27451cd9fccb650f85282004d625ba67"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "dec21b4823ea8f7c37a9c2d79ecf9207579deacf6ebb3edaf5975fa6bed68e92"
     },
     {
       "clip": "Staff_Walk",
@@ -248,8 +248,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "b568519c5770752d5bd0cd45460e1a31df237a475624857618e45c9279735123"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "692dcb61d78deabfc3fd2cad5c3e3cf03e64cd6ddbe70fee60417167fe1ced67"
     },
     {
       "clip": "Staff_Run",
@@ -261,8 +261,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.2,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "93fddc1becd16d20b06701bf1ab65dc37b37a9ec1194158b55de46743eb150bb"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "bbe3a369a5397cc25025bd61fdb757b71fa33273db7a780a218f8d3a7ef47ddf"
     },
     {
       "clip": "Sword_Guard",
@@ -274,8 +274,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "931d6218897ca18b0154d7f89af310352b82ba358b054c46edfa7f39737e9271"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "46791cc952af42995d53ecf32677b93ff6bc636f805a0f7c1a27ce01544d00b6"
     },
     {
       "clip": "Staff_Guard",
@@ -417,8 +417,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "8239efe4cef47fb0816191a9819273617a587003b45f5957c244b4a3ca511234"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "eeec7a3684ddb57eea331f0c192ec70f9b77f6493513cb731cc093e5b69fc2fd"
     },
     {
       "clip": "Bow_Run",
@@ -430,8 +430,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.2,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "f48c65a5fecf8f084a9917523b4c9d7230f3aed6ecba8ea3684028fdb282822d"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "71f1cad2ee4f97dd1e99c3ec73e543711d2a74b5b0183f3d125734f28b17c19a"
     },
     {
       "clip": "Sword_Carry",
@@ -443,8 +443,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.0,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "470a29c04e93c420d0e053ed2ae80276b0749fa78e3e3aa6e398f0dba138db84"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "bdd3e634f2a1e65d5a0586203cc0617508635e138dbf150ca46b8fcab362728f"
     },
     {
       "clip": "Staff_Carry",
@@ -482,8 +482,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "5739b43e46f14655ac0b5ac5887cfd9c45988946b1a01a112d62b8c04b92254d"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "970122c2c1fc4e97699c0f218a0f9cb43eadb3b4dc3ab2ed9cf15366645c916f"
     },
     {
       "clip": "Sword_Walk_Left",
@@ -495,8 +495,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "b3cad6224ab4891b3e5e7368ed002eecd689ae64ae4f54e5c800e1d66917bb4b"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "e44ed53bef9620011a93403c6dabf63e915971ce9736843ac1c7f873e3f1166c"
     },
     {
       "clip": "Sword_Walk_Right",
@@ -508,8 +508,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "5a19c93c59efc06907696393c21337eaaf4410e007094ae80b9d8cae221e0b68"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "9433854e231bd14c50b76ea4a85f69cdd14f7c4a10f0e0f0d435685fd1aeed97"
     },
     {
       "clip": "Sword_Run_Backward",
@@ -521,8 +521,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "fe48c7f29a627ffa06b16a0d0166fa5c8441d43f7d9dc88022dc5aa48028a55f"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "712b0350d0b74ecc193591a2e3bc3f0d0c045f515b72643c005e78bd28f379ce"
     },
     {
       "clip": "Sword_Run_Left",
@@ -534,8 +534,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "d4ad3180d6c59bac5f48ff6e2beb2bd0076c829d96b57537b0851ea6e38a64ee"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "b8f43da84cceed2138cf1e942b4a5d275f362d2179c222f11c06a57b82480c3c"
     },
     {
       "clip": "Sword_Run_Right",
@@ -547,8 +547,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "bed3fe9081e807e8a12b74a6c1dd9d0cea39737b952a6d99f5dbc3453fe2d06c"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "b93bbef23b0495b11a77b208b5b35605abc2519963890a6145dc34cf9811767e"
     },
     {
       "clip": "Staff_Walk_Backward",
@@ -560,8 +560,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "305a2cd88467d6f9b479fe0c17ba9f6cd6145178320398b2c30033771bfec138"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "a6fae59a94c547b008c3b3866f550e0198218e7fdac86da8bee8351111e3af37"
     },
     {
       "clip": "Staff_Walk_Left",
@@ -573,8 +573,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "fc54cec1e4e60933d81e0e055b969b121444b3e504f917b84fcce5b58a64493c"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "dad176b16ec045262e8f06a3d1c26e8e4652c7aef65d6937a0ab1023e9865434"
     },
     {
       "clip": "Staff_Walk_Right",
@@ -586,8 +586,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "a711e5ded7687fa616c39d829ce48cd670b51c39fc8f1df3e920962c992433c4"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "f488e4dde9d8f73125eb068a7d39eb0049b52ab154998d77a4c4715218811ce9"
     },
     {
       "clip": "Staff_Run_Backward",
@@ -599,8 +599,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "04d5f428a637330904382b954f60adf77c3cefed2f334437dd8aacf6d6f75dea"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "ae78844a6919bfc571a60c732f8e4eb319251cae54074fd12965b03b6edb2d20"
     },
     {
       "clip": "Staff_Run_Left",
@@ -612,8 +612,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "7a31462827e24963b7690f4ea3508fef819f3f70944342b2ab7d3e1437e0f12e"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "8bba77cb04b58d2b212bbba1568f5b9d8c932de54be3a0cdc4bf145c16b74fb1"
     },
     {
       "clip": "Staff_Run_Right",
@@ -625,8 +625,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "8be5b7083e53a033a220e169bffe99c20afd34ae0e8701909fd432007103d636"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "e2579d7116a007a54b61064b23d8e5c272733edfdae983f49e87d1f21eb95afc"
     },
     {
       "clip": "Bow_Walk_Backward",
@@ -638,8 +638,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "14dd82cd7cb47083be78cdabbe3951b03e9beab5eb4d30c8b2c2cb42db069e48"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "0804c61e9e8b542615c4944c2deb4153c08f54403783aec6b0e243b2f191e8d8"
     },
     {
       "clip": "Bow_Walk_Left",
@@ -651,8 +651,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "d0403cf4e00ffd499f94c69957274332486492b4693f146e05fe6ecd35ede7fa"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "dfa6bb31e869f7244087df5d5d4f2f117a9e25715bcdef99230be926ca735355"
     },
     {
       "clip": "Bow_Walk_Right",
@@ -664,8 +664,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.62,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "dcb743f5541c6675e7d82855f89401bfdb587fd315cd7c2a2881e798ea83e492"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "6569862a04a32de3a602a5dd36fc286ca34a19045f881d02304e486e5ffaffb9"
     },
     {
       "clip": "Bow_Run_Backward",
@@ -677,8 +677,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "210ef37b549f7ed5b558234bb45f8361a9a5845a63d2b892be6dc9c937321a4f"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "4cee32718b3dfebf9ef9c06698c6632a837cee8a01147c5f52a4394231e7db45"
     },
     {
       "clip": "Bow_Run_Left",
@@ -690,8 +690,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "a0aaa25f245da7eae2bacdf3194b5d5a145b8130b5e94044fd99d1c41f8069eb"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "07b039f4d4b660d26b5221ebc9f61c3608a84979b0819ffdec43baa4fac4d251"
     },
     {
       "clip": "Bow_Run_Right",
@@ -703,8 +703,8 @@
       "takeoff": 0.0,
       "landing": 0.0,
       "stance": 0.18,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "24bb08abc910abda1642a278a94a82b1845e9b62fa21dae0f2e5e89e92611c70"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "bec312b9f631a0070d27d8d9eab54d11ab2c8a3a0bb8d7840b75e585388c8251"
     },
     {
       "clip": "Sword_Jump",
@@ -716,8 +716,8 @@
       "takeoff": 0.3103448275862069,
       "landing": 0.5057471264367815,
       "stance": 0.0,
-      "source": "v21 grip and knee/arm revision",
-      "sha256": "abf500f5d6f776a1a7da6ce4ce8a577835b3ef3660b05470233310fed37683a6"
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "e0b20b789ed44bc00f6827b3652097a6a76b13136a50f400748462be7b061674"
     },
     {
       "clip": "Staff_Jump",
@@ -744,9 +744,35 @@
       "stance": 0.0,
       "source": "v19 weapon-arm articulation and follow-through; unchanged body/head/contact data",
       "sha256": "ee2af1a89b47952d1c6975591b83003380fc069a463f5f9abfe371d0e39ca009"
+    },
+    {
+      "clip": "Sword_Attack_Carry_Rising",
+      "frames": 57,
+      "duration": 0.9333333333333333,
+      "loop": false,
+      "load": 0.07714285714285714,
+      "contact": 0.19285714285714284,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.0,
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "d3f6468e0ad176d66a6732a29e8f0bbb546b045794c75a552c393ad0ba55ec37"
+    },
+    {
+      "clip": "Sword_Attack_Carry_Sweep",
+      "frames": 76,
+      "duration": 1.25,
+      "loop": false,
+      "load": 0.096,
+      "contact": 0.24,
+      "takeoff": 0.0,
+      "landing": 0.0,
+      "stance": 0.0,
+      "source": "v22 low-carry entry and forward gait",
+      "sha256": "550914fd0596e6902ae6e54ceef3a2fe028d2bcd65346c1a6f90d506bfb09cbf"
     }
   ],
-  "sha256": "ef956fb3e970b75b20898126a15b8e8166f808555973e8e351350c976f55d7e7",
+  "sha256": "1304b3c735863165a49aca29986342f32601a88bf946b8d47c67cf6ed099383e",
   "retarget": "Blender +X-left/-Y-forward/Z-up to native +X-right/+Z-forward/Y-up; shoulders/arm lengths fitted to native IK; world jump displacement removed; native contacts retained.",
   "frame_channels": 53,
   "revised_actions": [
@@ -786,7 +812,9 @@
     "Bow_Run_Backward",
     "Bow_Run_Left",
     "Bow_Run_Right",
-    "Sword_Jump"
+    "Sword_Jump",
+    "Sword_Attack_Carry_Rising",
+    "Sword_Attack_Carry_Sweep"
   ],
   "revised_track_indices": [
     0,
@@ -825,8 +853,10 @@
     51,
     52,
     53,
-    54
+    54,
+    57,
+    58
   ],
   "preserved_track_count": 20,
-  "rebaked_action_count": 37
+  "rebaked_action_count": 39
 }

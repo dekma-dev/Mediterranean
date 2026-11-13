@@ -1,4 +1,5 @@
 #include "game/SpellVfx.h"
+#include "game/SpellFlow.h"
 #include "engine/Renderer.h"
 #include <algorithm>
 #include <cmath>
@@ -49,8 +50,10 @@ void MagicFlight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,flo
  const float length=std::max(.05f,Length(Sub(point(1),point(0))));
  const auto head=point(t);const Frame frame(head,Sub(point(t+.002f),point(t-.002f)));
  const unsigned seed=e.actor*31u+unsigned(std::max(0,e.ability))*47u;
- const float bodyLength=(meteor?.95f:holy?.58f:frost?.48f:.56f)*power;
- const float radius=(meteor?.50f:holy?.25f:frost?.18f:.33f)*power;
+ const bool fire=!holy && !frost && !arcane;
+ const float stretch=combat::Smooth(age/.075f);
+ const float bodyLength=(meteor?1.02f:holy?.58f:frost?.48f:fire?.36f+.38f*stretch:.56f)*power;
+ const float radius=(meteor?.52f:holy?.25f:frost?.18f:fire?.42f-.08f*stretch:.33f)*power;
  // The leading cap ends at the accepted trace. All mass and wakes trail it;
  // a decorative head must never arrive at a target before gameplay contact.
  const float grown=combat::Smooth(age/.035f);
@@ -64,7 +67,25 @@ void MagicFlight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,flo
    arcane?XMFLOAT4{.60f,.25f,1,1}:XMFLOAT4{1,.28f,.025f,1};
  const float span=(meteor?3.2f:holy?3.f:frost?1.9f:arcane?2.6f:2.4f)*power;
  const float tail=std::max(0.f,t-span/length);
- if(t>tail+.00001f){
+ if(fire && t>tail+.00001f){
+  // Three swept, twisting sheets occupy different world planes. Their torn
+  // material flows into the head while the tail is left on the travelled path.
+  // Changing the camera cannot turn the complete effect into a flat card.
+  const float actualSpan=(t-tail)*length;
+  for(int sheet=0;sheet<3;++sheet){
+   const float a=sheet*tau/3;
+   const auto path=[&](float u){
+    const float behind=(1-u)*actualSpan,turn=a+behind*2.7f-age*4.2f;
+    const float spread=std::sin(u*pi)*(.12f+.11f*std::sin(behind*3-age*6+a));
+    auto p=point(tail+(t-tail)*u);
+    p=Add(p,Add(Mul(frame.right,std::cos(turn)*spread*power),Mul(frame.up,std::sin(turn)*spread*power)));
+    p.y+=behind*behind*.045f+after*.48f;return p;
+   };
+   const auto normal=Add(Mul(frame.right,std::cos(a)),Mul(frame.up,std::sin(a)));
+   FlameStream(r,path,normal,(meteor?.46f:.32f)*power,actualSpan,age+sheet*.23f,{1,1,1,fade*.64f});
+  }
+  Ribbon(r,[&](float u){return point(tail+(t-tail)*u);},frame.up,.018f*power,{1,.76f,.35f,fade*.46f});
+ } else if(t>tail+.00001f){
   const int strands=holy?(e.ability==5?2:1):arcane?3:thermal?2:2;
   for(int strand=0;strand<strands;++strand){
    const auto path=[&](float s){const float u=tail+(t-tail)*s,behind=(1-s)*span;
@@ -79,7 +100,7 @@ void MagicFlight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,flo
    Ribbon(r,path,frame.up,.014f*power,color);
   }
  }
- if(!holy && !frost && !arcane){
+ if(fire){
   // Fixed birth times on the real path: smoke/embers detach, drift and cool.
   // Their identities survive frame-rate changes and the head reaching contact.
   constexpr float interval=1.f/60,life=.15f;

@@ -186,6 +186,8 @@ bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
  if (!Check(device_->CreateBuffer(&b,nullptr,constants_.GetAddressOf()),L"Create constants")) return false;
  b.ByteWidth=sizeof(spellVolumes_);
  if(!Check(device_->CreateBuffer(&b,nullptr,spellVolumeConstants_.GetAddressOf()),L"Create spell volumes"))return false;
+ b.ByteWidth=sizeof(spellFields_);
+ if(!Check(device_->CreateBuffer(&b,nullptr,spellFieldConstants_.GetAddressOf()),L"Create spell field constants"))return false;
  b.ByteWidth=sizeof(visual::TransientLightBlock);
  const visual::TransientLightBlock emptyLights{};
  D3D11_SUBRESOURCE_DATA lightData{};lightData.pSysMem=&emptyLights;
@@ -353,6 +355,7 @@ void Renderer::BeginFrame() {
  effects_.clear(); groundMarks_.clear();cloudSprites_.clear();cloudVertices_.clear(); effectVertices_=0;
  spellVolumeCount_=0;spellVolumeCoverage_=0;
  spellGlowPasses_=0;
+ spellFieldCount_=0;
  for (auto& batch : world_) batch.clear();
  bodyCount_=handCount_=0;
  bodyLodCounts_={}; bodyLodHistory_.BeginFrame();
@@ -853,6 +856,19 @@ void Renderer::EffectQuad(XMFLOAT3 a,XMFLOAT3 b,XMFLOAT3 c,XMFLOAT3 d,XMFLOAT4 c
 void Renderer::DrawEffectRibbon(XMFLOAT3 a,XMFLOAT3 b,XMFLOAT3 c,XMFLOAT3 d,XMFLOAT4 color,float startAlpha,float endAlpha) {
  EffectQuad(a,b,c,d,color,startAlpha,endAlpha,0);
 }
+void Renderer::DrawFlameRibbon(XMFLOAT3 a,XMFLOAT3 b,XMFLOAT3 c,XMFLOAT3 d,float from,float to,float phase,
+ XMFLOAT4 color,float startAlpha,float endAlpha) {
+ const auto finite=[](XMFLOAT3 p){return std::isfinite(p.x)&&std::isfinite(p.y)&&std::isfinite(p.z);};
+ if((portrait_ && !portraitEffects_) || EffectVertices()+6>maxEffectVertices || !finite(a)||!finite(b)||!finite(c)||!finite(d) ||
+   !std::isfinite(from)||!std::isfinite(to)||!std::isfinite(phase)||!std::isfinite(startAlpha)||!std::isfinite(endAlpha) ||
+   !std::isfinite(color.x)||!std::isfinite(color.y)||!std::isfinite(color.z)||!std::isfinite(color.w)||color.w<=0)return;
+ const float u=from*2.4f-phase*5.f,v=to*2.4f-phase*5.f;
+ if(!std::isfinite(u)||!std::isfinite(v))return;
+ const XMFLOAT4 first{color.x,color.y,color.z,color.w*std::clamp(startAlpha,0.f,1.f)},
+   last{color.x,color.y,color.z,color.w*std::clamp(endAlpha,0.f,1.f)};
+ const Vertex va{a,{u,0,4},first},vb{b,{u,1,4},first},vc{c,{v,1,4},last},vd{d,{v,0,4},last};
+ effects_.insert(effects_.end(),{va,vb,vc,va,vc,vd});
+}
 void Renderer::DrawEffectGlow(XMFLOAT3 center,float radius,XMFLOAT4 color) {
  EffectBillboard(center,radius,color,1);
 }
@@ -979,6 +995,8 @@ bool Renderer::FlushEffects() {
  context_->PSSetSamplers(2,1,fontSampler_.GetAddressOf());
  if(spellVolumeCount_)context_->UpdateSubresource(spellVolumeConstants_.Get(),0,nullptr,spellVolumes_.data(),0,0);
  context_->PSSetConstantBuffers(5,1,spellVolumeConstants_.GetAddressOf());
+ if(spellFieldCount_)context_->UpdateSubresource(spellFieldConstants_.Get(),0,nullptr,spellFields_.data(),0,0);
+ context_->PSSetConstantBuffers(7,1,spellFieldConstants_.GetAddressOf());
  std::sort(cloudSprites_.begin(),cloudSprites_.end(),[](const CloudSprite& a,const CloudSprite& b){return a.depth>b.depth;});
  cloudVertices_.clear();
  for(const auto& sprite:cloudSprites_)cloudVertices_.insert(cloudVertices_.end(),sprite.vertices.begin(),sprite.vertices.end());

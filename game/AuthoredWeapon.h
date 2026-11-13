@@ -79,6 +79,15 @@ struct AuthoredWeaponController {
       const float start=contact*.40f,end=contact+recovery;
       phase=playerclips::AttackPhase(clip,clock,start,contact,end);
       auto target=playerclips::Sample(clip,phase);
+      if(!staff&&!bow&&(style<0||style==0)) {
+        // A relaxed sword cannot reach a high guard and cut back down inside
+        // the first contact interval. The source has a separate low-entry cut.
+        const auto entry=heavy?playerclips::Clip::SwordCarrySweep:playerclips::Clip::SwordCarryRising;
+        const auto carry=playerclips::Sample(entry,playerclips::AttackPhase(entry,clock,start,contact,end));
+        const float prepared=combat::Smooth(entryReady);
+        const auto aim=BlendWeaponAim(carry.weapon,target.weapon,prepared);
+        target=playerclips::Blend(carry,target,prepared);target.weapon=aim;
+      }
       if(style==0 && (ability==8 || ability==11 || ability==14)) {
         // Wide techniques cross the body instead of reusing the overhead chop.
         // Re-time the imported slash to this action's authoritative contact.
@@ -118,7 +127,12 @@ struct AuthoredWeaponController {
       // Load the guarded source action from the incoming carry throughout
       // preparation, arriving at full action weight on the contact clock.
       const float entrance=staff||bow?std::min(.22f,contact):contact;
-      const float load=staff||bow?combat::Smooth(clock/entrance):LoadEnvelope(clock/entrance);
+      const float guardedLoad=staff||bow?combat::Smooth(clock/entrance):LoadEnvelope(clock/entrance);
+      // Low-entry source poses already depart from carry. Applying another
+      // contact-length fade squeezed their authored arc into the last frames.
+      const bool lowEntry=!staff&&!bow&&(style<0||style==0)&&
+        ability!=8&&ability!=11&&ability!=12&&ability!=14;
+      const float load=lowEntry?combat::Smooth(clock/.035f):guardedLoad;
       // Complete the authored follow-through before blending to guard. An
       // early second fade folded the blade toward the forearm in mid-cut.
       const float release=contact+(staff||bow?.10f:heavy?.50f:.40f);

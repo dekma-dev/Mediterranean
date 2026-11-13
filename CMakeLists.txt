@@ -43,7 +43,7 @@ set(scene_shader_header "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>/SceneBy
 add_custom_command(OUTPUT "${scene_shader_header}"
   COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>"
   COMMAND $<TARGET_FILE:SceneShaderCompiler> "${scene_shader_header}"
-  DEPENDS SceneShaderCompiler engine/SceneShader.h engine/SpellVolumeShader.inc engine/SpellGlowShader.inc
+  DEPENDS SceneShaderCompiler engine/SceneShader.h engine/SpellVolumeShader.inc engine/SpellGlowShader.inc engine/SpellFieldShader.inc
   COMMENT "Compiling embedded DirectX 11 shaders"
   VERBATIM)
 
@@ -134,8 +134,10 @@ add_library(MediterraneanClient STATIC
   engine/RecordedAudio.cpp
   engine/Renderer.cpp
   engine/RendererGlow.cpp
+  engine/RendererField.cpp
   game/SpellVfx.cpp
   game/SpellFlight.cpp
+  game/SpellFields.cpp
   game/CastEffects.cpp
   game/SustainedEffects.cpp
   engine/AuthoredAssets.cpp

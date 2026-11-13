@@ -27,6 +27,32 @@ double Difference(const Pixels& a,const Pixels& b){Check(a.size()==b.size(),"Pix
 std::size_t ChangedPixels(const Pixels& a,const Pixels& b){std::size_t count=0;
  for(std::size_t n=0;n<a.size();n+=4)if(std::max({std::abs(int(a[n])-int(b[n])),std::abs(int(a[n+1])-int(b[n+1])),std::abs(int(a[n+2])-int(b[n+2]))})>=3)++count;
  return count;}
+void Fields(Renderer& r,const std::filesystem::path& out){
+ using Field=Renderer::SpellField;std::array<float,25> ground{};
+ const auto begin=[&]{r.BeginFrame();r.SetCamera({0,4,-5},{0,0,0});r.DrawMarkerBox({0,-.16f,0},{9,.3f,9},{.20f,.18f,.15f,1});};
+ const auto field=[&](Field kind,float age){r.DrawSpellField(kind,{0,0},2,age,{1,1,1,1},ground,17);};
+ Pixels frost;
+ for(int kind=0;kind<4;++kind){begin();field(Field(kind),.6f);const auto first=Capture(r,out/("field-"+std::to_string(kind)+".png"));
+  Check(r.SpellFieldCount()==1,"Field record missing");
+  begin();field(Field(kind),.6f);Check(first==Capture(r,out/"field-repeat.png"),"Drawing a field advances its time");
+  begin();field(Field(kind),1.2f);Check(ChangedPixels(first,Capture(r,out/"field-motion.png"))>100,"Field has no internal motion");
+  if(kind==0)frost=first;else Check(ChangedPixels(frost,first)>1000,"Field schools lost distinct patterns");
+ }
+ begin();const auto blank=Capture(r,out/"field-empty.png");begin();field(Field::Frost,0);Check(blank==Capture(r,out/"field-birth.png"),"Field pops in before its birth");
+ begin();Check(r.SpellFieldCount()==0,"Stale field records");
+ field(Field::Holy,1);Check(r.EffectVertices()==96,"Field patch escaped geometry allowance");Check(r.EndFrame(false),"Field frame");
+ begin();for(int n=0;n<30;++n)field(Field::Holy,.5f);
+ Check(r.SpellFieldCount()==12 && r.EffectVertices()==1152,"Field pool escaped fixed allocation");Check(r.EndFrame(false),"Field limit frame");
+ begin();ground[4]=NAN;field(Field::Frost,.5f);ground[4]=0;
+ field(Field::Frost,NAN);field(Field::Frost,-1);field(Field(99),.5f);
+ Check(r.SpellFieldCount()==0 && r.EffectVertices()==0,"Invalid field was submitted");Check(r.EndFrame(false),"Rejected field frame");
+ // Cover the complete patch with opaque scenery, including its glare source.
+ const auto wall=[&]{begin();r.DrawMarkerBox({0,.6f,0},{7,1.2f,7},{.25f,.25f,.25f,1});};
+ wall();const auto blocked=Capture(r,out/"field-wall.png");wall();field(Field::Holy,.8f);
+ Check(blocked==Capture(r,out/"field-occluded.png"),"Field/glow shines through an opaque floor");
+ begin();Check(r.BeginPortrait(.1f,.1f,.6f,.8f),"Field isolated preview");field(Field::Holy,.5f);
+ Check(r.SpellFieldCount()==0 && r.EndPortrait() && r.EndFrame(false),"Field entered an isolated portrait");
+}
 void Native(Renderer& r,const std::filesystem::path& out){
  const auto begin=[&]{r.BeginFrame();r.SetCamera({0,1,-5},{0,1,0});};
  for(int kind=0;kind<4;++kind){Pixels previous;
@@ -159,7 +185,7 @@ int main(int argc,char** argv){try{
  Check(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"COM");
  const auto out=argc>1?std::filesystem::path(argv[1]):std::filesystem::path("spell-volume-check");std::filesystem::create_directories(out);
  Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),960,600,L"Spell volume checks",false),"Window");
- Renderer r;Check(r.Initialize(window.GetHandle(),960,600),"Renderer");Glow(r,out);Native(r,out);Flights(r,out);Cost(r,out);
+ Renderer r;Check(r.Initialize(window.GetHandle(),960,600),"Renderer");Fields(r,out);Glow(r,out);Native(r,out);Flights(r,out);Cost(r,out);
  Check(r.ValidateDebugMessages(),"DirectX volume binding/depth hazard");
  std::cout<<"PASS: animated media from three views, in-volume opaque clipping, bounded submission, portrait/resize, equal-age flight and expiry.\n";
  }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

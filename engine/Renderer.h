@@ -108,6 +108,10 @@ public:
   static constexpr unsigned maxEffectVertices=6144;
   void DrawEffectRibbon(DirectX::XMFLOAT3 a,DirectX::XMFLOAT3 b,DirectX::XMFLOAT3 c,DirectX::XMFLOAT3 d,
     DirectX::XMFLOAT4 color,float startAlpha=1,float endAlpha=1);
+  // Continuous material coordinates across joined quads; phase is the accepted
+  // effect age, never a renderer clock. Shares the bounded additive batch.
+  void DrawFlameRibbon(DirectX::XMFLOAT3 a,DirectX::XMFLOAT3 b,DirectX::XMFLOAT3 c,DirectX::XMFLOAT3 d,
+    float from,float to,float phase,DirectX::XMFLOAT4 color,float startAlpha=1,float endAlpha=1);
   void DrawEffectGlow(DirectX::XMFLOAT3 center,float radius,DirectX::XMFLOAT4 color);
   void DrawGroundMark(DirectX::XMFLOAT3 a,DirectX::XMFLOAT3 b,DirectX::XMFLOAT3 c,DirectX::XMFLOAT3 d,DirectX::XMFLOAT4 color);
   void DrawEffectRing(DirectX::XMFLOAT3 center,float radius,DirectX::XMFLOAT4 color);
@@ -119,6 +123,11 @@ public:
   void DrawSpellVolume(SpellMedium medium,DirectX::XMFLOAT3 center,DirectX::XMFLOAT3 direction,
     DirectX::XMFLOAT3 radii,float phase,DirectX::XMFLOAT4 tint,unsigned seed=0);
   unsigned SpellVolumeCount() const { return spellVolumeCount_; }
+  enum class SpellField { Frost, Ember, Holy, Arcane };
+  // A terrain-conforming 4x4 patch; height samples are world Y, row-major Z/X.
+  void DrawSpellField(SpellField kind,DirectX::XMFLOAT2 center,float radius,float age,
+    DirectX::XMFLOAT4 tint,const std::array<float,25>& heights,unsigned seed=0);
+  unsigned SpellFieldCount() const { return spellFieldCount_; }
   void SetSpellGlowEnabled(bool enabled) { spellGlowEnabled_=enabled; }
   unsigned SpellGlowPasses() const { return spellGlowPasses_; }
   std::size_t SpellGlowBytes() const { return std::size_t(glowWidth_)*glowHeight_*8*3; }
@@ -226,6 +235,10 @@ private:
   unsigned spellVolumeCount_=0;
   float spellVolumeCoverage_=0;
   Microsoft::WRL::ComPtr<ID3D11Buffer> spellVolumeConstants_;
+  struct SpellFieldData {DirectX::XMFLOAT4 clock,tint;};
+  std::array<SpellFieldData,12> spellFields_{};
+  unsigned spellFieldCount_=0;
+  Microsoft::WRL::ComPtr<ID3D11Buffer> spellFieldConstants_;
   std::vector<visual::Vertex> cloudVertices_;
   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> effectAtlas_;
   std::size_t effectTextureBytes_=0;

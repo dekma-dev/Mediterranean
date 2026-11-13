@@ -58,12 +58,12 @@
       "name": "WarriorShield",
       "lods": [
         {
-          "vertices": 4879,
-          "triangles": 9180
+          "vertices": 15297,
+          "triangles": 29448
         },
         {
-          "vertices": 1994,
-          "triangles": 3472
+          "vertices": 4265,
+          "triangles": 7930
         }
       ]
     },
@@ -71,12 +71,12 @@
       "name": "WarriorSword",
       "lods": [
         {
-          "vertices": 32817,
-          "triangles": 15916
+          "vertices": 10888,
+          "triangles": 16522
         },
         {
-          "vertices": 9440,
-          "triangles": 4318
+          "vertices": 3358,
+          "triangles": 4436
         }
       ]
     },
@@ -84,12 +84,12 @@
       "name": "WarriorVeteranSword",
       "lods": [
         {
-          "vertices": 31528,
-          "triangles": 15468
+          "vertices": 10892,
+          "triangles": 16522
         },
         {
-          "vertices": 8985,
-          "triangles": 4161
+          "vertices": 3358,
+          "triangles": 4436
         }
       ]
     },
@@ -433,8 +433,8 @@
     }
   ],
   "bytes": 28467932,
-  "sha256": "0d05e95a1f657a818b98e842c9a19dad1d03f972e8ae81e820c05959638f7d96",
-  "blend_sha256": "dc557b430ce04e8c660b8da694d17338108e380080d1427de5dfa5281b0fd67c",
+  "sha256": "8da3600122c69c8a0bc1432ad59d4926c07bf0b4ede4834909773d5222366bce",
+  "blend_sha256": "6cf89dc21ed266432a1f1072f6db49bde065b95c4030f61d085f6930bc9f3722",
   "cloth_revision": "Reference 3: tailored starter/veteran clothing and waist-bound weighted hems",
   "garment_weights_sha256": "14407a84b9c63f6f5901deb17dd1a3d9a31eb24712545909ae85658869b4fc15",
   "preserved_parts": [
@@ -483,5 +483,5 @@
     "bytes": 10478304,
     "sha256": "14407a84b9c63f6f5901deb17dd1a3d9a31eb24712545909ae85658869b4fc15"
   },
-  "weapon_revision": "v21: fitted short sword hilts, flat leather wraps, forged guards and feather vanes; other records and garment weights retained"
+  "weapon_revision": "v22: shaped blade sections, sharpened bevels, fuller, localized edge wear; layered cambered shield with cuts and fitted heraldic paint; other records and garment weights retained"
 }

@@ -315,63 +315,6 @@ Residue MakeResidue(const rpg::CombatVisualEvent& e) {
  return {e.position,kind,std::isfinite(e.elapsed)?std::clamp(e.elapsed,0.f,.05f):0,e.facing,
    (e.heavy?1.55f:.85f)*(e.signature || e.ability==8 || e.ability==11?1.25f:1.f),e.actor*37u+unsigned(e.ability)*71u};
 }
-void Aftermath(Renderer& r,const Residue& e) {
- const float life=ResidueLifetime(e.kind);
- if(!std::isfinite(e.age+e.position.x+e.position.z+e.size+e.facing) || e.age<0 || e.age>=life || e.size<=0)return;
- const float age=e.age,fade=combat::Smooth(age/.18f)*(1-combat::Smooth(age/life));
- const float size=std::clamp(e.size,.3f,2.f);
- const auto local=[&](float x,float z,float lift=.04f){const float c=std::cos(e.facing),s=std::sin(e.facing);
-   return Ground({e.position.x+(c*x+s*z)*size,e.position.z+(-s*x+c*z)*size},lift);};
- if(e.kind==ResidueKind::Holy) {
-   Stamp(r,e.position,size*.68f,e.facing,{1,.77f,.34f,fade*.36f});
-   for(int n=0;n<6;++n) {
-     const float a=n*tau/6,phase=Unit((age-.08f*n)/1.3f),rise=std::sin(phase*pi);
-     for(int k=0;k<2;++k){const float u=k*.5f,v=(k+1)*.5f;
-       const auto at=[&](float t){return local(std::cos(a)*(.22f+t*.42f),std::sin(a)*(.22f+t*.42f),.06f+std::sin(t*pi)*.28f*rise);};
-       r.DrawEffectStreak(at(u),at(v),.012f,{1,.91f,.65f,fade*.45f});
-     }
-     r.DrawEffectSprite(Art::Sparks,local(std::cos(a)*.48f,std::sin(a)*.48f,.10f+phase*.85f),.035f,.075f,0,{1,.94f,.76f,fade*rise*.6f});
-   }
-   return;
- }
- if(e.kind==ResidueKind::Arcane) {
-   for(int n=0;n<3;++n){const float a=n*tau/3+age*.12f;
-     const auto p=[&](float angle,float radius){return local(std::cos(angle)*radius,std::sin(angle)*radius,.055f);};
-     const auto x=p(a,.25f),y=p(a+.22f,.72f),z=p(a+.55f,.58f),w=p(a+.45f,.21f);
-     r.DrawEffectSurface(Art::Arcane,x,y,z,w,{.62f,.44f,1,fade*.38f});
-     r.DrawEffectStreak(x,y,.013f,{.77f,.78f,1,fade*.55f});r.DrawEffectStreak(y,z,.013f,{.77f,.78f,1,fade*.55f});
-   }
-   return;
- }
- const bool frost=e.kind==ResidueKind::Frost,mixed=e.kind==ResidueKind::Thermal;
- for(unsigned n=0;n<6;++n) {
-   const float a=n*tau/6+Rand(e.seed+n)*.28f,reach=.42f+Rand(e.seed+n*19)*.36f;
-   const bool ice=frost || (mixed && n%2==0);
-   const auto centre=local(std::cos(a)*reach*.50f,std::sin(a)*reach*.50f,.035f);
-   if(ice) {
-     const auto inner=local(std::cos(a)*.12f,std::sin(a)*.12f),joint=local(std::cos(a+.14f)*reach*.65f,std::sin(a+.14f)*reach*.65f);
-     const auto outer=local(std::cos(a)*reach,std::sin(a)*reach);
-     r.DrawEffectStreak(inner,joint,.045f,{.24f,.52f,.80f,fade*.28f});
-     r.DrawEffectStreak(inner,joint,.020f,{.66f,.90f,1,fade*.85f});r.DrawEffectStreak(joint,outer,.014f,{.80f,.95f,1,fade*.72f});
-     const float melt=1-combat::Smooth(age/life),h=(.11f+.06f*Rand(e.seed+n*31))*melt;
-     r.DrawEffectSurface(Art::Ice,Add(centre,{-.07f,0,0}),Add(centre,{-.04f,h,0}),Add(centre,{.06f,h*.65f,0}),Add(centre,{.08f,0,0}),{.50f,.78f,.94f,fade*.60f});
-   }else {
-     const float x=std::cos(a)*reach*.55f,z=std::sin(a)*reach*.55f,w=.19f+Rand(e.seed+n*7)*.10f;
-     r.DrawGroundMark(local(x-w,z-w,.015f),local(x-w,z+w,.015f),local(x+w,z+w,.015f),local(x+w,z-w,.015f),{.045f,.029f,.018f,fade*.55f});
-     const float glow=fade*std::pow(Unit(1-age/2.7f),.45f),flicker=.85f+.15f*std::sin(age*9+n*2.f);
-     const auto tip=local(x+std::cos(a)*.19f,z+std::sin(a)*.19f);
-     r.DrawEffectStreak(centre,tip,.055f,{1,.20f,.025f,glow*flicker*.32f});
-     r.DrawEffectStreak(centre,tip,.024f,{1,.55f,.12f,glow*flicker*.95f});
-     r.DrawEffectSprite(Art::Sparks,Add(centre,{std::sin(a)*age*.07f,.10f+age*.35f,std::cos(a)*age*.07f}),.025f,.065f,a,{1,.51f,.13f,glow*.55f});
-   }
- }
- const float vapor=Envelope(age-.14f,1.8f,.12f);
- for(int n=0;n<2;++n) {
-   const auto p=local((n?1.f:-1.f)*.19f,.08f+age*.09f,.13f+age*.24f);
-   r.DrawEffectSprite(Art::Smoke,p,(.23f+age*.13f)*size,(.15f+age*.16f)*size,n+age*.08f,
-     frost || mixed?XMFLOAT4{.50f,.67f,.76f,vapor*.20f}:XMFLOAT4{.23f,.20f,.17f,vapor*.22f},true);
- }
-}
 float ContactLifetime(const rpg::CombatVisualEvent& e){return e.school==C::Priest?.88f:e.school==C::Mage?(e.heavy || e.chain>=2?.88f:.70f):.66f;}
 XMFLOAT3 ProjectilePosition(const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float progress){
  const float t=std::isfinite(progress)?Unit(progress):0;

@@ -216,7 +216,7 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
           if(!oldStyle)renderer.DrawMeshBetween(M::CoatPanel,offset(along(hip,knee,.95f),-.01f),offset(hip,-.01f),
             .22f,.17f,cloth,S::Cloth,forward);
           renderer.DrawMeshBetween(oldStyle?M::OldWarriorThigh:M::GuardPlate,offset(along(hip,knee,.54f),oldStyle?.025f:.13f),offset(along(hip,knee,.04f),oldStyle?.025f:.14f),
-            .235f,oldStyle?.27f:.18f,oldStyle?XMFLOAT4{1,1,1,1}:XMFLOAT4{.43f,.435f,.405f,1},oldStyle?S::Count:S::WornMetal,forward);
+            oldStyle?.215f:.235f,oldStyle?.245f:.18f,oldStyle?XMFLOAT4{1,1,1,1}:XMFLOAT4{.43f,.435f,.405f,1},oldStyle?S::Count:S::WornMetal,forward);
         }
         if(outfit.boots) {
           renderer.DrawMeshBetween(oldStyle?M::OldWarriorGreave:M::GuardPlate,offset(along(ankle,knee,.12f),oldStyle?.025f:.07f),offset(along(ankle,knee,.87f),oldStyle?.025f:.08f),

@@ -17,7 +17,7 @@ float4 PSGlowSource(EffectOut i) : SV_TARGET {
  float sceneDepth=(.1*farPlane)/max(.0001,farPlane-z*(farPlane-.1));
  // The reduced target has no DSV. Perform the ordinary geometry visibility
  // test here; media instead integrate their own opaque interior clipping.
- if(kind<32 && i.viewDepth>sceneDepth+.005) return 0;
+ if((kind<32 || kind>=64) && i.viewDepth>sceneDepth+.005) return 0;
  float peak=max(c.r,max(c.g,c.b));
  float knee=smoothstep(.46,.92,peak);
  return float4(max(0,c.rgb)*saturate(c.a)*knee,1);

@@ -219,7 +219,8 @@ struct State {
     pose.dashLoad=active?Gesture(pose.dashPhase,.10f,.32f):0;
   }
   void Update(float dt,float height,float velocity,float travel,bool alive,float strike,
-              float landingSpeed=0,float landingElapsed=0,float forwardAcceleration=0,bool castStarted=false) {
+              float landingSpeed=0,float landingElapsed=0,float forwardAcceleration=0,bool castStarted=false,
+              float rootYawRate=0) {
     if (!std::isfinite(dt) || dt<=0) return;
     dt=std::min(dt,.05f);
     if (!alive) { Reset(); return; }
@@ -297,7 +298,9 @@ struct State {
       std::clamp(.025f+flow*.24f+Signed(velocity/motion::jumpSpeed)*.05f,.005f,.32f),14.f,dt);
     motion::Spring(pose.clothSide,clothSideVelocity,
       -Signed(pose.bank)*.12f+std::sin(phase*3)*flow*.025f+std::sin(phase*.5f)*.008f,12.f,dt);
-    pose.cloak=cloakMotion.Update(dt,travel/dt,velocity,pose.bank,forwardAcceleration);
+    const float clothBodyYaw=pose.authoredMotion.torso.y*(1-pose.authoredStrikeWeight)+
+      pose.authoredStrike.torso.y*pose.authoredStrikeWeight;
+    pose.cloak=cloakMotion.Update(dt,travel/dt,velocity,pose.bank,forwardAcceleration,clothBodyYaw,rootYawRate);
     restWeight=(1-travelBlend)*(1-Unit(strike))*(1-pose.air);
     RefreshRecoil();
   }

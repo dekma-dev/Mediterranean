@@ -55,14 +55,15 @@ rpg::Simulation Hero(rpg::ClassId id,bool major){
 }
 }
 int wmain(int argc,wchar_t** argv){try{
- if(argc<2 || argc>3 || (argc==3 && std::wstring(argv[2])!=L"--major")){std::cerr<<"Usage: SpellMotionReview <output-directory> [--major]\n";return 2;}
- const bool major=argc==3;const int duration=major?4:3;
+ if(argc<2 || argc>3 || (argc==3 && std::wstring(argv[2])!=L"--major" && std::wstring(argv[2])!=L"--fields")){std::cerr<<"Usage: SpellMotionReview <output-directory> [--major|--fields]\n";return 2;}
+ const bool fields=argc==3 && std::wstring(argv[2])==L"--fields",major=argc==3;const int duration=fields?7:major?4:3;
  Hr(CoInitializeEx(nullptr,COINIT_MULTITHREADED));Hr(MFStartup(MF_VERSION));
  const auto out=std::filesystem::absolute(argv[1]);std::filesystem::create_directories(out);
  Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),width,height,L"Native spell motion review",false),"Window");
  Renderer r;Check(r.Initialize(window.GetHandle(),width,height),"Renderer");
  struct Scene{rpg::ClassId school;int ability;const char* name;};
- const std::vector<Scene> scenes=major?std::vector<Scene>{{rpg::ClassId::Mage,0,"fire"},{rpg::ClassId::Mage,1,"heavy-fire"},
+ const std::vector<Scene> scenes=fields?std::vector<Scene>{{rpg::ClassId::Mage,8,"frost-field"},{rpg::ClassId::Mage,9,"ember-ground"},
+  {rpg::ClassId::Priest,6,"holy-ground"},{rpg::ClassId::Mage,13,"arcane-ground"}}:major?std::vector<Scene>{{rpg::ClassId::Mage,0,"fire"},{rpg::ClassId::Mage,1,"heavy-fire"},
   {rpg::ClassId::Mage,8,"frost-bloom"},{rpg::ClassId::Mage,9,"meteor"},{rpg::ClassId::Mage,11,"sun-storm"},
   {rpg::ClassId::Mage,14,"thermal"},{rpg::ClassId::Priest,5,"absolution"},{rpg::ClassId::Priest,6,"sanctuary"}}:
   std::vector<Scene>{{rpg::ClassId::Mage,0,"fire"},{rpg::ClassId::Mage,1,"heavy-fire"},{rpg::ClassId::Mage,5,"frost"},
@@ -87,6 +88,7 @@ int wmain(int argc,wchar_t** argv){try{
   for(int frame=0;frame<duration*fps;++frame){
    rpg::Command command;if(frame==20){command.selectActor=100;command.ability=scene.ability;}
    game.ExecuteCommand(command,1.f/fps);
+   if(fields)game.SetCameraOrbit(.35f+.8f*combat::Smooth((frame/float(fps)-2.f)/3.f),.55f,11);
    for(std::size_t i=0;i<game.State().VisualEventCount();++i){const auto kind=game.State().VisualEvents()[i].kind;
     if(kind==rpg::CombatVisualKind::SpellCast){released=true;releaseFrame=frame;manifest<<scene.name<<','<<frame<<','<<(sceneIndex*duration+frame/60.f)<<",release\n";}
     if(kind==rpg::CombatVisualKind::Hit || kind==rpg::CombatVisualKind::HeavyHit){contact=true;hitFrame=frame;manifest<<scene.name<<','<<frame<<','<<(sceneIndex*duration+frame/60.f)<<",contact\n";}
@@ -95,6 +97,7 @@ int wmain(int argc,wchar_t** argv){try{
    const auto image=out/L"frame.png";Check(r.Capture(image.wstring()) && r.EndFrame(false),"Motion capture");movie.Write(image);
    if(frame==releaseFrame+3 && released)std::filesystem::copy_file(image,out/(std::string(scene.name)+"-flight.png"),std::filesystem::copy_options::overwrite_existing);
    if(frame==hitFrame+5 && contact)std::filesystem::copy_file(image,out/(std::string(scene.name)+"-contact.png"),std::filesystem::copy_options::overwrite_existing);
+   if(fields && frame==hitFrame+75 && contact)std::filesystem::copy_file(image,out/(std::string(scene.name)+"-sustain.png"),std::filesystem::copy_options::overwrite_existing);
   }
   Check(released && contact,"Review spell did not produce real release/contact");
   std::cout<<scene.name<<": real release/contact recorded at 60 Hz\n"<<std::flush;++sceneIndex;

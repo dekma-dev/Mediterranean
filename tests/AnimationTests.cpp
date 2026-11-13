@@ -10,6 +10,26 @@ void Require(bool value,const char* message) {
   if (!value) { std::cerr<<message<<'\n'; std::exit(1); }
 }
 void CloakInertiaChecks() {
+  // Torso cuts and facing changes must excite a stationary cloak; reset must
+  // establish a fresh shoulder pose, not differentiate across a teleport.
+  for(int hz : {30,60,144}) {
+    animation::CloakMotion cloth;
+    auto initial=cloth.Update(1.f/hz,0,0,0,0,1.7f);
+    Require(std::abs(initial.hemSide)<1e-6f,"Initial torso angle kicked the cloak");
+    float peakSide=0,peakTwist=0;
+    animation::CloakSample s;
+    for(int i=0;i<3*hz;++i) {
+      const float t=(i+1.f)/hz;
+      const float yaw=1.7f+.65f*std::sin(3.14159265f*std::min(t/.6f,1.f));
+      s=cloth.Update(1.f/hz,0,0,0,0,yaw);
+      peakSide=std::max(peakSide,std::abs(s.hemSide));
+      peakTwist=std::max(peakTwist,std::abs(s.twist));
+    }
+    Require(peakSide>.025f && peakTwist>.012f,"Standing cut did not transfer momentum to the cloak");
+    Require(std::abs(s.hemSide)<.003f && std::abs(s.twist)<.002f,"Cut-driven cloak did not settle");
+    for(int i=0;i<hz/2;++i)s=cloth.Update(1.f/hz,0,0,0,0,1.7f,2.f);
+    Require(s.hemSide<-.025f,"Facing turn did not load the stationary cloak");
+  }
   // Equal speed with different acceleration must load the cloth differently.
   // The response is integrated, never a one-frame displacement of the hem.
   animation::CloakMotion accelerating,coasting;

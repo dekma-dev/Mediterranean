@@ -49,7 +49,7 @@ Library Decode(std::string_view bytes){
   std::array<float,frameChannels> a,b;std::memcpy(a.data(),&result[i].frames.front(),sizeof(Frame));std::memcpy(b.data(),&result[i].frames.back(),sizeof(Frame));
   for(unsigned k=0;k<a.size();++k)Check(std::abs(a[k]-b[k])<.0001f,"Discontinuous player gait loop");
  }
- for(auto clip:{Clip::Slash,Clip::Overhead,Clip::StaffSweep,Clip::StaffThrust,Clip::BowRelease,Clip::BowPowerRelease}) {
+ for(auto clip:{Clip::Slash,Clip::Overhead,Clip::StaffSweep,Clip::StaffThrust,Clip::BowRelease,Clip::BowPowerRelease,Clip::SwordCarryRising,Clip::SwordCarrySweep}) {
   auto& t=result[unsigned(clip)];Check(!t.loop&&t.load>0&&t.contact>t.load&&t.contact<1,"Missing attack contact markers");
 
  }
@@ -180,10 +180,14 @@ float AttackPhase(Clip clip,float seconds,float start,float contact,float end){
  Check(std::isfinite(end)&&start>0&&contact>start&&end>contact,"Invalid player attack retiming");
  Check(unsigned(clip)<unsigned(Clip::Count),"Invalid attack clip");const auto& t=Collection()[unsigned(clip)];
  Check(t.contact>t.load&&t.load>0,"Clip has no attack markers");
- if(clip==Clip::BowRelease||clip==Clip::BowPowerRelease||clip==Clip::Slash||clip==Clip::Overhead||clip==Clip::StaffSweep||clip==Clip::StaffThrust) {
+ if(clip==Clip::BowRelease||clip==Clip::BowPowerRelease||clip==Clip::Slash||clip==Clip::Overhead||clip==Clip::StaffSweep||clip==Clip::StaffThrust||clip==Clip::SwordCarryRising||clip==Clip::SwordCarrySweep) {
   // PCL3 actions already contain acceleration, contact and deceleration.
   // Arc-length playback would erase their authored acceleration and convert
   // near-stationary recovery into abrupt changes in source time.
+  // The low-entry cuts already ease their complete preparation arc in Blender.
+  // A second Hermite acceleration here concentrates the turn into its middle.
+  if((clip==Clip::Slash||clip==Clip::Overhead||clip==Clip::SwordCarryRising||clip==Clip::SwordCarrySweep)&&seconds<=contact)
+    return t.contact*std::clamp(seconds/contact,0.f,1.f);
   const std::array<float,4> time={0,start,contact,end},phase={0,t.load,t.contact,1};
   const float a=t.load/start,b=(t.contact-t.load)/(contact-start),c=(1-t.contact)/(end-contact);
   const std::array<float,4> velocity={0,2*a*b/(a+b),2*b*c/(b+c),0};

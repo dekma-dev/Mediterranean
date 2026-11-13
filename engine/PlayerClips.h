@@ -12,7 +12,7 @@ enum class Clip:unsigned { Slash,Overhead,Jump,Land,WalkForward,WalkBackward,Wal
  SwordWalkBackward,SwordWalkLeft,SwordWalkRight,SwordRunBackward,SwordRunLeft,SwordRunRight,
  StaffWalkBackward,StaffWalkLeft,StaffWalkRight,StaffRunBackward,StaffRunLeft,StaffRunRight,
  BowWalkBackward,BowWalkLeft,BowWalkRight,BowRunBackward,BowRunLeft,BowRunRight,
- SwordJump,StaffJump,BowJump,Count };
+ SwordJump,StaffJump,BowJump,SwordCarryRising,SwordCarrySweep,Count };
 enum class Equipment { None,Sword,Staff,Bow };
 struct Frame {
  std::array<DirectX::XMFLOAT3,2> hands{},feet{};

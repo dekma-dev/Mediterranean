@@ -1,3 +1,9 @@
+## Sustained spell fields (2026-11-13)
+
+- Cast Mage frost bloom, move through and outside its boundary, orbit low/high, and repeat on a slope. The three-metre border must match the slowing area; frost veins, solid crystals and low mist should grow and dissolve over the actual five-second field. Recasting starts a new field at the accepted location. Death/load/reset must leave no old field.
+- Compare fire, frost, arcane and Priest contact aftermath at ordinary combat distance. Watch the ground pattern reveal and decay, ascending holy light and cooling embers; they are cosmetic receipts and must not deal extra damage or claim another active area. Repeat after changing camera angle and with several simultaneous contacts.
+- Check wall occlusion and return to the creation preview. A field must remain on its surface, hidden by opaque scenery; old world marks must not follow the player into the preview. Inspect an empty frame after expiration and resize/fullscreen changes. Enemy warning contours must survive crowded effects.
+
 ## Spell radiance and major contact staging (2026-11-11)
 
 - Compare the eight-spell native movies in `build-vfx-radiance/movie-before/` and `movie-after/` at normal speed. In live play use Mage fire, frost bloom, meteor, sun storm and thermal rupture, then Priest Absolution/Sanctuary. Follow the hot core, colored halo, expansion and decay. Major fire must lift a torn pressure front; frost fragments must retain depth while orbiting; returning prayer ribbons must remain joined. Damage, resource spending and accepted cast timing must agree with the HUD.
