@@ -411,7 +411,7 @@ Geometry BuildMesh(Mesh mesh) {
     const bool guard=mesh==Mesh::GuardCloak;
     // One continuous flared sheet, shared smooth normals and a separate back
     // surface. Coordinates are metres from the pinned shoulder seam.
-    const unsigned columns=guard?48:32,rows=48,stride=columns+1,sideVertices=stride*(rows+1);
+    const unsigned columns=guard?64:48,rows=64,stride=columns+1,sideVertices=stride*(rows+1);
     for (unsigned side=0;side<2;++side) {
       for (unsigned row=0;row<=rows;++row) for (unsigned column=0;column<=columns;++column) {
         const float t=float(row)/rows,u=2.f*column/columns-1;
@@ -421,7 +421,8 @@ Geometry BuildMesh(Mesh mesh) {
         // Keep the pinned seam against the shoulders, then drape outside the
         // fitted doublet's upper back instead of cutting through its volume.
         const float backClearance=guard?.040f*std::sin(t*3.14159265f):0;
-        const XMFLOAT3 p{u*(.22f+t*(guard?.11f:.14f)),-(guard?.88f:.82f)*t+hem,-.025f-.115f*t*t-fold-.035f*u*u-backClearance};
+        const float thickness=.0015f+(edge>.91f||t>.93f?.0008f:0);
+        const XMFLOAT3 p{u*(.22f+t*(guard?.11f:.14f)),-(guard?.88f:.82f)*t+hem,-.025f-.115f*t*t-fold-.035f*u*u-backClearance+(side?thickness:-thickness)};
         const bool trim=column==0 || column==columns || row==rows;
         const float shade=1-.18f*t-.12f*edge;
         auto color=trim?XMFLOAT4{.66f,.48f,.22f,1}:XMFLOAT4{.13f*shade,.28f*shade,.39f*shade,1};
@@ -442,6 +443,11 @@ Geometry BuildMesh(Mesh mesh) {
         else { Triangle(g,a,c,b); Triangle(g,a,d,c); }
       }
     }
+    const auto closeEdge=[&](unsigned a,unsigned b){
+      Triangle(g,a,a+sideVertices,b+sideVertices);Triangle(g,a,b+sideVertices,b);
+    };
+    for(unsigned c=0;c<columns;++c){closeEdge(c+1,c);closeEdge(rows*stride+c,rows*stride+c+1);}
+    for(unsigned r=0;r<rows;++r){closeEdge(r*stride,(r+1)*stride);closeEdge((r+1)*stride+columns,r*stride+columns);}
     Normals(g); return g;
   }
   if (mesh==Mesh::Masonry) {
@@ -777,7 +783,9 @@ std::vector<std::uint8_t> BuildMaterialLayer(Material material,unsigned size) {
       const float oxidation=smooth((noise(u,v,8)-.57f)*5);
       value=.84f+.11f*hammer+.04f*fineHammer-.12f*oxidation+.025f*abrasion;
       height=.00022f*hammer+.00004f*fineHammer-.000035f*abrasion;
-      roughness=.43f+.16f*hammer+.15f*oxidation-.025f*abrasion;
+      // Polished working steel and oxidized recesses should reflect differently;
+      // uniformly rough grey metal made the forged equipment read as plastic.
+      roughness=.27f+.13f*hammer+.28f*oxidation-.055f*abrasion;
       if(material==Material::RivetedMail){value*=.9f;roughness+=.09f;}
       break;
     }

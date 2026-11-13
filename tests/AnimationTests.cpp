@@ -57,7 +57,10 @@ void CloakInertiaChecks() {
       if(tick==hz+hz/6-1)stopped=s;
       if(tick==3*hz-1)settled=s;
     }
-    Require(early.hemBack<early.midBack*3 && loaded.hemBack>loaded.midBack*3.5f,
+    // Distributed aerodynamic load no longer obeys the old two-spring 3.5x
+    // ratio. Check a changing bend profile rather than that implementation.
+    Require(early.hemBack<early.midBack*3 && loaded.hemBack>loaded.midBack*2.4f &&
+      loaded.hemBack-loaded.midBack>.08f,
       "Cloak middle and hem moved as one rigid board");
     Require(stopped.hemBack>loaded.hemBack*.65f && stopped.flutter>settled.flutter*3,
       "Cloak lost its trailing momentum at a stop");

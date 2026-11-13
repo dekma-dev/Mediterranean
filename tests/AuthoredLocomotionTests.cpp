@@ -30,7 +30,8 @@ void LibraryChecks(){
     controller.Update(.001f,0,false,false,true);
     const auto carry=playerclips::Sample(playerclips::Clip::SwordCarry,0);
     const auto guard=playerclips::Sample(playerclips::Clip::SwordGuard,0);
-    const auto expected=animation::BlendSwordReadyAim(carry.weapon,guard.weapon,ready);
+    const auto expected=playerclips::HasWeaponFrame(carry)?playerclips::Blend(carry,guard,ready).weapon:
+      animation::BlendSwordReadyAim(carry.weapon,guard.weapon,ready);
     Check(Distance(controller.frame.weapon,expected)<.001f,"Partial-ready attack changed its incoming blade orientation");
   }
   for(auto entry : {playerclips::Clip::SwordCarryRising,playerclips::Clip::SwordCarrySweep}) {
@@ -103,6 +104,17 @@ void LibraryChecks(){
   Check(rejected(corrupt),"Invalid authored knee direction must be rejected");
   Check(clips[8].frames[20].articulated==1,"Blender spine and clavicle channels were discarded");
   Check(compatibility[8].frames[20].articulated==0,"Legacy archive enabled nonexistent spine channels");
+  Check(!playerclips::HasWeaponFrame(compatibility[0].frames[0]),"Legacy archive invented a gripping frame");
+  Check(playerclips::HasWeaponFrame(clips[0].frames[0]),"Blender grip roll was discarded");
+  for(auto clip:{playerclips::Clip::SwordCarry,playerclips::Clip::SwordGuard,playerclips::Clip::SwordRun,
+      playerclips::Clip::Slash,playerclips::Clip::Overhead})for(int k=0;k<=200;++k){
+    const auto f=playerclips::Sample(clip,k/200.f);
+    Check(std::abs(Distance(f.weaponRight,{0,0,0})-1)<1e-5f&&
+      std::abs(XMVectorGetX(XMVector3Dot(XMLoadFloat3(&f.weaponRight),XMLoadFloat3(&f.weapon))))<1e-5f,
+      "Interpolated hand frame sheared or lost its authored roll");
+  }
+  corrupt=std::string(bytes);bad=.5f;std::memcpy(corrupt.data()+12+36+53*sizeof(float),&bad,sizeof(bad));
+  Check(rejected(corrupt),"Nonorthogonal imported hand frame accepted");
   corrupt=std::string(bytes);bad=.5f;std::memcpy(corrupt.data()+12+36+52*sizeof(float),&bad,sizeof(bad));
   Check(rejected(corrupt),"Invalid skeletal extension flag accepted");
   corrupt=std::string(bytes);bad=.2f;std::memcpy(corrupt.data()+12+36+46*sizeof(float),&bad,sizeof(bad));

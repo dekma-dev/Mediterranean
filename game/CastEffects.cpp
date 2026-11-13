@@ -19,6 +19,7 @@ XMFLOAT3 Local(const Attachments& a,XMFLOAT3 origin,float x,float y,float z=0){
 }
 bool Valid(const Attachments& a){
  for(const auto p:{a.root,a.focus,a.left,a.right})if(!std::isfinite(p.x)||!std::isfinite(p.y)||!std::isfinite(p.z))return false;
+ if(a.blade)for(const auto p:{a.edgeBase,a.edgeTip})if(!std::isfinite(p.x)||!std::isfinite(p.y)||!std::isfinite(p.z))return false;
  return a.alive && std::isfinite(a.facing);
 }
 void Panel(Renderer& r,const Attachments& a,Art art,XMFLOAT3 p,float width,float height,float tilt,XMFLOAT4 tint){
@@ -132,22 +133,26 @@ Attachments FromPose(const CharacterPose& pose,XMFLOAT3 root,float facing,rpg::W
  const auto world=[&](XMFLOAT3 p){return Local(a,root,p.x,p.y,p.z);};
  a.left=world(BuildHandPose(pose,0,weapon,shield,pose.handCast).Point({0,.045f,.025f}));
  a.right=world(BuildHandPose(pose,1,weapon,shield,pose.handCast).Point({0,.045f,.025f}));
- a.focus=world(rpg::PhysicalLauncher(form)?WeaponReleasePoint(pose,form):SpellReleasePoint(pose,shield));return a;
+ a.focus=world(rpg::PhysicalLauncher(form)?WeaponReleasePoint(pose,form):SpellReleasePoint(pose,shield));
+ a.blade=weapon && form==rpg::WeaponForm::Blade;
+ if(a.blade){a.edgeBase=world(pose.WeaponPoint(rpg::weaponTraceRoot));a.edgeTip=world(pose.WeaponPoint(rpg::WeaponTraceTip(form)));}
+ return a;
 }
 void Prepare(Renderer& r,const rpg::Simulation& state,const Attachments& a){
  if(!Valid(a) || state.Health()<=0)return;
  const bool recovery=state.CastingRecovery();
- if(!recovery && (!state.Attacking() || state.ClassInfo().range<=3))return;
+ if(!recovery && (!state.Attacking() || (state.ClassInfo().range<=3 && state.Class()!=C::Warrior)))return;
  PrepareAction(r,state.Class(),state.AttackAbility(),state.HeavyAttack(),state.AttackSeconds(),state.AttackRate(),recovery,state.RecoveryProgress(),a);
 }
 void PrepareAction(Renderer& r,C id,int ability,bool heavy,float seconds,float rate,bool recovery,float recoveryProgress,const Attachments& a){
  if(!Valid(a) || !std::isfinite(rate) || rate<=0)return;
  const float progress=recovery?recoveryProgress:seconds/combat::StrokeStart(heavy);
  if(!std::isfinite(progress) || progress<=0 || progress>=1)return;
- if(recovery){RecoveryCharge(r,id,a,progress);return;}
+ if(recovery){if(id==C::Priest)ClassCharge(r,id,3,progress,progress, a);else RecoveryCharge(r,id,a,progress);return;}
  const float power=combat::Smooth(progress);
  const float age=seconds/rate;
- if(id==C::Scout || id==C::Engineer){
+ if(ClassCharge(r,id,ability,progress,age,a))return;
+ if(id==C::Engineer){
   if(!heavy)return;
   const float span=.18f-.12f*power;const XMFLOAT4 c{.72f,.86f,.73f,power*.68f};
   for(float side:{-1.f,1.f}){
@@ -155,61 +160,6 @@ void PrepareAction(Renderer& r,C id,int ability,bool heavy,float seconds,float r
    r.DrawEffectStreak(Local(a,a.focus,side*span,.075f),Local(a,a.focus,side*(span-.04f),.075f),.009f,c);
    r.DrawEffectStreak(Local(a,a.focus,side*span,-.075f),Local(a,a.focus,side*(span-.04f),-.075f),.009f,c);
   }
-  if(id==C::Scout && (ability==9 || ability==11 || ability==14))for(int n=0;n<4;++n){
-   const float u=std::fmod(age*1.8f+n*.25f,1.f),side=n%2?1.f:-1.f;
-   const auto p=Local(a,a.focus,side*(1-u)*.35f,(n/2?1.f:-1.f)*(1-u)*.16f,-(1-u)*.45f);
-   r.DrawEffectStreak(p,Mix(p,a.focus,.24f),.010f,{.67f,.82f,.73f,power*std::sin(u*pi)*.55f});}
-  return;
- }
- if(id==C::Priest){
-  r.DrawSpellVolume(Renderer::SpellMedium::Holy,a.focus,{0,1,0},
-    {.16f+power*.14f,.16f+power*.14f,.24f+power*.28f},age,{1,1,1,power*.65f},unsigned(std::max(0,ability)));
-  if(ability==5) {
-   // Absolution gathers two prayer paths through the moving hands, then
-   // joins them at the same focus that will release the paired projectile.
-   for(int side:{-1,1}) {
-    const auto hand=side<0?a.left:a.right;
-    const auto source=Local(a,a.root,side*.62f,.20f,-.10f);
-    Stream(r,a,source,hand,side*.22f,age*2,power,{1,.83f,.39f,.62f},10);
-    Stream(r,a,hand,a.focus,side*.13f,-age*3,power,{1,.96f,.76f,.72f},8);
-    Panel(r,a,Art::Seal,hand,.11f+power*.07f,.11f+power*.07f,side*age*.4f,{1,.88f,.52f,power*.65f});
-   }
-   Panel(r,a,Art::Slash,a.focus,.045f+power*.035f,.15f+power*.23f,0,{1,.94f,.76f,power*.85f});
-   return;
-  }
-  if(ability==6) {
-   // Sanctuary rises as open, vaulted ribs rather than another ball around
-   // the palm. Gaps preserve the champion silhouette and the weapon grip.
-   Seal(r,a,.82f+power*.20f,0,{1,.82f,.39f,power*.30f});
-   for(int n=0;n<6;++n) {
-    const float angle=n*tau/6,reach=.52f+.12f*power;
-    const auto foot=Local(a,a.root,std::cos(angle)*reach,.10f,std::sin(angle)*reach);
-    const auto crown=Local(a,a.focus,std::cos(angle)*.22f,.20f,std::sin(angle)*.22f);
-    const auto at=[&](float t){auto p=Mix(foot,crown,t);p.y+=std::sin(t*pi)*.20f*power;return p;};
-    for(int k=0;k<6;++k){const float u=k/6.f,v=(k+1)/6.f;
-     r.DrawEffectStreak(at(u),at(v),.012f+.006f*power,{1,.87f,.54f,power*(.22f+.37f*std::sin((u+v)*pi*.5f))});}
-    const float flow=std::fmod(age*.7f+n/6.f,1.f);
-    r.DrawEffectSprite(Art::Sparks,at(flow),.045f,.10f,0,{1,.97f,.81f,power*std::sin(flow*pi)*.7f});
-   }
-   Panel(r,a,Art::Seal,a.focus,.17f+power*.10f,.17f+power*.10f,0,{1,.94f,.71f,power*.72f});
-   return;
-  }
-  if(ability==7) {
-   const auto end=Local(a,a.focus,0,0,.18f+power*.30f);
-   Stream(r,a,a.right,a.focus,.08f,age*3,power,{1,.87f,.48f,.55f},8);
-   r.DrawEffectStreak(a.focus,end,.025f,{1,.97f,.78f,power*.9f});
-   for(int side:{-1,1})r.DrawEffectStreak(Local(a,a.focus,side*.13f,-.06f,-.08f),end,.012f,{1,.81f,.31f,power*.65f});
-   Panel(r,a,Art::Seal,a.focus,.11f+power*.08f,.11f+power*.08f,0,{1,.91f,.58f,power*.6f});
-   return;
-  }
-  const float radius=.20f+power*.20f;
-  Panel(r,a,Art::Seal,a.focus,radius,radius,-age*.5f,{1,.84f,.4f,power*.65f});
-  for(int n=0;n<6;++n){const float angle=n*tau/6+age*.4f;const auto p=Local(a,a.focus,std::cos(angle)*radius*1.4f,std::sin(angle)*radius*1.4f);
-   Stream(r,a,p,a.focus,.045f,age*3,power,{1,.94f,.72f,.7f},6);}
-  Stream(r,a,a.right,a.focus,.16f,age*3,power,{1,.83f,.46f,.65f});
-  if(heavy)Seal(r,a,.70f+power*.2f,0,{1,.83f,.4f,power*.26f});
-  for(int side:{-1,1}){const auto from=Local(a,a.root,side*.48f,.12f,0),to=Local(a,a.focus,side*.18f,.10f,0);
-   Stream(r,a,from,to,side*.25f,age*2,power,{1,.86f,.47f,.50f},10);}
   return;
  }
  const bool mage=id==C::Mage,frost=mage && (ability==5 || ability==6 || ability==8 || ability==12),arcane=mage && (ability==10 || ability==13),thermal=mage && ability==14;
@@ -324,6 +274,7 @@ void DisciplinePulse(Renderer& r,const rpg::CombatVisualEvent& e,float age,const
 }
 void Complete(Renderer& r,const rpg::CombatVisualEvent& e,float age,const Attachments& a){
  if(!Valid(a) || e.kind!=rpg::CombatVisualKind::Mend || !std::isfinite(age) || age<=0 || age>=.8f)return;
+ if(e.school==C::Priest){PrayerCompletion(r,age,a);return;}
  const float t=age/.8f,fade=combat::Smooth(age/.055f)*(1-combat::Smooth(t));
  auto c=RecoveryColor(e.school,fade*.72f);const auto chest=Local(a,a.root,0,1.0f,.1f);
  if(e.school==C::Warrior || e.school==C::Engineer){
@@ -344,25 +295,13 @@ void Complete(Renderer& r,const rpg::CombatVisualEvent& e,float age,const Attach
   Seal(r,a,.80f+t*.16f,-age*.2f,{.44f,.72f,1,fade*.50f});
   for(int n=0;n<3;++n)r.DrawEffectSprite(Art::Smoke,Local(a,a.root,std::sin(n*2.1f)*.35f,.20f+age*.3f,std::cos(n*2.1f)*.35f),.42f,.24f,float(n),{.57f,.73f,.86f,fade*.28f},true);return;
  }
- if(e.school==C::Priest || e.school==C::Paladin){
-  const float span=e.school==C::Priest?.92f:.48f;
+ if(e.school==C::Paladin){
   Seal(r,a,.70f+t*.15f,0,{1,.80f,.32f,fade*.56f});
   for(float side:{-1.f,1.f})for(int n=0;n<4;++n){const auto base=Local(a,chest,side*.18f,.02f+n*.10f,0);
-   const auto tip=Local(a,chest,side*(span+n*.11f),.22f+n*.13f+age*.16f,-.10f);
+   const auto tip=Local(a,chest,side*(.48f+n*.11f),.22f+n*.13f+age*.16f,-.10f);
    r.DrawEffectStreak(base,tip,.025f,{1,.84f,.48f,fade*.62f});
    Panel(r,a,Art::Slash,Mix(base,tip,.65f),.10f,.27f,side*.65f,{1,.85f,.52f,fade*.55f});}
   for(int n=0;n<5;++n)r.DrawEffectSprite(Art::Sparks,Local(a,a.root,std::cos(n*2.4f)*.42f,.20f+t*1.45f,std::sin(n*2.4f)*.42f),.055f,.18f,0,{1,.90f,.61f,fade*.78f});
-  if(e.school==C::Priest){
-   // Open gold arches rise behind the shoulders, leaving the face/body clear.
-   const float rise=combat::Smooth(age/.18f);
-   for(int arch=0;arch<3;++arch)for(int n=0;n<16;++n){
-    const float span=.72f+arch*.16f,height=(1.85f+arch*.24f)*rise;
-    const auto at=[&](float u,float edge){const float dx=2*span,dy=std::cos(u*pi)*pi*height,length=std::hypot(dx,dy);
-     return Local(a,a.root,(2*u-1)*span-edge*dy/length,.28f+std::sin(u*pi)*height+edge*dx/length,-.24f-arch*.13f);};
-    const float u=n/16.f,v=(n+1)/16.f;
-    for(int layer=0;layer<2;++layer){const float width=layer?.009f:arch?.042f:.060f;
-     r.DrawEffectRibbon(at(u,-width),at(u,width),at(v,width),at(v,-width),layer?XMFLOAT4{1,.96f,.78f,fade*.70f}:XMFLOAT4{1,.78f,.29f,fade*.44f},std::sin(u*pi),std::sin(v*pi));}}
-  }
   return;
  }
  if(e.school==C::Druid){

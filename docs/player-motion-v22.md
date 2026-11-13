@@ -70,7 +70,10 @@ does not claim photorealism or an exact reconstruction of the reference game.
 
 Local authoring scripts, captures, source audits and validation logs are under
 `.blender-local/motion-v22-20261113/`, ignored by Git. `review.html` compares
-native gameplay-rendered sequences and provides frame stepping. The final
+native gameplay-rendered sequences and provides frame stepping. It includes
+actual `Game` movement/jump playback and a separate encounter with ordinary
+and heavy attacks issued through game commands. The encounter uses an isolated
+legacy test snapshot; it does not read or modify the player's saves. The final
 machine-readable results are recorded in `validation-summary.json` after
 validation completes.
 

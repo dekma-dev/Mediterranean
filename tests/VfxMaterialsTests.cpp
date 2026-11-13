@@ -101,7 +101,7 @@ void Lifetimes(Renderer& r,const std::filesystem::path& out){
   r.BeginFrame();r.SetCamera({1.5f,2.3f,-4},{0,1,0});fx.Render(r);
   Check(fx.BurstCount()==1 && r.EffectVertices()>0,"Slow projectile expired before its accepted flight ended");Capture(r,out/"slow-projectile.png");
   for(int i=0;i<7;++i)fx.Advance(.05f);Check(fx.BurstCount()==0,"Slow projectile never expired");}
- for(auto id:{ClassId::Warrior,ClassId::Scout,ClassId::Mage})for(int ability:{0,1,5,12,13,14}){
+ for(auto id:{ClassId::Warrior,ClassId::Scout,ClassId::Mage})for(int ability:{0,1,5,8,9,11,12,13,14}){
   CombatVisualEvent e{K::HeavyHit,{0,0},1.2f,0,100};e.school=id;e.ability=ability;e.heavy=ability!=0 && ability!=12;e.chain=ability==14?3:0;
   Pixels equal;
   for(int hz:{30,60,144}){
@@ -149,9 +149,12 @@ void InterruptChecks(Renderer& r,const std::filesystem::path& out) {
 void ContactSequences(Renderer& r,const std::filesystem::path& out) {
  Check(r.Resize(960,600),"Contact review resolution");
  const std::pair<ClassId,int> spells[]={{ClassId::Warrior,1},{ClassId::Scout,1},
+  {ClassId::Warrior,8},{ClassId::Warrior,9},{ClassId::Warrior,11},{ClassId::Warrior,14},
+  {ClassId::Scout,9},{ClassId::Scout,11},{ClassId::Scout,14},{ClassId::Mage,9},
   {ClassId::Mage,1},{ClassId::Mage,5},{ClassId::Mage,13},{ClassId::Mage,14},{ClassId::Priest,1},{ClassId::Priest,6}};
  for(const auto& spell:spells)for(int view=0;view<3;++view) {
   CombatVisualEvent e{K::HeavyHit,{0,0},1.2f,.4f,100};e.school=spell.first;e.ability=spell.second;e.heavy=true;
+  e.source={-std::sin(e.facing)*2.f,-std::cos(e.facing)*2.f};
   const float angle=.4f+view*1.5707963f;
   const auto begin=[&]{r.BeginFrame();r.SetCamera({-std::sin(angle)*7,3,-std::cos(angle)*7},{0,1.2f,0});
    r.DrawMesh(visual::Mesh::Box,{0,-.1f,0},{9,.18f,9},{.22f,.23f,.22f,1},visual::Material::Stone);};

@@ -30,8 +30,11 @@ struct Frame {
  // PCL5: global lower/upper spine rotations and chest-local clavicle offsets.
  std::array<DirectX::XMFLOAT3,2> spine{},shoulders{};
  float articulated=0;
+ // PCL6: authored grip roll, expressed as the blade's transverse axis.
+ // Zero preserves legacy retargeting; a nonzero axis completes the hand frame.
+ DirectX::XMFLOAT3 weaponRight{};
 };
-inline constexpr unsigned frameChannels=53;
+inline constexpr unsigned frameChannels=56;
 struct Track {
  float duration=0,load=0,contact=0,takeoff=0,landing=0,stance=0,speed=0;
  bool loop=false;
@@ -45,6 +48,8 @@ Frame Sample(Clip clip,float phase);
 bool Looping(Clip clip);
 // Direction weights are forward/backward/left/right; sum <= 1 retains idle.
 Frame Blend(const Frame& a,const Frame& b,float weight);
+bool HasWeaponFrame(const Frame& frame);
+void BlendWeaponFrame(Frame& result,const Frame& a,const Frame& b,float weight);
 Frame Locomotion(const std::array<float,4>& weights,float run,float phase,Equipment equipment=Equipment::None);
 float SwingHeight(const std::array<float,4>& weights,float run,int side,float phase);
 // Progress along the authored ankle path, fitted between live release/contact.

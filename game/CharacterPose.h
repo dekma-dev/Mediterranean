@@ -32,6 +32,9 @@ struct CharacterPose {
   // Match BodyBindPose: knee (.17,.53,0), ankle (.18,.17,0).
   // The former .40 m shin stretched the 36 cm bind bone and forced a crouch.
   static constexpr float upperArm=.28f,forearm=.27f,thigh=.40f,shin=.36013886f;
+  // The source human's femoral heads sit 25 cm apart. The old 34 cm rig
+  // forced a wide upper-leg stance even after narrowing its foot tracks.
+  static constexpr float hipHalfWidth=.125f,standingHalfWidth=.125f;
   DirectX::XMFLOAT3 UpperPoint(DirectX::XMFLOAT3 point) const;
   DirectX::XMMATRIX UpperTransform() const;
   DirectX::XMMATRIX SpineTransform(unsigned segment) const;

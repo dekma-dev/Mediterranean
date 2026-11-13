@@ -507,8 +507,11 @@ void CombatEffects::Render(Renderer& renderer,const castfx::Attachments* caster)
       auto veil=body;veil.w*=.22f;
       renderer.DrawEffectRibbon(point(a,.45f),point(a,1.10f),point(b,1.10f),point(b,.45f),veil,
         std::pow(Unit(1-a.age/trailLife),2.f),std::pow(Unit(1-b.age/trailLife),2.f));
-      renderer.DrawEffectRibbon(point(a,.18f),a.tip,b.tip,point(b,.18f),body,
-        std::pow(Unit(1-a.age/trailLife),2.f),std::pow(Unit(1-b.age/trailLife),2.f));
+      if(trail.school==rpg::ClassId::Warrior && !hostile)
+        renderer.DrawFilamentRibbon(point(a,.18f),a.tip,b.tip,point(b,.18f),(trail.age-a.age)*6,(trail.age-b.age)*6,trail.age,body,
+          std::pow(Unit(1-a.age/trailLife),2.f),std::pow(Unit(1-b.age/trailLife),2.f));
+      else renderer.DrawEffectRibbon(point(a,.18f),a.tip,b.tip,point(b,.18f),body,
+          std::pow(Unit(1-a.age/trailLife),2.f),std::pow(Unit(1-b.age/trailLife),2.f));
       if(trail.school==rpg::ClassId::Warrior && trail.kind!=K::EnemySwing){
         const auto edge=[](const Sample& s){return XMFLOAT3{s.tip.x+(s.root.x-s.tip.x)*.12f,s.tip.y+(s.root.y-s.tip.y)*.12f,s.tip.z+(s.root.z-s.tip.z)*.12f};};
         renderer.DrawEffectRibbon(edge(a),a.tip,b.tip,edge(b),{.82f,.92f,1,.65f*intensity},

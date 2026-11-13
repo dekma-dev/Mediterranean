@@ -1,6 +1,7 @@
 #include "game/SpellVfx.h"
 #include "game/SpellTrajectory.h"
 #include "game/SpellFlow.h"
+#include "game/CastEffects.h"
 #include "game/CombatEffects.h"
 #include "game/ClassEffects.h"
 #include "engine/Renderer.h"
@@ -62,6 +63,7 @@ void Dust(Renderer& r,XMFLOAT3 p,float age,float size,unsigned seed,bool stone=f
 // remains attached to the sampled launch socket even when selection changes.
 void Release(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float age){
  if(age>=.18f)return;
+ if(castfx::Discharge(r,e,origin,age))return;
  const float fade=Envelope(age,.14f,.008f);
  const float sx=std::sin(e.facing),cx=std::cos(e.facing);
  const auto local=[&](float x,float y,float z=0.f){return Add(origin,{cx*x+sx*z,y,-sx*x+cx*z});};
@@ -356,6 +358,7 @@ XMFLOAT3 ProjectilePosition(const rpg::CombatVisualEvent& e,XMFLOAT3 origin,floa
 void Contact(Renderer& r,const rpg::CombatVisualEvent& e,float age){
  if((e.kind!=K::Hit && e.kind!=K::HeavyHit) || !std::isfinite(age)||age<0 || age>=ContactLifetime(e) ||
    !std::isfinite(e.position.x) || !std::isfinite(e.position.z) || !std::isfinite(e.height) || !std::isfinite(e.facing))return;
+ if(HasClassImpact(e)){ClassImpact(r,e,age);return;}
  const XMFLOAT3 p{e.position.x-std::sin(e.facing)*.36f,e.height,e.position.z-std::cos(e.facing)*.36f};
  MajorContact(r,e,p,age);
  const float power=(e.heavy?1.15f:.72f)*(e.empowered?1.15f:1)*(e.chain>=2?1.12f:1)*(e.primary?1.f:.62f);
@@ -461,6 +464,16 @@ void Flight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,float ag
    const auto fin=Add(point(std::max(0.f,u-.35f/length)),offset);
    for(float side:{-1.f,1.f})r.DrawEffectStreak(Add(tail,{cx*side*.045f,.02f,-sx*side*.045f}),fin,.012f,{.55f,.74f,.63f,arrowFade*.8f});
    if(e.heavy || count>1)r.DrawEffectStreak(Add(point(std::max(0.f,u-.8f/length)),offset),tip,.022f,{.63f,.82f,.73f,arrowFade*.22f});
+   if(e.heavy || e.ability==9 || e.ability==11 || e.ability==14){
+    const float start=std::max(0.f,u-(e.ability==11?3.2f:2.1f)/length),span=(u-start)*length;
+    if(span>.001f)for(int sheet=0;sheet<2;++sheet){
+     const auto wake=[&](float v){auto p=Add(point(start+(u-start)*v),offset);
+      const float curl=std::sin(v*pi)*std::sin(v*5-age*7+sheet*pi)*.10f;
+      p.x+=cx*curl;p.y+=sheet?curl:0;p.z-=sx*curl;return p;};
+     FilamentStream(r,wake,sheet?XMFLOAT3{cx,0,-sx}:XMFLOAT3{0,1,0},.105f,span,age,
+       {.72f,.85f,.73f,arrowFade*.52f},10);
+    }
+   }
   }
   if(e.ability==13)r.DrawEffectSprite(Art::Sparks,head,.075f,.075f,age*5,{.65f,.75f,.28f,arrowFade*.5f});
   return;

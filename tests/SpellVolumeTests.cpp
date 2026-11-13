@@ -46,6 +46,24 @@ void FlameSheets(Renderer& r,const std::filesystem::path& out){
  r.DrawFlameRibbon({NAN,0,0},{-1,1,0},{1,1,0},{1,0,0},0,1,.2f,{1,1,1,1});
  Check(r.EffectVertices()==0 && r.EndFrame(false),"Invalid flame sheet submitted");
 }
+void FilamentSheets(Renderer& r,const std::filesystem::path& out){
+ const auto begin=[&]{r.BeginFrame();r.SetCamera({0,1,-5},{0,1,0});};
+ const auto sheet=[&](int parts,float age){for(int n=0;n<parts;++n){
+  const float u=float(n)/parts,v=float(n+1)/parts,x=-1.5f+3*u,y=-1.5f+3*v;
+  r.DrawFilamentRibbon({x,.6f,0},{x,1.4f,0},{y,1.4f,0},{y,.6f,0},u*3,v*3,age,{1,.84f,.50f,.8f});
+ }};
+ begin();sheet(1,.18f);const auto whole=Capture(r,out/"filament-sheet.png");
+ begin();sheet(19,.18f);const auto split=Capture(r,out/"filament-sheet-split.png");
+ Check(Difference(whole,split)<.02,"Filament material restarts at joins");
+ begin();sheet(19,.33f);Check(ChangedPixels(split,Capture(r,out/"filament-sheet-flow.png"))>500,"Filament sheet does not flow");
+ begin();sheet(19,.18f);Check(split==Capture(r,out/"filament-sheet-repeat.png"),"Filament material depends on draw history");
+ const auto wall=[&]{begin();r.DrawMarkerBox({0,1,-.3f},{4,2,.15f},{.2f,.2f,.2f,1});};
+ wall();const auto hidden=Capture(r,out/"filament-sheet-wall.png");wall();sheet(19,.18f);
+ Check(hidden==Capture(r,out/"filament-sheet-hidden.png"),"Filament/glare escapes opaque occlusion");
+ begin();r.DrawFilamentRibbon({-1,0,0},{-1,1,0},{1,1,0},{1,0,0},0,1,NAN,{1,1,1,1});
+ r.DrawFilamentRibbon({NAN,0,0},{-1,1,0},{1,1,0},{1,0,0},0,1,.2f,{1,1,1,1});
+ Check(r.EffectVertices()==0 && r.EndFrame(false),"Invalid filament submitted");
+}
 void Fields(Renderer& r,const std::filesystem::path& out){
  using Field=Renderer::SpellField;std::array<float,25> ground{};
  const auto begin=[&]{r.BeginFrame();r.SetCamera({0,4,-5},{0,0,0});r.DrawMarkerBox({0,-.16f,0},{9,.3f,9},{.20f,.18f,.15f,1});};
@@ -214,7 +232,7 @@ int main(int argc,char** argv){try{
  Check(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"COM");
  const auto out=argc>1?std::filesystem::path(argv[1]):std::filesystem::path("spell-volume-check");std::filesystem::create_directories(out);
  Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),960,600,L"Spell volume checks",false),"Window");
- Renderer r;Check(r.Initialize(window.GetHandle(),960,600),"Renderer");FlameSheets(r,out);Fields(r,out);Glow(r,out);Native(r,out);Flights(r,out);Cost(r,out);
+ Renderer r;Check(r.Initialize(window.GetHandle(),960,600),"Renderer");FlameSheets(r,out);FilamentSheets(r,out);Fields(r,out);Glow(r,out);Native(r,out);Flights(r,out);Cost(r,out);
  Check(r.ValidateDebugMessages(),"DirectX volume binding/depth hazard");
  std::cout<<"PASS: animated media from three views, in-volume opaque clipping, bounded submission, portrait/resize, equal-age flight and expiry.\n";
  }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

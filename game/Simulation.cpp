@@ -1164,12 +1164,18 @@ void Simulation::Update(float seconds,const Command& command) {
   UpdateRitual(dt);
   UpdateCourt(dt,command);
   if(queuedAttack_>=0) {
-    queueRemaining_=std::max(0.f,queueRemaining_-dt);
     const auto* target=TargetActor();
-    if(command.haltMovement || health_<=0 || !target || target->id!=queuedTarget_ || target->health<=0 || queueRemaining_==0)
+    if(command.haltMovement || health_<=0 || !target || target->id!=queuedTarget_ || target->health<=0)
       queuedAttack_=-1;
     else if(!Attacking() && cooldowns_[queuedAttack_]==0) {
-      const int ability=queuedAttack_;queuedAttack_=-1;UseAbility(ability);
+      // Readiness can cross in the same frame as the buffer deadline. The
+      // accepted action gets its ordinary validation before expiring it.
+      const int ability=queuedAttack_;queuedAttack_=-1;queueRemaining_=0;UseAbility(ability);
+    } else {
+      // Input was accepted after this frame's timer tick. Like a fresh attack,
+      // a new queue starts now; charging it dt again shortened the window.
+      if(!buffered)queueRemaining_=std::max(0.f,queueRemaining_-dt);
+      if(queueRemaining_==0)queuedAttack_=-1;
     }
   }
   if(CastingRecovery()) {

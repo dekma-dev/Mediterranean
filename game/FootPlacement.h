@@ -165,7 +165,7 @@ private:
   int next_=0;
   bool ready_=false;
   bool firstStep_=true;
-  static Foot Neutral(rpg::Vec2 position,float yaw,int side,float width=.18f) {
+  static Foot Neutral(rpg::Vec2 position,float yaw,int side,float width=CharacterPose::standingHalfWidth) {
     const float offset=side==0?-width:width;
     const float x=position.x+std::cos(yaw)*offset,z=position.z-std::sin(yaw)*offset;
     return {x,rpg::WorldMap::Height({x,z})+.17f,z,yaw};

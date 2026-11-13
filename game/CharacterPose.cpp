@@ -216,9 +216,10 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
       (a*std::sin((1-amount)*angle)+b*std::sin(amount*angle))/std::sin(angle):a);
     return result;
   };
-  idleClip.weapon=dynamics.authoredEquipment==playerclips::Equipment::Sword?
-    animation::BlendSwordReadyAim(carryClip.weapon,guardClip.weapon,ready):
-    blendDirection(carryClip.weapon,guardClip.weapon,ready);
+  if(!playerclips::HasWeaponFrame(idleClip))
+    idleClip.weapon=dynamics.authoredEquipment==playerclips::Equipment::Sword?
+      animation::BlendSwordReadyAim(carryClip.weapon,guardClip.weapon,ready):
+      blendDirection(carryClip.weapon,guardClip.weapon,ready);
   // Retain the authored directional swing while bringing the carry towards
   // guard. The blend is presentation state, never a second combat timer.
   const float readyGait=ready*gaitAmount;
@@ -230,6 +231,11 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   if(gaitAmount>.00001f) {
     const auto direction=blendDirection(gaitClip.weapon,guardClip.weapon,ready);
     gaitClip.weapon={direction.x*gaitAmount,direction.y*gaitAmount,direction.z*gaitAmount};
+    if(playerclips::HasWeaponFrame(gaitClip)&&playerclips::HasWeaponFrame(guardClip)) {
+      auto source=dynamics.authoredMotion;
+      playerclips::BlendWeaponFrame(gaitClip,source,guardClip,ready);
+      gaitClip.weapon.x*=gaitAmount;gaitClip.weapon.y*=gaitAmount;gaitClip.weapon.z*=gaitAmount;
+    }
   }
   const float idleWeight=authoredBlend*(1-gaitAmount)*clipWeight*(1-air)*(1-castLayer);
   // Hands are interpolated to the strike later; fading their carry here too
@@ -354,7 +360,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   std::array<XMFLOAT3,2> contacts{};
   if (contactWeight>0) for (int i=0;i<2;++i) {
     const auto& foot=sourceFeet[i];
-    const float hip=pose.PelvisPoint({i==0?-.17f:.17f,.93f,0}).x;
+    const float hip=pose.PelvisPoint({i==0?-CharacterPose::hipHalfWidth:CharacterPose::hipHalfWidth,.93f,0}).x;
     // Use the same bounded contact for standing and departure, including its
     // heading. Losing the heading at release visibly twists a turning boot.
     float x=std::isfinite(foot.x)?foot.x-hip:0,z=std::isfinite(foot.z)?foot.z:0;
@@ -378,7 +384,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     const float lift=air*(.17f*(1-.85f*descent)+positiveRise*positiveRise*.15f+(i==0?.045f:0)*(1-descent))*
       (1-animation::Unit(dynamics.takeoff)*(i==0?.45f:.9f));
     auto& target=targets[i];
-    target={side*(.18f+air*.015f),.17f+step*step*.055f+lift,stride*.22f+air*(i==0?.13f:-.10f)*(1-descent)};
+    target={side*(CharacterPose::standingHalfWidth+air*.015f),.17f+step*step*.055f+lift,stride*.22f+air*(i==0?.13f:-.10f)*(1-descent)};
     if(authoredAir>0) {
       const auto delta=jumpClip.feet[i];const XMFLOAT3 authored{side*.18f+delta.x,.17f+delta.y,delta.z};
       target={target.x+(authored.x-target.x)*authoredAir,target.y+(authored.y-target.y)*authoredAir,target.z+(authored.z-target.z)*authoredAir};
@@ -402,7 +408,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     // poses without a world contact controller. With anatomical shin length,
     // even breathing can otherwise lift a standing ankle beyond its reach.
     // Retaining this fit through departure also prevents a takeoff hip snap.
-    const auto hip=pose.PelvisPoint({side*.17f,.93f,0});
+    const auto hip=pose.PelvisPoint({side*CharacterPose::hipHalfWidth,.93f,0});
     const float x=target.x-hip.x,z=target.z-hip.z;
     // Keep a small non-singular bend without reintroducing a visible idle
     // crouch. The solver itself reserves 0.05 mm of extension.
@@ -437,7 +443,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     };
     addKnee(gaitClip,authoredWeight);addKnee(jumpClip,authoredAir);
     XMStoreFloat3(&knee,XMVector3Normalize(bend));
-    pose.legs[i]=Solve(pose.PelvisPoint({side*.17f,.93f,0}),targets[i],knee,CharacterPose::thigh,CharacterPose::shin,.00005f);
+    pose.legs[i]=Solve(pose.PelvisPoint({side*CharacterPose::hipHalfWidth,.93f,0}),targets[i],knee,CharacterPose::thigh,CharacterPose::shin,.00005f);
     const float armStride=strides[i]+(std::clamp(contacts[i].z/.30f,-1.f,1.f)-strides[i])*contactWeight;
     const float attack=i==1&&!newStrike?swing:0;
     XMFLOAT3 hand{side*(.40f+air*.035f),1.02f+attack*.52f+air*.12f+landing*.08f+hit*.08f+dash*.12f+brake*.07f,
@@ -507,7 +513,9 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     const auto shoulder=pose.UpperPoint({side*.305f+offsetShoulder.x,1.43f+offsetShoulder.y,offsetShoulder.z}),wrist=pose.UpperPoint(hand);
     // Legacy procedural gestures have no authored elbow channel. Retain their
     // established bend plane; the transported solver belongs to authored clips.
-    pose.arms[i]=dynamics.authoredGait || newStrike?SolveArm(shoulder,wrist,elbowPoles[i]):
+    const bool sourceGrip=i==1&&form==rpg::WeaponForm::Blade&&dynamics.authoredGait&&playerclips::HasWeaponFrame(idleClip);
+    pose.arms[i]=sourceGrip?Solve(shoulder,wrist,elbowPoles[i],CharacterPose::upperArm,CharacterPose::forearm,.006f):
+      dynamics.authoredGait || newStrike?SolveArm(shoulder,wrist,elbowPoles[i]):
       Solve(shoulder,wrist,elbowPoles[i],CharacterPose::upperArm,CharacterPose::forearm);
   }
   XMFLOAT3 weapon{.12f,-.76f+swing*1.72f+landing*.25f+air*.20f+dash*.32f+brake*.16f,.63f-swing*.45f};
@@ -556,6 +564,15 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     weapon={0,.75f+.25f*aim,.66f*(1-aim)};
   } else if(form==rpg::WeaponForm::Scepter || form==rpg::WeaponForm::Focus || form==rpg::WeaponForm::Baton)
     weapon={.08f,.93f,.32f+dash*.15f};
+  // Retain Blender's complete gripping frame. Reconstructing its transverse
+  // axis from the IK forearm discarded authored pronation and blade alignment.
+  auto gripFrame=playerclips::Blend(idleClip,gaitClip,gaitAmount);
+  if(equippedFlight&&armAir>0&&!armLanding)gripFrame=playerclips::Blend(gripFrame,flightArms,armAir*(1-burst)*(1-hit));
+  if(equippedFlight&&armLanding)gripFrame=playerclips::Blend(gripFrame,landingArms,armLandingWeight*(1-burst)*(1-hit));
+  if(timed&&authoredAttack)gripFrame=playerclips::Blend(gripFrame,attackClip,stroke.weight*(1-burst));
+  const bool authoredGripFrame=form==rpg::WeaponForm::Blade&&dynamics.authoredGait&&
+    dynamics.authoredEquipment==playerclips::Equipment::Sword&&playerclips::HasWeaponFrame(gripFrame);
+  if(authoredGripFrame)weapon=gripFrame.weapon;
   const auto direction=pose.UpperDirection(weapon);
   XMStoreFloat3(&pose.weaponDirection,XMVector3Normalize(XMLoadFloat3(&direction)));
   // Retargeted wrist heights differ from the source actor. Preserve a small
@@ -605,12 +622,20 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     shaftForward=XMVector3Cross(shaftRight,shaftUp);
     wristOffset=-shaftRight*.055f+shaftForward*.043f;
   }
+  if(authoredGripFrame) {
+    const auto authoredRight=pose.UpperDirection(gripFrame.weaponRight);
+    const auto r=XMLoadFloat3(&authoredRight);
+    shaftRight=XMVector3Normalize(r-shaftUp*XMVector3Dot(r,shaftUp));
+    shaftForward=XMVector3Cross(shaftRight,shaftUp);
+    wristOffset=-shaftRight*.055f+shaftForward*.043f;
+  }
   XMStoreFloat3(&pose.weaponRight,shaftRight);
   if(pose.fittedBladeGrip)
     wristOffset+=shaftUp*weapongrip::swordAlong-shaftForward*weapongrip::swordPalmInset;
   if(pose.hasGripSocket) {
     XMFLOAT3 wrist;XMStoreFloat3(&wrist,XMLoadFloat3(&pose.arms[1].end)+wristOffset);
-    pose.arms[1]=SolveArm(pose.arms[1].root,wrist,elbowPoles[1]);
+    pose.arms[1]=authoredGripFrame?Solve(pose.arms[1].root,wrist,elbowPoles[1],CharacterPose::upperArm,CharacterPose::forearm,.006f):
+      SolveArm(pose.arms[1].root,wrist,elbowPoles[1]);
     XMStoreFloat3(&pose.weaponGrip,XMLoadFloat3(&pose.arms[1].end)-wristOffset);
   }
   if(rpg::StaffWeapon(form)&&!shield&&dynamics.authoredGait&&dynamics.authoredEquipment==playerclips::Equipment::Staff) {

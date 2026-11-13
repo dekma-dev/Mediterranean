@@ -216,6 +216,21 @@ void DefensiveIdentity() {
   }
 }
 void BufferedAttacks() {
+  // Input is accepted after timers tick, just like a fresh attack. Do not age
+  // a newly created queue by that same frame again. A ready action also wins
+  // when its readiness and queue deadline fall within the same coarse frame.
+  for(auto id:{ClassId::Warrior,ClassId::Scout,ClassId::Mage,ClassId::Priest}) {
+    Simulation s;Duel(s,id);auto& target=const_cast<Enemy&>(s.Enemies()[0]);
+    target.windup=0;target.attackCooldown=100;target.rooted=100;target.health=target.MaxHealth();
+    Command input;input.ability=0;s.Update(.001f,input);
+    const float delay=id==ClassId::Warrior || id==ClassId::Scout?s.Cooldown(0)-.255f:s.Spell(0).recovery-.215f;
+    Tick(s,delay,1000);target.health=target.MaxHealth();
+    input.queueAttack=true;s.Update(.05f,input);
+    Check(s.QueuedAttack()==0,"Boundary input did not enter the offensive queue");
+    bool started=false;
+    for(int frame=0;frame<6;++frame){s.Update(.05f,{});started|=s.QueuedAttack()<0 && s.Attacking() && s.AttackSeconds()<.06f;}
+    Check(started,"Accepted queued attack was lost at its cooldown/deadline boundary");
+  }
   // Queue a technique during the final recovery of an accepted basic. It must
   // retain its target, spend nothing early and revalidate range at execution.
   for(auto id:{ClassId::Warrior,ClassId::Mage,ClassId::Scout,ClassId::Priest})for(int hz:{30,60,144,1000})for(bool leaveRange:{false,true}) {

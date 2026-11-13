@@ -53,8 +53,8 @@ void MagicFlight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,flo
  const unsigned seed=e.actor*31u+unsigned(std::max(0,e.ability))*47u;
  const bool fire=!holy && !frost && !arcane;
  const float stretch=combat::Smooth(age/.075f);
- const float bodyLength=(meteor?1.02f:holy?.58f:frost?.48f:fire?.36f+.38f*stretch:.56f)*power;
- const float radius=(meteor?.52f:holy?.25f:frost?.18f:fire?.42f-.08f*stretch:.33f)*power;
+ const float bodyLength=(meteor?1.15f:holy?.58f:frost?.48f:fire?.36f+.38f*stretch:.56f)*power;
+ const float radius=(meteor?.60f:holy?.25f:frost?.18f:fire?.42f-.08f*stretch:.33f)*power;
  // The leading cap ends at the accepted trace. All mass and wakes trail it;
  // a decorative head must never arrive at a target before gameplay contact.
  const float grown=combat::Smooth(age/.035f);
@@ -66,7 +66,7 @@ void MagicFlight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,flo
 
  const XMFLOAT4 hue=holy?XMFLOAT4{1,.72f,.28f,1}:frost?XMFLOAT4{.25f,.65f,1,1}:
    arcane?XMFLOAT4{.60f,.25f,1,1}:XMFLOAT4{1,.28f,.025f,1};
- const float span=(meteor?3.2f:holy?3.f:frost?1.9f:arcane?2.6f:2.4f)*power;
+ const float span=(meteor?4.1f:holy?3.f:frost?1.9f:arcane?2.6f:2.4f)*power;
  const float tail=std::max(0.f,t-span/length);
  if(fire && t>tail+.00001f){
   // Three swept, twisting sheets occupy different world planes. Their torn
@@ -77,13 +77,13 @@ void MagicFlight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,flo
    const float a=sheet*tau/3;
    const auto path=[&](float u){
     const float behind=(1-u)*actualSpan,turn=a+behind*2.7f-age*4.2f;
-    const float spread=std::sin(u*pi)*(.12f+.11f*std::sin(behind*3-age*6+a));
+    const float spread=std::sin(u*pi)*((meteor?.30f:.12f)+.11f*std::sin(behind*3-age*6+a));
     auto p=point(tail+(t-tail)*u);
     p=Add(p,Add(Mul(frame.right,std::cos(turn)*spread*power),Mul(frame.up,std::sin(turn)*spread*power)));
     p.y+=behind*behind*.045f+after*.48f;return p;
    };
    const auto normal=Add(Mul(frame.right,std::cos(a)),Mul(frame.up,std::sin(a)));
-   FlameStream(r,path,normal,(meteor?.46f:.32f)*power,actualSpan,age+sheet*.23f,{1,1,1,fade*.64f});
+   FlameStream(r,path,normal,(meteor?.60f:.32f)*power,actualSpan,age+sheet*.23f,{1,1,1,fade*.64f});
   }
   Ribbon(r,[&](float u){return point(tail+(t-tail)*u);},frame.up,.018f*power,{1,.76f,.35f,fade*.46f});
  } else if(t>tail+.00001f){
@@ -143,7 +143,8 @@ void MagicFlight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,flo
   for(int n=0;n<wings;++n){const float a=n*tau/wings;
    const auto path=[&](float u){const float width=std::sin(u*pi)*(.32f+(e.ability==6?.16f:0))*power;
     return frame.At(std::cos(a)*width,std::sin(a)*width,-(1-u)*1.35f*power);};
-   Ribbon(r,path,frame.right,.035f*power,{1,.91f,.61f,front*.52f},8);
+   FilamentStream(r,path,Add(Mul(frame.right,-std::sin(a)),Mul(frame.up,std::cos(a))),
+     .11f*power,1.7f,age+n*.13f,{1,.91f,.61f,front*.66f},8);
   }
  }
 }

@@ -51,6 +51,9 @@ void AttachmentChecks(Renderer& r,const std::filesystem::path& out){
  for(bool weapon:{false,true})for(bool shield:{false,true}){
   const auto p=BuildCharacterPose(.2f,.4f,shield);
   const auto a=castfx::FromPose(p,{},0,WeaponFor(ClassId::Warrior).form,shield,weapon);
+  Check(a.blade==weapon,"Unequipped weapon left a blade charge socket");
+  if(weapon){const auto tip=p.WeaponPoint(WeaponTraceTip(WeaponForm::Blade));
+   Check(std::abs(tip.x-a.edgeTip.x)+std::abs(tip.y-a.edgeTip.y)+std::abs(tip.z-a.edgeTip.z)<.00001f,"Blade charge is detached from the real tip");}
   for(unsigned side=0;side<2;++side){const auto expected=BuildHandPose(p,side,weapon,shield,p.handCast).Point({0,.045f,.025f});
    const auto actual=side?a.right:a.left;
    Check(std::abs(expected.x-actual.x)+std::abs(expected.y-actual.y)+std::abs(expected.z-actual.z)<.00001f,"Effect hand ignores equipment grip");}
@@ -72,7 +75,7 @@ void AttachmentChecks(Renderer& r,const std::filesystem::path& out){
  auto dead=castfx::Preview({},{0,1,0},0);dead.alive=false;r.BeginFrame();potion.Render(r,&dead);Check(r.EffectVertices()==0 && r.EndFrame(false),"Dead actor retained potion aura");
 }
 void Preparations(Renderer& r,const std::filesystem::path& out){
- for(auto id:{ClassId::Mage,ClassId::Scout,ClassId::Priest})for(int ability:{1,5,6,7,8,9,13,14}){
+ for(auto id:{ClassId::Warrior,ClassId::Mage,ClassId::Scout,ClassId::Priest})for(int ability:{0,1,5,6,7,8,9,10,12,13,14}){
   if(id==ClassId::Priest && ability>=8)continue;
   Pixels reference;
   for(int hz:{30,60,144}){
@@ -85,13 +88,32 @@ void Preparations(Renderer& r,const std::filesystem::path& out){
    target.health=target.MaxHealth();target.stunned=100;target.attackCooldown=100;
    Command c;c.selectActor=100;c.ability=ability;s.Update(.001f,c);Check(s.Attacking(),"Preparation fixture rejected");
    const float time=combat::StrokeStart(s.HeavyAttack())/s.AttackRate()*.70f;Advance(time,hz,[&](float dt){s.Update(dt,{});});
-   const auto a=castfx::Preview({0,0,0},{-.2f,1.3f,.3f},.45f);r.BeginFrame();r.SetCamera({2.7f,2.4f,-4},{0,.9f,0});
+   const auto a=id==ClassId::Warrior?castfx::FromPose(BuildCharacterPose(.2f,0,false),{},.45f,WeaponForm::Blade,false):
+     castfx::Preview({0,0,0},{-.2f,1.3f,.3f},.45f);r.BeginFrame();r.SetCamera({2.7f,2.4f,-4},{0,.9f,0});
    castfx::Prepare(r,s,a);const bool quiet=id==ClassId::Scout && !s.HeavyAttack();
    Check(quiet?r.EffectVertices()==0:r.EffectVertices()>0 && r.EffectVertices()<512,"Preparation budget");
    const auto image=Capture(r,out/("prepare-"+std::to_string(int(id))+"-"+std::to_string(ability)+"-"+std::to_string(hz)+".png"));
    if(hz==30)reference=image;else Check(Difference(reference,image)<.04,"Preparation depends on refresh rate");
    s.StopMovement();r.BeginFrame();castfx::Prepare(r,s,a);Check(r.EffectVertices()==0 && r.EndFrame(false),"Cancelled preparation retained charge");
   }
+ }
+}
+void ChargeGuards(Renderer& r){
+ auto a=castfx::FromPose(BuildCharacterPose(.2f,0,false),{},.4f,WeaponForm::Blade,false);
+ for(int mode=0;mode<5;++mode){auto bad=a;
+  if(mode==0)bad.blade=false;if(mode==1)bad.edgeTip.x=NAN;if(mode==2)bad.edgeBase.y=INFINITY;
+  if(mode==3)bad.alive=false;if(mode==4)bad.edgeTip=bad.edgeBase;
+  r.BeginFrame();castfx::PrepareAction(r,ClassId::Warrior,9,true,.15f,1,false,0,bad);
+  Check(r.EffectVertices()==0 && r.EndFrame(false),"Missing/invalid blade submitted charge geometry");
+ }
+ for(auto id:{ClassId::Warrior,ClassId::Scout,ClassId::Mage,ClassId::Priest})for(float phase:{0.f,1.f,-.1f,NAN}){
+  r.BeginFrame();castfx::ClassCharge(r,id,id==ClassId::Mage?8:1,phase,.1f,a);
+  Check(r.EffectVertices()==0 && r.EndFrame(false),"Charge drew before preparation or after release");
+ }
+ for(auto id:{ClassId::Scout,ClassId::Mage,ClassId::Priest})for(int invalid=0;invalid<5;++invalid){
+  CombatVisualEvent e;e.kind=K::SpellCast;e.school=id;e.ability=8;float age=.04f;XMFLOAT3 origin{0,1,0};
+  if(invalid==0)e.kind=K::CastStart;if(invalid==1)age=-.01f;if(invalid==2)age=.18f;if(invalid==3)age=NAN;if(invalid==4)origin.x=NAN;
+  r.BeginFrame();castfx::Discharge(r,e,origin,age);Check(r.EffectVertices()==0 && r.EndFrame(false),"Unaccepted/invalid discharge submitted geometry");
  }
 }
 void World(Renderer& r,const std::filesystem::path& out){
@@ -121,6 +143,6 @@ int main(){try{
  Check(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"COM");Timing();
  const auto out=std::filesystem::current_path()/"casting-effects-review";std::filesystem::create_directories(out);
  Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),960,600,L"Casting and attached recovery",false),"Window");
- Renderer r;Check(r.Initialize(window.GetHandle(),960,600),"Renderer");AttachmentChecks(r,out);Preparations(r,out);World(r,out);
+ Renderer r;Check(r.Initialize(window.GetHandle(),960,600),"Renderer");AttachmentChecks(r,out);Preparations(r,out);ChargeGuards(r);World(r,out);
  Check(r.ValidateDebugMessages(),"DirectX validation");std::cout<<"PASS: eleven attached recoveries, cast clocks/cancellation, frame-rate equality, actual pose/world captures and reset isolation.\n";
  }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

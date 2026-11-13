@@ -872,6 +872,19 @@ void Renderer::DrawFlameRibbon(XMFLOAT3 a,XMFLOAT3 b,XMFLOAT3 c,XMFLOAT3 d,float
 void Renderer::DrawEffectGlow(XMFLOAT3 center,float radius,XMFLOAT4 color) {
  EffectBillboard(center,radius,color,1);
 }
+void Renderer::DrawFilamentRibbon(XMFLOAT3 a,XMFLOAT3 b,XMFLOAT3 c,XMFLOAT3 d,float from,float to,float phase,
+ XMFLOAT4 color,float startAlpha,float endAlpha) {
+ const auto finite=[](XMFLOAT3 p){return std::isfinite(p.x)&&std::isfinite(p.y)&&std::isfinite(p.z);};
+ if((portrait_ && !portraitEffects_) || EffectVertices()+6>maxEffectVertices || !finite(a)||!finite(b)||!finite(c)||!finite(d) ||
+   !std::isfinite(from)||!std::isfinite(to)||!std::isfinite(phase)||!std::isfinite(startAlpha)||!std::isfinite(endAlpha) ||
+   !std::isfinite(color.x)||!std::isfinite(color.y)||!std::isfinite(color.z)||!std::isfinite(color.w)||color.w<=0)return;
+ const float u=from*2.f-phase*3.f,v=to*2.f-phase*3.f;
+ if(!std::isfinite(u)||!std::isfinite(v))return;
+ const XMFLOAT4 first{color.x,color.y,color.z,color.w*std::clamp(startAlpha,0.f,1.f)},
+   last{color.x,color.y,color.z,color.w*std::clamp(endAlpha,0.f,1.f)};
+ const Vertex va{a,{u,0,5},first},vb{b,{u,1,5},first},vc{c,{v,1,5},last},vd{d,{v,0,5},last};
+ effects_.insert(effects_.end(),{va,vb,vc,va,vc,vd});
+}
 void Renderer::DrawGroundMark(XMFLOAT3 a,XMFLOAT3 b,XMFLOAT3 c,XMFLOAT3 d,XMFLOAT4 color) {
  if(portrait_ || color.w<=0 || groundMarks_.size()+6>1536 || EffectVertices()+6>maxEffectVertices)return;
  const Vertex va{a,{0,0,1},color},vb{b,{0,1,1},color},vc{c,{1,1,1},color},vd{d,{1,0,1},color};

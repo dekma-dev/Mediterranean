@@ -112,6 +112,8 @@ public:
   // effect age, never a renderer clock. Shares the bounded additive batch.
   void DrawFlameRibbon(DirectX::XMFLOAT3 a,DirectX::XMFLOAT3 b,DirectX::XMFLOAT3 c,DirectX::XMFLOAT3 d,
     float from,float to,float phase,DirectX::XMFLOAT4 color,float startAlpha=1,float endAlpha=1);
+  void DrawFilamentRibbon(DirectX::XMFLOAT3 a,DirectX::XMFLOAT3 b,DirectX::XMFLOAT3 c,DirectX::XMFLOAT3 d,
+    float from,float to,float phase,DirectX::XMFLOAT4 color,float startAlpha=1,float endAlpha=1);
   void DrawEffectGlow(DirectX::XMFLOAT3 center,float radius,DirectX::XMFLOAT4 color);
   void DrawGroundMark(DirectX::XMFLOAT3 a,DirectX::XMFLOAT3 b,DirectX::XMFLOAT3 c,DirectX::XMFLOAT3 d,DirectX::XMFLOAT4 color);
   void DrawEffectRing(DirectX::XMFLOAT3 center,float radius,DirectX::XMFLOAT4 color);

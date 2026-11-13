@@ -60,7 +60,11 @@ float3 CloakPoint(float3 p,float4 surface,float3 hem,float3 ripple) {
  float2 mid=float2(surface.z,surface.w-.001);
  float2 edge=hem.xy;
  float2 bend=(8*mid-edge)*t2+(2*edge-8*mid)*t3;
- float wave=hem.z*t2*(sin(ripple.x-7*t+9*p.x)+.35*sin(2*ripple.x-11*t-13*p.x));
+ // Advect folds down the hanging fabric. The free edges flutter independently
+ // while the pinned shoulder band retains its position and normal.
+ float freeHem=t2*(.25+.75*t),u=p.x/(.22+.12*t);
+ float wave=hem.z*freeHem*(sin(ripple.x-7*t+3*u)+.45*sin(1.7*ripple.x-11*t-5*u));
+ wave+=hem.z*.45*freeHem*sin(4*3.14159265*u+.55*ripple.x-3*t);
  p.x+=bend.x+ripple.y*t2*sin(5*p.x);
  p.z-=max(0,bend.y)+wave+ripple.y*t2*p.x;
  p.y+=hem.z*.18*t2*sin(ripple.x-5*t+8*p.x);
@@ -785,6 +789,19 @@ float4 EffectColor(EffectOut i) {
   float sceneDistance=(.1*farPlane)/max(.0001,farPlane-z*(farPlane-.1));
   float soft=saturate((sceneDistance-i.viewDepth)/(tile==1 || tile==2?.24:.065));
   result=float4(texel.rgb*i.tint.rgb,saturate(texel.a*i.tint.a)*border*soft*i.fog);
+ } else if(i.uv.z>=4.5) {
+  // Continuous silver/gold strands inside a broad, translucent wake. The
+  // material flows along a world-space curve, independently of tessellation.
+  float x=i.uv.x,y=i.uv.y*2-1;
+  float wave=sin(x*2.3)*.15+sin(x*5.7)*.04;
+  float a=y-wave,b=y+.37+sin(x*3.1+2)*.10,c=y-.40+sin(x*2.7)*.09;
+  float strands=exp2(-110*a*a)+.58*exp2(-160*b*b)+.42*exp2(-140*c*c);
+  float mist=exp2(-4*y*y)*(.30+.30*Noise(float2(x*1.3,y*5)));
+  float edge=1-smoothstep(.62,1,abs(y));
+  float z=effectSceneDepth.Load(int3((int2)i.p.xy,0)),farPlane=eyeAndHud.w<0?20:280;
+  float sceneDepth=(.1*farPlane)/max(.0001,farPlane-z*(farPlane-.1));
+  result=float4(i.tint.rgb*(.65+strands*.8),saturate((mist+strands*.72)*i.tint.a)*edge*
+    saturate((sceneDepth-i.viewDepth)/.08)*i.fog);
  } else if(i.uv.z>=3.5) {
   // Advected, torn flame sheets. U is continuous along the whole curve, so
   // material motion and tongues cross joins instead of repeating each quad.

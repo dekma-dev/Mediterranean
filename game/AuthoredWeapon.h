@@ -107,15 +107,17 @@ struct AuthoredWeaponController {
         // rising/downward recoveries can align the shaft with the forearm.
         const float destination=initial>=.5f?1.f:0.f;
         const float prepared=initial+(destination-initial)*combat::Smooth((clock-contact)/.24f);
+        const bool authoredGrip=playerclips::HasWeaponFrame(carry)&&playerclips::HasWeaponFrame(target);
         const auto aim=BlendSwordReadyAim(carry.weapon,target.weapon,prepared);
-        target=playerclips::Blend(carry,target,prepared);target.weapon=aim;
+        target=playerclips::Blend(carry,target,prepared);
+        if(!authoredGrip)target.weapon=aim;
       }
       if(style==0 && (ability==8 || ability==11 || ability==14)) {
         // Wide techniques cross the body instead of reusing the overhead chop.
         // Re-time the imported slash to this action's authoritative contact.
         const auto sweep=playerclips::Sample(playerclips::Clip::Slash,
           playerclips::AttackPhase(playerclips::Clip::Slash,clock,start,contact,end));
-        target.hands[1]=sweep.hands[1];target.elbows[1]=sweep.elbows[1];target.weapon=sweep.weapon;
+        target.hands[1]=sweep.hands[1];target.elbows[1]=sweep.elbows[1];target.weapon=sweep.weapon;target.weaponRight=sweep.weaponRight;
         target.torso.y=sweep.torso.y;target.pelvis.y=sweep.pelvis.y;
       }
       if(style==1) {
@@ -132,7 +134,7 @@ struct AuthoredWeaponController {
         // The backhand actually crosses in the opposite direction. Keep the
         // lower-body load/accent clock forward and reverse only the weapon arm.
         const auto reverse=playerclips::Sample(clip,ReturnCutPhase(phase,playerclips::Collection()[unsigned(clip)].contact));
-        target.hands[1]=reverse.hands[1];target.elbows[1]=reverse.elbows[1];target.weapon=reverse.weapon;
+        target.hands[1]=reverse.hands[1];target.elbows[1]=reverse.elbows[1];target.weapon=reverse.weapon;target.weaponRight=reverse.weaponRight;
       }
       if(style==3) {
         // A one-handed reliquary gathers toward the chest and sends the free
@@ -171,7 +173,8 @@ struct AuthoredWeaponController {
       // A weighted linear direction can collapse between opposing cuts. Its
       // later normalization whips the attached wrist through the zero vector.
       // Positions keep their weighted blend; orientation follows a unit arc.
-      frame.weapon=BlendWeaponAim(outgoing.weapon,target.weapon,frameBlend);
+      if(!playerclips::HasWeaponFrame(outgoing)||!playerclips::HasWeaponFrame(target))
+        frame.weapon=BlendWeaponAim(outgoing.weapon,target.weapon,frameBlend);
       const float accentBlend=weight>.00001f?w*blend/weight:1;
       accent=outgoingAccent*(1-accentBlend)+AbilityAccent(style,ability,phase,playerclips::Collection()[unsigned(clip)].contact)*accentBlend;
       // The support/brace follows the outgoing strike too. Recomputing it from

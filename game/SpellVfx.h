@@ -22,6 +22,8 @@ float ContactLifetime(const rpg::CombatVisualEvent& event);
 float ArrowProgress(int ability,int ordinal,float age,float flight);
 DirectX::XMFLOAT3 ProjectilePosition(const rpg::CombatVisualEvent&,DirectX::XMFLOAT3 origin,float progress);
 void Contact(Renderer&,const rpg::CombatVisualEvent&,float age);
+bool HasClassImpact(const rpg::CombatVisualEvent&);
+void ClassImpact(Renderer&,const rpg::CombatVisualEvent&,float age);
 void Interrupt(Renderer&,const rpg::CombatVisualEvent&,float age);
 void Flight(Renderer&,const rpg::CombatVisualEvent&,DirectX::XMFLOAT3 origin,float age,const FlightPath* path=nullptr);
 void MagicFlight(Renderer&,const rpg::CombatVisualEvent&,DirectX::XMFLOAT3 origin,float age,const FlightPath* path=nullptr);

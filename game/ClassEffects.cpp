@@ -142,7 +142,7 @@ void Impact(Renderer& r,const rpg::CombatVisualEvent& e,float age) {
   spellvfx::Contact(r,e,age);
   // The dedicated elemental contact owns the whole Mage impact. The legacy
   // orange generic burst otherwise paints fire over frost/arcane contacts.
-  if(e.school==C::Priest || e.school==C::Mage || !e.primary)return;
+  if(e.school==C::Priest || e.school==C::Mage || !e.primary || spellvfx::HasClassImpact(e))return;
   const float phase=Unit(age/.48f),fade=(1-phase)*(1-phase);
   const float flash=std::pow(1-Unit(age/.095f),2.f);
   const float size=(e.heavy?1.1f:.72f)*(e.empowered?1.2f:1);

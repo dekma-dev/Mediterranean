@@ -55,16 +55,21 @@ rpg::Simulation Hero(rpg::ClassId id,bool major){
 }
 }
 int wmain(int argc,wchar_t** argv){try{
- if(argc<2 || argc>3 || (argc==3 && std::wstring(argv[2])!=L"--major" && std::wstring(argv[2])!=L"--fields" && std::wstring(argv[2])!=L"--moving" && std::wstring(argv[2])!=L"--crowded")){std::cerr<<"Usage: SpellMotionReview <output-directory> [--major|--fields|--moving|--crowded]\n";return 2;}
+ if(argc<2 || argc>3 || (argc==3 && std::wstring(argv[2])!=L"--major" && std::wstring(argv[2])!=L"--fields" && std::wstring(argv[2])!=L"--moving" && std::wstring(argv[2])!=L"--crowded" && std::wstring(argv[2])!=L"--signatures" && std::wstring(argv[2])!=L"--invocations")){std::cerr<<"Usage: SpellMotionReview <output-directory> [--major|--fields|--moving|--crowded|--signatures|--invocations]\n";return 2;}
  const bool fields=argc==3 && std::wstring(argv[2])==L"--fields",moving=argc==3 && std::wstring(argv[2])==L"--moving";
  const bool crowded=argc==3 && std::wstring(argv[2])==L"--crowded";
- const bool major=argc==3 && !moving;const int duration=fields || crowded?7:moving?5:major?4:3;
+ const bool signatures=argc==3 && std::wstring(argv[2])==L"--signatures";
+ const bool invocations=argc==3 && std::wstring(argv[2])==L"--invocations";
+ const bool major=argc==3 && !moving;const int duration=fields || crowded?7:moving || signatures || invocations?5:major?4:3;
  Hr(CoInitializeEx(nullptr,COINIT_MULTITHREADED));Hr(MFStartup(MF_VERSION));
  const auto out=std::filesystem::absolute(argv[1]);std::filesystem::create_directories(out);
  Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),width,height,L"Native spell motion review",false),"Window");
  Renderer r;Check(r.Initialize(window.GetHandle(),width,height),"Renderer");
  struct Scene{rpg::ClassId school;int ability;const char* name;};
- const std::vector<Scene> scenes=crowded?std::vector<Scene>{{rpg::ClassId::Warrior,8,"warrior-crowded"},{rpg::ClassId::Mage,8,"frost-crowded"},
+ const std::vector<Scene> scenes=invocations?std::vector<Scene>{{rpg::ClassId::Warrior,9,"steel-load"},{rpg::ClassId::Scout,9,"bow-draw"},
+  {rpg::ClassId::Mage,8,"frost-gather"},{rpg::ClassId::Mage,13,"arcane-weave"},{rpg::ClassId::Priest,6,"invocation"},{rpg::ClassId::Priest,3,"greater-heal"}}:
+  signatures?std::vector<Scene>{{rpg::ClassId::Warrior,8,"steel-cleave"},{rpg::ClassId::Scout,9,"piercing-arrow"},
+  {rpg::ClassId::Mage,9,"falling-star"},{rpg::ClassId::Priest,6,"sanctuary"}}:crowded?std::vector<Scene>{{rpg::ClassId::Warrior,8,"warrior-crowded"},{rpg::ClassId::Mage,8,"frost-crowded"},
   {rpg::ClassId::Scout,8,"arrows-crowded"},{rpg::ClassId::Priest,6,"sanctuary-crowded"}}:moving?std::vector<Scene>{{rpg::ClassId::Warrior,0,"warrior-moving"},{rpg::ClassId::Mage,0,"fire-moving"},
   {rpg::ClassId::Scout,1,"arrow-moving"},{rpg::ClassId::Priest,1,"holy-moving"}}:fields?std::vector<Scene>{{rpg::ClassId::Mage,8,"frost-field"},{rpg::ClassId::Mage,9,"ember-ground"},
   {rpg::ClassId::Priest,6,"holy-ground"},{rpg::ClassId::Mage,13,"arcane-ground"}}:major?std::vector<Scene>{{rpg::ClassId::Mage,0,"fire"},{rpg::ClassId::Mage,1,"heavy-fire"},
@@ -79,6 +84,7 @@ int wmain(int argc,wchar_t** argv){try{
   Game game;game.Initialize();Check(game.RestoreSnapshot(Hero(scene.school,major).Save()),"Review snapshot");
   auto& enemy=const_cast<rpg::Enemy&>(game.State().Enemies()[0]);enemy.position={-4,11.5f};enemy.home=enemy.position;
   enemy.kind=rpg::EnemyKind::Raider;enemy.health=enemy.MaxHealth();enemy.attackCooldown=100;enemy.rooted=100;enemy.state=rpg::EnemyState::Idle;
+  if((signatures || invocations) && scene.school==rpg::ClassId::Warrior)enemy.position=enemy.home={-4,7.4f};
   if(moving){enemy.position=enemy.home={-4,scene.school==rpg::ClassId::Warrior?7.2f:11.5f};enemy.rooted=0;enemy.state=rpg::EnemyState::Pursuing;enemy.attackCooldown=.8f;}
   game.SetCameraOrbit(.35f,.55f,11);
   if(scene.ability==6 || scene.ability==11){
@@ -109,6 +115,7 @@ int wmain(int argc,wchar_t** argv){try{
    game.ExecuteCommand(command,1.f/fps);
    if(fields)game.SetCameraOrbit(.35f+.8f*combat::Smooth((frame/float(fps)-2.f)/3.f),.55f,11);
    for(std::size_t i=0;i<game.State().VisualEventCount();++i){const auto kind=game.State().VisualEvents()[i].kind;
+    if(scene.ability==3 && kind==rpg::CombatVisualKind::Mend){released=contact=true;releaseFrame=hitFrame=frame;manifest<<scene.name<<','<<frame<<','<<(sceneIndex*duration+frame/60.f)<<",healed\n";}
     if(kind==rpg::CombatVisualKind::SpellCast || kind==rpg::CombatVisualKind::Strike || kind==rpg::CombatVisualKind::HeavyStrike){released=true;releaseFrame=frame;manifest<<scene.name<<','<<frame<<','<<(sceneIndex*duration+frame/60.f)<<",release\n";}
     if(kind==rpg::CombatVisualKind::Hit || kind==rpg::CombatVisualKind::HeavyHit){contact=true;hitFrame=frame;manifest<<scene.name<<','<<frame<<','<<(sceneIndex*duration+frame/60.f)<<",contact\n";}
    }
@@ -116,7 +123,8 @@ int wmain(int argc,wchar_t** argv){try{
    const auto image=out/L"frame.png";Check(r.Capture(image.wstring()) && r.EndFrame(false),"Motion capture");movie.Write(image);
    if(r.EffectVertices()>peakVertices){peakVertices=r.EffectVertices();std::filesystem::copy_file(image,out/(std::string(scene.name)+"-dense.png"),std::filesystem::copy_options::overwrite_existing);}
    peakLights=std::max(peakLights,r.CombatLightCount());peakDraws=std::max(peakDraws,r.LastDrawCalls());
-   if(!prepared && game.State().Attacking() && game.State().AttackSeconds()/combat::StrokeStart(game.State().HeavyAttack())>.70f){
+   if(!prepared && ((game.State().Attacking() && game.State().AttackSeconds()/combat::StrokeStart(game.State().HeavyAttack())>.70f) ||
+       (game.State().CastingRecovery() && game.State().RecoveryProgress()>.70f))){
     prepared=true;std::filesystem::copy_file(image,out/(std::string(scene.name)+"-prepare.png"),std::filesystem::copy_options::overwrite_existing);}
    if(frame==releaseFrame+3 && released)std::filesystem::copy_file(image,out/(std::string(scene.name)+"-flight.png"),std::filesystem::copy_options::overwrite_existing);
    if(frame==releaseFrame+8 && released)std::filesystem::copy_file(image,out/(std::string(scene.name)+"-travel.png"),std::filesystem::copy_options::overwrite_existing);

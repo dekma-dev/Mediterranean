@@ -16,7 +16,7 @@ struct Reader {
 Library Decode(std::string_view bytes){
  Check(bytes.size()<=2*1024*1024,"Player clip budget exceeded");Reader r{bytes};
  const auto magic=r.Get<unsigned>(),version=r.Get<unsigned>();
- Check(((magic==0x334c4350&&version==3)||(magic==0x344c4350&&version==4)||(magic==0x354c4350&&version==5))&&r.Get<unsigned>()==unsigned(Clip::Count),"Invalid player clip header");Library result;
+ Check(((magic==0x334c4350&&version==3)||(magic==0x344c4350&&version==4)||(magic==0x354c4350&&version==5)||(magic==0x364c4350&&version==6))&&r.Get<unsigned>()==unsigned(Clip::Count),"Invalid player clip header");Library result;
  for(auto& track:result){
   auto count=r.Get<unsigned>();track.duration=r.Get<float>();
   track.load=r.Get<float>();track.contact=r.Get<float>();track.takeoff=r.Get<float>();track.landing=r.Get<float>();track.stance=r.Get<float>();track.speed=r.Get<float>();
@@ -26,7 +26,8 @@ Library Decode(std::string_view bytes){
   Check(std::isfinite(track.speed)&&track.speed>=0&&track.speed<=10,"Invalid clip travel speed");
   for(unsigned i=0;i<count;++i){
    Frame f;
-   if(version==5)f=r.Get<Frame>();
+   if(version==6)f=r.Get<Frame>();
+   else if(version==5){const auto legacy=r.Get<std::array<float,53>>();std::memcpy(&f,legacy.data(),sizeof(legacy));}
    else if(version==4){const auto legacy=r.Get<std::array<float,40>>();std::memcpy(&f,legacy.data(),sizeof(legacy));}
    else {const auto legacy=r.Get<std::array<float,30>>();std::memcpy(&f,legacy.data(),sizeof(legacy));}
    std::array<float,frameChannels> values;std::memcpy(values.data(),&f,sizeof(f));
@@ -42,7 +43,11 @@ Library Decode(std::string_view bytes){
    for(const auto& ankle:f.ankles)Check(std::abs(ankle.x)<=1.5f&&std::abs(ankle.y)<=1.5f,"Invalid player ankle rotation");
    Check(f.articulated==0||f.articulated==1,"Invalid articulated source flag");
    for(const auto& shoulder:f.shoulders)Check(std::hypot(shoulder.x,shoulder.y,shoulder.z)<.12f,"Invalid clavicle translation");
-   Check(std::abs(f.weapon.x*f.weapon.x+f.weapon.y*f.weapon.y+f.weapon.z*f.weapon.z-1)<1e-4f,"Invalid player weapon direction");track.frames.push_back(f);
+   Check(std::abs(f.weapon.x*f.weapon.x+f.weapon.y*f.weapon.y+f.weapon.z*f.weapon.z-1)<1e-4f,"Invalid player weapon direction");
+   const float rollLength=f.weaponRight.x*f.weaponRight.x+f.weaponRight.y*f.weaponRight.y+f.weaponRight.z*f.weaponRight.z;
+   Check(rollLength<1e-8f || (std::abs(rollLength-1)<1e-4f &&
+     std::abs(f.weaponRight.x*f.weapon.x+f.weaponRight.y*f.weapon.y+f.weaponRight.z*f.weapon.z)<1e-4f),"Invalid authored grip frame");
+   track.frames.push_back(f);
   }
  }
  for(unsigned i=0;i<result.size();++i) if(result[i].loop) {
@@ -71,6 +76,18 @@ Library Decode(std::string_view bytes){
 std::string_view EmbeddedBytes(){auto module=GetModuleHandleW(nullptr);auto resource=FindResourceW(module,MAKEINTRESOURCEW(303),MAKEINTRESOURCEW(10));Check(resource!=nullptr,"Missing player Blender clips");auto handle=LoadResource(module,resource);auto data=handle?LockResource(handle):nullptr;Check(data!=nullptr,"Cannot load player clips");return {static_cast<const char*>(data),SizeofResource(module,resource)};}
 const Library& Collection(){static const auto clips=Decode(EmbeddedBytes());return clips;}
 bool Looping(Clip clip){Check(unsigned(clip)<unsigned(Clip::Count),"Invalid clip selection");return Collection()[unsigned(clip)].loop;}
+bool HasWeaponFrame(const Frame& f){return f.weaponRight.x*f.weaponRight.x+f.weaponRight.y*f.weaponRight.y+f.weaponRight.z*f.weaponRight.z>1e-8f;}
+void BlendWeaponFrame(Frame& result,const Frame& a,const Frame& b,float weight){
+ if(!HasWeaponFrame(a)||!HasWeaponFrame(b))return;
+ using namespace DirectX;
+ const auto rotation=[](const Frame& f){
+  const auto up=XMVector3Normalize(XMLoadFloat3(&f.weapon));
+  auto right=XMLoadFloat3(&f.weaponRight);right=XMVector3Normalize(right-up*XMVector3Dot(right,up));
+  return XMQuaternionRotationMatrix(XMMATRIX(right,up,XMVector3Cross(right,up),XMVectorSet(0,0,0,1)));
+ };
+ const auto matrix=XMMatrixRotationQuaternion(XMQuaternionSlerp(rotation(a),rotation(b),std::clamp(weight,0.f,1.f)));
+ XMStoreFloat3(&result.weaponRight,matrix.r[0]);XMStoreFloat3(&result.weapon,matrix.r[1]);
+}
 Frame Sample(Clip clip,float phase){
  Check(unsigned(clip)<unsigned(Clip::Count),"Invalid player clip selection");const auto& frames=Collection()[unsigned(clip)].frames;
  phase=std::isfinite(phase)?phase:0.f;
@@ -85,13 +102,14 @@ Frame Sample(Clip clip,float phase){
   const float t2=t*t,t3=t2*t;
   for(unsigned k=0;k<c.size();++k)c[k]=a[k]*(2*t3-3*t2+1)+(b[k]-left[k])*.5f*(t3-2*t2+t)+b[k]*(-2*t3+3*t2)+(right[k]-a[k])*.5f*(t3-t2);
  }
- Frame result;std::memcpy(&result,c.data(),sizeof(Frame));using namespace DirectX;XMStoreFloat3(&result.weapon,XMVector3Normalize(XMLoadFloat3(&result.weapon)));return result;
+ Frame result;std::memcpy(&result,c.data(),sizeof(Frame));using namespace DirectX;XMStoreFloat3(&result.weapon,XMVector3Normalize(XMLoadFloat3(&result.weapon)));
+ BlendWeaponFrame(result,frames[i],frames[i+1],t);return result;
 }
 Frame Blend(const Frame& a,const Frame& b,float weight) {
  weight=std::clamp(std::isfinite(weight)?weight:0.f,0.f,1.f);
  std::array<float,frameChannels> x,y;std::memcpy(x.data(),&a,sizeof(a));std::memcpy(y.data(),&b,sizeof(b));
  for(unsigned i=0;i<x.size();++i)x[i]+=(y[i]-x[i])*weight;
- Frame f;std::memcpy(&f,x.data(),sizeof(f));return f;
+ Frame f;std::memcpy(&f,x.data(),sizeof(f));BlendWeaponFrame(f,a,b,weight);return f;
 }
 Frame Locomotion(const std::array<float,4>& weights,float run,float phase,Equipment equipment){
  run=std::clamp(std::isfinite(run)?run:0.f,0.f,1.f);
@@ -111,7 +129,7 @@ Frame Locomotion(const std::array<float,4>& weights,float run,float phase,Equipm
     frame.hands=armed.hands;frame.elbows=armed.elbows;frame.shoulders=armed.shoulders;
     // The source already authors the load lag. Keep socket and elbow samples
     // at the same instant instead of introducing a second orientation delay.
-    frame.weapon=armed.weapon;
+    frame.weapon=armed.weapon;frame.weaponRight=armed.weaponRight;
    }
    std::array<float,frameChannels> v;std::memcpy(v.data(),&frame,sizeof(Frame));
    for(unsigned k=0;k<v.size();++k)sum[k]+=v[k]*w;

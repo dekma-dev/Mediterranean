@@ -137,6 +137,8 @@ add_library(MediterraneanClient STATIC
   engine/RendererField.cpp
   game/SpellVfx.cpp
   game/SpellFlight.cpp
+  game/ClassImpact.cpp
+  game/ClassCharge.cpp
   game/SpellFields.cpp
   game/CastEffects.cpp
   game/SustainedEffects.cpp
