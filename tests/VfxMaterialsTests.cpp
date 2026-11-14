@@ -285,14 +285,17 @@ void Workload(Renderer& r,const std::filesystem::path& out){
  }
  Check(r.ValidateDebugMessages(),"Workload DirectX warnings");
 }
-void World(Renderer& r,const std::filesystem::path& out){
+void World(Renderer& r,const std::filesystem::path& out,int group=0){
  Check(r.Resize(1920,1080),"World review resolution");
  for(auto id:{ClassId::Warrior,ClassId::Mage,ClassId::Scout,ClassId::Priest})for(int ability:{1,5,13,14}){
+  const bool caster=id==ClassId::Mage || id==ClassId::Priest;
+  if((group==1 && caster) || (group==2 && !caster))continue;
   if(id==ClassId::Priest && ability>7)continue;
   Game game;game.Initialize();Check(game.RestoreSnapshot(Fixture(id)),"World review load");
   game.SetCameraOrbit(1.1f,.32f,6.5f);Command c;c.selectActor=100;c.ability=ability;game.ExecuteCommand(c,.001f);
   Check(game.State().Attacking(),"World review attack rejected");
   const std::string stem=std::to_string(int(id))+"-"+std::to_string(ability);
+  std::cout<<"World material case "<<stem<<'\n'<<std::flush;
   const auto tick=[&](float time){while(time>1e-6f){const float dt=std::min(time,1.f/120);game.ExecuteCommand({},dt);time-=dt;}};
   tick(game.State().Spell(ability).contact*.25f);
   r.BeginFrame();game.Render(r);Capture(r,out/("world-prepare-"+stem+".png"));
@@ -322,6 +325,15 @@ int main(int argc,char** argv){try{
  Renderer r;Check(r.Initialize(window.GetHandle(),960,600),"Native renderer");
  if(argc>2 && std::string(argv[2])=="--contacts"){ContactSequences(r,out);Check(r.ValidateDebugMessages(),"Contact sequence DirectX warnings");std::cout<<"PASS: contact phase/angle review.\n";return 0;}
  if(argc>2 && std::string(argv[2])=="--workload"){Workload(r,out);std::cout<<"PASS: bounded native VFX workload; see workload.txt.\n";return 0;}
- Rendering(r,out);Lifetimes(r,out);InterruptChecks(r,out);ContactSequences(r,out);AftermathChecks(r,out);World(r,out);Check(r.ValidateDebugMessages(),"Native VFX warnings");
- std::cout<<"PASS: original atlas, alpha ordering, soft depth, fixed budgets, lifecycle, equal-time contacts and actual world attacks. Atlas bytes: "<<r.EffectTextureBytes()<<'\n';
+ const std::string mode=argc>2?argv[2]:"--all";
+ Check(mode=="--all" || mode=="--materials" || mode=="--martial-world" || mode=="--caster-world","Unknown VFX review mode");
+ // Separate CTest processes retain every assertion without putting all
+ // material captures and fourteen world actions under one 120-second clock.
+ // The default standalone invocation still performs the complete review.
+ if(mode=="--all" || mode=="--materials"){
+  Rendering(r,out);Lifetimes(r,out);InterruptChecks(r,out);ContactSequences(r,out);AftermathChecks(r,out);
+ }
+ if(mode!="--materials")World(r,out,mode=="--martial-world"?1:mode=="--caster-world"?2:0);
+ Check(r.ValidateDebugMessages(),"Native VFX warnings");
+ std::cout<<"PASS: native VFX review "<<mode<<"; image, budget and lifecycle checks. Atlas bytes: "<<r.EffectTextureBytes()<<'\n';
  }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

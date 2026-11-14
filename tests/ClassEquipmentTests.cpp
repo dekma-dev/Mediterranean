@@ -87,12 +87,24 @@ void ShapesAndSockets() {
   const auto pose=BuildCharacterPose(0,0,false);
   const auto hand=BuildHandPose(pose,1,true,false,0);const auto palette=BuildHandRig(hand);
   for(int i=1;i<int(ClassId::Count);++i) {
-    const auto form=WeaponFor(ClassId(i)).form;const bool focused=oldstyle::Focused(ClassId(i));
+    const auto id=ClassId(i);const auto form=WeaponFor(id).form;const bool focused=oldstyle::Focused(id);
     const auto mesh=visual::BuildMesh(focused?oldstyle::Mesh(ClassId(i),5):WeaponMesh(form));
     std::cout<<WeaponFor(ClassId(i)).starter<<": "<<mesh.indices.size()/3<<" triangles\n";
-    Check(!mesh.vertices.empty() && mesh.indices.size()/3<(focused?16000u:1300u),"Weapon mesh missing/too expensive");
-    // All grips share the same conservative .025 m clearance envelope.
-    for(const auto& v:mesh.vertices) if(std::abs(v.position.y)<.085f && std::abs(v.position.z)<.04f && !(focused&&form==WeaponForm::Handbow&&v.color.w==6))
+    // The denser authored bows/staffs use up to 28k near triangles. Retain the
+    // procedural budget, bound the distant meshes, and keep the archive's
+    // existing 32 MiB ceiling in ClassArt::Decode.
+    Check(!mesh.vertices.empty() && mesh.indices.size()/3<(focused?28000u:1300u),"Weapon mesh missing/too expensive");
+    if(focused)for(unsigned tier=5;tier<=6;++tier) {
+      const auto& nearMesh=classart::Collection()[unsigned(id==ClassId::Scout?classart::Part::ScoutBow:classart::Part::MageStaff)+tier-5][0];
+      const auto& farMesh=classart::Collection()[unsigned(id==ClassId::Scout?classart::Part::ScoutBow:classart::Part::MageStaff)+tier-5][1];
+      Check(nearMesh.indices.size()/3<28000&&farMesh.indices.size()/3<8000&&farMesh.indices.size()<nearMesh.indices.size()*.35f,
+        "Dense ranged equipment lost its bounded distant LOD");
+    }
+    // The movable arrow and string are separate from the bow's handle. Dense
+    // string sampling now enters this height band; it must not be classified
+    // as extra handle thickness. The stave and bindings keep the same limit.
+    for(const auto& v:mesh.vertices) if(std::abs(v.position.y)<.085f && std::abs(v.position.z)<.04f &&
+      !(focused&&form==WeaponForm::Handbow&&(v.color.w==6||v.color.w==15)))
       Check(std::hypot(v.position.x,v.position.z)<=.0256f,"Fitted handle exceeds the skinned hand's grip envelope");
     for(float t:{0.f,.04f,.09f,.15f,.21f,.30f,.50f,.76f}) for(bool shield:{false,true}) for(int layer=0;layer<4;++layer) {
       animation::Sample sample;sample.action=animation::SampleAction(ClassId(i),animation::ActionClip::Heavy,t);

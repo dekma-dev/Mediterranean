@@ -126,23 +126,25 @@ void Native(Renderer& r,const std::filesystem::path& output) {
  Check(cells.size()==109,"Missing available spell illustrations");
  for(auto size:{std::pair<int,int>{960,600},{1920,1080},{2560,1080}}) {
   Check(r.Resize(size.first,size.second),"Spell review resize");const ui::Layout layout(float(size.first),float(size.second));
+  const auto bars=ui::HudTransform::At(float(size.first),float(size.second),640,710);
   for(auto id:{ClassId::Warrior,ClassId::Scout,ClassId::Mage}) {
    auto state=Hero(id);ui::Interface hud;const auto saved=state.Save();
    const auto draw=[&] {r.BeginFrame();hud.Render(r,state,.5f,false);Check(r.EndFrame(false),"Hotbar edit draw");};
    const auto point=[&](float x,float y,bool click,bool held,bool release,bool right=false) {return hud.Pointer(layout.x+x*layout.scale,layout.y+y*layout.scale,float(size.first),float(size.second),click,right,held,release);};
+   const auto hotbar=[&](float x,float y,bool click,bool held,bool release,bool right=false){return point(bars.X(x),bars.Y(y),click,held,release,right);};
    std::set<int> defaults;for(int i=0;i<20;++i)if(hud.HotbarSpell(i,id)>=0)Check(defaults.insert(hud.HotbarSpell(i,id)).second,"New profile has duplicated bindings");
-   draw();point(375,677,false,false,false,true);Check(hud.HotbarSpell(0,id)==-1,"RMB must remove disabled/no-target spells too");
-   draw();point(432,677,true,true,false);point(640,350,false,true,false);draw();point(640,350,false,false,true);
+   draw();hotbar(375,677,false,false,false,true);Check(hud.HotbarSpell(0,id)==-1,"RMB must remove disabled/no-target spells too");
+   draw();hotbar(432,677,true,true,false);point(640,350,false,true,false);draw();point(640,350,false,false,true);
    Check(hud.HotbarSpell(1,id)==-1,"World drop must unbind without casting");
-   hud.AssignHotbar(0,0,id);draw();point(375,677,true,true,false);point(700,350,false,true,false);hud.CancelDrag();point(700,350,false,false,true);
+   hud.AssignHotbar(0,0,id);draw();hotbar(375,677,true,true,false);point(700,350,false,true,false);hud.CancelDrag();point(700,350,false,false,true);
    Check(hud.HotbarSpell(0,id)==0,"Focus-loss cancellation must preserve binding");
-   draw();point(375,677,true,true,false);point(640,350,false,true,false);
-   point(375,677,false,true,false,true);point(375,677,false,false,true);
+   draw();hotbar(375,677,true,true,false);point(640,350,false,true,false);
+   hotbar(375,677,false,true,false,true);hotbar(375,677,false,false,true);
    Check(hud.HotbarSpell(0,id)==0,"RMB drag cancellation must not remove the slot beneath it");
-   hud.SetOnly(ui::Panel::Inventory);draw();point(375,677,true,true,false);point(1100,460,false,true,false);draw();point(1100,460,false,false,true);
+   hud.SetOnly(ui::Panel::Inventory);draw();hotbar(375,677,true,true,false);point(1100,460,false,true,false);draw();point(1100,460,false,false,true);
    Check(hud.HotbarSpell(0,id)==0,"Dropping on another window must preserve binding");
    hud.SetOnly(ui::Panel::Build);draw();const auto card=ui::buildlayout::Spell(11);
-   point(card.x+8,card.y+10,true,true,false);point(375,677,false,true,false);draw();point(375,677,false,false,true);
+   point(card.x+8,card.y+10,true,true,false);hotbar(375,677,false,true,false);draw();hotbar(375,677,false,false,true);
    Check(hud.HotbarSpell(0,id)==12,"Spellbook must restore a new basic attack into an empty/replaced slot");
    const auto bindings=hud.SaveHotbars();ui::Interface restored;Check(restored.LoadHotbars(bindings) && restored.SaveHotbars()==bindings,"Removed/reassigned bindings must persist");
    Check(state.Save()==saved,"Hotbar editing must never change simulation or player save");

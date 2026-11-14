@@ -80,6 +80,7 @@ public:
   bool CapturesMovement() const { return panel==Panel::Menu; }
   // Layouts are independent per class and saved with expedition settings.
   std::string SaveHotbars() const;
+  std::string OpportunityBindings(const rpg::Simulation& state) const;
   bool LoadHotbars(const std::string& data);
   int HotbarSpell(int slot,rpg::ClassId id) const {
     return slot>=0 && slot<hotbarSlots?hotbars_[rpg::ValidClass(id)?int(id):0][slot]:-1;

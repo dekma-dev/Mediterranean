@@ -1,8 +1,28 @@
 # Blender collection in the native renderer
 
+## Ranged grips and constructed weapons (2026-11-14, v24)
+
+The current motion source is `assets/authored/player-motion-v24.blend`.
+Twenty-six Staff/Bow Actions retain full grip orientation through travel,
+flight and attacks. The native hands fit the real handles and string, and
+engaging a second hand no longer switches the primary elbow plane. Two bows
+and two staffs have revised construction and detail; other equipment, all
+thirteen collection models, faces and body motion are preserved. See
+[the v24 record](ranged-equipment-v24.md) for sources, limits and validation.
+
+## Complete sword frames and connected cloak (2026-11-14, v23)
+
+The preceding motion source is `assets/authored/player-motion-v23.blend`.
+PCL6 retains the Blender gripping hand's full orientation, and the native sword
+solver preserves its authored elbow plane. Fifteen sword Actions refine carry,
+directional travel, flight and cuts. Hip roots and standing feet are narrower.
+A constrained cloth strip drives the cloak, and two existing blades retain
+sharper planes and more surface detail. Faces and all thirteen collection models
+remain frozen. See [the v23 record](player-motion-v23.md) for scope and checks.
+
 ## Connected sword cuts, closer gait and turning cloak (2026-11-13, v22)
 
-The current motion source is `assets/authored/player-motion-v22.blend`, with
+The preceding motion source is `assets/authored/player-motion-v22.blend`, with
 53 Blender Actions and 59 native tracks. First cuts have separate entries from
 low carry. Sword attacks now animate a connected arm/hand chain, and the cloak
 responds to shoulder rotation and facing changes. Forward foot lanes and thigh

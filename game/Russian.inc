@@ -1,4 +1,13 @@
 // Player-facing Russian catalog. English strings remain stable simulation/save identifiers.
+{"PARRY WINDOW", "ОКНО ПАРИРОВАНИЯ"},
+{"Face the incoming strike", "Встречайте удар лицом к противнику"},
+{"Fire imprint", "Огонь"},
+{"Frost imprint", "Лёд"},
+{"Arcane imprint", "Тайна"},
+{"Moving cast / already committed", "Каст в движении / усиление потрачено"},
+{"Assign a matching spell from N", "Добавьте подходящее умение из окна N"},
+{"Moving cast:", "Каст в движении:"},
+{"Empowered hit:", "Усиленный удар:"},
 {"Equipped outfit", "Текущее"},
 {"Equipment preview", "Примерка снаряжения"},
 {"Travel outfit", "Походное"},

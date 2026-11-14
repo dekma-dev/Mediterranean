@@ -41,9 +41,11 @@ XMMATRIX ShieldFrame(const CharacterPose& pose) {
 HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool shield,float cast) {
   side=std::min(side,1u);
   const float staffGrip=side||shield||!weapon?0:animation::Unit(pose.staffGripWeight);
-  const float bowGrip=!side&&weapon&&!shield?pose.bowDraw*(1.1f-.1f*pose.bowDraw):0;
+  const float bowGrip=!side&&weapon&&!shield?(pose.fittedBowGrip?pose.bowStringGrip:pose.bowDraw*(1.1f-.1f*pose.bowDraw)):0;
   const bool gripping=side?weapon:shield||staffGrip>0||bowGrip>0;
   const bool fitted=side&&weapon&&pose.fittedBladeGrip;
+  const bool ranged=weapon&&(pose.fittedStaffGrip||pose.fittedBowGrip);
+  const bool rangedHolding=ranged&&side;
   const auto& arm=pose.arms[side];
   const auto forearm=XMVector3Normalize(XMLoadFloat3(&arm.end)-XMLoadFloat3(&arm.joint));
   XMMATRIX frame;
@@ -51,6 +53,10 @@ HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool 
     const auto blade=WeaponFrame(pose);
     frame={blade.r[1],blade.r[0],-blade.r[2],blade.r[3]};
     if(fitted)frame.r[3]+=frame.r[0]*weapongrip::swordAlong+frame.r[2]*weapongrip::swordPalmInset;
+    if(ranged) {
+      frame=weapongrip::RangedPalm(blade.r[1],blade.r[0],pose.fittedBowGrip,side);
+      frame.r[3]=blade.r[3]+frame.r[2]*weapongrip::rangedPalmInset;
+    }
   } else if(!side && shield) {
     const auto plate=ShieldFrame(pose);
     frame={plate.r[1],-plate.r[0],plate.r[2],plate.r[3]};
@@ -83,7 +89,9 @@ HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool 
   }
   if(staffGrip>0 || bowGrip>0) {
     const auto shaft=WeaponFrame(pose);
-    const XMMATRIX held(shaft.r[1],shaft.r[0],-shaft.r[2],XMVectorSetW(XMLoadFloat3(&arm.end),1));
+    auto held=ranged?weapongrip::RangedPalm(shaft.r[1],shaft.r[0],pose.fittedBowGrip,side):
+      XMMATRIX(shaft.r[1],shaft.r[0],-shaft.r[2],XMVectorSet(0,0,0,1));
+    held.r[3]=XMVectorSetW(XMLoadFloat3(&arm.end),1);
     const float grip=std::max(staffGrip,bowGrip);
     const auto position=XMVectorLerp(frame.r[3],held.r[3],grip);
     frame=XMMatrixRotationQuaternion(XMQuaternionSlerp(XMQuaternionRotationMatrix(frame),XMQuaternionRotationMatrix(held),grip));
@@ -104,19 +112,28 @@ HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool 
   constexpr float lengths[4][3]={{.041f,.026f,.021f},{.045f,.028f,.023f},{.042f,.026f,.022f},{.033f,.022f,.019f}};
   // Free palms face forward when casting: thumbs point toward the body's
   // centre. Grip frames turn their X axis along the held item's shaft.
-  const float mirror=gripping?1.f:side?-1.f:1.f;
+  const float mirror=ranged?(side?-1.f:1.f):gripping?1.f:side?-1.f:1.f;
   result.mirrored=mirror<0;
   for(unsigned finger=0;finger<4;++finger) {
     auto& chain=result.fingers[finger];
     chain.width=finger==3?.020f:.023f;
     // Index is next to the thumb; the little finger has a lower knuckle.
     chain.joints[0]={mirror*(.033f-finger*.022f),finger==3?.014f:.024f,-.045f};
-    const float splay=(1-result.curl)*mirror*(float(finger)-1.2f)*.10f;
+    const float splay=(1-result.curl)*mirror*(float(finger)-1.2f)*.10f*(ranged&&!side&&pose.fittedBowGrip?1-bowGrip:1);
     constexpr float closedAngles[3]={.70f,1.66f,2.79f};
     for(unsigned bone=0;bone<3;++bone) {
       constexpr float littleAngles[3]={.70f,1.30f,1.90f};
-      const float closed=fitted?weapongrip::swordCurl[finger][bone]:finger==3?littleAngles[bone]:closedAngles[bone];
-      const float angle=.07f+result.curl*(closed-.07f);
+      const float closed=fitted?weapongrip::swordCurl[finger][bone]:rangedHolding?
+        (pose.fittedBowGrip?weapongrip::bowCurl:weapongrip::staffCurl)[finger][bone]:finger==3?littleAngles[bone]:closedAngles[bone];
+      float angle=.07f+result.curl*(closed-.07f);
+      if(ranged&&!side&&pose.fittedStaffGrip) {
+        const float resting=.07f+relaxed*(closed-.07f);
+        angle=resting+(weapongrip::staffCurl[finger][bone]-resting)*staffGrip;
+      }
+      if(ranged&&!side&&pose.fittedBowGrip&&finger<3) {
+        const float resting=.07f+relaxed*(closed-.07f);
+        angle=resting+(weapongrip::StringHook(finger,lengths[finger])[bone]-resting)*bowGrip;
+      }
       const auto direction=XMVector3TransformNormal(XMVectorSet(0,std::cos(angle),std::sin(angle),0),XMMatrixRotationZ(splay));
       XMStoreFloat3(&chain.joints[bone+1],XMLoadFloat3(&chain.joints[bone])+direction*lengths[finger][bone]);
     }
@@ -130,7 +147,8 @@ HandPose BuildHandPose(const CharacterPose& pose,unsigned side,bool weapon,bool 
   const XMFLOAT3 fittedThumb[]={{mirror*.35f,.05f,.935f},{-mirror*.60f,.40f,.69f},{-mirror*.96f,.28f,-.04f}};
   constexpr float thumbLengths[]={.035f,.030f,.024f};
   for(unsigned bone=0;bone<3;++bone) {
-    const auto direction=XMVector3Normalize(XMVectorLerp(XMLoadFloat3(&opened[bone]),XMLoadFloat3(&(fitted?fittedThumb:closed)[bone]),result.curl));
+    const float thumbCurl=ranged&&!side&&pose.fittedBowGrip?relaxed*(1-bowGrip)+.2f*bowGrip:result.curl;
+    const auto direction=XMVector3Normalize(XMVectorLerp(XMLoadFloat3(&opened[bone]),XMLoadFloat3(&(fitted?fittedThumb:closed)[bone]),thumbCurl));
     XMStoreFloat3(&thumb.joints[bone+1],XMLoadFloat3(&thumb.joints[bone])+direction*thumbLengths[bone]);
   }
   return result;

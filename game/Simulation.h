@@ -229,6 +229,7 @@ public:
   float GuardWindow() const {return std::max(0.f,discipline_.guard);}
   unsigned ElementMask() const {return class_==ClassId::Mage && discipline_.elements>0 && TargetActor() &&
     TargetActor()->id==discipline_.target && TargetActor()->health>0 && TargetActor()->state!=EnemyState::Returning?discipline_.mask:0;}
+  float ElementSeconds() const {return ElementMask()?std::max(0.f,discipline_.elements):0;}
   bool ConfluenceCast() const {return Attacking() && attackConfluence_;}
   bool DisciplineReady(int ability) const {return DisciplineSeconds()>0 && (class_==ClassId::Mage?NormallySteadyAttack(ability):class_==ClassId::Priest?ability==0 || ability==1:ability==0 || ability==12);}
   int ChainSteps() const {const auto* target=TargetActor();return target && target->health>0 && target->state!=EnemyState::Returning?chain_.Steps(target->id):0;}

@@ -43,11 +43,46 @@ void FittedSwordGrip() {
   float penetration=0;
   for(std::size_t i=0;i<mesh.mesh.vertices.size();++i) {
     const auto vertex=visual::SkinHandVertex(mesh.mesh.vertices[i],mesh.influences[i],palette);
-    const auto p=Transform(vertex.position,inverse);
+    const auto p=Transform(hand.Point(vertex.position),inverse);
     if(p.y>-.052f&&p.y<.097f)penetration=std::max(penetration,-gap(p.x,p.z));
   }
   std::cout<<"Fitted sword maximum skin/handle penetration: "<<penetration<<'\n';
   Check(penetration<.0025f,"Skinned palm or finger intersects the fitted sword handle");
+}
+void FittedRangedGrips() {
+  for(bool bow:{false,true})for(unsigned side=0;side<2;++side) {
+    if(bow&&!side)continue;
+    animation::Sample sample;sample.authoredGait=true;sample.authoredBlend=1;sample.authoredReady=1;
+    sample.authoredEquipment=bow?playerclips::Equipment::Bow:playerclips::Equipment::Staff;
+    const auto pose=BuildCharacterPose(0,0,false,sample,bow?rpg::WeaponForm::Handbow:rpg::WeaponForm::AstralStaff);
+    const auto hand=BuildHandPose(pose,side,true,false,0);const auto inverse=XMMatrixInverse(nullptr,WeaponFrame(pose));
+    Check(hand.mirrored==(side==1),"Ranged grip changed anatomical handedness");
+    Check(Distance(hand.Point(weapongrip::rangedSocket),pose.WeaponPoint(side?0:.26f))<.0001f,"Ranged palm detached from its real handle");
+    Check(Distance(hand.Point({0,-.055f,-.043f}),pose.arms[side].end)<.0001f,"Ranged wrist detached from forearm");
+    const auto gap=[bow](float x,float z) {
+      const float a=.023f,b=bow?.017f:.023f;float d=1;
+      for(int k=0;k<180;++k){const float angle=k*XM_2PI/180;d=std::min(d,std::hypot(x-a*std::cos(angle),z-b*std::sin(angle)));}
+      return (x*x/(a*a)+z*z/(b*b)<1?-1:1)*d;
+    };
+    float padError=0,penetration=0;
+    for(unsigned f=0;f<4;++f){const auto tip=Transform(hand.Point(hand.fingers[f].joints[3]),inverse);
+      padError=std::max(padError,std::abs(gap(tip.x,tip.z)-(f==3?.0085f:.0097f)*.8f));}
+    const auto palette=BuildHandRig(hand);const auto& mesh=visual::CharacterHand(0,hand.mirrored);
+    for(std::size_t i=0;i<mesh.mesh.vertices.size();++i){
+      const auto v=visual::SkinHandVertex(mesh.mesh.vertices[i],mesh.influences[i],palette);
+      const auto p=Transform(hand.Point(v.position),inverse);
+      if(std::abs(p.y-(side?0:.26f))<.065f)penetration=std::max(penetration,-gap(p.x,p.z));
+    }
+    std::cout<<(bow?"Bow":"Staff")<<" hand "<<side<<" pad error "<<padError<<" skin penetration "<<penetration<<'\n';
+    Check(padError<.003f,"Ranged fingertips float away from the authored handle");
+    Check(penetration<.0025f,"Ranged skinned fingers penetrate the handle");
+  }
+  CharacterPose pose;pose.fittedBowGrip=true;pose.hasGripSocket=true;pose.bowDraw=pose.bowStringGrip=1;
+  pose.weaponDirection={0,1,0};pose.weaponRight={1,0,0};
+  const auto hand=BuildHandPose(pose,0,true,false,0);
+  for(unsigned f=0;f<3;++f){const auto p=hand.fingers[f].joints[3];
+    Check(std::abs(p.y-.053f)<.00001f&&std::abs(p.z+.008f)<.00001f,"Archery fingers do not hook one string line");
+    Check(f==0?p.x>weapongrip::bowStringContact.x:p.x<weapongrip::bowStringContact.x,"Archery nock is not between index and middle fingers");}
 }
 void Structure() {
   float largestTipStep=0,smallestLateral=1;
@@ -115,6 +150,7 @@ void Structure() {
 int main() {
   Structure();
   FittedSwordGrip();
+  FittedRangedGrips();
   Check(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"Hand COM");
   Win32Window window; Check(window.Create(GetModuleHandle(nullptr),960,720,L"Hand and weapon checks",false),"Hidden hand window");
   Renderer renderer; Check(renderer.Initialize(window.GetHandle(),960,720),"Hand renderer");

@@ -49,6 +49,7 @@ void CloakInertiaChecks() {
     animation::CloakSample early,loaded,stopped,settled;
     for(int tick=0;tick<3*hz;++tick) {
       const auto s=cloth.Update(1.f/hz,tick<hz?6.f:0.f,0,tick<hz?.7f:0.f);
+      Require(cloth.MaximumStretch()<.001f,"Cloak links stretched by more than one millimetre");
       Require(s.active && std::isfinite(s.phase) && s.midBack>=0 && s.midBack<=.16f &&
         s.hemBack>=0 && s.hemBack<=.39f && std::abs(s.hemSide)<=.20f && s.flutter<=.04f,
         "Cloak inertia escaped its finite rendering envelope");

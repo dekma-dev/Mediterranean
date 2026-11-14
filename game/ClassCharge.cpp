@@ -40,8 +40,8 @@ void Steel(Renderer& r,int ability,float power,float age,const Attachments& a){
  const auto start=Mix(a.edgeBase,a.edgeTip,std::max(0.f,centre-half));
  const auto end=Mix(a.edgeBase,a.edgeTip,std::min(1.f,centre+half));
  for(auto normal:{Forward(a),XMFLOAT3{0,1,0}})
-  spellvfx::FilamentStream(r,[&](float u){return Mix(start,end,u);},normal,strong?.065f:.035f,.65f,age,
-    {.80f,.89f,1,power*(strong?.72f:.34f)},6);
+  spellvfx::FilamentStream(r,[&](float u){return Mix(start,end,u);},normal,strong?.095f:.035f,.65f,age,
+    {.80f,.89f,1,power*(strong?.85f:.34f)},6);
  if(strong){
   for(int n=0;n<3;++n){const float u=std::fmod(age*1.7f+n/3.f,1.f);const auto p=Mix(a.edgeBase,a.edgeTip,u);
    r.DrawEffectSprite(Art::Sparks,p,.022f,.05f,age,{1,.84f,.53f,power*std::sin(u*pi)*.45f});}
@@ -55,10 +55,10 @@ void Bow(Renderer& r,int ability,float power,float age,const Attachments& a){
  const int count=ability==8?3:2;
  for(int n=0;n<count;++n){const float angle=n*tau/count+age*.45f;
   const auto path=[&](float u){const auto centre=Mix(a.right,a.focus,u);
-   const float reach=std::sin(u*pi)*(.15f+power*.18f);
+   const float reach=std::sin(u*pi)*(.16f+power*(focused?.40f:.25f));
    return Local(a,centre,std::cos(angle)*reach,std::sin(angle)*reach,-(1-u)*(.18f+power*.22f));};
-  spellvfx::FilamentStream(r,path,Forward(a),focused?.070f:.045f,1.2f,age,
-    {.73f,.83f,.69f,power*(focused?.52f:.35f)},10);
+  spellvfx::FilamentStream(r,path,Forward(a),focused?.10f:.065f,1.2f,age,
+    {.80f,.88f,.76f,power*(focused?.62f:.40f)},10);
  }
  // A concentrated point follows the physical nock/muzzle; no forward wake
  // or contact is shown until the simulation emits the accepted shot.

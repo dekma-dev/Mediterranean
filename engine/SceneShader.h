@@ -108,16 +108,23 @@ void DeformCloth(inout float3 p,inout float3 n,float4 surface,float partMaterial
   n.y-=dot(n,bend)*derivative;p+=bend*weight;
  }
  [branch] if(surface.w<-2 && surface.w>-3) {
-  float draw=saturate(surface.z),height=abs(p.y)/.64;
+  float halfSpan=bend.x>.1?bend.x:.64;
+  float draw=saturate(surface.z),height=saturate(abs(p.y)/halfSpan);
   if(partMaterial==6) {
    // Arrow parts have their own material tag in the authored bow mesh.
    float visible=saturate((-surface.w-2.1)/.8);
    p=(p-float3(0,.035,0))*visible+float3(0,.035,-.40*draw);
   } else if(partMaterial==15) {
-   p.z-=draw*lerp(.40,.08,saturate(height));
+   // Each straight string half joins the real nock and the deformed tip.
+   // A shared .64 m normalization detached the shorter bow's string and
+   // treated the off-centre arrow nock as the middle of the bow.
+   float side=p.y>=.035?1:-1,span=max(.1,halfSpan-side*.035);
+   float along=saturate(abs(p.y-.035)/span);
+   p.z-=draw*lerp(.40,.08,along);
+   n.y-=draw*.32*side/span*n.z;
   } else {
    p.z-=draw*.08*height*height;
-   n.y+=draw*.16*p.y/(.64*.64)*n.z;
+   n.y+=draw*.16*p.y/(halfSpan*halfSpan)*n.z;
   }
  }
  [branch] if(surface.w<=-3 && surface.w>=-5) {

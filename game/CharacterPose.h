@@ -20,20 +20,22 @@ struct CharacterPose {
   float freeHandCurl=.32f;
   float staffGripWeight=0;
   float bowDraw=0,bowArrow=1;
+  float bowStringGrip=0;
   std::array<LimbPose,2> arms,legs; // Left, right in character space.
   std::array<float,2> footYaw{};
   std::array<float,2> footPitch{};
   DirectX::XMFLOAT3 weaponDirection;
   // Authored clips target the handle, whereas the arm solver targets the wrist.
   DirectX::XMFLOAT3 weaponGrip{};
-  DirectX::XMFLOAT3 weaponRight{}; // Grip roll follows the loaded forearm.
+  DirectX::XMFLOAT3 weaponRight{}; // Authored grip roll; forearm fallback for legacy clips.
   bool hasGripSocket=false;
   bool fittedBladeGrip=false;
+  bool fittedStaffGrip=false,fittedBowGrip=false;
   // Match BodyBindPose: knee (.17,.53,0), ankle (.18,.17,0).
   // The former .40 m shin stretched the 36 cm bind bone and forced a crouch.
   static constexpr float upperArm=.28f,forearm=.27f,thigh=.40f,shin=.36013886f;
-  // The source human's femoral heads sit 25 cm apart. The old 34 cm rig
-  // forced a wide upper-leg stance even after narrowing its foot tracks.
+  // Narrow the presentation hip span to 25 cm. The former 34 cm placement
+  // kept the upper legs spread even after narrowing the foot tracks.
   static constexpr float hipHalfWidth=.125f,standingHalfWidth=.125f;
   DirectX::XMFLOAT3 UpperPoint(DirectX::XMFLOAT3 point) const;
   DirectX::XMMATRIX UpperTransform() const;

@@ -99,6 +99,21 @@ void LibraryChecks(){
   const auto compatibility=playerclips::Decode(legacy);
   Check(compatibility[8].frames[20].ankles[0].x==0&&compatibility[8].frames[20].knees[0].z==0,"Legacy clips must initialize extension channels");
   Check(Difference(compatibility[8].frames[20],clips[8].frames[20])==0,"PCL3 compatibility changed existing channels");
+  for(unsigned version:{4u,5u}) {
+    std::string previous(bytes.substr(0,12));previous[3]=char('0'+version);previous[4]=char(version);
+    const std::size_t storedBytes=(version==4?40u:53u)*sizeof(float);
+    pos=12;
+    for(const auto& track:clips){
+      previous.append(bytes.substr(pos,36));pos+=36;
+      for(std::size_t i=0;i<track.frames.size();++i){previous.append(bytes.substr(pos,storedBytes));pos+=sizeof(playerclips::Frame);}
+    }
+    const auto decoded=playerclips::Decode(previous);
+    for(unsigned i=0;i<clips.size();++i)for(unsigned k=0;k<clips[i].frames.size();++k) {
+      Check(std::memcmp(&decoded[i].frames[k],&clips[i].frames[k],storedBytes)==0,
+        "Previous archive changed its stored skeletal channels");
+      Check(!playerclips::HasWeaponFrame(decoded[i].frames[k]),"Previous archive invented a grip roll");
+    }
+  }
   corrupt=std::string(bytes);bad=2;
   std::memcpy(corrupt.data()+12+36+34*sizeof(float),&bad,sizeof(bad));
   Check(rejected(corrupt),"Invalid authored knee direction must be rejected");
@@ -289,9 +304,11 @@ void CuttingGripChecks(){
       if(tick>500) {
         worstAlignment=std::min(worstAlignment,XMVectorGetX(XMVector3Dot(frame.r[0],forearm)));
         worstRollStep=std::max(worstRollStep,Distance(previous,pose.weaponRight));
-        // Forward torso lean shallows the world-space angle at full run.
-        // The blade must remain down and strongly behind the gripping hand.
-        Check(pose.weaponDirection.y<-.4f&&pose.weaponDirection.z<-.65f,
+        // A connected carrying arm shallows the trailing blade during its
+        // backswing. Check its downward/backward direction and real clearance
+        // together with a stricter wrist limit, rather than fixing its pitch.
+        const auto tip=pose.WeaponPoint(.96f);
+        Check(pose.weaponDirection.y<-.18f&&pose.weaponDirection.z<-.65f&&tip.y>.07f&&tip.x>.20f,
           "Travelling swordsman points the blade forward instead of carrying it down and clear");
         Check(Distance(BuildHandPose(pose,1,true,false,0).Point({0,-.055f,-.043f}),pose.arms[1].end)<1e-5f,
           "Cutting grip detached the wrist from the forearm");
@@ -299,7 +316,7 @@ void CuttingGripChecks(){
       previous=pose.weaponRight;
     }
   }
-  Check(worstAlignment>.85f,"Carried sword forces the knuckles sideways across the forearm");
+  Check(worstAlignment>.98f,"Carried sword forces the knuckles sideways across the forearm");
   Check(worstRollStep<.003f,"Carried sword rolls abruptly at a grip-frame pole");
   std::cout<<"Cutting grip: forearm alignment "<<worstAlignment<<", maximum roll-vector change per ms "<<worstRollStep<<'\n';
 }
@@ -513,7 +530,7 @@ void WeaponMotionChecks(){
       Check(tip.y>.025f,"Imported weapon tip pierced floor");
       if(staff) {
         const auto hand=BuildHandPose(pose,0,true,false,pose.handCast);
-        worstGrip=std::max(worstGrip,Distance(hand.Point({0,0,0}),pose.WeaponPoint(.26f)));
+        worstGrip=std::max(worstGrip,Distance(hand.Point(pose.fittedStaffGrip?weapongrip::rangedSocket:XMFLOAT3{}),pose.WeaponPoint(.26f)));
         Check(hand.curl>.99f,"Supporting staff hand did not close on shaft");
       }
       if(havePrevious&&hz==1000) {
@@ -588,7 +605,8 @@ void LoadedArmRunningChecks(){
         const auto acceleration=(XMLoadFloat3(&relative)-2*XMLoadFloat3(&previous)+XMLoadFloat3(&before))/(dt*dt);
         accelerationSquared+=XMVectorGetX(XMVector3LengthSq(acceleration));++samples;
         const XMFLOAT3 socket=pose.fittedBladeGrip?
-          XMFLOAT3{-weapongrip::swordAlong,0,-weapongrip::swordPalmInset}:XMFLOAT3{};
+          XMFLOAT3{-weapongrip::swordAlong,0,-weapongrip::swordPalmInset}:
+          (pose.fittedStaffGrip||pose.fittedBowGrip)?weapongrip::rangedSocket:XMFLOAT3{};
         Check(Distance(BuildHandPose(pose,1,true,false,0).Point(socket),pose.WeaponPoint(0))<.0001f,"Running weapon detached from its fitted palm socket");
       }
       before=previous;previous=relative;
@@ -658,7 +676,9 @@ void BowMotionChecks(){
         if(step>.025f)std::cout<<"Bow jump heavy "<<heavy<<" t "<<t<<" side "<<side<<" phase "<<controller.phase<<" draw "<<previous.bowDraw<<" -> "<<pose.bowDraw<<" delta "<<step<<'\n';}
       if(pose.bowDraw>.95f) {
         XMFLOAT3 nock;XMStoreFloat3(&nock,XMVector3TransformCoord(XMVectorSet(0,.035f,-.07f-.40f*pose.bowDraw,1),WeaponFrame(pose)));
-        worstNock=std::max(worstNock,Distance(nock,BuildHandPose(pose,0,true,false,0).Point({0,0,0})));drawn=true;
+        if(pose.bowStringGrip>.95f)
+          worstNock=std::max(worstNock,Distance(nock,BuildHandPose(pose,0,true,false,0).Point(weapongrip::bowStringContact)));
+        drawn=true;
         Check(BuildHandPose(pose,0,true,false,0).curl>.75f,"Archer drawing hand stayed open");
         const auto contact=playerclips::Collection()[unsigned(heavy?playerclips::Clip::BowPowerRelease:playerclips::Clip::BowRelease)].contact;
         if(controller.phase<contact)Check(pose.bowArrow>.9f,"Drawing bow lost its nocked arrow");

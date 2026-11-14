@@ -543,6 +543,9 @@ void Renderer::DrawBow(visual::Mesh mesh,const XMMATRIX& transform,float draw,fl
  item.instance.surface.z=std::isfinite(draw)?std::clamp(draw,0.f,1.f):0;
  // (-3,-2) is reserved for archery, separate from hands (-2) and faces (<=-3).
  item.instance.surface.w=-2.1f-.8f*(std::isfinite(arrow)?std::clamp(arrow,0.f,1.f):1);
+ // The two authored bows have different working lengths. Share the actual
+ // tip span with string/limb deformation in color and both shadow passes.
+ item.instance.normal._41=(mesh==visual::Mesh::OldScoutBow||mesh==visual::Mesh::OldScoutBowLow)?.57f:.64f;
  item.radius+=.45f;
 }
 void Renderer::DrawCoatPanel(visual::Mesh mesh,XMFLOAT3 hem,XMFLOAT3 waist,XMFLOAT3 knee,float width,float depth,XMFLOAT3 facing,const XMFLOAT4& paint) {

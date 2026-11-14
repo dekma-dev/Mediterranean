@@ -22,6 +22,34 @@ LimbPose Solve(XMFLOAT3 root,XMFLOAT3 target,XMFLOAT3 bend,float upper,float low
   XMStoreFloat3(&result.end,origin+axis*distance);
   return result;
 }
+playerclips::Frame BlendBladeGrip(const playerclips::Frame& a,const playerclips::Frame& b,float weight) {
+  auto result=playerclips::Blend(a,b,weight);
+  if(!playerclips::HasWeaponFrame(a)||!playerclips::HasWeaponFrame(b)||
+     !std::isfinite(weight)||weight<=0||weight>=1)return result;
+  const auto rotation=[](const playerclips::Frame& f){
+    const auto up=XMVector3Normalize(XMLoadFloat3(&f.weapon));
+    auto right=XMLoadFloat3(&f.weaponRight);right=XMVector3Normalize(right-up*XMVector3Dot(right,up));
+    return XMQuaternionRotationMatrix(XMMATRIX(right,up,XMVector3Cross(right,up),XMVectorSet(0,0,0,1)));
+  };
+  // Use one outboard grip hemisphere throughout a returning cut. Choosing
+  // the shortest quaternion arc anew each frame flips the interpolation path
+  // when a source stroke crosses 180 degrees from its partially loaded guard.
+  // Source key interpolation stays untouched; only the outer guard/action
+  // blend needs this common reference, with exact authored endpoints.
+  const auto up=XMVectorSet(.90630779f,0,.42261826f,0),right=XMVectorSet(0,1,0,0);
+  const auto reference=XMQuaternionRotationMatrix(XMMATRIX(right,up,XMVector3Cross(right,up),XMVectorSet(0,0,0,1)));
+  auto qa=rotation(a),qb=rotation(b);
+  if(XMVectorGetX(XMVector4Dot(qa,reference))<0)qa=-qa;
+  if(XMVectorGetX(XMVector4Dot(qb,reference))<0)qb=-qb;
+  const float dot=std::clamp(XMVectorGetX(XMVector4Dot(qa,qb)),-1.f,1.f);
+  XMVECTOR q;
+  if(dot>.9995f)q=XMQuaternionNormalize(XMVectorLerp(qa,qb,weight));
+  else if(dot<-.9995f)q=weight<.5f?XMQuaternionSlerp(qa,reference,weight*2):XMQuaternionSlerp(reference,qb,weight*2-1);
+  else {const float angle=std::acos(dot);
+    q=XMQuaternionNormalize((qa*std::sin((1-weight)*angle)+qb*std::sin(weight*angle))/std::sin(angle));}
+  const auto matrix=XMMatrixRotationQuaternion(q);
+  XMStoreFloat3(&result.weaponRight,matrix.r[0]);XMStoreFloat3(&result.weapon,matrix.r[1]);return result;
+}
 LimbPose SolveArm(XMFLOAT3 root,XMFLOAT3 target,XMFLOAT3 authoredBend) {
   const auto delta=XMLoadFloat3(&target)-XMLoadFloat3(&root);
   const auto axis=XMVector3Normalize(delta);
@@ -165,6 +193,7 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     const auto& track=playerclips::Collection()[unsigned(heavy?playerclips::Clip::BowPowerRelease:playerclips::Clip::BowRelease)];
     const float p=dynamics.authoredStrikePhase;
     pose.bowDraw=stroke.weight*animation::SmoothStep(p/track.contact)*(1-animation::SmoothStep((p-track.contact)/.18f));
+    pose.bowStringGrip=stroke.weight*animation::SmoothStep(p/track.contact)*(1-animation::SmoothStep((p-track.contact)/.055f));
     pose.bowArrow=p<=track.contact?stroke.weight*animation::SmoothStep(p/.035f):0;
   }
   pose.handCast=cast;
@@ -513,10 +542,14 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     const auto shoulder=pose.UpperPoint({side*.305f+offsetShoulder.x,1.43f+offsetShoulder.y,offsetShoulder.z}),wrist=pose.UpperPoint(hand);
     // Legacy procedural gestures have no authored elbow channel. Retain their
     // established bend plane; the transported solver belongs to authored clips.
-    const bool sourceGrip=i==1&&form==rpg::WeaponForm::Blade&&dynamics.authoredGait&&playerclips::HasWeaponFrame(idleClip);
+    const bool sourceGrip=i==1&&(form==rpg::WeaponForm::Blade||rpg::StaffWeapon(form)||bow)&&
+      dynamics.authoredGait&&playerclips::HasWeaponFrame(idleClip);
     pose.arms[i]=sourceGrip?Solve(shoulder,wrist,elbowPoles[i],CharacterPose::upperArm,CharacterPose::forearm,.006f):
       dynamics.authoredGait || newStrike?SolveArm(shoulder,wrist,elbowPoles[i]):
       Solve(shoulder,wrist,elbowPoles[i],CharacterPose::upperArm,CharacterPose::forearm);
+    // PCL6 targets the handle. It may lie beyond the wrist's reach sphere;
+    // defer that clamp until its fitted hand offset has been applied below.
+    if(sourceGrip)pose.arms[i].end=wrist;
   }
   XMFLOAT3 weapon{.12f,-.76f+swing*1.72f+landing*.25f+air*.20f+dash*.32f+brake*.16f,.63f-swing*.45f};
   if(rpg::StaffWeapon(form))weapon={.10f,.99f,.04f+dash*.18f};
@@ -556,7 +589,14 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     // accelerated sharply as the blade crossed from hanging down to raised.
     const auto blended=angle>.0001f?
       (a*std::sin((1-blend)*angle)+b*std::sin(blend*angle))/std::sin(angle):a;
-    XMStoreFloat3(&weapon,blended);
+    // Legacy direction-only sword clips need an outboard return to the next
+    // cut. The direct arc crossed the forearm axis during alternating attacks,
+    // making the fallback grip roll swivel rapidly around an almost axial
+    // forearm. The loaded source direction is still reached at full weight;
+    // a complete authored grip frame below remains authoritative.
+    if(newStrike && form==rpg::WeaponForm::Blade)
+      weapon=animation::BlendSwordReadyAim(rest,cut,blend);
+    else XMStoreFloat3(&weapon,blended);
   }
   if(rpg::StaffWeapon(form)&&!newStrike&&dynamics.authoredEquipment!=playerclips::Equipment::Staff)weapon={.10f,.99f,.04f+dash*.18f};
   if(rpg::PhysicalLauncher(form)&&!bow) {
@@ -569,9 +609,12 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   auto gripFrame=playerclips::Blend(idleClip,gaitClip,gaitAmount);
   if(equippedFlight&&armAir>0&&!armLanding)gripFrame=playerclips::Blend(gripFrame,flightArms,armAir*(1-burst)*(1-hit));
   if(equippedFlight&&armLanding)gripFrame=playerclips::Blend(gripFrame,landingArms,armLandingWeight*(1-burst)*(1-hit));
-  if(timed&&authoredAttack)gripFrame=playerclips::Blend(gripFrame,attackClip,stroke.weight*(1-burst));
-  const bool authoredGripFrame=form==rpg::WeaponForm::Blade&&dynamics.authoredGait&&
-    dynamics.authoredEquipment==playerclips::Equipment::Sword&&playerclips::HasWeaponFrame(gripFrame);
+  if(timed&&authoredAttack)gripFrame=form==rpg::WeaponForm::Blade?
+    BlendBladeGrip(gripFrame,attackClip,stroke.weight*(1-burst)):
+    playerclips::Blend(gripFrame,attackClip,stroke.weight*(1-burst));
+  const bool authoredGripFrame=dynamics.authoredGait&&playerclips::HasWeaponFrame(gripFrame)&&
+    ((form==rpg::WeaponForm::Blade&&dynamics.authoredEquipment==playerclips::Equipment::Sword)||
+     (rpg::StaffWeapon(form)&&dynamics.authoredEquipment==playerclips::Equipment::Staff)||bow);
   if(authoredGripFrame)weapon=gripFrame.weapon;
   const auto direction=pose.UpperDirection(weapon);
   XMStoreFloat3(&pose.weaponDirection,XMVector3Normalize(XMLoadFloat3(&direction)));
@@ -594,6 +637,8 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   const bool bladeGrip=pose.hasGripSocket &&
     (form==rpg::WeaponForm::Blade || form==rpg::WeaponForm::Mace || form==rpg::WeaponForm::Cleaver);
   pose.fittedBladeGrip=pose.hasGripSocket&&form==rpg::WeaponForm::Blade;
+  pose.fittedStaffGrip=pose.hasGripSocket&&rpg::StaffWeapon(form)&&dynamics.authoredEquipment==playerclips::Equipment::Staff;
+  pose.fittedBowGrip=pose.hasGripSocket&&bow;
   if(bladeGrip) {
     // A cutting grip closes across the handle while the knuckles continue
     // the forearm. Fixing this axis to torso +X bent the wrist sideways and
@@ -632,6 +677,8 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
   XMStoreFloat3(&pose.weaponRight,shaftRight);
   if(pose.fittedBladeGrip)
     wristOffset+=shaftUp*weapongrip::swordAlong-shaftForward*weapongrip::swordPalmInset;
+  if(pose.fittedStaffGrip||pose.fittedBowGrip)
+    wristOffset=weapongrip::WristOffset(weapongrip::RangedPalm(shaftUp,shaftRight,pose.fittedBowGrip,1));
   if(pose.hasGripSocket) {
     XMFLOAT3 wrist;XMStoreFloat3(&wrist,XMLoadFloat3(&pose.arms[1].end)+wristOffset);
     pose.arms[1]=authoredGripFrame?Solve(pose.arms[1].root,wrist,elbowPoles[1],CharacterPose::upperArm,CharacterPose::forearm,.006f):
@@ -649,15 +696,17 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     // Retarget the two-handed shaft onto the shorter, wider native skeleton.
     // Project the shared grip into BOTH reach spheres before solving either arm.
     auto grip=XMLoadFloat3(&pose.weaponGrip),axis=shaftUp;
+    const auto supportingOffset=weapongrip::WristOffset(weapongrip::RangedPalm(shaftUp,shaftRight,false,0));
     const auto right=XMLoadFloat3(&pose.arms[1].root),left=XMLoadFloat3(&pose.arms[0].root);
     const float reach=CharacterPose::upperArm+CharacterPose::forearm-.007f;
-    for(int iteration=0;iteration<12;++iteration)for(auto centre:{left-wristOffset-axis*.26f,right-wristOffset}) {
+    for(int iteration=0;iteration<12;++iteration)for(auto centre:{left-supportingOffset-axis*.26f,right-wristOffset}) {
       const auto d=grip-centre;const float len=XMVectorGetX(XMVector3Length(d));
       if(len>reach)grip=centre+d*(reach/len);
     }
     XMFLOAT3 r,l;XMStoreFloat3(&r,XMVectorLerp(XMLoadFloat3(&pose.arms[1].end),grip+wristOffset,pose.staffGripWeight));
-    XMStoreFloat3(&l,XMVectorLerp(XMLoadFloat3(&pose.arms[0].end),grip+axis*.26f+wristOffset,pose.staffGripWeight));
-    pose.arms[1]=SolveArm(pose.arms[1].root,r,elbowPoles[1]);
+    XMStoreFloat3(&l,XMVectorLerp(XMLoadFloat3(&pose.arms[0].end),grip+axis*.26f+supportingOffset,pose.staffGripWeight));
+    pose.arms[1]=authoredGripFrame?Solve(pose.arms[1].root,r,elbowPoles[1],CharacterPose::upperArm,CharacterPose::forearm,.006f):
+      SolveArm(pose.arms[1].root,r,elbowPoles[1]);
     pose.arms[0]=SolveArm(pose.arms[0].root,l,elbowPoles[0]);
     XMStoreFloat3(&pose.weaponGrip,XMLoadFloat3(&pose.arms[1].end)-wristOffset);
   }
@@ -665,24 +714,24 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
     // Native arm lengths differ from the Blender actor. Keep the string hand
     // attached to the rendered nock through the draw, then release it smoothly.
     const auto up=XMLoadFloat3(&pose.weaponDirection);
-    const auto localRight=pose.UpperDirection({1,0,0});const auto lateral=XMLoadFloat3(&localRight);
-    const auto right=XMVector3Normalize(lateral-up*XMVector3Dot(lateral,up));
-    const auto forward=XMVector3Cross(right,up);
+    const auto right=shaftRight,forward=shaftForward;
+    const auto stringOffset=weapongrip::WristOffset(weapongrip::RangedPalm(up,right,true,0),true);
     const auto nockOffset=up*.035f-forward*(.07f+.40f*pose.bowDraw);
     auto sharedGrip=XMLoadFloat3(&pose.weaponGrip);
     const auto leftRoot=XMLoadFloat3(&pose.arms[0].root),rightRoot=XMLoadFloat3(&pose.arms[1].root);
     constexpr float reach=CharacterPose::upperArm+CharacterPose::forearm-.007f;
-    for(int iteration=0;iteration<12;++iteration)for(auto centre:{leftRoot-wristOffset-nockOffset,rightRoot-wristOffset}) {
+    for(int iteration=0;iteration<12;++iteration)for(auto centre:{leftRoot-stringOffset-nockOffset,rightRoot-wristOffset}) {
       const auto d=sharedGrip-centre;const float length=XMVectorGetX(XMVector3Length(d));
       if(length>reach)sharedGrip=centre+d*(reach/length);
     }
     sharedGrip=XMVectorLerp(XMLoadFloat3(&pose.weaponGrip),sharedGrip,animation::SmoothStep(pose.bowDraw/.6f));
     XMFLOAT3 holdingWrist;XMStoreFloat3(&holdingWrist,sharedGrip+wristOffset);
-    pose.arms[1]=SolveArm(pose.arms[1].root,holdingWrist,elbowPoles[1]);
+    pose.arms[1]=authoredGripFrame?Solve(pose.arms[1].root,holdingWrist,elbowPoles[1],CharacterPose::upperArm,CharacterPose::forearm,.006f):
+      SolveArm(pose.arms[1].root,holdingWrist,elbowPoles[1]);
     XMStoreFloat3(&pose.weaponGrip,XMLoadFloat3(&pose.arms[1].end)-wristOffset);
     const auto nock=XMLoadFloat3(&pose.weaponGrip)+nockOffset;
-    const float grip=animation::SmoothStep(pose.bowDraw/.8f);
-    XMFLOAT3 target;XMStoreFloat3(&target,XMVectorLerp(XMLoadFloat3(&pose.arms[0].end),nock+wristOffset,grip));
+    const float grip=pose.bowStringGrip;
+    XMFLOAT3 target;XMStoreFloat3(&target,XMVectorLerp(XMLoadFloat3(&pose.arms[0].end),nock+stringOffset,grip));
     pose.arms[0]=SolveArm(pose.arms[0].root,target,elbowPoles[0]);
   }
   return pose;

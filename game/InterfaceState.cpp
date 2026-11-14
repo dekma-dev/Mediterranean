@@ -3,6 +3,17 @@
 #include <cmath>
 #include <sstream>
 namespace ui {
+std::string Interface::OpportunityBindings(const rpg::Simulation& s) const {
+  std::string result;int count=0;std::array<bool,rpg::spells.size()> seen{};
+  for(int slot=0;slot<hotbarSlots;++slot){
+    const int ability=HotbarSpell(slot,s.Class());
+    if(!rpg::ValidSpell(ability) || !s.DisciplineReady(ability) || s.Level()<rpg::SpellLevel(ability) || seen[ability])continue;
+    seen[ability]=true;
+    if(count<3){if(count)result+=" / ";result+=BindingLabel(slot);}++count;
+  }
+  if(count>3)result+=" +"+std::to_string(count-3);
+  return result;
+}
 std::vector<StatusEffect> TargetStatusEffects(const rpg::Enemy& enemy) {
   std::vector<StatusEffect> result;
   if(enemy.health<=0) return result;

@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 
 namespace {
 void Check(bool value,const char* message) { if(!value) throw std::runtime_error(message); }
@@ -322,8 +323,12 @@ void CastFadeCaptures(Renderer& renderer,const std::filesystem::path& output) {
 
 int main(int argc,char** argv) {
  try {
-  CombatTextChecks();
-  PlateChecks();CastChecks();CastReceiptChecks();
+  const std::string mode=argc>2?argv[2]:"--all";
+  Check(argc<=3 && (mode=="--all" || mode=="--controls" || mode=="--world"),"Unknown combat HUD review mode");
+  if(mode!="--world") {
+   CombatTextChecks();
+   PlateChecks();CastChecks();CastReceiptChecks();
+  }
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
   CoInitializeEx(nullptr,COINIT_MULTITHREADED);
   const auto output=std::filesystem::path(argc>1?argv[1]:"combat-hud-review");
@@ -331,13 +336,19 @@ int main(int argc,char** argv) {
   Win32Window window;Renderer renderer;
   Check(window.Create(GetModuleHandleW(nullptr),1920,1080,L"Combat HUD review",false),"Hidden review window");
   Check(renderer.Initialize(window.GetHandle(),1920,1080),"Native review renderer");
-  DensityChecks(renderer);
-  TargetReceiptChecks(renderer,output);
-  AbilityFeedbackChecks(&renderer,output);
-  WorldPickChecks(renderer);
-  PreparationChecks(renderer);
-  CastFadeCaptures(renderer,output);
-  for(auto id:{rpg::ClassId::Warrior,rpg::ClassId::Mage,rpg::ClassId::Scout}) {
+  // Keep all checks in the default standalone review. CTest separates the
+  // control captures from full encounters under the original per-run limit.
+  if(mode!="--world") {
+   DensityChecks(renderer);
+   TargetReceiptChecks(renderer,output);
+   AbilityFeedbackChecks(&renderer,output);
+   WorldPickChecks(renderer);
+   PreparationChecks(renderer);
+   CastFadeCaptures(renderer,output);
+   std::cout<<"HUD controls, picking and cast receipts complete\n"<<std::flush;
+  }
+  if(mode!="--controls")for(auto id:{rpg::ClassId::Warrior,rpg::ClassId::Mage,rpg::ClassId::Scout}) {
+   std::cout<<"HUD world case "<<int(id)<<'\n'<<std::flush;
    Game game;game.Initialize();
    auto& state=const_cast<rpg::Simulation&>(game.State());
    Check(state.CreateCharacter(id,"Dawnwatch"),"Review character");
@@ -396,7 +407,7 @@ int main(int argc,char** argv) {
    Check(state.Save()==unchanged,"Combat numbers advanced simulation during rendering");
   }
   Check(renderer.ValidateDebugMessages(),"HUD DirectX debug messages");
-  std::cout<<"PASS: three-class native combat HUD review, two resolutions, read-only rendering.\n";
+  std::cout<<"PASS: native combat HUD review "<<mode<<"; input, layout and read-only rendering checks.\n";
   return 0;
  } catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 1;}
 }

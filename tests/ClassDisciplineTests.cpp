@@ -6,6 +6,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <cmath>
+#include <limits>
 
 namespace {
 using namespace rpg;
@@ -91,6 +92,23 @@ void Rules(){
  ClassDiscipline d;Check(!d.Take(.04f),"Fresh state appears ready within a frame");d.Prime(1);d.Advance(1.02f);Check(d.Take(.03f) && !d.Take(.03f),"Sub-frame opportunity expiry/one-time spend");
  d.Clear();d.Contact(100,0,0);d.Contact(101,12,0);Check(d.mask==2,"Element memory leaked between targets");d.Advance(6.1f);d.Contact(101,13,0);Check(d.mask==4,"Expired element memory persisted");
 }
+void OpportunityHud(){
+ using P=ui::OpportunityView::Phase;
+ auto warrior=Hero(ClassId::Warrior);Check(ui::ReadOpportunity(warrior).phase==P::None,"Idle hero has an opportunity");
+ Command guard;guard.ability=3;warrior.Update(.001f,guard);
+ Check(ui::ReadOpportunity(warrior).phase==P::Guard && ui::ReadOpportunity(warrior).remaining<=.8f,"Guard timing missing from HUD");
+ Tick(warrior,.81f);Check(ui::ReadOpportunity(warrior).phase==P::None,"Expired guard remains in HUD");
+ auto mage=Hero(ClassId::Mage);Cast(mage,0,60);const auto first=ui::ReadOpportunity(mage);
+ Check(first.phase==P::Elements && first.elements==1 && first.remaining>0 && first.remaining<=6,"First confirmed element/timer missing");
+ Command change;change.selectActor=211;mage.Update(.001f,change);
+ Check(ui::ReadOpportunity(mage).phase==P::None && mage.ElementSeconds()==0,"Partial elements shown on a different target");
+ change.selectActor=210;mage.Update(.001f,change);Check(ui::ReadOpportunity(mage).elements==1,"Target-bound elements lost on reselection");
+ Tick(mage,6.1f);Check(ui::ReadOpportunity(mage).phase==P::None,"Expired elements remain in HUD");
+ Elements(mage,60);Command cast;cast.ability=14;mage.Update(.001f,cast);
+ Check(ui::ReadOpportunity(mage).phase==P::Casting && ui::ReadOpportunity(mage).icon==14,"Committed mobile cast missing from HUD");
+ mage.StopMovement();Check(ui::ReadOpportunity(mage).phase==P::None,"Cancelled mobile cast remains in HUD");
+ Check(mage.Load(mage.Save()) && ui::ReadOpportunity(mage).phase==P::None,"Load revived transient HUD state");
+}
 void Native(){
  Check(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"COM");Win32Window window;
  Check(window.Create(GetModuleHandleW(nullptr),1600,900,L"Class discipline review",false),"Window");Renderer r;
@@ -102,8 +120,29 @@ void Native(){
   g.SetCameraOrbit(2.5f,.38f,6.5f);g.ExecuteCommand({},.016f);
   const auto unchanged=s.Save();for(int i=0;i<2;++i){r.BeginFrame();g.Render(r);Check(r.Capture((out/("ready-"+std::to_string(int(id))+"-"+std::to_string(i)+".png")).wstring()) && r.EndFrame(false),"Ready world capture");}
   Check(s.Save()==unchanged,"Presentation mutated gameplay");
-  const auto sockets=castfx::Preview({0,0,0},{.2f,1.1f,.2f},0);r.BeginFrame();r.SetCamera({2,2,-4},{0,1,0});castfx::Discipline(r,s,sockets,2);
+  auto sockets=castfx::Preview({0,0,0},{.2f,1.1f,.2f},0);
+  if(id==ClassId::Warrior){sockets.blade=true;sockets.edgeBase={.3f,.8f,.2f};sockets.edgeTip={.35f,1.6f,.3f};}
+  r.BeginFrame();r.SetCamera({2,2,-4},{0,1,0});castfx::Discipline(r,s,sockets,2);
   Check(r.EffectVertices()>0 && r.EffectVertices()<512,"Readiness geometry budget");Check(r.EndFrame(false),"Ready render");
+  const auto view=ui::ReadOpportunity(s);Check(view.phase==ui::OpportunityView::Phase::Ready && view.remaining>0,"Ready opportunity missing from HUD");
+  ui::Interface hud;for(int slot=0;slot<ui::Interface::hotbarSlots;++slot)hud.ClearHotbar(slot,id);
+  Check(hud.OpportunityBindings(s).empty(),"Unbound opportunities invent keys");
+  const int consumer=id==ClassId::Mage?1:0;
+  hud.AssignHotbar(consumer,19,id);Check(hud.OpportunityBindings(s)=="Ctrl+0","Opportunity ignores second-row binding");
+  hud.MoveHotbar(19,4,id);Check(hud.OpportunityBindings(s)=="5","Opportunity ignores rearranged binding");
+  hud.AssignHotbar(consumer,19,id);Check(hud.OpportunityBindings(s)=="5","Duplicate spell repeats binding hint");
+  const float nan=std::numeric_limits<float>::quiet_NaN();
+  for(int bad=0;bad<4;++bad){auto invalid=sockets;if(bad==0)invalid.alive=false;if(bad==1)invalid.focus.x=nan;if(bad==2)invalid.facing=nan;
+    r.BeginFrame();castfx::Discipline(r,s,invalid,bad==3?nan:2);Check(r.EffectVertices()==0 && r.SpellVolumeCount()==0 && r.EndFrame(false),"Invalid owner/clock emitted opportunity geometry");}
+  // Same instant at another frame cadence must remain a stateless evaluation.
+  for(float time:{1.f,1.f,1.f+1.f/144,1.f+1.f/30}){r.BeginFrame();castfx::Discipline(r,s,sockets,time);
+    Check(r.EffectVertices()>0 && r.EffectVertices()<512 && r.SpellVolumeCount()<=1 && r.EndFrame(false),"Persistent opportunity exceeded its budget");}
+  for(auto kind:{K::DisciplineReady,K::DisciplineSpent})for(float age:{.01f,.15f,.40f,.64f}){
+    CombatVisualEvent event;event.kind=kind;event.school=id;event.height=1;event.actor=kind==K::DisciplineSpent && id!=ClassId::Mage?210:0;
+    r.BeginFrame();castfx::DisciplinePulse(r,event,age,&sockets);Check(r.EffectVertices()>0 && r.EffectVertices()<512 && r.EndFrame(false),"Opportunity pulse geometry/lifetime budget");
+    event.kind=K::Hit;r.BeginFrame();castfx::DisciplinePulse(r,event,age,&sockets);Check(r.EffectVertices()==0 && r.EndFrame(false),"Unrelated event emitted opportunity pulse");
+    event.kind=kind;event.position.x=nan;r.BeginFrame();castfx::DisciplinePulse(r,event,age,&sockets);Check(r.EffectVertices()==0 && r.EndFrame(false),"Invalid pulse position emitted geometry");
+  }
   CombatEffects fx;CombatVisualEvent e;e.kind=K::DisciplineReady;e.school=id;fx.Emit(e);fx.Advance(.15f);r.BeginFrame();fx.Render(r,&sockets);
   Check(r.EffectVertices()>0 && r.EffectVertices()<512 && r.EndFrame(false),"Readiness pulse budget");for(int n=0;n<14;++n)fx.Advance(.05f);r.BeginFrame();fx.Render(r,&sockets);Check(r.EffectVertices()==0 && r.EndFrame(false),"Readiness pulse never expired");
   if(id==ClassId::Mage){Command c;c.ability=14;g.ExecuteCommand(c,.001f);c.ability=-1;c.movement={.10f,0};for(int i=0;i<40;++i)g.ExecuteCommand(c,.01f);
@@ -113,4 +152,4 @@ void Native(){
  Check(r.ValidateDebugMessages(),"DirectX diagnostics");
 }
 }
-int main(){try{Rules();Native();std::cout<<"PASS: class opportunities, exact contacts, mobile confluence, cancellation/expiry/load, native UI and bounded VFX.\n";}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}
+int main(){try{Rules();OpportunityHud();Native();std::cout<<"PASS: class opportunities, exact contacts, mobile confluence, cancellation/expiry/load, native UI and bounded VFX.\n";}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

@@ -1058,6 +1058,9 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  if(s.TargetActor() || s.FriendlyTarget()>=0) plates.Reserve(anchors.target.x,anchors.target.y,257,70);
  const auto mapBounds=mapTransform.Map(Rect{1090,3,176,178});
  plates.Reserve(mapBounds.x,mapBounds.y,mapBounds.w,mapBounds.h);plates.Reserve(1016,194,250,183);
+ if(combatLayout && ReadOpportunity(s).phase!=OpportunityView::Phase::None){
+  const auto rail=castTransform.Map(Rect{475,559,330,31});plates.Reserve(rail.x,rail.y,rail.w,rail.h);
+ }
  if(combatLayout && incoming.count) {
   const auto board=warningTransform.Map(Rect{438,s.Sparring() || s.SparringReportTime()>0?205.f:24.f,340,24+incoming.count*36.f});
   plates.Reserve(board.x,board.y,board.w,board.h);
@@ -1393,7 +1396,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   }
   if(i>=0 && (s.ChainReady(i) || s.DisciplineReady(i)) && (ready || s.CanBufferAttack(i))) {
     const float pulse=.55f+.20f*std::sin(time*5);
-    const Color glow=s.DisciplineReady(i)?Color{.55f,.85f,1,pulse}:Color{.85f,.73f,.38f,pulse};
+    const Color glow=s.DisciplineReady(i)?Color{classAccent.x,classAccent.y,classAccent.z,pulse}:Color{.85f,.73f,.38f,pulse};
     c.Line(x+2,y+2,x+52,y+2,2,glow);c.Line(x+2,y+49,x+52,y+49,2,glow);
     c.Line(x+2,y+2,x+2,y+49,2,glow);c.Line(x+52,y+2,x+52,y+49,2,glow);
     if(s.ChainReady(i))c.Center(x+34,y+33,18,std::to_string(s.ChainSteps()),11,gold);
@@ -1410,9 +1413,35 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.FitText(486,520,278,(s.ChainSteps()>=2?"CHAIN READY":"CHAIN STARTED")+std::string(" / ")+std::to_string(s.ChainSteps())+" / "+Seconds(s.ChainSeconds())+"s",10,gold);
    c.RectFill({485,532,280*s.ChainSeconds()/5,1},classAccent);
  }
- if((s.DisciplineSeconds()>0 || s.ConfluenceCast()) && !HasPanels()) {
-   c.Gradient({480,498,325,17},{.035f,.065f,.08f,.88f},{.035f,.065f,.08f,.25f});
-   c.FitText(486,500,313,s.ConfluenceCast()?"CONFLUENCE / MOBILE CAST":std::string(rpg::DisciplineName(s.Class()))+" / "+Seconds(s.DisciplineSeconds())+"s",11,{.70f,.86f,1,1});
+ const auto opportunity=ReadOpportunity(s);
+ if(opportunity.phase!=OpportunityView::Phase::None && !HasPanels()) {
+   using P=OpportunityView::Phase;
+   const bool collecting=opportunity.phase==P::Elements,guard=opportunity.phase==P::Guard,mobile=opportunity.phase==P::Casting;
+   const float fraction=std::clamp(opportunity.remaining/opportunity.duration,0.f,1.f);
+   const float opacity=combat::Smooth(opportunity.remaining/.16f)*combat::Smooth((opportunity.duration-opportunity.remaining)/.10f);
+   c.Skin({475,559,330,31},8,{1,1,1,opacity});
+   c.Gradient({480,562,320,25},{classAccent.x*.24f,classAccent.y*.24f,classAccent.z*.24f,opacity*.9f},{.025f,.022f,.018f,opacity*.65f});
+   AbilityArtwork(c,{480,562,25,25},opportunity.icon,s.Class(),opacity);
+   c.FitText(511,561,234,guard?"PARRY WINDOW":rpg::DisciplineName(s.Class()),12,{ink.x,ink.y,ink.z,opacity});
+   c.Center(753,561,45,Seconds(opportunity.remaining)+"s",11,{classAccent.x,classAccent.y,classAccent.z,opacity});
+   std::string hint;
+   if(guard)hint="Face the incoming strike";
+   else if(mobile)hint="Moving cast / already committed";
+   else if(!collecting){const auto keys=OpportunityBindings(s);hint=keys.empty()?"Assign a matching spell from N":
+     std::string(s.Class()==rpg::ClassId::Mage?"Moving cast: ":"Empowered hit: ")+keys;}
+   if(collecting){
+     const char* names[]={"Fire imprint","Frost imprint","Arcane imprint"};
+     const Color colors[]={{1,.59f,.26f,opacity},{.56f,.84f,1,opacity},{.83f,.65f,1,opacity}};
+     for(int n=0;n<3;++n){const bool earned=(opportunity.elements&(1u<<n))!=0;const float x=511+n*96.f;
+       c.Frame({x,578,7,7},earned?colors[n]:Color{.08f,.07f,.06f,opacity},earned?colors[n]:border);
+       c.FitText(x+11,576,78,names[n],11,earned?colors[n]:Color{.47f,.44f,.39f,opacity});}
+   }else c.FitText(511,576,s.Class()==rpg::ClassId::Mage?244.f:284.f,hint,10,{.83f,.81f,.72f,opacity});
+   if(s.Class()==rpg::ClassId::Mage && !collecting){
+     const Color colors[]={{1,.48f,.18f,opacity},{.43f,.8f,1,opacity},{.78f,.55f,1,opacity}};
+     for(int n=0;n<3;++n){const float x=765+n*11.f;const bool earned=(opportunity.elements&(1u<<n))!=0;
+       c.Frame({x,578,8,8},earned?colors[n]:Color{.08f,.07f,.06f,opacity},earned?colors[n]:border);}
+   }
+   c.RectFill({480,588,320*fraction,1},{classAccent.x,classAccent.y,classAccent.z,opacity*.85f});
  }else if(s.EvasionSeconds()>0) c.Center(505,505,270,"EVASION / "+Seconds(s.EvasionSeconds())+"s",12,classAccent);
  const auto cast=ReadPlayerCast(s);
  const float receipt=castReceipt_.Opacity();

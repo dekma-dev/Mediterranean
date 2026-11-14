@@ -125,7 +125,7 @@ int main() {
   feet.Update(.02f,{0,-9.2f},0,true,true,sample);
   Require(sample.feetActive && feet.Planted(0) && feet.Planted(1) && std::abs(sample.feet[0].z)<.001f,"Landing must establish fresh local contacts");
   feet.Update(.02f,{10,-20},1,true,true,sample);
-  Require(std::abs(sample.feet[0].x+.18f)<.001f && std::abs(sample.feet[0].z)<.001f,"Teleport must discard the old support anchors");
+  Require(std::abs(sample.feet[0].x+CharacterPose::standingHalfWidth)<.001f && std::abs(sample.feet[0].z)<.001f,"Teleport must discard the old support anchors");
   feet.Update(.02f,{10,-20},1,true,false,sample); Require(!sample.feetActive,"Death must release stepping state");
   for (float bad : {0.f,-1.f,std::numeric_limits<float>::quiet_NaN()}) {
     feet.Update(bad,{10,-20},1,true,true,sample); Require(!sample.feetActive,"Invalid time must not publish a new foot pose");

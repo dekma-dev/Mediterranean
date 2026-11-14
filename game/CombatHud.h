@@ -28,6 +28,27 @@ inline CombatHudLayout CombatHudAnchors(bool panels) {
   return panels?CombatHudLayout{{18,23},{475,23}}:CombatHudLayout{{318,399},{778,405}};
 }
 
+struct OpportunityView {
+  enum class Phase { None, Guard, Elements, Ready, Casting };
+  Phase phase=Phase::None;
+  float remaining=0,duration=1;
+  unsigned elements=0;
+  int icon=0;
+};
+inline OpportunityView ReadOpportunity(const rpg::Simulation& s) {
+  using P=OpportunityView::Phase;using C=rpg::ClassId;
+  if(s.Health()<=0 || !rpg::HasDiscipline(s.Class()))return {};
+  if(s.ConfluenceCast() && s.AttackSeconds()<combat::StrokeStart(s.HeavyAttack())) {
+    const float duration=combat::StrokeStart(s.HeavyAttack())/s.AttackRate();
+    return {P::Casting,std::max(0.f,duration-s.AttackSeconds()/s.AttackRate()),duration,7,s.AttackAbility()};
+  }
+  if(s.DisciplineSeconds()>0)return {P::Ready,s.DisciplineSeconds(),s.Class()==C::Mage?8.f:s.Class()==C::Priest?6.f:5.f,
+    s.Class()==C::Mage?7u:0u,s.Class()==C::Mage?13:s.Class()==C::Priest?1:0};
+  if(s.ElementMask())return {P::Elements,s.ElementSeconds(),6,s.ElementMask(),13};
+  if(s.Class()==C::Warrior && s.GuardWindow()>0)return {P::Guard,s.GuardWindow(),.8f,0,3};
+  return {};
+}
+
 // A cast meter describes preparation, not the entire attack/recovery cycle.
 // Use the same accepted clock and release boundary as simulation and effects.
 struct PlayerCastView {
