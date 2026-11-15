@@ -56,20 +56,25 @@ rpg::Simulation Hero(rpg::ClassId id,bool major){
 }
 }
 int wmain(int argc,wchar_t** argv){try{
- if(argc<2 || argc>4 || (argc>=3 && std::wstring(argv[2])!=L"--major" && std::wstring(argv[2])!=L"--fields" && std::wstring(argv[2])!=L"--moving" && std::wstring(argv[2])!=L"--crowded" && std::wstring(argv[2])!=L"--crowded-far" && std::wstring(argv[2])!=L"--signatures" && std::wstring(argv[2])!=L"--invocations" && std::wstring(argv[2])!=L"--opportunities") || (argc==4 && std::wstring(argv[3])!=L"--check-events")){std::cerr<<"Usage: SpellMotionReview <output-directory> [--major|--fields|--moving|--crowded|--crowded-far|--signatures|--invocations|--opportunities] [--check-events]\n";return 2;}
+ if(argc<2 || argc>4 || (argc>=3 && std::wstring(argv[2])!=L"--major" && std::wstring(argv[2])!=L"--fields" && std::wstring(argv[2])!=L"--moving" && std::wstring(argv[2])!=L"--crowded" && std::wstring(argv[2])!=L"--crowded-far" && std::wstring(argv[2])!=L"--signatures" && std::wstring(argv[2])!=L"--invocations" && std::wstring(argv[2])!=L"--opportunities" && std::wstring(argv[2])!=L"--chains" && std::wstring(argv[2])!=L"--priest") || (argc==4 && std::wstring(argv[3])!=L"--check-events")){std::cerr<<"Usage: SpellMotionReview <output-directory> [--major|--fields|--moving|--crowded|--crowded-far|--signatures|--invocations|--opportunities|--chains|--priest] [--check-events]\n";return 2;}
  const bool fields=argc>=3 && std::wstring(argv[2])==L"--fields",moving=argc>=3 && std::wstring(argv[2])==L"--moving";
  const bool farView=argc>=3 && std::wstring(argv[2])==L"--crowded-far";
  const bool crowded=farView || (argc>=3 && std::wstring(argv[2])==L"--crowded");
  const bool signatures=argc>=3 && std::wstring(argv[2])==L"--signatures";
  const bool invocations=argc>=3 && std::wstring(argv[2])==L"--invocations";
  const bool opportunities=argc>=3 && std::wstring(argv[2])==L"--opportunities",checkOnly=argc==4;
- const bool major=argc>=3 && !moving;const int duration=opportunities?9:fields || crowded?7:moving || signatures || invocations?5:major?4:3;
+ const bool chains=argc>=3 && std::wstring(argv[2])==L"--chains",priest=argc>=3 && std::wstring(argv[2])==L"--priest";
+ const bool major=argc>=3 && !moving;const int duration=opportunities || chains?9:fields || crowded?7:moving || signatures || invocations?5:major?4:3;
  Hr(CoInitializeEx(nullptr,COINIT_MULTITHREADED));Hr(MFStartup(MF_VERSION));
  const auto out=std::filesystem::absolute(argv[1]);std::filesystem::create_directories(out);
  Win32Window window;Renderer r;if(!checkOnly){Check(window.Create(GetModuleHandleW(nullptr),width,height,L"Native spell motion review",false),"Window");
  Check(r.Initialize(window.GetHandle(),width,height),"Renderer");}
  struct Scene{rpg::ClassId school;int ability;const char* name;};
- const std::vector<Scene> scenes=opportunities?std::vector<Scene>{{rpg::ClassId::Warrior,0,"riposte"},{rpg::ClassId::Scout,0,"pursuit"},
+ const std::vector<Scene> scenes=chains?std::vector<Scene>{{rpg::ClassId::Warrior,14,"crossing-steel"},{rpg::ClassId::Scout,14,"crossfire"},
+  {rpg::ClassId::Mage,14,"thermal-rupture"},{rpg::ClassId::Priest,14,"final-verdict"}}:
+  priest?std::vector<Scene>{{rpg::ClassId::Priest,8,"consecration"},{rpg::ClassId::Priest,9,"judgment"},
+  {rpg::ClassId::Priest,10,"hushed-bell"},{rpg::ClassId::Priest,11,"ascension"}}:
+  opportunities?std::vector<Scene>{{rpg::ClassId::Warrior,0,"riposte"},{rpg::ClassId::Scout,0,"pursuit"},
   {rpg::ClassId::Mage,14,"confluence"},{rpg::ClassId::Priest,1,"benediction"}}:
   invocations?std::vector<Scene>{{rpg::ClassId::Warrior,9,"steel-load"},{rpg::ClassId::Scout,9,"bow-draw"},
   {rpg::ClassId::Mage,8,"frost-gather"},{rpg::ClassId::Mage,13,"arcane-weave"},{rpg::ClassId::Priest,6,"invocation"},{rpg::ClassId::Priest,3,"greater-heal"}}:
@@ -89,7 +94,8 @@ int wmain(int argc,wchar_t** argv){try{
   Game game;game.Initialize();Check(game.RestoreSnapshot(Hero(scene.school,major).Save()),"Review snapshot");
   auto& enemy=const_cast<rpg::Enemy&>(game.State().Enemies()[0]);enemy.position={-4,11.5f};enemy.home=enemy.position;
   enemy.kind=rpg::EnemyKind::Raider;enemy.health=enemy.MaxHealth();enemy.attackCooldown=100;enemy.rooted=100;enemy.state=rpg::EnemyState::Idle;
-  if((signatures || invocations) && scene.school==rpg::ClassId::Warrior)enemy.position=enemy.home={-4,7.4f};
+  if((signatures || invocations || chains) && scene.school==rpg::ClassId::Warrior)enemy.position=enemy.home={-4,7.4f};
+  if(chains || priest){enemy.rank=20;enemy.health=enemy.MaxHealth();}
   if(moving){enemy.position=enemy.home={-4,scene.school==rpg::ClassId::Warrior?7.2f:11.5f};enemy.rooted=0;enemy.state=rpg::EnemyState::Pursuing;enemy.attackCooldown=.8f;}
   game.SetCameraOrbit(.35f,.55f,11);
   if(farView)game.SetCameraOrbit(.70f,.65f,17);
@@ -118,12 +124,18 @@ int wmain(int argc,wchar_t** argv){try{
     enemy.rooted=0;enemy.facing=3.14159265f;enemy.state=rpg::EnemyState::Pursuing;enemy.attackCooldown=0;}
    game.SetCameraOrbit(.35f,.55f,11);
   }
-  bool released=false,contact=false,prepared=false;int releaseFrame=-1,hitFrame=-1;
+  bool released=false,contact=false,prepared=false,chainSpent=false;int releaseFrame=-1,hitFrame=-1;
   bool readyCaptured=false,opportunityReady=false,opportunitySpent=false;
   int rotationStep=0,nextCastFrame=20,readyFrame=-1;
   unsigned peakVertices=0,peakLights=0,peakDraws=0,peakVolumes=0;
   for(int frame=0;frame<duration*fps;++frame){
-   rpg::Command command;if(frame==20 && !opportunities){command.selectActor=100;command.ability=scene.ability;}
+   rpg::Command command;if(frame==20 && !opportunities && !chains){command.selectActor=100;command.ability=scene.ability;}
+   if(priest && scene.ability==10 && frame==20){enemy.kind=rpg::EnemyKind::Wraith;enemy.windup=enemy.WindupDuration();enemy.facing=3.14159265f;}
+   if(chains){
+    constexpr int rotation[]={0,12,13,14};command.selectActor=100;
+    if(rotationStep<4 && frame>=nextCastFrame && !game.State().Attacking() && game.State().Cooldown(rotation[rotationStep])==0)
+      command.ability=rotation[rotationStep];
+   }
    if(opportunities){
     command.selectActor=100;
     if(frame==20 && scene.school!=rpg::ClassId::Mage)command.ability=scene.school==rpg::ClassId::Warrior || scene.school==rpg::ClassId::Priest?3:
@@ -143,10 +155,13 @@ int wmain(int argc,wchar_t** argv){try{
    if(crowded && frame>150 && frame<280)command.movement={.8f,-.4f};
    if(crowded && frame==150){command.selectActor=100;command.ability=0;}
    game.ExecuteCommand(command,1.f/fps);
+   if(chains && command.ability>=0 && game.State().Attacking() && game.State().AttackAbility()==command.ability){++rotationStep;nextCastFrame=frame+12;}
    if(opportunities && scene.school==rpg::ClassId::Mage && command.ability>=0 && game.State().Attacking() && game.State().AttackAbility()==command.ability){++rotationStep;nextCastFrame=frame+12;}
    if(opportunities && readyFrame<0 && game.State().DisciplineSeconds()>0)readyFrame=frame;
    if(fields)game.SetCameraOrbit(.35f+.8f*combat::Smooth((frame/float(fps)-2.f)/3.f),.55f,11);
    for(std::size_t i=0;i<game.State().VisualEventCount();++i){const auto kind=game.State().VisualEvents()[i].kind;
+    if(chains && game.State().VisualEvents()[i].chain){Check(game.State().VisualEvents()[i].chain==3 && game.State().VisualEvents()[i].ability==14,"Review chain was not earned through three actual contacts");
+     Check(!chainSpent,"Duplicate chain payoff");chainSpent=true;manifest<<scene.name<<','<<frame<<','<<(sceneIndex*duration+frame/60.f)<<",three-step-payoff\n";}
     if(opportunities && (kind==rpg::CombatVisualKind::DisciplineReady || kind==rpg::CombatVisualKind::DisciplineSpent)){
      opportunityReady|=kind==rpg::CombatVisualKind::DisciplineReady;opportunitySpent|=kind==rpg::CombatVisualKind::DisciplineSpent;
      manifest<<scene.name<<','<<frame<<','<<(sceneIndex*duration+frame/60.f)<<','<<(kind==rpg::CombatVisualKind::DisciplineReady?"opportunity-ready":"opportunity-spent")<<'\n';
@@ -175,6 +190,7 @@ int wmain(int argc,wchar_t** argv){try{
   }
   Check(released && contact,"Review spell did not produce real release/contact");
   if(opportunities)Check(opportunityReady && opportunitySpent,"Review did not earn and consume a real class opportunity");
+  if(chains)Check(rotationStep==4 && chainSpent,"Review missed its four-action chain");
   Check(peakVertices<=Renderer::maxEffectVertices && peakLights<=4 && peakVolumes<=24,"Review exceeded effects budgets");
   budgets<<scene.name<<','<<peakVertices<<','<<peakLights<<','<<peakDraws<<','<<peakVolumes<<'\n';
   std::cout<<scene.name<<": real release/contact recorded at 60 Hz\n"<<std::flush;++sceneIndex;

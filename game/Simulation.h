@@ -333,7 +333,7 @@ public:
   int CourtWardCount() const {return CourtActive()?3-int(bool(courtSeals_&1))-int(bool(courtSeals_&2))-int(bool(courtSeals_&4)):0;}
   bool CourtGuarded(int site) const;
   bool CourtProtected(const Enemy& enemy) const {return CourtWardCount()>0 && enemy.id==105;}
-  bool FinisherSetup(const Enemy& enemy) const {return AdvancedClass(class_) && enemy.health>0 && !CourtProtected(enemy) &&
+  bool FinisherSetup(const Enemy& enemy) const {return AdvancedClass(class_) && class_!=ClassId::Priest && enemy.health>0 && !CourtProtected(enemy) &&
     (class_==ClassId::Mage?(enemy.snared>0 || enemy.rooted>0):enemy.exposed>0);}
   bool FrontierReady() const { return RitualActive()?ritualStage_==4:SurveyActive()?surveyMask_==7:ExpeditionActive()?expeditionMask_==7:(!CourtActive() || courtSeals_==7) && DefeatedCount()==int(enemies_.size()); }
   QuestStage DialogueStage() const;

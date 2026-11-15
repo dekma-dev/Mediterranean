@@ -44,12 +44,8 @@ std::string Number(float value) {
  std::ostringstream text; text<<std::setprecision(4)<<value; return text.str();
 }
 std::string SpellEffect(const rpg::Simulation& s,int ability) {
- if(ability>=12) return Number(ability==12?s.StrikeDamage()*.85f:s.HeavyDamage()*(ability==13?.55f:1.15f))+" base damage / level "+std::to_string(rpg::SpellLevel(ability));
  if(ability>=8) {
-   const float scale=ability==8?(s.Class()==rpg::ClassId::Warrior?.85f:s.Class()==rpg::ClassId::Scout?.70f:.65f):
-     ability==9?(s.Class()==rpg::ClassId::Warrior?1.25f:s.Class()==rpg::ClassId::Scout?1.30f:1.40f):
-     ability==10?(s.Class()==rpg::ClassId::Warrior?.50f:s.Class()==rpg::ClassId::Scout?.55f:.60f):(s.Class()==rpg::ClassId::Warrior?1.5f:1.75f);
-   return Number(s.HeavyDamage()*scale)+" base damage / level "+std::to_string(rpg::SpellLevel(ability));
+   return Number((ability==12?s.StrikeDamage():s.HeavyDamage())*rpg::AdvancedDamageMultiplier(s.Class(),ability))+" base damage / level "+std::to_string(rpg::SpellLevel(ability));
  }
  if (ability==7) return Number(s.StrikeDamage()*.9f)+" damage / builds reserve";
  if (ability==6) return Number(s.HeavyDamage()*(s.Class()==rpg::ClassId::Demonologist?1.6f:1.1f))+" base damage / full reserve";

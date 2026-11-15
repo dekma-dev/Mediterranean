@@ -2,6 +2,25 @@
 
 Generated with the built-in imagegen tool for Mediterranean. No reference-game image files were copied into the runtime.
 
+## Priest disciplines — 2026-11-15
+
+`assets/ui/priest-disciplines.png` is an original 4-column, 2-row atlas generated
+with the built-in `image_gen.imagegen` tool. Row-major cells 0–6 map to durable
+Priest IDs 8–14: Consecration, Judgment, Hushed bell, Ascension, Votive spark,
+Litany and Final verdict. Cell 7 is reserved. Existing Priest IDs 0–7 and all
+other class artwork retain their previous files and mappings.
+
+WIC decodes this atlas to 512 × 256, with mipmaps and two decoded pixels of
+inset at each cell edge. It adds about 0.67 MiB; total native UI storage must
+still pass the existing 30 MiB ceiling. Resource 207 and HUD texture slot 17
+are separate from effect resource 206 and the glow texture at slot 16.
+
+Exact generation prompt:
+
+> Create one production-ready game UI sprite atlas: exactly FOUR equal columns by TWO equal rows, eight perfectly square cells in a 2:1 landscape image, edge-to-edge cells with NO gutters, no external margin, no borders, no labels, no text, no numbers, no watermark. Each square is a separate original highly detailed classical dark fantasy Priest spell icon. Rich painterly realistic materials: aged church gold, ivory light, worn silver, deep charcoal backgrounds, intricate engraved reliquaries, concentrated strong silhouettes readable at 48 pixels; illuminated oil-painting RPG icon finish, no cartoon styling. Bright subject occupies central 75 percent of each square, no subject crosses cells. Ordered left to right then top to bottom: 1) Consecration: ground-facing golden censer casting a circular radiant blessing over weathered stone. 2) Judgment: massive descending ivory-gold sword of light splitting an obsidian chain. 3) Hushed bell: ancient bronze church bell clasped by a luminous spectral hand, ring of light torn apart around it. 4) Ascension: upward arch of ivory feathers surrounding a monumental sunburst above dark cathedral arches. 5) Votive spark: compact silver-gold candle flame shooting from a small polished thurible, narrow pointed light streak, blue-black background. 6) Litany: open weathered prayer book with glowing abstract decorative strokes and a protective ivory halo; no legible writing. 7) Final verdict: two tall crossing golden lances converging around a blazing seal, sharp white center, deep burgundy background. 8) reserved decorative icon: simple closed worn reliquary, unlit. Make all eight distinct compositions consistent in art quality and lighting, NOT repetitive glowing balls. This is an original atlas for a C++ fantasy RPG, not copied game artwork.
+
+The earlier two-atlas implementation below is retained as its historical record.
+
 - `combat-spells.png`: 8 columns × 6 rows; first 45 cells are Warrior, Scout, Mage in groups of fifteen, following durable ability IDs 0–14 (ID 4 is the shared potion item). Last three cells are unused.
 - `class-spells.png`: 8 columns × 8 rows; Paladin, Priest, Druid, Necromancer, Psionic, Bard, Engineer, Demonologist, each row following IDs 0–7. Potions intentionally depict the same common consumable.
 - `game/SpellArtwork.h` is the authoritative UV/identity mapping. Every available ability has its own cell, shared across book, action rows, drag preview, hover inspection and creation previews.

@@ -208,14 +208,8 @@ void Simulation::UseAbility(int index,float visualElapsed) {
     attackEmpowered_=index==1 && EmpoweredReady();
     if(attackEmpowered_) classResource_=0;
     attackDamage_=index==0?StrikeDamage():HeavyDamage();
-    if(index==12) attackDamage_=StrikeDamage()*.85f;
-    if(index==13) attackDamage_*=.55f;
-    if(index==14) attackDamage_*=1.15f;
-    if(index==8) attackDamage_*=class_==ClassId::Warrior?.85f:class_==ClassId::Scout?.70f:.65f;
-    if(index==9) attackDamage_*=class_==ClassId::Warrior?1.25f:class_==ClassId::Scout?1.30f:1.40f;
-    if(index==10) attackDamage_*=class_==ClassId::Warrior?.50f:class_==ClassId::Scout?.55f:.60f;
-    if(index==11) {classResource_=0;attackDamage_*=class_==ClassId::Warrior?1.50f:1.75f;}
-    if(class_==ClassId::Priest && (index==9 || index==11))attackDamage_=HeavyDamage()*(index==9?1.25f:1.50f);
+    if(index>=8) attackDamage_=(index==12?StrikeDamage():HeavyDamage())*AdvancedDamageMultiplier(class_,index);
+    if(index==11) classResource_=0;
     if(index==7) attackDamage_=StrikeDamage()*.9f;
     if(index==6) {
       classResource_=0;attackDamage_*=class_==ClassId::Demonologist?1.6f:1.1f;

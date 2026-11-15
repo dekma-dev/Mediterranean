@@ -143,6 +143,17 @@ inline float ClassRecoveryBarrier(ClassId id) {
  return wards[ValidClass(id)?int(id):0];
 }
 inline bool AdvancedClass(ClassId id) {return id==ClassId::Warrior || id==ClassId::Mage || id==ClassId::Scout || id==ClassId::Priest;}
+// Shared by committed damage and spell inspection. Conditional hit bonuses
+// remain in ResolveContact; these are only the advertised base multipliers.
+inline float AdvancedDamageMultiplier(ClassId id,int index) {
+ switch(index){
+ case 8:return id==ClassId::Warrior?.85f:id==ClassId::Scout?.70f:.65f;
+ case 9:return id==ClassId::Warrior || id==ClassId::Priest?1.25f:id==ClassId::Scout?1.30f:1.40f;
+ case 10:return id==ClassId::Warrior?.50f:id==ClassId::Scout?.55f:.60f;
+ case 11:return id==ClassId::Warrior || id==ClassId::Priest?1.50f:1.75f;
+ case 12:return .85f;case 13:return .55f;case 14:return 1.15f;default:return 1.f;
+ }
+}
 inline float AdvancedRate(ClassId id,int index) {
  if(id==ClassId::Priest) return index==12?.85f:index==13?.60f:index==14?.45f:index==10?.85f:index==11?.15f:index==8?.45f:.35f;
  if(index==12) return id==ClassId::Warrior?1.05f:id==ClassId::Scout?.9f:.65f;

@@ -29,7 +29,7 @@ Simulation Hero(ClassId id){
  Simulation s;Check(s.Load("MEDITERRANEAN 3\n12 -3.8 50 0 3 90\n5 1 1 0\n4\n0 0 0 0\n100 -4 7 0 0 1 3 0 0\n101 4 9 0 0 1 3 0 0\n102 0 12 0 0 1 3 0 0\n"),"Legacy fixture");
  auto save=s.Save();const auto at=save.find("PROFILE ");save.replace(at,save.find('\n',at)-at,"PROFILE "+std::to_string(int(id))+" \"Tester\" 7 0 3");Check(s.Load(save) && s.Level()==10,"Level-ten fixture");return s;
 }
-void Motion(){
+void Motion(int firstStyle=0,int lastStyle=3){
  float maximumHandSpeed=0;
  for(int ability:{8,11,14}){
   animation::AuthoredWeaponController wide;wide.Update(.001f,combat::Contact(true),true,false,true,1,false,ability,0);
@@ -49,7 +49,7 @@ void Motion(){
  const auto velocity=[&](bool reverse){auto a=raw(contact-.001f,reverse),b=raw(contact+.001f,reverse);return XMFLOAT3{b.x-a.x,b.y-a.y,b.z-a.z};};
  const auto a=velocity(false),b=velocity(true);
  Check(a.x*b.x+a.y*b.y+a.z*b.z<-.000001f,"Backhand still crosses in the normal direction");
- for(int style=0;style<4;++style)for(int ability:{0,1,5,6,8,9,11,12,13,14})for(bool cancel:{false,true}){
+ for(int style=firstStyle;style<=lastStyle;++style)for(int ability:{0,1,5,6,8,9,11,12,13,14})for(bool cancel:{false,true}){
   const bool heavy=ability!=0 && ability!=12,bow=style==1,staff=style>=2;
   animation::AuthoredWeaponController control;CharacterPose previous;float speed=0,shift=0,peakTime=0;int peakSide=0;
   for(int n=0;n<1800;++n){const float t=n*.001f,end=cancel?.13f:combat::Duration(heavy);
@@ -123,9 +123,11 @@ void Native(Renderer& r,const std::filesystem::path& out){
  meteor.school=ClassId::Scout;meteor.ability=8;begin();spellvfx::Flight(r,meteor,start,.22f);const auto fanVertices=r.EffectVertices();Capture(r,out/"scout-fan.png");
  meteor.ability=0;begin();spellvfx::Flight(r,meteor,start,.22f);Check(fanVertices>r.EffectVertices()*3 && r.EndFrame(false),"Fan still renders a single arrow");
 }
-void Live(Renderer& r,const std::filesystem::path& out){
+void Live(Renderer& r,const std::filesystem::path& out,int group=0){
  Check(r.Resize(1600,900),"World resolution");
  for(auto id:{ClassId::Warrior,ClassId::Scout,ClassId::Mage,ClassId::Priest})for(int ability:id==ClassId::Mage?std::vector<int>{8,9,11,14}:id==ClassId::Priest?std::vector<int>{5,6}:id==ClassId::Warrior?std::vector<int>{0,1,6,12,14}:std::vector<int>{8,9,11}){
+  const bool caster=id==ClassId::Mage || id==ClassId::Priest;
+  if((group==1 && caster) || (group==2 && !caster))continue;
   Game g;g.Initialize();Check(g.RestoreSnapshot(Hero(id).Save()),"World fixture");
   // Inspect the cut itself, not a camera retracted into the hero by a tree.
   // Use this clear orbit for both the phase sequence and the wider contact.
@@ -170,14 +172,20 @@ void Live(Renderer& r,const std::filesystem::path& out){
 int main(int argc,char** argv){try{
  Check(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"COM");
  if(argc>1 && std::string(argv[1])=="--motion"){Motion();std::cout<<"PASS: motion continuity and anchored feet.\n";return 0;}
+ const std::string mode=argc>1?argv[1]:"--all";
+ if(mode.size()==10 && mode.substr(0,9)=="--motion-" && mode.back()>='0' && mode.back()<='3'){
+  const int style=mode.back()-'0';Motion(style,style);std::cout<<"PASS: class "<<style<<" motion continuity, cancellation, anchored feet and alternating cuts.\n";return 0;}
+ Check(mode=="--all" || mode=="--native" || mode=="--materials" || mode=="--martial-world" || mode=="--caster-world","Unknown signature review mode");
  // Report independent native/event failures even if the pose-only audit fails.
  // The suite still fails at the end; no motion assertion is relaxed/skipped.
  std::string motionFailure;
- try{Motion();}catch(const std::exception& e){motionFailure=e.what();std::cerr<<"Motion audit: "<<motionFailure<<'\n';}
+ if(mode=="--all")try{Motion();}catch(const std::exception& e){motionFailure=e.what();std::cerr<<"Motion audit: "<<motionFailure<<'\n';}
  const std::filesystem::path out="signature-review";std::filesystem::create_directories(out);
  Win32Window w;Check(w.Create(GetModuleHandleW(nullptr),960,600,L"Signature checks",false),"Window");Renderer r;Check(r.Initialize(w.GetHandle(),960,600),"Renderer");
- Native(r,out);Live(r,out);Check(r.ValidateDebugMessages(),"D3D diagnostics");
- std::cout<<"PASS: native signatures, area contacts/audio, actual four-class combat and load isolation.\n";
+ if(mode=="--all" || mode=="--native" || mode=="--materials")Native(r,out);
+ if(mode!="--materials")Live(r,out,mode=="--martial-world"?1:mode=="--caster-world"?2:0);
+ Check(r.ValidateDebugMessages(),"D3D diagnostics");
+ std::cout<<"PASS: native signature checks "<<mode<<".\n";
  Check(motionFailure.empty(),motionFailure.c_str());
- std::cout<<"PASS: ability choreography, anchored feet, distinct native signatures, meteor endpoint, fan arrows, one primary area event/audio, actual four-class combat and load isolation.\n";
+ if(mode=="--all")std::cout<<"PASS: ability choreography, anchored feet, distinct native signatures, meteor endpoint, fan arrows, one primary area event/audio, actual four-class combat and load isolation.\n";
  }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

@@ -146,13 +146,15 @@ void InterruptChecks(Renderer& r,const std::filesystem::path& out) {
   Check(r.EffectVertices()==0 && r.EndFrame(false),"Preparation fabricated a successful interrupt");
  }
 }
-void ContactSequences(Renderer& r,const std::filesystem::path& out) {
+void ContactSequences(Renderer& r,const std::filesystem::path& out,bool priestOnly=false) {
  Check(r.Resize(960,600),"Contact review resolution");
  const std::pair<ClassId,int> spells[]={{ClassId::Warrior,1},{ClassId::Scout,1},
   {ClassId::Warrior,8},{ClassId::Warrior,9},{ClassId::Warrior,11},{ClassId::Warrior,14},
   {ClassId::Scout,9},{ClassId::Scout,11},{ClassId::Scout,14},{ClassId::Mage,9},
-  {ClassId::Mage,1},{ClassId::Mage,5},{ClassId::Mage,13},{ClassId::Mage,14},{ClassId::Priest,1},{ClassId::Priest,6}};
+  {ClassId::Mage,1},{ClassId::Mage,5},{ClassId::Mage,13},{ClassId::Mage,14},{ClassId::Priest,1},{ClassId::Priest,6},
+  {ClassId::Priest,8},{ClassId::Priest,9},{ClassId::Priest,10},{ClassId::Priest,11},{ClassId::Priest,12},{ClassId::Priest,13},{ClassId::Priest,14}};
  for(const auto& spell:spells)for(int view=0;view<3;++view) {
+  if((spell.first==ClassId::Priest && spell.second>=8)!=priestOnly)continue;
   CombatVisualEvent e{K::HeavyHit,{0,0},1.2f,.4f,100};e.school=spell.first;e.ability=spell.second;e.heavy=true;
   e.source={-std::sin(e.facing)*2.f,-std::cos(e.facing)*2.f};
   const float angle=.4f+view*1.5707963f;
@@ -196,10 +198,11 @@ void ContactSequences(Renderer& r,const std::filesystem::path& out) {
  }
  for(float age:{.045f,.16f,.24f,.36f,.60f}){
   CombatVisualEvent events[6];unsigned sum=0;
-  const int abilities[]={8,9,11,14,5,6};
+  const int abilities[]={8,9,11,14,5,6},holyAbilities[]={8,9,10,11,13,14};
   const auto begin=[&]{r.BeginFrame();r.SetCamera({0,4,-10},{0,1,0});};
   for(int n=0;n<6;++n){auto& e=events[n];e.kind=K::HeavyHit;e.school=n<4?ClassId::Mage:ClassId::Priest;
-   e.ability=abilities[n];e.heavy=true;e.position={float(n%3-1)*1.8f,float(n/3)*1.8f};e.height=1.2f;e.actor=100+n;
+   e.ability=priestOnly?holyAbilities[n]:abilities[n];if(priestOnly)e.school=ClassId::Priest;
+   e.heavy=true;e.position={float(n%3-1)*1.8f,float(n/3)*1.8f};e.height=1.2f;e.actor=100+n;
    e.source={0,-3};e.sourceHeight=0;
    begin();spellvfx::Contact(r,e,age);sum+=r.EffectVertices();Check(r.EndFrame(false),"Isolated crowd contact");
   }
@@ -324,6 +327,7 @@ int main(int argc,char** argv){try{
  Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),960,600,L"VFX material review",false),"Native window");
  Renderer r;Check(r.Initialize(window.GetHandle(),960,600),"Native renderer");
  if(argc>2 && std::string(argv[2])=="--contacts"){ContactSequences(r,out);Check(r.ValidateDebugMessages(),"Contact sequence DirectX warnings");std::cout<<"PASS: contact phase/angle review.\n";return 0;}
+ if(argc>2 && std::string(argv[2])=="--priest-contacts"){ContactSequences(r,out,true);Check(r.ValidateDebugMessages(),"Priest sequence DirectX warnings");std::cout<<"PASS: seven Priest contact phase/angle/lifetime checks and six concurrent effects.\n";return 0;}
  if(argc>2 && std::string(argv[2])=="--workload"){Workload(r,out);std::cout<<"PASS: bounded native VFX workload; see workload.txt.\n";return 0;}
  const std::string mode=argc>2?argv[2]:"--all";
  Check(mode=="--all" || mode=="--materials" || mode=="--martial-world" || mode=="--caster-world","Unknown VFX review mode");
