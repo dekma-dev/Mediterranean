@@ -33,7 +33,7 @@ int main() try {
     rpg::Simulation hero;check(hero.CreateCharacter(rpg::ClassId(id),"Алёна-Ёж"));
     const auto saved=hero.Save();
     check(translated(hero.ClassInfo().name) && translated(hero.ClassInfo().title) && translated(hero.ClassInfo().role) && translated(hero.ClassInfo().identity));
-    for(int spell:{0,1,2,3,5,6,7,8,9}) {
+    for(int spell:{0,1,2,3,5,6,7,8,9,10,11,12,13,14}) {
       const auto data=hero.Spell(spell);
       check(translated(data.name) && translated(data.description) && translated(data.targeting));
     }

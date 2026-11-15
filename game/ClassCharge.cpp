@@ -103,7 +103,7 @@ void Elemental(Renderer& r,int ability,float power,float age,const Attachments& 
  if(grand)GroundSeal(r,a,.65f+power*.18f,{.40f,.72f,1,power*.25f});
 }
 void Prayer(Renderer& r,int ability,float power,float age,const Attachments& a){
- const bool heal=ability==3,grand=heal || ability==6;
+ const bool heal=ability==3,grand=heal || ability==6 || ability==8 || ability==11;
  const auto focus=heal?Local(a,a.root,0,1.03f,.12f):a.focus;
  r.DrawSpellVolume(Medium::Holy,focus,{0,1,0},{.18f+power*.12f,.18f+power*.12f,.28f+power*.27f},age,
    {1,1,1,power*.57f},unsigned(ability));

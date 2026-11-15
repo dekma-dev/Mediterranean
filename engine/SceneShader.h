@@ -19,6 +19,7 @@ Texture2D<float> cloudLightField : register(t8);
 // t9 is the body palette, including pixel-stage clothing-region lookup.
 Texture2D<float4> combatSpells : register(t13);
 Texture2D<float4> classSpells : register(t12);
+Texture2D<float4> priestSpells : register(t17);
 Texture2D<float4> effectArtwork : register(t14);
 Texture2D<float> effectSceneDepth : register(t15);
 Texture2DArray surfaceColor : register(t10);
@@ -517,7 +518,8 @@ float Shadow(float4 widePosition,float4 detailPosition,float sunFacing,float rec
 float4 PSMain(VOut i) : SV_TARGET {
  if (eyeAndHud.w>.5) {
   float4 result=color*i.tint;
-  if (i.wp.z>6.5) result*=classSpells.Sample(fontSampler,i.wp.xy);
+  if (i.wp.z>7.5) result*=priestSpells.Sample(fontSampler,i.wp.xy);
+  else if (i.wp.z>6.5) result*=classSpells.Sample(fontSampler,i.wp.xy);
   else if (i.wp.z>5.5) result*=combatSpells.Sample(fontSampler,i.wp.xy);
   else if (i.wp.z>4.5) result*=uiIcons.Sample(fontSampler,i.wp.xy);
   else if (i.wp.z>3.5) result*=uiHall.Sample(fontSampler,i.wp.xy);

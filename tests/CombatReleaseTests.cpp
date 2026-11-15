@@ -106,7 +106,7 @@ void EnemyPreparation(Renderer& r,const std::filesystem::path& out){
   begin();castfx::PrepareEnemy(r,enemy,socket);Check(r.EffectVertices()>100 && r.EffectVertices()<=360,"Hostile charge invisible or over its budget");
   const auto pixels=Capture(r,out/("enemy-charge-"+tag+".png"));
   begin();castfx::PrepareEnemy(r,enemy,socket);Check(Capture(r,out/("enemy-charge-repeat-"+tag+".png"))==pixels,"Rendering advances enemy preparation");
-  for(float windup:{0.f,-1.f,std::numeric_limits<float>::quiet_NaN()}){auto cancelled=enemy;cancelled.windup=windup;begin();castfx::PrepareEnemy(r,cancelled,socket);
+  for(float windup:{0.f,-1.f,enemy.WindupDuration()+.1f,std::numeric_limits<float>::quiet_NaN()}){auto cancelled=enemy;cancelled.windup=windup;begin();castfx::PrepareEnemy(r,cancelled,socket);
     Check(r.EffectVertices()==0 && r.EndFrame(false),"Interrupted/invalid cast retained preparation");}
   auto dead=socket;dead.alive=false;begin();castfx::PrepareEnemy(r,enemy,dead);Check(r.EffectVertices()==0 && r.EndFrame(false),"Dead enemy retained charge");
   CombatVisualEvent e;e.kind=kind==EnemyKind::Wraith?K::EnemyLance:K::EnemyExecution;e.position=enemy.position;e.facing=enemy.facing;

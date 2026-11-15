@@ -119,6 +119,15 @@ struct AuthoredWeaponController {
           playerclips::AttackPhase(playerclips::Clip::Slash,clock,start,contact,end));
         target.hands[1]=sweep.hands[1];target.elbows[1]=sweep.elbows[1];target.weapon=sweep.weapon;target.weaponRight=sweep.weaponRight;
         target.torso.y=sweep.torso.y;target.pelvis.y=sweep.pelvis.y;
+        if(ability==14){
+          // Crossing steel carries a second returning arc after the accepted
+          // contact. Blend only the weapon arm; planted feet keep their source.
+          const auto returning=playerclips::Sample(playerclips::Clip::Slash,
+            ReturnCutPhase(phase,playerclips::Collection()[unsigned(playerclips::Clip::Slash)].contact));
+          const auto counter=playerclips::Blend(target,returning,.75f*combat::Smooth((clock-contact-.10f)/.40f));
+          target.hands[1]=counter.hands[1];target.elbows[1]=counter.elbows[1];
+          target.weapon=counter.weapon;target.weaponRight=counter.weaponRight;
+        }
       }
       if(style==1) {
         const float strike=playerclips::Collection()[unsigned(clip)].contact;
@@ -129,6 +138,10 @@ struct AuthoredWeaponController {
         target.hands[0].z-=.085f*follow;target.hands[0].x-=.025f*follow;
         target.hands[0].y+=.025f*follow;target.elbows[0].z-=.08f*follow;
         target.hands[1].z+=.018f*follow;
+        if(ability==8 || ability==14){
+          target.hands[1].x+=.075f*follow;target.hands[1].y+=.035f*follow;
+          target.torso.y-=.07f*follow;target.pelvis.y-=.025f*follow;
+        }
       }
       if(style==0 && ability==12) {
         // The backhand actually crosses in the opposite direction. Keep the
@@ -147,6 +160,20 @@ struct AuthoredWeaponController {
         target.hands[0]={.16f*gather+.09f*send,(.28f*gather+.23f*send)*solemn,.06f*gather+.31f*send};
         target.hands[1]={-.10f*gather-.035f*send,(.25f*gather+.12f*send)*solemn,.07f*gather+.08f*send};
         target.weapon={.08f,.93f,.32f};
+        if(ability>=8){
+          if(ability==8 || ability==11){
+            const float grandeur=ability==11?1.f:.65f;
+            target.hands[0].y+=grandeur*(.22f*gather+.18f*send);
+            target.hands[0].x-=grandeur*.18f*send;target.hands[1].y+=grandeur*.10f*gather;
+          }else if(ability==9){
+            target.hands[0].y+=.28f*gather-.08f*send;target.hands[0].z+=.08f*send;
+          }else if(ability==14){
+            target.hands[0].x+=.12f*gather-.20f*send;target.hands[0].y+=.13f*gather;
+            target.hands[1].x-=.08f*send;target.hands[1].y+=.08f*send;
+          }else if(ability==12){
+            target.hands[0].y*=.65f;target.hands[1].y*=.65f;
+          }else if(ability==13){target.hands[0].x+=.12f*gather;target.hands[0].z-=.09f*gather;}
+        }
       }
       // Load the guarded source action from the incoming carry throughout
       // preparation, arriving at full action weight on the contact clock.

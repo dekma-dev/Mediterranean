@@ -1,5 +1,5 @@
 R"(
-struct SpellFieldData {float4 clock;float4 tint;};
+struct SpellFieldData {float4 clock;float4 tint;float4 shape;float4 details;};
 cbuffer SpellFields : register(b7) {SpellFieldData spellFields[12];};
 float FieldLine(float distance,float width) {
  float aa=max(.0015,fwidth(distance));return 1-smoothstep(width,width+aa*1.5,abs(distance));
@@ -15,12 +15,40 @@ float FieldFracture(float2 p) {
  }
  return FieldLine(second-nearest,.022);
 }
+float4 AttackFieldRadiance(EffectOut i,SpellFieldData f) {
+ float2 p=i.uv.xy*f.clock.z;
+ float radius=length(p),forward=dot(p,f.shape.xy),side=dot(p,float2(f.shape.y,-f.shape.x));
+ float angle=abs(atan2(side,forward)),halfAngle=f.details.x;
+ float cone=max(radius-f.clock.y,radius*sin(clamp(angle-halfAngle,-1.5707963,1.5707963)));
+ if(halfAngle>3.1415)cone=radius-f.clock.y;
+ float ring=f.shape.w>0?max(f.shape.z-radius,radius-f.shape.w):10000;
+ float sd=min(cone,ring),aa=max(.008,fwidth(sd));
+ float inside=1-smoothstep(-aa,aa,sd);
+ float rim=1-smoothstep(.012,.012+aa*.65,abs(sd));
+ float lip=1-smoothstep(.052,.052+aa*.65,abs(sd));
+ // Stable engraved hatching inside the real danger shape. Only the softer
+ // timing wave travels; the damage boundary is visible from the first frame.
+ float hatch=FieldLine(sin((p.x+p.y)*8),.12)*inside;
+ float phase=f.clock.x,front=lerp(.05,max(f.clock.y,f.shape.w),phase);
+ float wave=exp2(-25*(radius-front)*(radius-front))*inside;
+ float urgency=smoothstep(.55,1,phase),threat=f.details.y;
+ float alpha=max(inside*(.10+hatch*.055+wave*.13+urgency*.035),lip*.26);
+ alpha=max(alpha,rim*(.62+.20*threat));
+ float3 ink=float3(.16,.055,.028),light=f.tint.rgb;
+ float3 color=lerp(ink,light,saturate(rim+wave*.68+hatch*.24));
+ color=lerp(color,float3(1,.87,.64)*light,rim*urgency*.32);
+ float z=effectSceneDepth.Load(int3((int2)i.p.xy,0));
+ float depth=28/max(.0001,280-z*279.9);
+ return float4(color,alpha*i.fog*saturate((depth-i.viewDepth)/.02));
+}
 float4 FieldRadiance(EffectOut i) {
  SpellFieldData f=spellFields[min(11u,(uint)round(i.uv.z)-64u)];
+ float4 result=0;
+ [branch] if(f.clock.w>3.5){result=AttackFieldRadiance(i,f);}else{
  float2 p=i.uv.xy;float radius=length(p),angle=atan2(p.y,p.x),age=f.clock.x,seed=f.clock.y*.013;
  float edge=1-smoothstep(.91,1,radius),birth=smoothstep(0,.22,age);
  float reveal=1-smoothstep(saturate(age*2.8)-.12,saturate(age*2.8)+.03,radius);
- float4 result=0;float strength=0;float3 color=0;
+ float strength=0;float3 color=0;
  float noise=Noise(p*5+seed),mist=Noise(p*4+float2(age*.12,-age*.16));
  if(f.clock.w<.5){
   float veins=FieldFracture(p*4.2+seed);
@@ -56,6 +84,7 @@ float4 FieldRadiance(EffectOut i) {
  float depth=(.1*farPlane)/max(.0001,farPlane-z*(farPlane-.1));
  float soft=saturate((depth-i.viewDepth)/.025);
  result=float4(color*f.tint.rgb,saturate(strength)*edge*birth*f.tint.a*i.fog*soft);
+ }
  return result;
 }
 )"

@@ -99,33 +99,49 @@ Attachments FromEnemy(const rpg::Enemy& enemy,const presentation::Actor& actor){
 }
 void PrepareEnemy(Renderer& r,const rpg::Enemy& enemy,const Attachments& a){
  if(!Valid(a) || enemy.health<=0 || !std::isfinite(enemy.windup) || enemy.windup<=0 ||
+    enemy.windup>enemy.WindupDuration() || !std::isfinite(enemy.facing) ||
     (!enemy.Boss() && enemy.kind!=rpg::EnemyKind::Wraith) || r.EffectVertices()+360>3600)return;
  const float progress=Unit(1-enemy.windup/enemy.WindupDuration());
  const float weight=combat::Smooth(progress/.16f),power=.45f+.55f*progress;
+ const float age=enemy.WindupDuration()-enemy.windup;
  const bool quake=enemy.Boss() && enemy.bossAttack==0,tempest=enemy.Boss() && enemy.bossAttack==1;
- const XMFLOAT4 color=quake?XMFLOAT4{1,.52f,.18f,weight*.65f}:XMFLOAT4{.67f,.38f,1,weight*.72f};
- // Keep the damaging footprint entirely in Warnings; these open filaments
- // describe the preparation at the actual animated hands, above that border.
+ const XMFLOAT4 color=quake?XMFLOAT4{1,.57f,.23f,weight*.72f}:XMFLOAT4{.67f,.38f,1,weight*.72f};
+ // Height and direction distinguish the preparation at the solved palms.
+ // The floor owns the damaging footprint; these sheets never claim its range.
  const auto focus=tempest?Mix(a.left,a.right,.5f):a.focus;
- for(int n=0;n<3;++n){
-   const float angle=n*tau/3-progress*5;
-   const auto start=Local(a,focus,std::cos(angle)*(.40f+.20f*power),-.18f+std::sin(angle)*.24f,std::sin(angle)*.26f);
-   Stream(r,a,start,focus,.08f,angle,weight,color,8);
- }
- if(tempest || !quake)Stream(r,a,a.left,focus,.16f,progress*11,weight,color,8);
- for(const auto hand:{a.left,a.right}) {
-   const float size=(quake?.15f:.18f)*power;
-   Panel(r,a,quake?Art::Sparks:Art::Seal,hand,size,size,-progress*3,color);
- }
  if(quake){
-   for(int n=0;n<4;++n){const float u=std::fmod(progress*2+n*.25f,1.f),angle=n*tau/4;
-     const auto p=Mix(Local(a,a.root,std::cos(angle)*.46f,.10f,std::sin(angle)*.46f),a.right,u);
-     r.DrawEffectSprite(Art::Dust,p,.10f+.08f*(1-u),.13f,angle,{.57f,.46f,.33f,weight*std::sin(u*pi)*.45f},true);}
+   for(int n=0;n<3;++n){const float angle=n*tau/3;
+     auto start=Local(a,a.root,std::cos(angle)*.68f,.08f,std::sin(angle)*.68f);
+     if(a.terrain)start.y=rpg::WorldMap::Height({start.x,start.z})+.08f;
+     const auto path=[&](float u){auto p=Mix(start,n%2?a.left:a.right,u);
+       return Local(a,p,std::sin(u*pi)*std::cos(angle)*.13f,0,std::sin(u*pi)*std::sin(angle)*.13f);};
+     spellvfx::FilamentStream(r,path,{std::sin(a.facing),0,std::cos(a.facing)},.055f,1.5f,age,color,8);
+     for(int mote=0;mote<3;++mote){const float u=std::fmod(age*.65f+n*.21f+mote/3.f,1.f);const auto p=path(u);
+       r.DrawEffectSprite(Art::Dust,p,.09f+.08f*(1-u),.11f,angle,{.56f,.45f,.31f,weight*std::sin(u*pi)*.50f},true);}
+   }
+   for(const auto hand:{a.left,a.right})r.DrawEffectGlow(hand,.075f+.07f*power,{1,.65f,.32f,weight*.7f});
+ }else if(tempest){
+   // Inward-winding sheets leave open windows around the torso.
+   for(int band=0;band<2;++band){const auto path=[&](float u){const float angle=band*pi+u*tau*.8f-age*2.8f;
+       const float radius=(.72f+.14f*power)*(1-u)*(.65f+.35f*std::sin(u*pi));
+       auto p=Mix(Local(a,a.root,0,.25f),focus,u);
+       return Local(a,p,std::cos(angle)*radius,std::sin(u*pi)*.38f,std::sin(angle)*radius);};
+     spellvfx::FilamentStream(r,path,{0,1,0},.16f,2.8f,age+band*.3f,color,18);}
+   r.DrawSpellVolume(Renderer::SpellMedium::Arcane,focus,{0,1,0},{.18f,.32f,.18f},age,
+     {.75f,.65f,1,weight*.60f},enemy.id);
  }else{
-   Panel(r,a,Art::Arcane,focus,.15f+progress*.13f,.22f+progress*.16f,progress*4,color);
-   r.DrawEffectGlow(focus,.045f+progress*.025f,{.87f,.77f,1,weight*.75f});
-   // A short forward spine makes the committed aim readable before release.
-   if(!tempest)r.DrawEffectStreak(focus,Local(a,focus,0,0,.16f+progress*.38f),.018f,{.91f,.81f,1,weight*.65f});
+   const float length=.30f+power*(enemy.Boss()?1.05f:.65f);
+   const auto forward=XMFLOAT3{std::sin(enemy.facing),0,std::cos(enemy.facing)};
+   // Aim stays committed even while the presentation torso settles.
+   const auto point=[&](float u,float side,float up){return XMFLOAT3{
+     focus.x+forward.x*u*length+forward.z*side,focus.y+up,focus.z+forward.z*u*length-forward.x*side};};
+   for(int band=0;band<2;++band){const auto path=[&](float u){const float angle=band*pi+u*9-age*6;
+       const float width=std::sin(u*pi)*(.13f+.08f*power);return point(u,std::cos(angle)*width,std::sin(angle)*width);};
+     spellvfx::FilamentStream(r,path,forward,enemy.Boss()?.10f:.07f,length,age,color,16);}
+   r.DrawSpellVolume(Renderer::SpellMedium::Arcane,point(.38f,0,0),forward,
+     {.12f,.12f,length*.52f},age,{.8f,.7f,1,weight*.65f},enemy.id);
+   Stream(r,a,a.left,focus,.12f,age*5,weight,color,10);
+   r.DrawEffectStreak(focus,point(1,0,0),.018f,{.91f,.81f,1,weight*.65f});
  }
 }
 Attachments FromPose(const CharacterPose& pose,XMFLOAT3 root,float facing,rpg::WeaponForm form,bool shield,bool weapon,bool alive){

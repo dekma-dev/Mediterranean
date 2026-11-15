@@ -139,10 +139,10 @@ void MagicFlight(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 origin,flo
  if(holy){
   // Swept open vanes give the prayer a lance silhouette without a rotating
   // ornamental disc facing the camera. Its breathing mist is the volume above.
-  const int wings=e.ability==6?6:4;
+  const int wings=e.ability==12 || e.ability==14?2:e.ability==6 || e.ability==11?6:4;
   for(int n=0;n<wings;++n){const float a=n*tau/wings;
-   const auto path=[&](float u){const float width=std::sin(u*pi)*(.32f+(e.ability==6?.16f:0))*power;
-    return frame.At(std::cos(a)*width,std::sin(a)*width,-(1-u)*1.35f*power);};
+   const auto path=[&](float u){const float width=std::sin(u*pi)*(e.ability==12?.14f:e.ability==14?.48f:.32f+(e.ability==6?.16f:0))*power;
+    return frame.At(std::cos(a)*width,std::sin(a)*width+(e.ability==14?std::cos(a)*width*.55f:0),-(1-u)*1.35f*power);};
    FilamentStream(r,path,Add(Mul(frame.right,-std::sin(a)),Mul(frame.up,std::cos(a))),
      .11f*power,1.7f,age+n*.13f,{1,.91f,.61f,front*.66f},8);
   }

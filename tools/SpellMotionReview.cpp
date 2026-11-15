@@ -56,9 +56,10 @@ rpg::Simulation Hero(rpg::ClassId id,bool major){
 }
 }
 int wmain(int argc,wchar_t** argv){try{
- if(argc<2 || argc>4 || (argc>=3 && std::wstring(argv[2])!=L"--major" && std::wstring(argv[2])!=L"--fields" && std::wstring(argv[2])!=L"--moving" && std::wstring(argv[2])!=L"--crowded" && std::wstring(argv[2])!=L"--signatures" && std::wstring(argv[2])!=L"--invocations" && std::wstring(argv[2])!=L"--opportunities") || (argc==4 && std::wstring(argv[3])!=L"--check-events")){std::cerr<<"Usage: SpellMotionReview <output-directory> [--major|--fields|--moving|--crowded|--signatures|--invocations|--opportunities] [--check-events]\n";return 2;}
+ if(argc<2 || argc>4 || (argc>=3 && std::wstring(argv[2])!=L"--major" && std::wstring(argv[2])!=L"--fields" && std::wstring(argv[2])!=L"--moving" && std::wstring(argv[2])!=L"--crowded" && std::wstring(argv[2])!=L"--crowded-far" && std::wstring(argv[2])!=L"--signatures" && std::wstring(argv[2])!=L"--invocations" && std::wstring(argv[2])!=L"--opportunities") || (argc==4 && std::wstring(argv[3])!=L"--check-events")){std::cerr<<"Usage: SpellMotionReview <output-directory> [--major|--fields|--moving|--crowded|--crowded-far|--signatures|--invocations|--opportunities] [--check-events]\n";return 2;}
  const bool fields=argc>=3 && std::wstring(argv[2])==L"--fields",moving=argc>=3 && std::wstring(argv[2])==L"--moving";
- const bool crowded=argc>=3 && std::wstring(argv[2])==L"--crowded";
+ const bool farView=argc>=3 && std::wstring(argv[2])==L"--crowded-far";
+ const bool crowded=farView || (argc>=3 && std::wstring(argv[2])==L"--crowded");
  const bool signatures=argc>=3 && std::wstring(argv[2])==L"--signatures";
  const bool invocations=argc>=3 && std::wstring(argv[2])==L"--invocations";
  const bool opportunities=argc>=3 && std::wstring(argv[2])==L"--opportunities",checkOnly=argc==4;
@@ -91,6 +92,7 @@ int wmain(int argc,wchar_t** argv){try{
   if((signatures || invocations) && scene.school==rpg::ClassId::Warrior)enemy.position=enemy.home={-4,7.4f};
   if(moving){enemy.position=enemy.home={-4,scene.school==rpg::ClassId::Warrior?7.2f:11.5f};enemy.rooted=0;enemy.state=rpg::EnemyState::Pursuing;enemy.attackCooldown=.8f;}
   game.SetCameraOrbit(.35f,.55f,11);
+  if(farView)game.SetCameraOrbit(.70f,.65f,17);
   if(scene.ability==6 || scene.ability==11){
    // Earn the real resource using accepted opening attacks, before recording.
    // No fabricated reserve/contact events or private gameplay field writes.

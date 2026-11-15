@@ -2,6 +2,8 @@
 #include "game/ClassEffects.h"
 #include "game/CastEffects.h"
 #include "game/ActorPresentation.h"
+#include "game/AttackWarning.h"
+#include "game/AttackSurface.h"
 #include "game/SpellVfx.h"
 #include "engine/Renderer.h"
 #include <algorithm>
@@ -13,11 +15,6 @@ constexpr float pi=3.14159265f,tau=2*pi;
 float Unit(float x){return std::clamp(x,0.f,1.f);}
 XMFLOAT3 Add(XMFLOAT3 a,XMFLOAT3 b){return {a.x+b.x,a.y+b.y,a.z+b.z};}
 XMFLOAT3 Ground(rpg::Vec2 p,float lift=.07f){return {p.x,rpg::WorldMap::Height(p)+lift,p.z};}
-XMFLOAT3 Polar(rpg::Vec2 p,float a,float radius,float lift=.07f){return Ground({p.x+std::sin(a)*radius,p.z+std::cos(a)*radius},lift);}
-void Ring(Renderer& r,rpg::Vec2 p,float radius,float start,float span,float width,XMFLOAT4 c,int segments=24){
-  for(int i=0;i<segments;++i){const float a=start+span*i/segments,b=start+span*(i+1)/segments;
-    r.DrawEffectRibbon(Polar(p,a,radius-width),Polar(p,a,radius+width),Polar(p,b,radius+width),Polar(p,b,radius-width),c);}
-}
 void Seal(Renderer& r,rpg::Vec2 p,float radius,float angle,XMFLOAT4 c){
   const auto at=[&](float x,float z){return Ground({p.x+(std::cos(angle)*x-std::sin(angle)*z)*radius,p.z+(std::sin(angle)*x+std::cos(angle)*z)*radius},.055f);};
   r.DrawEffectSurface(Art::Seal,at(-1,-1),at(-1,1),at(1,1),at(1,-1),c);
@@ -151,41 +148,17 @@ void SustainedEffects::Render(Renderer& r,const rpg::Simulation& s,float /*time*
   }
 }
 void SustainedEffects::Warnings(Renderer& r,const rpg::Simulation& s,const std::vector<presentation::Actor>* actors){
-  if(s.Health()<=0)return;
-  struct Warning {const rpg::Enemy* e=nullptr;float distance=0;bool threatens=false;};
-  std::array<Warning,maxWarnings> chosen{};std::size_t count=0;
-  const auto before=[](const Warning& a,const Warning& b){return a.threatens!=b.threatens?a.threatens:
-    a.e->windup!=b.e->windup?a.e->windup<b.e->windup:a.distance!=b.distance?a.distance<b.distance:a.e->id<b.e->id;};
-  const auto add=[&](const rpg::Enemy& e){
-    if(!s.VisibleEnemyCast(e))return;
-    const float dx=s.Player().x-e.position.x,dz=s.Player().z-e.position.z,d=std::hypot(dx,dz);
-    const float dot=d>.001f?(std::sin(e.facing)*dx+std::cos(e.facing)*dz)/d:1;
-    Warning w{&e,d,e.Hits(d,dot) || (e.kind==rpg::EnemyKind::Boar && d<=e.WarningReach() && dot>=std::cos(e.HalfAngle()))};
-    std::size_t slot=0;while(slot<count && before(chosen[slot],w))++slot;if(slot>=maxWarnings)return;
-    for(auto n=std::min(count,maxWarnings-1);n>slot;--n)chosen[n]=chosen[n-1];chosen[slot]=w;count=std::min(count+1,maxWarnings);
-  };
-  for(const auto& e:s.Combatants())add(e);if(s.Sparring())add(s.SparringOpponent());
-  // Submit essential borders before scenery, status ornaments and hit cosmetics.
-  // Eight simultaneous quake+cone borders cost at most 3,168 vertices.
-  const int circleSegments=count<=2?64:count<=4?40:24,coneSegments=count<=2?32:count<=4?24:16;
-  for(std::size_t i=0;i<count;++i){const auto& e=*chosen[i].e;const float progress=Unit(1-e.windup/e.WindupDuration());
-    const auto color=e.Interruptible()?XMFLOAT4{1,.47f-.25f*progress,.08f,.72f}:XMFLOAT4{.77f,.36f,1,.78f};
-    const bool disc=e.Boss() && e.bossAttack==1;const float span=e.HalfAngle()*2,start=e.facing-e.HalfAngle();
-    Ring(r,e.position,e.WarningReach(),start,span,.028f,color,disc?circleSegments:coneSegments);
-    if(!disc)for(float side:{-1.f,1.f})r.DrawEffectStreak(Polar(e.position,e.facing+side*e.HalfAngle(),.08f),
-      Polar(e.position,e.facing+side*e.HalfAngle(),e.WarningReach()),.023f,color);
-    if(e.Boss() && e.bossAttack==0)for(float radius:{rpg::Enemy::shockInner,rpg::Enemy::shockOuter})Ring(r,e.position,radius,0,tau,.028f,color,circleSegments);
+  const auto chosen=rpg::ReadAttackWarnings<maxWarnings>(s);
+  // One material describes the complete cone/annulus union and its safe holes.
+  // Terrain grid cells and their diagonals exactly match the rendered floor.
+  for(unsigned i=0;i<chosen.count;++i){const auto& row=chosen.rows[i];const auto& e=*row.enemy;
+    const bool quake=e.Boss() && e.bossAttack==0;
+    const Renderer::AttackField field{e.WarningReach(),e.HalfAngle(),e.facing,
+      quake?rpg::Enemy::shockInner:0,quake?rpg::Enemy::shockOuter:0,
+      Unit(1-e.windup/e.WindupDuration()),e.Interruptible(),row.threatens};
+    r.DrawAttackField({e.position.x,e.position.z},field,presentation::AttackSurface(e.position,field.Extent()));
   }
-  const unsigned detailLimit=3600;
-  const int fillSegments=count<=2?48:count<=4?24:12;
-  for(std::size_t i=0;i<count && r.EffectVertices()+fillSegments*6+36<=detailLimit;++i){const auto& e=*chosen[i].e;
-    const float progress=Unit(1-e.windup/e.WindupDuration());const bool quake=e.Boss() && e.bossAttack==0;
-    const float span=quake?tau:e.HalfAngle()*2,start=quake?0:e.facing-e.HalfAngle();
-    const auto c=e.Interruptible()?XMFLOAT4{1,.30f,.08f,.08f+progress*.09f}:XMFLOAT4{.72f,.30f,1,.08f+progress*.09f};
-    for(int n=0;n<fillSegments;++n){const float a=start+span*n/fillSegments,b=start+span*(n+1)/fillSegments;
-      const float inner=quake?rpg::Enemy::shockInner:.08f,outer=quake?rpg::Enemy::shockOuter:e.WarningReach();
-      r.DrawEffectRibbon(Polar(e.position,a,inner),Polar(e.position,a,outer),Polar(e.position,b,outer),Polar(e.position,b,inner),c);
-    }
+  for(unsigned i=0;i<chosen.count;++i){const auto& e=*chosen.rows[i].enemy;
     if(actors && (e.kind==rpg::EnemyKind::Wraith || e.Boss())){
       const auto actor=std::find_if(actors->begin(),actors->end(),[&](const presentation::Actor& a){return a.id==e.id;});
       if(actor!=actors->end())castfx::PrepareEnemy(r,e,castfx::FromEnemy(e,*actor));

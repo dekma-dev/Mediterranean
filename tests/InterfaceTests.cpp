@@ -1405,16 +1405,16 @@ int main() {
     enemies[1].kind=rpg::EnemyKind::Wraith;
     enemies[2].rank=1;enemies[2].bossAttack=1;enemies[2].health=enemies[2].MaxHealth();
     const auto alerts=ui::ReadIncomingAttacks(state);
-    Require(alerts.count==3 && alerts.rows[0].enemy->id==102 && alerts.rows[2].enemy->id==100,
-      "Incoming attacks must include unselected enemies in deadline order");
-    Require(!alerts.rows[0].threatens && alerts.rows[1].threatens,"Threat status must use actual circle/lance geometry");
+    Require(alerts.count==3 && alerts.rows[0].enemy->id==101 && alerts.rows[1].enemy->id==102 && alerts.rows[2].enemy->id==100,
+      "Incoming attacks must prioritize an actual threat before earlier safe casts");
+    Require(alerts.rows[0].threatens && !alerts.rows[1].threatens,"Threat status must use actual circle/lance geometry");
     const auto before=state.Save();ui::Interface hud;
     renderer.BeginFrame();hud.Render(renderer,state,0,false);
     Require(renderer.Capture(L"incoming-attacks-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),"Incoming attack capture");
     const ui::Layout layout(float(size.first),float(size.second));
     const auto warning=ui::HudTransform::At(float(size.first),float(size.second),608,24);
     const auto event=hud.Pointer(layout.x+warning.X(500)*layout.scale,layout.y+warning.Y(60)*layout.scale,float(size.first),float(size.second),true,false);
-    Require(event.action==ui::Action::SelectThreat && event.value==102 && hud.PointerOverUi() && state.Save()==before,
+    Require(event.action==ui::Action::SelectThreat && event.value==101 && hud.PointerOverUi() && state.Save()==before,
       "Incoming row must return its caster identity without changing simulation during rendering");
     rpg::Command select;select.nextTarget=true;state.Update(.001f,select);
     renderer.BeginFrame();hud.Render(renderer,state,.01f,false);Require(renderer.EndFrame(false),"Damage trail baseline");

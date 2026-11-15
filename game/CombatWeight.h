@@ -43,10 +43,13 @@ inline CombatWeight AbilityAccent(int style,int ability,float phase,float contac
   r.pitch=(grand?-.07f:-.025f)*load+(grand?.085f:.035f)*drive;
   r.yaw=(ability==10 || ability==13?.065f:.025f)*(drive-load);r.pelvisYaw=r.yaw*.4f;
   r.lift=-(grand?.025f:.008f)*load;r.forward=(grand?.035f:.012f)*drive;
+  if(ability==14){r.yaw+=.075f*(load-drive);r.pelvisYaw-=.025f*(load-drive);r.roll+=.025f*(drive-load);}
  }else{
-  const bool prayer=ability==5 || ability==6;
+  const bool prayer=ability==5 || ability==6 || ability==8 || ability==11;
   r.pitch=-(prayer?.085f:.025f)*load+(prayer?.03f:.015f)*drive;
   r.lift=(prayer?.025f:.008f)*load;r.yaw=.02f*(drive-load);r.forward=.012f*drive;
+  if(ability==9){r.pitch-=.055f*load;r.pitch+=.045f*drive;r.forward+=.025f*drive;}
+  if(ability==14){r.yaw+=.065f*(load-drive);r.pelvisYaw=-r.yaw*.4f;}
  }
  return r;
 }

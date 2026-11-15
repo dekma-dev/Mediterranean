@@ -1,5 +1,7 @@
 #include "game/SustainedEffects.h"
 #include "game/Game.h"
+#include "game/AttackWarning.h"
+#include "game/AttackSurface.h"
 #include "engine/Renderer.h"
 #include "platform/Win32Window.h"
 #include <wincodec.h>
@@ -57,6 +59,73 @@ void Lifecycle(){
  auto& dummy=const_cast<Enemy&>(s.Dummies()[0]);dummy.rooted=2;dummy.position={s.Player().x,s.Player().z+1};
  target.selectActor=dummy.id;s.Update(.001f,target);Advance(fx,s,.2f);Check(fx.Weight(dummy.id,0)>.9f,"Training dummy omitted control effect");
 }
+void ThreatSelection(){
+ auto s=Hero(ClassId::Mage);auto& foes=const_cast<std::vector<Enemy>&>(s.Enemies());foes.resize(5);
+ for(unsigned i=0;i<foes.size();++i){auto& e=foes[i];e.kind=EnemyKind::Wraith;e.rank=1;e.health=e.MaxHealth();e.id=100+i;
+  e.position=e.home={s.Player().x,s.Player().z+2};e.state=EnemyState::Pursuing;e.windup=.1f+i*.15f;e.facing=0;}
+ foes.back().facing=pi;
+ const auto first=ReadAttackWarnings<3>(s);
+ Check(first.count==3 && first.rows[0].enemy->id==104 && first.rows[0].threatens,"Imminent safe casts hid a later real threat");
+ Check(first.rows[1].enemy->id==100 && first.rows[2].enemy->id==101,"Safe cast deadline order changed");
+ std::reverse(foes.begin(),foes.end());const auto reordered=ReadAttackWarnings<3>(s);
+ Check(reordered.rows[0].enemy->id==104 && reordered.rows[1].enemy->id==100,"Threat priority depends on roster order");
+ foes.front().health=0;Check(ReadAttackWarnings<3>(s).rows[0].enemy->id==100,"Dead caster retained top priority");
+ for(auto& e:foes)e.windup=0;Check(ReadAttackWarnings<3>(s).count==0,"Cancelled attacks retained HUD entries");
+}
+void FieldGeometry(Renderer& r,const std::filesystem::path& out){
+ Renderer::AttackSurface surface;surface.origin={-10,-10};surface.step=2;surface.columns=surface.rows=11;
+ Renderer::AttackField field{2.4f,1.f,0,2.8f,5.8f,.55f,true,true};
+ const auto begin=[&]{r.BeginFrame();r.SetCamera({0,18,-.01f},{0,0,0});
+  r.DrawMesh(visual::Mesh::Box,{0,-.25f,0},{20,.5f,20},{.3f,.3f,.3f,1},visual::Material::Stone);};
+ begin();Check(r.EndFrame(false),"Warm field floor");begin();const auto baseline=Capture(r,out/"warning-floor.png");
+ const auto difference=[&](const Pixels& pixels,float x,float z){XMFLOAT2 screen;
+  Check(r.Project({x,.055f,z},screen),"Warning sample outside camera");double sum=0;
+  const int px=int(screen.x*r.Width()),py=int(screen.y*r.Height());Check(px>2 && py>2 && px+2<int(r.Width()) && py+2<int(r.Height()),"Warning probe bounds");
+  for(int y=py-1;y<=py+1;++y)for(int q=px-1;q<=px+1;++q)for(int c=0;c<3;++c){const auto n=(y*r.Width()+q)*4+c;
+   sum+=std::abs(int(pixels[n])-int(baseline[n]));}return sum/27;
+ };
+ for(float progress:{.05f,.55f,.99f}){
+  field.progress=progress;begin();r.DrawAttackField({0,0},field,surface);
+  Check(r.SpellFieldCount()==1,"Warning did not allocate its complete shape");
+  const auto pixels=Capture(r,out/("warning-phase-"+std::to_string(int(progress*100))+".png"));
+  Check(difference(pixels,4,0)>1 && difference(pixels,0,1.5f)>1,"Annulus or frontal hit zone missing");
+  Check(difference(pixels,-1,0)<.01 && difference(pixels,0,2.6f)<.01 && difference(pixels,6.5f,0)<.01,
+    "Warning painted a safe inner flank, ring gap or exterior");
+ }
+ field.inner=field.outer=0;field.reach=7;field.halfAngle=.16f;
+ for(float facing:{0.f,.73f,2.4f}){field.facing=facing;
+  begin();r.DrawAttackField({0,0},field,surface);const auto lance=Capture(r,out/("warning-lance-"+std::to_string(int(facing*100))+".png"));
+  const float sx=std::sin(facing),cx=std::cos(facing);
+  Check(difference(lance,sx*4,cx*4)>1 && difference(lance,sx*4+cx*1.5f,cx*4-sx*1.5f)<.01 && difference(lance,-sx*4,-cx*4)<.01,
+    "Lance warning does not follow its narrow committed cone");
+ }
+ const auto wall=[&]{r.DrawMesh(visual::Mesh::Box,{0,1,0},{20,1,20},{.3f,.3f,.3f,1},visual::Material::Stone);};
+ begin();wall();const auto blocked=Capture(r,out/"warning-occluder.png");
+ begin();wall();r.DrawAttackField({0,0},field,surface);
+ Check(blocked==Capture(r,out/"warning-occluded.png"),"Warning shines through opaque geometry");
+ begin();const float nan=std::numeric_limits<float>::quiet_NaN();
+ auto invalid=field;invalid.reach=nan;r.DrawAttackField({0,0},invalid,surface);
+ invalid=field;invalid.progress=-1;r.DrawAttackField({0,0},invalid,surface);
+ surface.heights[20]=nan;r.DrawAttackField({0,0},field,surface);
+ Check(r.EffectVertices()==0 && r.SpellFieldCount()==0 && r.EndFrame(false),"Invalid field entered a batch");
+ begin();Check(r.SpellFieldCount()==0 && r.EndFrame(false),"Warning constants leaked into the next frame");
+}
+void SlopedField(Renderer& r,const std::filesystem::path& out){
+ const Vec2 center{-16,8};const float floor=WorldMap::Height(center);
+ const Renderer::AttackField field{2.4f,1,0,2.8f,5.8f,.72f,true,true};
+ const auto surface=presentation::AttackSurface(center,field.Extent());
+ const auto begin=[&]{r.BeginFrame();r.SetCamera({center.x,floor+22,center.z-.01f},{center.x,floor,center.z});
+  r.DrawMesh(visual::Mesh::Terrain,{0,0,0},{1,1,1},{.23f,.25f,.22f,1},visual::Material::Stone);};
+ begin();Check(r.EndFrame(false),"Warm terrain field");begin();const auto baseline=Capture(r,out/"warning-hill-floor.png");
+ begin();r.DrawAttackField({center.x,center.z},field,surface);const auto pixels=Capture(r,out/"warning-hill.png");
+ for(int i=0;i<12;++i){const float angle=i*pi/6,x=center.x+std::sin(angle)*4,z=center.z+std::cos(angle)*4;
+  XMFLOAT2 screen;Check(r.Project({x,WorldMap::Height({x,z})+.055f,z},screen),"Hill warning projection");
+  const int px=int(screen.x*r.Width()),py=int(screen.y*r.Height());double change=0;
+  for(int y=py-1;y<=py+1;++y)for(int q=px-1;q<=px+1;++q)for(int c=0;c<3;++c){const auto n=(y*r.Width()+q)*4+c;
+   change+=std::abs(int(pixels[n])-int(baseline[n]));}
+  Check(change/27>.5,"Ground warning sinks into a terrain slope/diagonal");
+ }
+}
 void Native(Renderer& r,const std::filesystem::path& out){
  const auto begin=[&](const Simulation& s){const auto p=s.Player();r.BeginFrame();r.SetCamera({p.x+3,3,p.z-4},{p.x,1,p.z+1.5f});
   r.DrawMesh(visual::Mesh::Terrain,{0,0,0},{1,1,1},{.23f,.25f,.22f,1},visual::Material::Stone);};
@@ -80,7 +149,7 @@ void Native(Renderer& r,const std::filesystem::path& out){
   foe.state=EnemyState::Pursuing;foe.windup=.7f;foe.facing=pi;foe.bossAttack=0;}
  std::vector<presentation::Actor> actors;presentation::Bind(actors,s.Combatants(),s.SparringOpponent());
  begin(s);SustainedEffects::Warnings(r,s,&actors);const unsigned warningVertices=r.EffectVertices();
- Check(warningVertices>=3168 && warningVertices<=3600,"Eight quake borders missing or over budget");
+ Check(r.SpellFieldCount()==8 && warningVertices<=3600,"Eight complete quake fields missing or over budget");
  const auto original=Capture(r,out/"crowd-warnings.png");std::reverse(roster.begin(),roster.end());
  presentation::Bind(actors,s.Combatants(),s.SparringOpponent());
  begin(s);SustainedEffects::Warnings(r,s,&actors);const auto reordered=Capture(r,out/"crowd-warnings-reordered.png");
@@ -117,10 +186,10 @@ void World(Renderer& r,const std::filesystem::path& out){
 }
 }
 int main(){try{
- Check(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"COM");Lifecycle();
+ Check(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"COM");Lifecycle();ThreatSelection();
  const auto out=std::filesystem::current_path()/"sustained-effects-review";std::filesystem::create_directories(out);
  Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),960,600,L"Sustained effects checks",false),"Native window");
- Renderer r;Check(r.Initialize(window.GetHandle(),960,600),"Renderer");Native(r,out);World(r,out);
+ Renderer r;Check(r.Initialize(window.GetHandle(),960,600),"Renderer");FieldGeometry(r,out);SlopedField(r,out);Native(r,out);World(r,out);
  Check(r.ValidateDebugMessages(),"World DirectX warnings");
  std::cout<<"PASS: status lifecycle, identities, priority, dummy controls, native equal-time capture, real fields and boss warnings.\n";
  }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

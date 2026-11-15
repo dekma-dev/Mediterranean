@@ -221,7 +221,7 @@ public:
   bool HeavyAttack() const { return attackAbility_==1 || attackAbility_==5 || attackAbility_==6 || (attackAbility_>=8 && attackAbility_!=12); }
   bool NormallySteadyAttack(int index) const {
     return CombatStyleInfo().steadyHeavy && (index==1 || index==5 || index==6 || index==9 || index==11 ||
-      ((index==8 || index==14) && class_==ClassId::Mage));
+      ((index==8 || index==14) && class_==ClassId::Mage) || (index==8 && class_==ClassId::Priest));
   }
   bool SteadyAttack(int index) const {return NormallySteadyAttack(index) &&
     !(class_==ClassId::Mage && (discipline_.ready>0 || (Attacking() && attackAbility_==index && attackConfluence_)));}

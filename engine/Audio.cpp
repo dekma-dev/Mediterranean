@@ -464,7 +464,8 @@ Cue ReleaseCue(rpg::ClassId school,int ability,bool heavy){
 }
 Cue ContactCue(rpg::ClassId school,int ability,bool heavy){
  if(school==rpg::ClassId::Scout)return ability==9?Cue::ArrowPierce:Cue::ArrowImpact;
- if(school==rpg::ClassId::Priest)return ability==6?Cue::HolySanctuary:Cue::HolyImpact;
+ if(school==rpg::ClassId::Priest)return ability==6 || ability==8 || ability==11?Cue::HolySanctuary:
+   ability==9 || ability==14?Cue::HolyJudgment:ability==10?Cue::Interrupt:Cue::HolyImpact;
  if(school==rpg::ClassId::Mage){if(ability==9)return Cue::MeteorImpact;if(ability==11)return Cue::FirestormImpact;const auto element=rpg::ClassDiscipline::Element(ability);return element==2?Cue::FrostImpact:element==4?Cue::ArcaneImpact:Cue::FireImpact;}
  return rpg::DescribeClass(school).range>3 && school!=rpg::ClassId::Engineer?Cue::SpellHit:heavy?Cue::HeavyHit:Cue::Hit;
 }

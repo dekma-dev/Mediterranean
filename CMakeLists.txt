@@ -177,7 +177,7 @@ endif()
 # Embed artwork in every native client host (including offscreen test hosts).
 # Resource include paths make RC independent of the build working directory.
 target_sources(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/UiArtwork.rc")
-set_source_files_properties(assets/ui/UiArtwork.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/antique-frame.png;${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/chapter-hall.png;${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/equipment-icons.png;${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/combat-spells.png;${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/class-spells.png")
+set_source_files_properties(assets/ui/UiArtwork.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/antique-frame.png;${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/chapter-hall.png;${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/equipment-icons.png;${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/combat-spells.png;${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/class-spells.png;${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/priest-disciplines.png")
 target_sources(MediterraneanClient INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/Collection.rc")
 file(GLOB SURFACE_MATERIAL_MAPS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/materials/*-color.png" "${CMAKE_CURRENT_SOURCE_DIR}/assets/materials/*-normal.png")
 set_source_files_properties(assets/authored/Collection.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/collection01.masset;${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/frostfang.motion;${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/player.clips;${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/player-body.skin;${CMAKE_CURRENT_SOURCE_DIR}/assets/authored/oldstyle-classes.kit")

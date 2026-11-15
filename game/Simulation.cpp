@@ -215,6 +215,7 @@ void Simulation::UseAbility(int index,float visualElapsed) {
     if(index==9) attackDamage_*=class_==ClassId::Warrior?1.25f:class_==ClassId::Scout?1.30f:1.40f;
     if(index==10) attackDamage_*=class_==ClassId::Warrior?.50f:class_==ClassId::Scout?.55f:.60f;
     if(index==11) {classResource_=0;attackDamage_*=class_==ClassId::Warrior?1.50f:1.75f;}
+    if(class_==ClassId::Priest && (index==9 || index==11))attackDamage_=HeavyDamage()*(index==9?1.25f:1.50f);
     if(index==7) attackDamage_=StrikeDamage()*.9f;
     if(index==6) {
       classResource_=0;attackDamage_*=class_==ClassId::Demonologist?1.6f:1.1f;
@@ -284,8 +285,9 @@ void Simulation::ResolveAttack(float elapsed) {
       const float along=(delta.x*line.x+delta.z*line.z)/lineLength;
       const float across=std::abs(delta.x*line.z-delta.z*line.x)/lineLength;
       if(along<lineLength || across>.55f || !HasLineOfSight(centre,enemy.position)) return;
-    } else if(class_==ClassId::Mage) {
-      if(Length(Difference(enemy.position,centre))>(attackAbility_==11?4.5f:3.f) || !HasLineOfSight(centre,enemy.position)) return;
+    } else if(class_==ClassId::Mage || class_==ClassId::Priest) {
+      const float radius=attackAbility_==11?(class_==ClassId::Priest?3.5f:4.5f):3.f;
+      if(Length(Difference(enemy.position,centre))>radius || !HasLineOfSight(centre,enemy.position)) return;
     } else if(attackAbility_!=11 && distance>.01f && (delta.x*std::sin(facing_)+delta.z*std::cos(facing_))/distance<
         std::cos(class_==ClassId::Warrior?1.2f:.48f)) return;
     if(!CourtProtected(enemy)) ++sweepHits;
@@ -364,6 +366,7 @@ void Simulation::ResolveContact(Enemy& enemy,float elapsed) {
     if(class_==ClassId::Warrior) {barrier_=std::max(barrier_,18.f);enemy.exposed=std::max(enemy.exposed,3.f);}
     if(class_==ClassId::Scout) {enemy.rooted=std::max(enemy.rooted,2.f);enemy.exposed=std::max(enemy.exposed,4.f);}
     if(class_==ClassId::Mage) classResource_=std::min(CombatStyleInfo().capacity,classResource_+1);
+    if(class_==ClassId::Priest) {enemy.exposed=std::max(enemy.exposed,4.f);barrier_=std::max(barrier_,12.f);classResource_=std::min(CombatStyleInfo().capacity,classResource_+1);}
   }
   if(index==14 && class_==ClassId::Mage && (enemy.snared>0 || enemy.rooted>0)) {
     bonus+=HeavyDamage()*.35f;enemy.snared=enemy.rooted=0;
@@ -394,6 +397,10 @@ void Simulation::ResolveContact(Enemy& enemy,float elapsed) {
     enemy.stunned=std::max(enemy.stunned,1.f);enemy.exposed=std::max(enemy.exposed,4.f);barrier_=std::max(barrier_,10.f);
   }
   if(index==9 && class_==ClassId::Scout) enemy.exposed=std::max(enemy.exposed,5.f);
+  if(class_==ClassId::Priest) {
+    if(index==8) {enemy.exposed=std::max(enemy.exposed,3.f);if(enemy.id==attackTarget_)barrier_=std::max(barrier_,18.f);}
+    if(index==9 && exposedAtContact) {bonus+=HeavyDamage()*.35f;enemy.exposed=0;}
+  }
   if(index==10) {
     if(class_==ClassId::Warrior) enemy.stunned=std::max(enemy.stunned,1.4f);
     if(class_==ClassId::Scout) enemy.snared=std::max(enemy.snared,4.f);
@@ -414,6 +421,13 @@ void Simulation::ResolveContact(Enemy& enemy,float elapsed) {
   const float mastery=(attackEmpowered_ || index==6 || index==11) && HasTalent(Talent::Overwhelming)?1.2f:1.f;
   const float damage=std::min(enemy.health,(attackDamage_*finishing+bonus)*mastery*(exposedAtContact?1.25f:1.f));
   float heal=class_==ClassId::Necromancer?damage*.15f:class_==ClassId::Bard?3.f:class_==ClassId::Priest && index==1?8.f:0.f;
+  // Holy recovery belongs to the accepted primary hit. An area cast cannot
+  // multiply healing/wards with its secondary victims or protected targets.
+  if(class_==ClassId::Priest && enemy.id==attackTarget_) {
+    if(index==9)heal+=16;
+    if(index==11){heal+=30;barrier_=std::max(barrier_,24.f);}
+    if(index==14 && chainSpent>=2){heal+=8.f*chainSpent;barrier_=std::max(barrier_,8.f*chainSpent);}
+  }
   if(index==5) {
     // Apply tactical effects only after validated contact.
     switch(class_) {
@@ -501,6 +515,7 @@ void Simulation::ResolveContact(Enemy& enemy,float elapsed) {
       if(class_==ClassId::Warrior) barrier_=std::max(barrier_,40.f);
       if(class_==ClassId::Mage) classResource_=std::min(CombatStyleInfo().capacity,classResource_+1);
       if(class_==ClassId::Scout) {enemy.exposed=std::max(enemy.exposed,6.f);classResource_=std::min(CombatStyleInfo().capacity,classResource_+1);}
+      if(class_==ClassId::Priest)barrier_=std::max(barrier_,24.f);
     }
     Emit(FeedbackKind::Interrupt,enemy.position);
     if(ReplayActive() && enemy.id>=100 && enemy.id<106) ++replayReport_.interrupts;

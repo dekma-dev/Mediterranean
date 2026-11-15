@@ -6,6 +6,7 @@
 #include "platform/Win32Window.h"
 #include <filesystem>
 #include <set>
+#include <tuple>
 #include <iostream>
 #include <stdexcept>
 #include <cmath>
@@ -48,7 +49,7 @@ void Gameplay() {
  for(int hz:{30,60,144}) {
   chain.Clear();chain.Contact(100,0,0);chain.Advance(4.99f);chain.Advance(1.f/hz);
   chain.Contact(100,12,1.f/hz-.005f);Check(chain.Steps(100)==2,"Subframe chain expiration changed with refresh rate");
-  for(auto id:{ClassId::Warrior,ClassId::Scout,ClassId::Mage}) {
+  for(auto id:{ClassId::Warrior,ClassId::Scout,ClassId::Mage,ClassId::Priest}) {
    auto s=Hero(id);Check(ContactCount(Cast(s,0,hz))==1,"First basic contact count");
    Check(s.ChainSteps()==1,"First basic must start chain");
    Check(ContactCount(Cast(s,12,hz))==1 && s.ChainSteps()==2,"Second basic must produce one contact and two steps");
@@ -108,7 +109,7 @@ void Gameplay() {
     auto moving=Hero(id);c={};c.ability=13;moving.Update(.001f,c);c={};c.movement={.1f,0};moving.Update(.05f,c);
     Check(moving.Attacking(),"Mobile setup unexpectedly cancelled on movement");
     auto finish=Hero(id);c={};c.ability=14;finish.Update(.001f,c);c={};c.movement={.1f,0};finish.Update(.05f,c);
-    Check(finish.Attacking()==(id==ClassId::Scout),"Mage finisher/Scout mobile preparation rules diverged");
+    Check(finish.Attacking()==(id!=ClassId::Mage),"Stationary Mage/mobile Scout and Priest finisher rules diverged");
    }
   }
  }
@@ -118,16 +119,16 @@ void Gameplay() {
  }
 }
 void Native(Renderer& r,const std::filesystem::path& output) {
- std::set<std::pair<bool,int>> cells;
+ std::set<std::tuple<bool,bool,int>> cells;
  for(int id=0;id<int(ClassId::Count);++id)for(int ability=0;ability<(AdvancedClass(ClassId(id))?15:8);++ability) {
   const auto cell=ui::SpellArtwork(ClassId(id),ability);const auto uv=cell.Uv();
-  Check(cell.tile>=0 && cells.emplace(cell.combat,cell.tile).second && uv.x>=0 && uv.y>=0 && uv.z<=1 && uv.w<=1,"Spell atlas cells alias or leave bounds");
+  Check(cell.tile>=0 && cells.emplace(cell.combat,cell.priest,cell.tile).second && uv.x>=0 && uv.y>=0 && uv.z<=1 && uv.w<=1,"Spell atlas cells alias or leave bounds");
  }
- Check(cells.size()==109,"Missing available spell illustrations");
+ Check(cells.size()==116,"Missing available spell illustrations");
  for(auto size:{std::pair<int,int>{960,600},{1920,1080},{2560,1080}}) {
   Check(r.Resize(size.first,size.second),"Spell review resize");const ui::Layout layout(float(size.first),float(size.second));
   const auto bars=ui::HudTransform::At(float(size.first),float(size.second),640,710);
-  for(auto id:{ClassId::Warrior,ClassId::Scout,ClassId::Mage}) {
+  for(auto id:{ClassId::Warrior,ClassId::Scout,ClassId::Mage,ClassId::Priest}) {
    auto state=Hero(id);ui::Interface hud;const auto saved=state.Save();
    const auto draw=[&] {r.BeginFrame();hud.Render(r,state,.5f,false);Check(r.EndFrame(false),"Hotbar edit draw");};
    const auto point=[&](float x,float y,bool click,bool held,bool release,bool right=false) {return hud.Pointer(layout.x+x*layout.scale,layout.y+y*layout.scale,float(size.first),float(size.second),click,right,held,release);};
@@ -157,7 +158,7 @@ void Native(Renderer& r,const std::filesystem::path& output) {
  }
  Check(r.InterfaceBytes()<30*1024*1024,"Unique spell art exceeded 30 MiB total UI budget");
  Check(r.Resize(960,600),"Effects resize");
- for(auto id:{ClassId::Warrior,ClassId::Scout,ClassId::Mage})for(int ability:{12,13,14}) {
+ for(auto id:{ClassId::Warrior,ClassId::Scout,ClassId::Mage,ClassId::Priest})for(int ability:{12,13,14}) {
   CombatVisualEvent e;e.school=id;e.ability=ability;e.heavy=ability!=12;e.position={0,0};e.height=1.1f;e.source={0,-2};e.destination={0,0};e.flight=.25f;e.chain=ability==14?3:0;
   r.BeginFrame();r.SetCamera({2,2.5f,-5},{0,1,0});classfx::Projectile(r,e,{0,1.1f,-2},.15f);classfx::Impact(r,e,.13f);
   Check(r.EffectVertices()<1600,"New effects exceeded fixed geometry budget");
@@ -165,7 +166,7 @@ void Native(Renderer& r,const std::filesystem::path& output) {
  }
  Check(r.ValidateDebugMessages(),"Native spell review emitted DirectX warnings");
  Check(r.Resize(1920,1080),"World spell capture resize");
- for(auto id:{ClassId::Warrior,ClassId::Scout,ClassId::Mage}) {
+ for(auto id:{ClassId::Warrior,ClassId::Scout,ClassId::Mage,ClassId::Priest}) {
    const auto fixture=Hero(id);Game game;game.Initialize();Check(game.RestoreSnapshot(fixture.Save()),"Native world fixture");
    game.SetCameraOrbit(.35f,.46f,6.8f);Command select;select.selectActor=210;game.ExecuteCommand(select,.01f);
    const auto tick=[&](float duration) {while(duration>1e-6f) {const auto dt=std::min(duration,1.f/60);game.ExecuteCommand({},dt);duration-=dt;}};
@@ -183,5 +184,5 @@ int main(int argc,char** argv) {try {
  Gameplay();Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),960,600,L"Spell chain review",false),"Test window");
  Renderer renderer;Check(renderer.Initialize(window.GetHandle(),960,600),"Test renderer");
  const auto output=argc>1?std::filesystem::path(argv[1]):std::filesystem::path("spell-chain-review");std::filesystem::create_directories(output);
- Native(renderer,output);std::cout<<"PASS: nine abilities, target-bound chains, hit/cancel/save rules, unique art and hotbar editing.\n";
+ Native(renderer,output);std::cout<<"PASS: four-class abilities, target-bound chains, hit/cancel/save rules, unique art and hotbar editing.\n";
  }catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 1;} }

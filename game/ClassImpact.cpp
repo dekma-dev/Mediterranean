@@ -10,6 +10,7 @@ using C=rpg::ClassId;
 using Art=Renderer::EffectArt;
 constexpr float pi=3.141592654f,tau=pi*2;
 float Unit(float v){return std::clamp(v,0.f,1.f);}
+XMFLOAT3 Add(XMFLOAT3 a,XMFLOAT3 b){return {a.x+b.x,a.y+b.y,a.z+b.z};}
 float Envelope(float t,float life,float rise=.018f){return Unit(t/rise)*std::pow(Unit(1-t/life),1.3f);}
 struct Frame {
  XMFLOAT3 p;float sn,cs;
@@ -128,18 +129,105 @@ void Sanctuary(Renderer& r,const rpg::CombatVisualEvent& e,float age){
  for(int n=0;n<8;++n){const float a=n*tau/8;const auto p=f.At(std::cos(a)*(.3f+open*.6f),.3f+age*(1.2f+(n%3)*.35f),std::sin(a)*(.3f+open*.6f));
   r.DrawEffectSprite(Art::Slash,p,.035f,.17f,age,{1,.95f,.68f,fade*.7f});}
 }
+void ChainFinish(Renderer& r,const rpg::CombatVisualEvent& e,float age){
+ const Frame f({e.position.x,e.height,e.position.z},e.facing);
+ const float power=e.chain>=2?1.18f:1.f;
+ // Sequential surfaces replace the old simultaneous impact. One confirmed
+ // hit still owns damage; the second stroke is its visual follow-through.
+ if(e.school==C::Warrior){
+  for(int side:{-1,1}){const float t=age-(side>0?.065f:0.f);if(t<0 || t>.48f)continue;
+   const float sweep=combat::Smooth(t/.22f),fade=Envelope(t,.48f,.008f);
+   const auto path=[&](float u){const float x=(-1.25f+(u*.85f+sweep*.55f)*2.f)*side;
+    return f.At(x*power,side*x*.65f*power,std::sin(u*pi)*.22f);};
+   FilamentStream(r,path,f.Normal(0,1),.30f*power,2.7f,t,{.73f,.87f,1,fade*.85f},16);
+   FilamentStream(r,path,f.Normal(0,1),.055f,2.7f,t,{1,.91f,.66f,fade},10);
+  }
+  Debris(r,f,age,.9f,true);
+ }else if(e.school==C::Scout){
+  // Two swept wakes pass the impact in opposite oblique planes. Their width
+  // opens after contact; neither decorative arrow claims an additional hit.
+  const float t=combat::Smooth(age/.28f),fade=Envelope(age,.55f,.008f);
+  for(int side:{-1,1})for(int layer=0;layer<2;++layer){
+   const auto path=[&](float u){const float span=(u-.5f)*1.8f;
+    return f.At(side*span*(.25f+t*.65f),side*span*.34f+std::sin(u*pi)*layer*.18f,-.85f+u*1.5f+t*.45f);};
+   FilamentStream(r,path,f.Normal(side,1),layer?.035f:.19f*power,2.5f,age+layer*.1f,
+     layer?XMFLOAT4{1,.92f,.66f,fade*.8f}:XMFLOAT4{.56f,.85f,.76f,fade*.66f},14);
+  }
+  Debris(r,f,age,.8f,false);
+ }else if(e.school==C::Mage){
+  const float open=combat::Smooth(age/.28f),fade=Envelope(age,.84f,.012f);
+  for(int side:{-1,1}){
+   const auto path=[&](float u){const float turn=side*(u*pi*1.35f+age*1.8f),radius=(.22f+open*.95f)*power;
+    return f.At(std::sin(turn)*radius,(u-.5f)*1.75f*power,std::cos(turn)*radius*.65f);};
+   if(side<0)FlameStream(r,path,f.Normal(0,1),.43f*power,3.5f,age,{1,1,1,fade*.85f},20);
+   else FilamentStream(r,path,f.Normal(0,1),.27f*power,3.5f,age,{.32f,.73f,1,fade*.88f},20);
+   r.DrawSpellVolume(side<0?Renderer::SpellMedium::Fire:Renderer::SpellMedium::Frost,
+     path(.48f),f.Normal(side*.6f,1),{.26f*power,.44f*power,.60f*power},age,{1,1,1,fade*.65f},e.actor+side+7);
+   if(side>0)for(int n=0;n<5;++n){const auto p=path((n+.5f)/5);
+    r.DrawEffectSurface(Art::Ice,Add(p,{- .07f,-.16f,0}),Add(p,{-.025f,.24f,0}),Add(p,{.045f,.13f,.09f}),Add(p,{.08f,-.13f,.04f}),{.58f,.88f,1,fade*.8f});}
+  }
+  r.DrawEffectSprite(Art::Smoke,f.At(0,age*.45f),.24f+age,.3f+age*.6f,0,{.67f,.75f,.8f,fade*.24f},true);
+ }else{
+  const float fade=Envelope(age,.86f,.015f),open=combat::Smooth(age/.23f);
+  for(int side:{-1,1}){const float t=age-(side>0?.045f:0.f);if(t<=0)continue;
+   const float descend=1-combat::Smooth(t/.16f);
+   FilamentStream(r,[&](float u){return f.At(side*(u-.5f)*(1.35f+open*.4f)*power,
+      (-.7f+u*3.2f+descend)*power,.10f+side*.12f);},f.Normal(0,1),.22f,3.6f,t,
+      {1,.89f,.56f,Envelope(t,.72f,.012f)*.85f},16);
+  }
+  for(int n=0;n<3;++n){const float a=n*tau/3;
+   FilamentStream(r,[&](float u){const float radius=std::sin(u*pi)*(.45f+open*.5f)*power;
+    return f.At(std::cos(a)*radius,(-.55f+u*2.f)*power,std::sin(a)*radius);},f.Normal(-std::sin(a),std::cos(a)),.09f,2.8f,age,
+      {1,.70f,.25f,fade*.55f},12);}
+  r.DrawSpellVolume(Renderer::SpellMedium::Holy,f.At(0,.4f),{0,1,0},{.22f,.22f,1.2f},age,{1,1,1,fade*.65f},e.actor);
+ }
+ r.DrawEffectGlow(f.p,.16f*power,{1,.94f,.79f,Envelope(age,.12f,.004f)});
+}
+void HolyDiscipline(Renderer& r,const rpg::CombatVisualEvent& e,float age){
+ if(e.ability==14){ChainFinish(r,e,age);return;}
+ const Frame f(Floor(e.position),e.facing);
+ const float fade=Envelope(age,.86f,.02f),open=combat::Smooth(age/.22f);
+ if(e.ability==8 || e.ability==11){
+  const bool grand=e.ability==11;const float radius=grand?3.5f:3.f;
+  GroundField(r,e.position,radius,age,ResidueKind::Holy,fade*.75f,e.actor);
+  for(int n=0;n<6;++n){const float a=n*tau/6;
+   const auto path=[&](float u){const float rr=(.18f+std::sin(u*pi)*radius*.70f)*open;
+    auto p=f.At(std::cos(a)*rr,.2f+u*(grand?4.5f:2.3f),std::sin(a)*rr);
+    p.y+=rpg::WorldMap::Height({p.x,p.z})-f.p.y;return p;};
+   FilamentStream(r,path,f.Normal(-std::sin(a),std::cos(a)),grand?.19f:.11f,radius*2,age+n*.12f,
+     {1,.88f,.53f,fade*(grand?.65f:.50f)},12);
+  }
+  if(grand)r.DrawSpellVolume(Renderer::SpellMedium::Holy,f.At(0,2.1f),{0,1,0},{.45f,.45f,2.0f},age,{1,1,1,fade*.7f},e.actor);
+ }else if(e.ability==9){
+  const float lower=.20f+(1-combat::Smooth(age/.12f))*2.6f;
+  for(int n=0;n<3;++n)FilamentStream(r,[&](float u){return f.At((n-1)*.12f,lower+u*(4.4f-lower),.1f*(n-1));},
+    f.Normal(0,1),n==1?.24f:.08f,4.4f,age,{1,.91f,.61f,fade*(n==1?.9f:.5f)},12);
+  r.DrawSpellVolume(Renderer::SpellMedium::Holy,f.At(0,1.2f),{0,1,0},{.25f,.25f,1.2f},age,{1,1,1,fade*.7f},e.actor);
+ }else{
+  // Litany wraps the target; the bell splits its halo outward. Spark remains
+  // a compact rising trace instead of inheriting the grand invocation.
+  const bool bell=e.ability==10,litany=e.ability==13;
+  for(int n=0;n<(litany?3:2);++n){const float a=n*pi;
+   FilamentStream(r,[&](float u){const float angle=a+u*pi*1.6f,radius=(bell?.35f+age*.9f:litany?.48f:.13f)*open;
+    return f.At(std::cos(angle)*radius,.5f+u*(litany?1.5f:1.f),std::sin(angle)*radius);},
+    {0,1,0},litany?.10f:.065f,2.6f,age,{1,.86f,.46f,fade*.8f},12);
+  }
+ }
+}
 }
 bool HasClassImpact(const rpg::CombatVisualEvent& e){
  if(!e.primary)return false;
  return (e.school==C::Warrior && (e.ability==1 || e.ability==8 || e.ability==9 || e.ability==11 || e.ability==14)) ||
    (e.school==C::Scout && (e.ability==1 || e.ability==6 || e.ability==9 || e.ability==11 || e.ability==14)) ||
-   (e.school==C::Mage && (e.ability==1 || e.ability==9)) || (e.school==C::Priest && e.ability==6);
+   (e.school==C::Mage && (e.ability==1 || e.ability==9 || e.ability==14)) || (e.school==C::Priest && (e.ability==6 || (e.ability>=8 && e.ability<=14)));
 }
 void ClassImpact(Renderer& r,const rpg::CombatVisualEvent& e,float age){
  if(!HasClassImpact(e) || !std::isfinite(age) || age<0 || age>=ContactLifetime(e) ||
    !std::isfinite(e.position.x)||!std::isfinite(e.position.z)||!std::isfinite(e.height)||!std::isfinite(e.facing) ||
    (e.kind!=rpg::CombatVisualKind::Hit && e.kind!=rpg::CombatVisualKind::HeavyHit))return;
- if(e.school==C::Warrior)Steel(r,e,age);
+ if(e.ability==14)ChainFinish(r,e,age);
+ else if(e.school==C::Priest && e.ability>=8)HolyDiscipline(r,e,age);
+ else if(e.school==C::Warrior)Steel(r,e,age);
  else if(e.school==C::Scout)Pierce(r,e,age);
  else if(e.school==C::Mage)Meteor(r,e,age);
  else Sanctuary(r,e,age);

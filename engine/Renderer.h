@@ -12,6 +12,7 @@
 #include "engine/StaticScene.h"
 #include "engine/TransientLights.h"
 #include <array>
+#include <algorithm>
 #include <functional>
 class Renderer {
 public:
@@ -130,6 +131,20 @@ public:
   void DrawSpellField(SpellField kind,DirectX::XMFLOAT2 center,float radius,float age,
     DirectX::XMFLOAT4 tint,const std::array<float,25>& heights,unsigned seed=0);
   unsigned SpellFieldCount() const { return spellFieldCount_; }
+  struct AttackField {
+    float reach=0,halfAngle=0,facing=0,inner=0,outer=0,progress=0;
+    bool interruptible=true,threatens=false;
+    float Extent() const { return std::max(reach,outer)+.16f; }
+  };
+  struct AttackSurface {
+    DirectX::XMFLOAT2 origin{};
+    float step=2;
+    unsigned columns=0,rows=0;
+    std::array<float,121> heights{};
+  };
+  // Exact cone/annulus union over the caller's terrain grid/diagonal. Alpha
+  // blended without bloom; cells outside the footprint are never submitted.
+  void DrawAttackField(DirectX::XMFLOAT2 center,const AttackField&,const AttackSurface&);
   void SetSpellGlowEnabled(bool enabled) { spellGlowEnabled_=enabled; }
   unsigned SpellGlowPasses() const { return spellGlowPasses_; }
   std::size_t SpellGlowBytes() const { return std::size_t(glowWidth_)*glowHeight_*8*3; }
@@ -152,7 +167,7 @@ public:
   void DrawHudRect(float x, float y, float width, float height, const DirectX::XMFLOAT4& color);
   void DrawHudGradient(float x,float y,float width,float height,DirectX::XMFLOAT4 top,DirectX::XMFLOAT4 bottom);
   void DrawHudTriangle(DirectX::XMFLOAT2 a,DirectX::XMFLOAT2 b,DirectX::XMFLOAT2 c,const DirectX::XMFLOAT4& color);
-  enum class UiArt { Frame, Hall, Icons, CombatSpells, ClassSpells };
+  enum class UiArt { Frame, Hall, Icons, CombatSpells, ClassSpells, PriestSpells };
   // Artwork joins the existing HUD batch; no texture swaps or per-panel upload.
   void DrawUiArt(UiArt art,float x,float y,float width,float height,
     DirectX::XMFLOAT4 uv={0,0,1,1},DirectX::XMFLOAT4 tint={1,1,1,1});
@@ -237,7 +252,7 @@ private:
   unsigned spellVolumeCount_=0;
   float spellVolumeCoverage_=0;
   Microsoft::WRL::ComPtr<ID3D11Buffer> spellVolumeConstants_;
-  struct SpellFieldData {DirectX::XMFLOAT4 clock,tint;};
+  struct SpellFieldData {DirectX::XMFLOAT4 clock,tint,shape,details;};
   std::array<SpellFieldData,12> spellFields_{};
   unsigned spellFieldCount_=0;
   Microsoft::WRL::ComPtr<ID3D11Buffer> spellFieldConstants_;
@@ -247,7 +262,7 @@ private:
   unsigned effectVertices_=0;
   FontAtlas font_;
   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> mapView_;
-  std::array<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>,5> uiViews_;
+  std::array<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>,6> uiViews_;
   std::size_t uiBytes_=0;
   std::size_t mapBytes_ = 0;
   Microsoft::WRL::ComPtr<ID3D11SamplerState> fontSampler_;

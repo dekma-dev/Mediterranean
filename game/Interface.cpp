@@ -407,7 +407,7 @@ void ClassSigil(Canvas& c,Rect rect,rpg::ClassId id,float alpha=1) {
 void AbilityArtwork(Canvas& c,Rect rect,int ability,rpg::ClassId id=rpg::ClassId::Warrior,float alpha=1) {
  const auto art=SpellArtwork(id,ability);
  if(art.tile>=0) {
-   c.Art(rect,art.combat?Renderer::UiArt::CombatSpells:Renderer::UiArt::ClassSpells,art.Uv(),{1,1,1,alpha});return;
+   c.Art(rect,art.priest?Renderer::UiArt::PriestSpells:art.combat?Renderer::UiArt::CombatSpells:Renderer::UiArt::ClassSpells,art.Uv(),{1,1,1,alpha});return;
  }
  if(ability==2) PaintedIcon(c,rect,22,alpha);
  else if(ability==3) {
@@ -445,7 +445,7 @@ void TalentIcon(Canvas& c,Rect rect,int index,float alpha=1,rpg::ClassId id=rpg:
    constexpr int offense[]{0,1,6,7,1,6};
    const int ability=branch==0?offense[row]:branch==1 && (row==2 || row==5)?2:3;
    const auto art=SpellArtwork(id,ability);
-   c.Art(rect,art.combat?Renderer::UiArt::CombatSpells:Renderer::UiArt::ClassSpells,art.Uv(),{1,1,1,alpha});
+   c.Art(rect,art.priest?Renderer::UiArt::PriestSpells:art.combat?Renderer::UiArt::CombatSpells:Renderer::UiArt::ClassSpells,art.Uv(),{1,1,1,alpha});
    // A milestone is a passive enhancement of its class action, not generic Mend.
    // Small engraved pips distinguish depth without obscuring the existing art.
    for(int n=0;n<=row;++n)c.Diamond(rect.x+4+n*(rect.w-8)/6,rect.y+rect.h-3,1.5f,1.5f,{.95f,.78f,.42f,alpha});
@@ -1179,7 +1179,8 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   if(incoming.count) {
    HudSection section(c,regions_,mouseX_,mouseY_,warningTransform);
    const Rect board{438,s.Sparring() || s.SparringReportTime()>0?205.f:24.f,340,24+incoming.count*36.f};
-   c.Gradient(board,{.025f,.022f,.019f,.83f},{.025f,.022f,.019f,.25f});
+   c.Gradient(board,{.025f,.022f,.019f,.88f},{.025f,.022f,.019f,.55f});
+   c.Line(board.x,board.y,board.x+board.w,board.y,1,border);
    c.FitText(board.x+8,board.y+3,324,"INCOMING ATTACKS / SELECT",11,gold);
    regions_.push_back({board,{},false});
    for(unsigned i=0;i<incoming.count;++i) {
@@ -1187,17 +1188,30 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     const float y=board.y+24+i*36;
     const Rect hit{board.x+5,y-2,330,34};
     const bool selected=s.TargetActor() && s.TargetActor()->id==enemy.id;
+    const float progress=std::clamp(1-enemy.windup/enemy.WindupDuration(),0.f,1.f);
+    if(row.threatens)c.Gradient(hit,{.32f,.085f,.025f,.23f+.16f*progress},{.16f,.04f,.025f,.08f});
     if(hit.Contains(mouseX_,mouseY_) || selected)
       c.RectFill(hit,selected?Color{.42f,.28f,.10f,.30f}:Color{.45f,.38f,.23f,.18f});
     if(selected) c.Line(hit.x,y,hit.x,y+29,2,gold);
     regions_.push_back({hit,{Action::SelectThreat,int(enemy.id)},true});
     const Color accent=enemy.Interruptible()?Color{.95f,.52f,.18f,1}:Color{.76f,.51f,.95f,1};
-    c.FitText(board.x+9,y,171,enemy.AttackName(),12,ink);
-    c.FitText(board.x+184,y,103,enemy.Boss()?(enemy.Enraged()?"BOSS / ENRAGED":"BOSS"):enemy.Name(),10,muted);
+    // A broken/open marker permits interruption; the enclosed shield means
+    // movement is required. Shape distinguishes these even without colour.
+    const float markerX=board.x+14,markerY=y+6;
+    c.Line(markerX-4,markerY-5,markerX+4,markerY-5,1.3f,accent);
+    c.Line(markerX-4,markerY-5,markerX-4,markerY+1,1.3f,accent);
+    c.Line(markerX+4,markerY-5,markerX+4,markerY+1,1.3f,accent);
+    if(!enemy.Interruptible()){
+      c.Line(markerX-4,markerY+1,markerX,markerY+5,1.3f,accent);
+      c.Line(markerX+4,markerY+1,markerX,markerY+5,1.3f,accent);
+    }else c.Line(markerX-2,markerY+3,markerX+4,markerY-3,1.4f,accent);
+    c.FitText(board.x+24,y,161,enemy.AttackName(),12,ink);
+    c.FitText(board.x+190,y,97,enemy.Boss()?(enemy.Enraged()?"BOSS / ENRAGED":"BOSS"):enemy.Name(),10,muted);
     std::ostringstream countdown;countdown<<std::fixed<<std::setprecision(1)<<std::ceil(enemy.windup*10)/10<<"s";
     c.Center(board.x+290,y,40,countdown.str(),12,accent);
-    c.RectFill({board.x+9,y+15,320,2},{.1f,.08f,.06f,1});
-    c.RectFill({board.x+9,y+15,320*std::clamp(1-enemy.windup/enemy.WindupDuration(),0.f,1.f),2},accent);
+    c.RectFill({board.x+9,y+15,320,3},{.1f,.08f,.06f,1});
+    c.Gradient({board.x+9,y+15,320*progress,3},accent,{accent.x*.55f,accent.y*.55f,accent.z*.55f,1});
+    c.Line(board.x+9+320*progress,y+14,board.x+9+320*progress,y+19,1,ink);
     c.FitText(board.x+9,y+20,320,row.threatens?enemy.Counterplay():"CLEAR NOW - WATCH THE WARNING",10,row.threatens?accent:muted);
    }
   }

@@ -207,7 +207,7 @@ bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
  if (!Check(device_->CreateBuffer(&b,nullptr,hudVertices_.GetAddressOf()),L"Create HUD buffer")) return false;
  b.ByteWidth=maxInstances*sizeof(Instance);
  if (!Check(device_->CreateBuffer(&b,nullptr,instances_.GetAddressOf()),L"Create bounded instance buffer")) return false;
- instanceScratch_.reserve(maxInstances); hud_.reserve(16380); effects_.reserve(maxEffectVertices); groundMarks_.reserve(1536);
+ instanceScratch_.reserve(maxInstances); hud_.reserve(16380); effects_.reserve(maxEffectVertices); groundMarks_.reserve(3600);
  cloudSprites_.reserve(96);cloudVertices_.reserve(96*6);
  D3D11_RASTERIZER_DESC r{}; r.FillMode=D3D11_FILL_SOLID; r.CullMode=D3D11_CULL_BACK; r.DepthClipEnable=TRUE;
  if (!Check(device_->CreateRasterizerState(&r,rasterizer_.GetAddressOf()),L"Create rasterizer")) return false;
@@ -1069,7 +1069,7 @@ void Renderer::DrawUiArt(UiArt art,float x,float y,float width,float height,XMFL
 }
 bool Renderer::CreateUiArtwork() {
  // Resource-backed PNGs travel with the executable. Decode once, bounded to
- // under 28 MiB including mipmaps; WIC objects/pixels are released immediately.
+ // under 29 MiB including mipmaps; WIC objects/pixels are released immediately.
  const HRESULT apartment=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
  if (FAILED(apartment) && apartment!=RPC_E_CHANGED_MODE) return Check(apartment,L"Initialize UI decoder apartment");
  struct Apartment {bool owned;~Apartment(){if(owned) CoUninitialize();}} scope{SUCCEEDED(apartment)};
@@ -1079,13 +1079,13 @@ bool Renderer::CreateUiArtwork() {
  for (unsigned i=0;i<=uiViews_.size();++i) {
   const bool effect=i==uiViews_.size();auto& textureView=effect?effectAtlas_:uiViews_[i];
   const auto module=GetModuleHandleW(nullptr);
-  const auto resource=FindResourceW(module,MAKEINTRESOURCEW(201+i),RT_RCDATA);
+  const auto resource=FindResourceW(module,MAKEINTRESOURCEW(effect?206:i==5?207:201+i),RT_RCDATA);
   const auto loaded=resource?LoadResource(module,resource):nullptr;
   auto* bytes=loaded?static_cast<BYTE*>(LockResource(loaded)):nullptr;
   if (!bytes) {error_=L"Embedded interface artwork is missing. Rebuild the complete executable.";return false;}
   ComPtr<IWICStream> stream;ComPtr<IWICBitmapDecoder> decoder;ComPtr<IWICBitmapFrameDecode> frame;
   ComPtr<IWICBitmapScaler> scaler;ComPtr<IWICFormatConverter> converter;
-  const UINT width=i==1?1536:1024,height=effect?512:i==1?864:i==3?768:1024;
+  const UINT width=!effect && i==5?512:i==1?1536:1024,height=effect?512:i==5?256:i==1?864:i==3?768:1024;
   if (!Check(factory->CreateStream(stream.GetAddressOf()),L"Create UI stream") ||
       !Check(stream->InitializeFromMemory(bytes,SizeofResource(module,resource)),L"Read UI resource") ||
       !Check(factory->CreateDecoderFromStream(stream.Get(),nullptr,WICDecodeMetadataCacheOnLoad,decoder.GetAddressOf()),L"Decode UI artwork") ||
@@ -1124,6 +1124,7 @@ bool Renderer::FlushHud() {
  context_->PSSetShaderResources(5,3,art);
  context_->PSSetShaderResources(13,1,uiViews_[3].GetAddressOf());
  context_->PSSetShaderResources(12,1,uiViews_[4].GetAddressOf());
+ context_->PSSetShaderResources(17,1,uiViews_[5].GetAddressOf());
  context_->PSSetSamplers(2,1,fontSampler_.GetAddressOf());
  for (std::size_t start=0;start<hud_.size();start+=16380) {
   const UINT count=static_cast<UINT>(std::min<std::size_t>(16380,hud_.size()-start));

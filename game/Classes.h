@@ -142,8 +142,9 @@ inline float ClassRecoveryBarrier(ClassId id) {
  constexpr float wards[]{30,18,0,10,0,35,40,18,0,40,45};
  return wards[ValidClass(id)?int(id):0];
 }
-inline bool AdvancedClass(ClassId id) {return id==ClassId::Warrior || id==ClassId::Mage || id==ClassId::Scout;}
+inline bool AdvancedClass(ClassId id) {return id==ClassId::Warrior || id==ClassId::Mage || id==ClassId::Scout || id==ClassId::Priest;}
 inline float AdvancedRate(ClassId id,int index) {
+ if(id==ClassId::Priest) return index==12?.85f:index==13?.60f:index==14?.45f:index==10?.85f:index==11?.15f:index==8?.45f:.35f;
  if(index==12) return id==ClassId::Warrior?1.05f:id==ClassId::Scout?.9f:.65f;
  if(index==13) return id==ClassId::Warrior?.9f:id==ClassId::Scout?.65f:.65f;
  if(index==14) return id==ClassId::Warrior?.65f:id==ClassId::Scout?.42f:.35f;
@@ -155,6 +156,21 @@ inline float AdvancedRate(ClassId id,int index) {
 inline SpellInfo ClassSpell(ClassId id,int index) {
  if(!ValidSpell(index)) return spells[0];
  auto result=spells[index];const auto& info=DescribeClass(id);
+ if(id==ClassId::Priest && index>=8) {
+   static constexpr const char* names[]={"Consecration","Judgment","Hushed bell","Ascension","Votive spark","Litany","Final verdict"};
+   static constexpr const char* descriptions[]={
+    "Level 5. A stationary invocation deals 65% heavy damage within three metres of the selected target. Each victim is exposed for three seconds. The primary contact grants an 18-point ward; additional victims cannot duplicate it.",
+    "Level 8. A stationary judgment deals 125% heavy damage. Consumes exposure for another 35% heavy damage and restores 16 health on a valid contact.",
+    "Level 6. A mobile 60% heavy toll grants one Faith. Interrupting a vulnerable cast grants a 24-point ward. An uninterruptible cast grants no ward.",
+    "Level 10. Spend full Faith on a stationary two-second invocation. Deal 150% heavy damage within 3.5 metres of the selected target. The primary contact restores 30 health and grants a 24-point ward, once per cast.",
+    "A mobile spark deals 85% basic damage and grants one Faith. Alternate with Radiance on the same target within five seconds to build a chain. This spark does not consume Benediction.",
+    "Level 3. A mobile litany deals 55% heavy damage, exposes for four seconds and grants one Faith and a 12-point ward. Adds a chain step after either basic spell on the same target.",
+    "Level 4. A mobile verdict deals 115% heavy damage. A two-step chain adds 40% heavy damage; three steps add 60%. Consumes the chain on contact and restores eight health per step with an eight-point ward per step."};
+   result.name=names[index-8];result.description=descriptions[index-8];result.range=info.range;
+   result.contact/=AdvancedRate(id,index);result.recovery/=AdvancedRate(id,index);
+   if(index==11)result.targeting="Full reserve / living enemy";
+   return result;
+ }
  if(index>=12) {
    result.range=info.range;
    result.contact/=AdvancedRate(id,index);result.recovery/=AdvancedRate(id,index);
