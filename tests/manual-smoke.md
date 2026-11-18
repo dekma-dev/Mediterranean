@@ -1,3 +1,9 @@
+## Southern caravan supply recovery (2026-11-18)
+
+- In Wheels in the mud, press E beside a missing cache. The tracker expands to show a labelled three-second progress meter. No objective credit should arrive on the input frame. Collect all three and return to Tessa for the existing single reward.
+- Move, jump, attack, take a real hostile hit, open Esc, or leave reach/visibility before completion. Progress must stop without adding a cache. Restart with E and verify it starts from zero. Save/load during recovery must also clear the pending action.
+- Revisit a recovered cache: it must report that it is already recovered, without restarting the meter or awarding anything twice. Try recovery after distracting or controlling the patrols; killing guards is not a completion requirement. Inspect Russian/English tracker text, distance/waypoint placement and journal clicking at small, Full HD and wide window sizes.
+
 ## Cooperative enemy assistance (2026-11-18)
 
 - Pull one humanoid near a second idle hostile. With both allies visible to one another and the second actor able to see the player, the second should turn toward the player and join after about 0.65 s, even just beyond its normal 9 m detection range. The allies must be within 5.5 m and the player within the receiver's home leash.

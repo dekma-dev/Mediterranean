@@ -84,8 +84,18 @@ void Campaign() {
   Talk(s,QuestAction::AcceptFrontier);Check(s.ExpeditionActive() && s.DefeatedCount()==0,"Supply encounter");
   for(int i=0;i<3;++i) {
    const auto p=s.ExpeditionSite(i);Warp(s,{p.x,p.z-1.3f});Command c;c.interact=true;s.Update(.001f,c);Roundtrip(s);
+   // Hold patrols under crowd control while testing uninterrupted recovery.
+   // This preserves the nonlethal route without disabling combat in production.
+   for(auto& e:const_cast<std::vector<Enemy>&>(s.Enemies()))e.stunned=10;
    Check(s.SupplyChannelSite()==i && s.ExpeditionMask()==(1u<<i)-1,"Supply interaction must start a channel, not grant immediate progress");
    Tick(s,1,hz);Check(s.SupplyChannelProgress()>.32f && s.SupplyChannelProgress()<.35f,"Supply channel timing");
+   {
+    auto attacked=s;auto& e=const_cast<std::vector<Enemy>&>(attacked.Enemies())[0];
+    e.kind=EnemyKind::Raider;e.position=e.home={attacked.Player().x,attacked.Player().z-1.2f};
+    e.health=e.MaxHealth();e.stunned=e.rooted=e.attackCooldown=0;e.state=EnemyState::Pursuing;e.facing=0;e.windup=.001f;
+    const float hp=attacked.Health();attacked.Update(.05f,{});
+    Check(attacked.Health()<hp && attacked.SupplyChannelSite()<0,"A real hostile impact must interrupt supply recovery");
+   }
    Simulation restored;Check(restored.Load(s.Save()) && restored.SupplyChannelSite()<0,"Loading must not resume an unattended supply channel");
    s.StopMovement();Check(s.SupplyChannelSite()<0,"Menu/control cancellation must clear supply recovery");
    s.Update(.001f,c);Tick(s,3.05f,hz);

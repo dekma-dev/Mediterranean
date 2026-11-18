@@ -1316,7 +1316,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  if (!inventoryOpen || panel!=Panel::None) {
   const auto lines=c.Lines(231,s.Objective(),13);
   const float textHeight=std::min(120.f,float(lines.size())*17);
-  const Rect tracker{1016,194,250,52+textHeight+(hasWaypoint?21.f:0.f)};
+  const Rect tracker{1016,194,250,52+textHeight+(hasWaypoint?21.f:0.f)+(s.SupplyChannelSite()>=0?22.f:0.f)};
   // Text and a quiet backing preserve the view of the world. The actual entry
   // opens the journal, rather than behaving as a dead decorative rectangle.
   c.Gradient(tracker,{.025f,.021f,.016f,.60f},{.025f,.021f,.016f,.12f});
@@ -1326,7 +1326,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   c.Paragraph({1028,225,231,textHeight},s.Objective(),13,ink,4);
   regions_.push_back({tracker,{Action::Journal},true});
   if(tracker.Contains(mouseX_,mouseY_)) c.Line(1020,222,1020,tracker.y+tracker.h-5,2,gold);
-  const float footer=225+textHeight+3;
+  float footer=225+textHeight+3;
   if(s.RitualActive() && s.RitualStage()>0 && s.RitualStage()<4) {
     c.RectFill({1028,footer-5,230,3},border);c.RectFill({1028,footer-5,230*s.RitualCharge(),3},{.36f,.65f,.79f,1});
   }
@@ -1334,7 +1334,9 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.RectFill({1028,footer-5,230,3},border);c.RectFill({1028,footer-5,230*s.CourtChannelProgress(),3},{.72f,.40f,.15f,1});
   }
   if(s.SupplyChannelSite()>=0) {
-    c.RectFill({1028,footer-5,230,3},border);c.RectFill({1028,footer-5,230*s.SupplyChannelProgress(),3},{.72f,.60f,.25f,1});
+    c.RectFill({1028,footer,230,16},border);
+    c.RectFill({1029,footer+1,228*s.SupplyChannelProgress(),14},{.38f,.30f,.10f,1});
+    c.Center(1028,footer+1,230,"Recovering supplies",11,ink);footer+=22;
   }
   const auto objective=s.ObjectivePosition();
   if (s.TrackedHunt()>=0 || s.ReplayActive() || s.AnchorState()!=rpg::AnchorQuest::Complete || s.FrontierCompleted()<rpg::frontierQuestCount)
