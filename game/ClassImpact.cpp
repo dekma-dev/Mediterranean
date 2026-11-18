@@ -19,14 +19,6 @@ struct Frame {
  XMFLOAT3 Normal(float x,float z)const{return {cs*x+sn*z,0,-sn*x+cs*z};}
 };
 XMFLOAT3 Floor(rpg::Vec2 p,float up=.08f){return {p.x,rpg::WorldMap::Height(p)+up,p.z};}
-void Debris(Renderer& r,const Frame& f,float age,float strength,bool metal){
- const float fade=Envelope(age,.64f,.006f);
- for(int n=0;n<10;++n){const float a=n*2.39996f,v=.8f+(n%4)*.55f;
-  const auto at=[&](float t){return f.At(std::cos(a)*t*v,(.8f+std::sin(a)*1.4f)*t-3.6f*t*t,t*(.6f+(n%3)*.5f));};
-  r.DrawEffectStreak(at(std::max(0.f,age-.035f)),at(age),metal?.014f:.010f,
-    metal?XMFLOAT4{1,.69f,.28f,fade*strength}:XMFLOAT4{.73f,.62f,.40f,fade*strength});
- }
-}
 void Steel(Renderer& r,const rpg::CombatVisualEvent& e,float age){
  const Frame hit({e.position.x,e.height,e.position.z},e.facing);
  const bool breaker=e.ability==9,cross=e.ability==14,cyclone=e.ability==11;
@@ -53,7 +45,6 @@ void Steel(Renderer& r,const rpg::CombatVisualEvent& e,float age){
  // A fast pressure cut at the victim ties the wide swing to the hit frame.
  FilamentStream(r,[&](float u){return hit.At((u-.5f)*1.45f,(u-.5f)*(breaker?2.1f:.48f),-.12f);},
    hit.Normal(0,1),.16f,1.8f,age,{1,.89f,.64f,Envelope(age,.18f,.004f)},8);
- Debris(r,hit,age,.9f,true);
  for(int n=0;n<3;++n){const auto p=Floor({hit.p.x+std::cos(n*2.1f+e.facing)*age*2,
    hit.p.z+std::sin(n*2.1f+e.facing)*age*2},.10f+age*.22f);
   r.DrawEffectSprite(Art::Dust,p,.24f+age*.8f,.16f+age*.4f,float(n),{.48f,.43f,.33f,Envelope(age,.58f,.04f)*.42f},true);}
@@ -69,7 +60,6 @@ void Pierce(Renderer& r,const rpg::CombatVisualEvent& e,float age){
     f.Normal(std::sin(a),std::cos(a)),.10f,1.8f,age,{.76f,.88f,.73f,fade*.65f},10);
  }
  r.DrawEffectSprite(Art::Sparks,f.p,.34f,.34f,0,{1,.86f,.56f,Envelope(age,.12f,.004f)});
- Debris(r,f,age,.85f,false);
  r.DrawEffectSprite(Art::Dust,f.At(0,-.08f,age*.5f),.20f+age*.7f,.17f+age*.5f,e.facing,
    {.43f,.40f,.31f,Envelope(age,.42f)*.50f},true);
 }
@@ -94,10 +84,6 @@ void Meteor(Renderer& r,const rpg::CombatVisualEvent& e,float age){
     {(.48f+age*.20f)*mass,(.48f+age*.20f)*mass,.80f*mass},age+n*.13f,{1,.86f,.62f,fade*.72f},e.actor+n*31);}
   const auto smoke=f.At(ca*radial,.25f+age*.75f,sa*radial);
   r.DrawEffectSprite(Art::Smoke,smoke,.24f+age*.85f,.28f+age*.80f,a,{.29f,.26f,.22f,Envelope(age-.05f,.78f,.07f)*.5f},true);
- }
- for(int n=0;n<14;++n){const float a=n*2.39996f,speed=1.8f+(n%4)*.6f;
-  const auto at=[&](float t){return f.At(std::cos(a)*t*speed,.20f+(2.8f+(n%3)*.65f)*t-3.8f*t*t,std::sin(a)*t*speed);};
-  r.DrawEffectStreak(at(std::max(0.f,age-.045f)),at(age),.018f,{1,.53f,.09f,fade*.92f});
  }
 }
 void Sanctuary(Renderer& r,const rpg::CombatVisualEvent& e,float age){
@@ -142,7 +128,6 @@ void ChainFinish(Renderer& r,const rpg::CombatVisualEvent& e,float age){
    FilamentStream(r,path,f.Normal(0,1),.30f*power,2.7f,t,{.73f,.87f,1,fade*.85f},16);
    FilamentStream(r,path,f.Normal(0,1),.055f,2.7f,t,{1,.91f,.66f,fade},10);
   }
-  Debris(r,f,age,.9f,true);
  }else if(e.school==C::Scout){
   // Two swept wakes pass the impact in opposite oblique planes. Their width
   // opens after contact; neither decorative arrow claims an additional hit.
@@ -153,7 +138,6 @@ void ChainFinish(Renderer& r,const rpg::CombatVisualEvent& e,float age){
    FilamentStream(r,path,f.Normal(side,1),layer?.035f:.19f*power,2.5f,age+layer*.1f,
      layer?XMFLOAT4{1,.92f,.66f,fade*.8f}:XMFLOAT4{.56f,.85f,.76f,fade*.66f},14);
   }
-  Debris(r,f,age,.8f,false);
  }else if(e.school==C::Mage){
   const float open=combat::Smooth(age/.28f),fade=Envelope(age,.84f,.012f);
   for(int side:{-1,1}){

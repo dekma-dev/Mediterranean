@@ -1,3 +1,11 @@
+## Physical combat aftermath (2026-11-18)
+
+- With Warrior, Mage, Scout and Priest, hit a target on level ground, a hillside and beside a building. Watch beyond the initial flash: steel sparks, directional splinters, embers/ice and golden fragments should have a separate fall, contact and fade. Nothing should keep travelling through a solid wall or below terrain. Crossed ice surfaces should tumble and settle against the slope. Small dust puffs should begin at the landing point.
+- Compare Mage frost, fire, arcane and thermal rupture. Secondary victims must keep the same element; thermal rupture must include both ice and embers. A cancelled cast, mere release or evasion must not create this hit aftermath. Damage and release/contact timing must remain unchanged.
+- Repeat at low/high refresh rates and close/normal combat cameras. Trails should fold at a bounce, not draw through the wall. Hard paving should rebound more than earth. Check that chips disappear within two seconds and do not keep spawning from an expired flash.
+- Sustain a crowded fight. Warning footprints and main contacts must remain readable; overflow drops secondary cosmetics without growing the effect pool. Return to character selection, load/reset, then re-enter: old particles must not reappear. Keep the larger action dock and existing controls intact.
+- Use `build-impact-physics/accepted/combat-motion.mp4` and the accompanying contact/aftermath captures for the controlled four-class sequence. This supplements an interactive check on hills and near scenery; it does not establish full reference parity.
+
 ## Larger action dock and complete spell cards (2026-11-18)
 
 - Restart the current play build and compare the default two action rows at 1920x1080: larger icons, legible binding plates and separate cooldown/ready/chain cues. At 960x600, 1440p, ultrawide and 4K, verify the dock stays on screen and clear of utility buttons. Esc -> Action bar size must adjust 80-120%, retain the choice on restart and preserve every class binding.

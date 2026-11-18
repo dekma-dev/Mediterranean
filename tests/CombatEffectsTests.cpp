@@ -208,7 +208,7 @@ int main() {
   for (float dt : {0.f,-1.f,std::numeric_limits<float>::quiet_NaN()}) pool.Advance(dt);
   Require(pool.BurstCount()==CombatEffects::maxBursts,"Invalid time must not advance effects");
   pool.Reset(); Require(pool.BurstCount()==0 && pool.TrailCount()==0,"Reset must clear every pool slot");
-  Require(sizeof(CombatEffects)<=16384,"Fixed combat effect state must fit the 16 KiB CPU budget");
+  Require(sizeof(CombatEffects)<=32768,"Fixed effects including 96 physical particles must fit the 32 KiB CPU budget");
 
   Require(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"COM failed");
   Win32Window window; Require(window.Create(GetModuleHandle(nullptr),960,720,L"combat effects checks",false),"Hidden effect window failed");

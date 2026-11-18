@@ -145,8 +145,13 @@ void Captures(Renderer& r,const std::filesystem::path& root) {
       Check(VisiblePixels(base,frame)>60,"Class impact is not visible beside the target");
       if(empowered) Check(VisiblePixels(impact,frame)>60,"Resource payoff has no distinct impact layer");else impact=frame;
     }
-    // Every emitter must end; a late render cannot manufacture more particles.
+    // Main flashes retain their original lifetime; independently simulated
+    // fragments can finish their fall after it, but must also expire.
     CombatEffects ended;ended.Emit(e);for(int n=0;n<20;++n) ended.Advance(.05f);
+    Check(ended.BurstCount()==0,"The contact flash outlived its original pool lifetime");
+    const bool physical=id==ClassId::Warrior || id==ClassId::Scout || id==ClassId::Mage || id==ClassId::Priest;
+    Check((ended.ImpactParticles().Count()>0)==physical,"Only the four focused classes retain a physical aftermath");
+    for(int n=0;n<20;++n)ended.Advance(.05f);
     Stage(r,id,false);ended.Render(r);Check(r.EffectVertices()==0,"Class impact outlived its pool lifetime");
     Check(r.EndFrame(false),"Expired effect frame");
     if(DescribeClass(id).range<=3) continue;
@@ -294,7 +299,7 @@ int main() {
     Capture(r,root/(std::to_string(id)+"-opening.png"));
   }
   DefensiveContacts(r,root);Captures(r,root);Recoveries(r,root);LiveStates(r,root);SchoolHues(r,root);SlopeEffects(r,root);
-  Check(sizeof(CombatEffects)<=16384,"Class effects exceeded the fixed CPU budget");
+  Check(sizeof(CombatEffects)<=32768,"Class effects including physical debris exceeded the 32 KiB CPU budget");
   Check(r.ValidateDebugMessages(),"D3D validation errors");
   std::cout<<"PASS: 11 class impacts, empowered layers, timed projectiles, live states, cancellation and GPU captures\n";
 }

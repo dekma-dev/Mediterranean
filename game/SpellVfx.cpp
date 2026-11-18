@@ -127,21 +127,13 @@ void MageContact(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 p,float ag
   if(e.ability==13)r.DrawEffectSprite(Art::Seal,p,(.22f+age*.9f)*size,(.22f+age*.9f)*size,-age*.7f,{.73f,.65f,1,fade*.28f});
  }else{
   const unsigned seed=e.actor*37u+unsigned(std::max(e.ability,0))*71u;
-  const unsigned count=frost?10:6;
-  for(unsigned n=0;n<count;++n){
+  // Detached ice/embers are advanced by ImpactParticles, including collisions.
+  // This stateless pass only retains the short-lived flame plumes.
+  const unsigned count=6;
+  for(unsigned n=0;n<count && !frost;++n){
    const float a=n*tau/count+Rand(seed+n)*.35f,speed=.8f+Rand(seed+n*17)*1.25f;
    const bool ice=frost || (mixed && n%2==0);
-   if(ice){
-    const auto shardAt=[&](float t){const float spread=.10f+speed*t*1.25f;
-     return frame.At(std::cos(a)*spread*size,std::sin(a)*spread*size-1.8f*t*t,
-      -t*(.4f+Rand(seed+n*11)*2.8f)*size);};
-    const auto centre=shardAt(age);const ContactFrame shard(centre,e.facing+a+age*(n%2?2.f:-2.f));
-    const float length=(.17f+Rand(seed+n*3)*.18f)*size,w=length*.30f;
-    // Two crossing fractured surfaces retain thickness from side/rear views.
-    for(int side=0;side<2;++side){const auto at=[&](float x,float y){return side?shard.At(0,y,x):shard.At(x,y,0);};
-     r.DrawEffectSurface(Art::Ice,at(-w,-length*.5f),at(-w*.35f,length),at(w*.30f,length*.75f),at(w,-length*.6f),{.37f,.69f,1,fade*.62f});}
-    r.DrawEffectStreak(shardAt(std::max(0.f,age-.045f)),centre,.012f*size,{.74f,.94f,1,fade*.7f});
-   }else{
+   if(!ice){
     const auto at=frame.At(std::cos(a)*age*speed*size,age*(.6f+speed*.35f),-age*(.35f+std::sin(a)*.25f)*size);
     const auto tip=frame.At(std::cos(a)*(.25f+age*speed)*size,age*(.6f+speed*.35f)+.40f,-age*(.35f+std::sin(a)*.25f)*size-.10f);
     const float radius=(.24f+age*.48f)*size;
@@ -170,12 +162,6 @@ void MageContact(Renderer& r,const rpg::CombatVisualEvent& e,XMFLOAT3 p,float ag
     const float angle=lobe*tau/3+u*1.40f+age*1.6f,radius=(.12f+expand*.78f*u)*size;
     return frame.At(std::cos(angle)*radius,std::sin(angle)*radius+age*.22f,-(.08f+u*.35f)*expand*size);
    },{frame.sn,0,frame.cs},.26f*size,1.4f*size,age+lobe*.23f,{1,1,1,crest*.78f},8);
-   // Detached ballistic embers retain their own trajectories after the flash.
-   for(unsigned n=0;n<9;++n){const float a=Rand(seed+n*29)*tau,speed=1.2f+Rand(seed+n*53)*2.8f;
-    const auto at=[&](float t){return frame.At(std::cos(a)*t*speed*size,
-     std::sin(a)*t*speed*size+t*.8f-2.1f*t*t,-t*(.3f+Rand(seed+n*11))*size);};
-    r.DrawEffectStreak(at(std::max(0.f,age-.024f)),at(age),.009f*size,{1,.65f,.16f,Envelope(age,.56f,.012f)*.75f});
-   }
   }
   const float residue=Envelope(age-.09f,ContactLifetime(e)-.09f,.09f);
   for(int n=0;n<2;++n){

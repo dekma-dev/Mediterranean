@@ -164,6 +164,7 @@ add_library(MediterraneanClient STATIC
   game/HandPose.cpp
   game/CharacterRig.cpp
   game/CombatEffects.cpp
+  game/ImpactParticles.cpp
   game/ClassEffects.cpp
   game/Interface.cpp
   game/InterfaceState.cpp
@@ -343,6 +344,12 @@ if (BUILD_TESTING)
   target_link_libraries(FootPlacementTests PRIVATE MediterraneanClient)
   add_test(NAME FootPlacementTests COMMAND FootPlacementTests)
   add_executable(CombatEffectsTests tests/CombatEffectsTests.cpp)
+  add_executable(ParticlePhysicsTests tests/ParticlePhysicsTests.cpp)
+  target_include_directories(ParticlePhysicsTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+  add_test(NAME ParticlePhysicsTests COMMAND ParticlePhysicsTests)
+  add_executable(ImpactParticlesTests tests/ImpactParticlesTests.cpp)
+  target_link_libraries(ImpactParticlesTests PRIVATE MediterraneanClient)
+  add_test(NAME ImpactParticlesTests COMMAND ImpactParticlesTests)
   target_link_libraries(CombatEffectsTests PRIVATE MediterraneanClient)
   add_test(NAME CombatEffectsTests COMMAND CombatEffectsTests)
   add_executable(ClassEffectsTests tests/ClassEffectsTests.cpp)

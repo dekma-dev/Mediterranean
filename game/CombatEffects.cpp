@@ -150,7 +150,7 @@ void Crescent(Renderer& renderer,XMFLOAT3 origin,float facing,float age,bool hea
   }
 }
 }
-void CombatEffects::Reset() { bursts_={}; trails_={}; wake_={}; serial_=0; flights_={}; footprints_={};footprintCursor_=0;residues_={}; }
+void CombatEffects::Reset() { bursts_={}; trails_={}; wake_={}; serial_=0; flights_={}; footprints_={};footprintCursor_=0;residues_={};impacts_.Reset(); }
 void CombatEffects::EmitFootstep(const presentation::CreatureContact& contact,const rpg::WorldMap& map) {
  if(!std::isfinite(contact.position.x+contact.position.y+contact.position.z+contact.strength+contact.facing) || contact.strength<=0)return;
  const auto p=rpg::Vec2{contact.position.x,contact.position.z};const auto surface=map.SurfaceAt(p);
@@ -166,6 +166,7 @@ std::size_t CombatEffects::ResidueCount() const {
 void CombatEffects::Advance(float dt) {
   if (!std::isfinite(dt) || dt<=0) return;
   dt=std::min(dt,.05f);
+  impacts_.Advance(dt);
   for(auto& residue:residues_)residue.age=std::min(10.f,residue.age+dt);
   for(auto& print:footprints_)print.age=std::min(10.f,print.age+dt);
   for (std::size_t i=0;i<wake_.count;++i) wake_.samples[i].age+=dt;
@@ -239,6 +240,7 @@ void CombatEffects::Emit(const rpg::CombatVisualEvent& incoming,const XMFLOAT3* 
     }
   }
   auto residue=spellvfx::MakeResidue(event);
+  impacts_.Emit(event,serial_+1);
   residue.order=serial_+1;
   if(residue.kind!=spellvfx::ResidueKind::None) {
     // Repeated contacts can rekindle a small patch, not stack an unlimited
@@ -633,6 +635,7 @@ void CombatEffects::Render(Renderer& renderer,const castfx::Attachments* caster)
       renderer.DrawEffectGlow(mote,.045f+Noise(burst.seed+i*7)*.035f,tint);
     }
   }
+  impacts_.Render(renderer);
   // Last cosmetic priority: never displace current danger, release or hit
   // geometry. At most six recent patches share a 900-vertex allowance.
   std::array<const spellvfx::Residue*,12> residueOrder{};std::size_t residueCount=0;

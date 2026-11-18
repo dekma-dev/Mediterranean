@@ -186,6 +186,7 @@ int wmain(int argc,wchar_t** argv){try{
    if(frame==releaseFrame+3 && released)std::filesystem::copy_file(image,out/(std::string(scene.name)+"-flight.png"),std::filesystem::copy_options::overwrite_existing);
    if(frame==releaseFrame+8 && released)std::filesystem::copy_file(image,out/(std::string(scene.name)+"-travel.png"),std::filesystem::copy_options::overwrite_existing);
    if(frame==hitFrame+5 && contact)std::filesystem::copy_file(image,out/(std::string(scene.name)+"-contact.png"),std::filesystem::copy_options::overwrite_existing);
+   if(frame==hitFrame+48 && contact)std::filesystem::copy_file(image,out/(std::string(scene.name)+"-aftermath.png"),std::filesystem::copy_options::overwrite_existing);
    if(fields && frame==hitFrame+75 && contact)std::filesystem::copy_file(image,out/(std::string(scene.name)+"-sustain.png"),std::filesystem::copy_options::overwrite_existing);
   }
   Check(released && contact,"Review spell did not produce real release/contact");

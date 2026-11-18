@@ -49,6 +49,9 @@ void Game::Initialize() {
   savedSnapshot_.reset();
   choosingCharacter_=inputBarrier_=false; quitRequested_=fullscreenRequest_=false;
   simulation_=rpg::Simulation{}; time_=0; atmosphereTime_=0;
+  // Construct the immutable particle collision grid during loading, not on
+  // the first accepted hit. No scenery allocations occur during combat.
+  (void)impactfx::Environment();
   worldView_.Reset();
   interface_.SetOnly(ui::Panel::None); LoadHotbarSettings(); orbiting_=false;
   yaw_=0; pitch_=.45f; distance_=10;

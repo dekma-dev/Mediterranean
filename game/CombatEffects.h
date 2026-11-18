@@ -3,6 +3,7 @@
 #include "game/CreatureContacts.h"
 #include "game/SpellVfx.h"
 #include "game/SpellTrajectory.h"
+#include "game/ImpactParticles.h"
 #include <DirectXMath.h>
 #include <array>
 
@@ -21,6 +22,7 @@ public:
   void EmitFootstep(const presentation::CreatureContact& contact,const rpg::WorldMap& map);
   std::size_t FootprintCount() const;
   std::size_t ResidueCount() const;
+  const particles::Pool& ImpactParticles() const {return impacts_.State();}
   void TrackWeapon(rpg::EntityId actor,DirectX::XMFLOAT3 root,DirectX::XMFLOAT3 tip);
   void CancelTrail(rpg::EntityId actor);
   void CancelTrails();
@@ -76,4 +78,5 @@ private:
   std::array<Footprint,64> footprints_{};
   unsigned footprintCursor_=0;
   std::array<spellvfx::Residue,12> residues_{};
+  impactfx::System impacts_;
 };
