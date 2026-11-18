@@ -38,6 +38,7 @@ struct Enemy {
   unsigned bossAttack=0,nextBossAttack=0; // committed warning and next rotation slot
   float snared=0,rooted=0,stunned=0,exposed=0; // transient combat effects
   float respawn=0,roamTime=0;
+  float assistance=0; // transient awareness; never persisted
   bool elite=false;
   bool Beast() const {return kind==EnemyKind::Wolf || kind==EnemyKind::Boar;}
   float ContactHeight() const {return kind==EnemyKind::Wolf?.72f:kind==EnemyKind::Boar?.85f:1.25f;}
@@ -199,7 +200,7 @@ public:
   float MovementDistance() const { return movementDistance_; } // excludes dash/respawn
   Vec2 MovementVelocity() const { return movementVelocity_; }
   float GroundMovementDistance() const { return groundMovementDistance_; }
-  void StopMovement() { courtChannel_=0;courtChannelSite_=-1;queuedAttack_=-1; queueRemaining_=0; recoveryCast_=0; movementVelocity_={}; movementDistance_=groundMovementDistance_=0; jumpBuffer_=0; dashRemaining_=dashTravelLeft_=0; dashTarget_=retreatThreat_=0; CancelAttack(); }
+  void StopMovement() { supplySite_=-1;supplyCharge_=0;courtChannel_=0;courtChannelSite_=-1;queuedAttack_=-1; queueRemaining_=0; recoveryCast_=0; movementVelocity_={}; movementDistance_=groundMovementDistance_=0; jumpBuffer_=0; dashRemaining_=dashTravelLeft_=0; dashTarget_=retreatThreat_=0; CancelAttack(); }
   int QueuedAttack() const { return queuedAttack_; }
   bool CanBufferAttack(int index) const {
     const bool focused=class_==ClassId::Warrior || class_==ClassId::Scout || class_==ClassId::Mage || class_==ClassId::Priest;
@@ -324,6 +325,8 @@ public:
   Vec2 ExpeditionSite(int index) const { return WorldMap::expeditionSites[index+(frontierCompleted_==13?6:frontierCompleted_==11?3:0)]; }
   bool RitualActive() const {return FrontierActive() && EncounterChapter()==14;}
   bool SuppliesActive() const {return frontierActive_ && frontierCompleted_==13;}
+  int SupplyChannelSite() const {return supplySite_;}
+  float SupplyChannelProgress() const {return supplyCharge_/3.f;}
   int RitualStage() const {return ritualStage_;}
   float RitualCharge() const {return ritualCharge_/4.f;}
   bool CourtActive() const {return FrontierActive() && EncounterChapter()==15;}
@@ -389,6 +392,9 @@ private:
   float courtChannel_=0;
   int courtChannelSite_=-1;
   void UpdateCourt(float dt,const Command& command);
+  void UpdateSupplies(float dt,const Command& command);
+  int supplySite_=-1;
+  float supplyCharge_=0;
   void AdvanceRitual();
   void UpdateRitual(float dt);
   void PrepareFrontierEnemies(int rank);

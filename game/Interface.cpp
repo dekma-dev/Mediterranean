@@ -1333,6 +1333,9 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   if(s.CourtChannelSite()>=0) {
     c.RectFill({1028,footer-5,230,3},border);c.RectFill({1028,footer-5,230*s.CourtChannelProgress(),3},{.72f,.40f,.15f,1});
   }
+  if(s.SupplyChannelSite()>=0) {
+    c.RectFill({1028,footer-5,230,3},border);c.RectFill({1028,footer-5,230*s.SupplyChannelProgress(),3},{.72f,.60f,.25f,1});
+  }
   const auto objective=s.ObjectivePosition();
   if (s.TrackedHunt()>=0 || s.ReplayActive() || s.AnchorState()!=rpg::AnchorQuest::Complete || s.FrontierCompleted()<rpg::frontierQuestCount)
    c.Text(1028,footer,std::to_string(int(std::ceil(std::hypot(s.Player().x-objective.x,s.Player().z-objective.z))))+" m to objective",11,gold);

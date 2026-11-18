@@ -1,4 +1,5 @@
 #include "game/Simulation.h"
+#include "game/EnemyAssistance.h"
 #include "game/Motion.h"
 #include <algorithm>
 #include <cmath>
@@ -643,6 +644,20 @@ void Simulation::UpdateCourt(float dt,const Command& command) {
     message_=courtSeals_==7?"All seals broken. The captain is vulnerable.":"Court seal broken. Follow the atlas to the next one.";
   }
 }
+void Simulation::UpdateSupplies(float dt,const Command& command) {
+  if(supplySite_<0)return;
+  if(!SuppliesActive() || health_<=0 || !Grounded() || Dashing() || Attacking() || CastingRecovery() ||
+    damagedThisUpdate_ || command.haltMovement || command.jump || Length(command.movement)>.001f ||
+    Length(movementVelocity_)>.15f || !CanReadSurvey(ExpeditionSite(supplySite_))) {
+    supplySite_=-1;supplyCharge_=0;message_="Supply recovery interrupted. Press E to try again.";return;
+  }
+  if(command.interact)return;
+  supplyCharge_+=dt;
+  if(supplyCharge_>=3) {
+    expeditionMask_|=1u<<supplySite_;supplySite_=-1;supplyCharge_=0;
+    message_=expeditionMask_==7?"All three caches recovered. Return to Tessa.":"Supplies recovered. The atlas marks the next cache.";
+  }
+}
 void Simulation::Interact() {
   if(!ReplayActive() && Grounded() && !Attacking() && !Dashing())
     for(int d:{2,5})if(hunts_[d]==1)for(int i=0;i<3;++i)if(!(huntMarks_[d]&(1u<<i)) && CanReadSurvey(population::Cache(d,i))) {
@@ -673,7 +688,13 @@ void Simulation::Interact() {
   }
   if(ExpeditionActive()) for(int i=0;i<3;++i) {
     const auto site=ExpeditionSite(i);if(!CanReadSurvey(site)) continue;
+    if(expeditionMask_&(1u<<i)) {message_="This site has already been recovered.";return;}
     if(!Grounded() || Dashing() || Attacking()) {message_=SuppliesActive()?"Stand on the ground to recover supplies.":"Stand on the ground to inspect the stone.";return;}
+    if(SuppliesActive()) {
+      if(CastingRecovery())return;
+      if(supplySite_!=i){StopMovement();supplySite_=i;supplyCharge_=0;}
+      message_="Recovering supplies. Remain still for three seconds.";return;
+    }
     if(frontierCompleted_==10 && std::any_of(enemies_.begin(),enemies_.end(),[&](const Enemy& e){return e.health>0 && Length(Difference(e.position,site))<7;})) {
       message_="The signal is guarded. Clear enemies within seven metres.";return;
     }
@@ -1142,6 +1163,7 @@ void Simulation::Update(float seconds,const Command& command) {
   UpdateCombat(dt,advanceAttack);
   UpdateRitual(dt);
   UpdateCourt(dt,command);
+  UpdateSupplies(dt,command);
   if(queuedAttack_>=0) {
     const auto* target=TargetActor();
     if(command.haltMovement || health_<=0 || !target || target->id!=queuedTarget_ || target->health<=0)
@@ -1206,7 +1228,7 @@ void Simulation::UpdateEnemy(Enemy& enemy,float dt,float frameTail) {
   // Split at effect expiry: a snare or stun gets exactly its advertised time
   // at every refresh rate, including the remainder after player contact.
   if(ReplayActive() && enemy.Beast())return;
-  if(enemy.health<=0) {enemy.snared=enemy.rooted=enemy.stunned=enemy.exposed=0;return;}
+  if(enemy.health<=0) {enemy.snared=enemy.rooted=enemy.stunned=enemy.exposed=enemy.assistance=0;return;}
   while(dt>0) {
     if(enemy.state==EnemyState::Returning) enemy.snared=enemy.rooted=enemy.stunned=enemy.exposed=0;
     float step=dt;
@@ -1283,6 +1305,14 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
   const EnemyState previous=enemy.state;
   if (enemy.state==EnemyState::Idle && distance<(enemy.Beast()?6.5f:9.f) && HasLineOfSight(enemy.position,player_))
     enemy.state=EnemyState::Pursuing;
+  if(enemy.state==EnemyState::Idle && !ReplayActive() && !CourtProtected(enemy)) {
+    bool alerted=false;
+    for(const auto& ally:Combatants())if(CanRequestAssistance(ally,enemy,player_)&&
+      HasLineOfSight(ally.position,enemy.position)&&HasLineOfSight(enemy.position,player_)) {alerted=true;break;}
+    enemy.assistance=alerted?enemy.assistance+dt:0;
+    if(alerted)enemy.facing=motion::FollowAngle(enemy.facing,std::atan2(player_.x-enemy.position.x,player_.z-enemy.position.z),5.f,dt);
+    if(enemy.assistance>=.65f) {enemy.state=EnemyState::Pursuing;enemy.repathTimer=0;enemy.path.clear();enemy.waypoint=0;}
+  } else enemy.assistance=0;
   if (enemy.state==EnemyState::Pursuing && (Length(Difference(player_,enemy.home))>(enemy.Beast()?20.f:13.f) || health_<=0))
     enemy.state=EnemyState::Returning;
   if (enemy.state==EnemyState::Returning) enemy.windup=0;

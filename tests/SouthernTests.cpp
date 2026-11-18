@@ -84,7 +84,13 @@ void Campaign() {
   Talk(s,QuestAction::AcceptFrontier);Check(s.ExpeditionActive() && s.DefeatedCount()==0,"Supply encounter");
   for(int i=0;i<3;++i) {
    const auto p=s.ExpeditionSite(i);Warp(s,{p.x,p.z-1.3f});Command c;c.interact=true;s.Update(.001f,c);Roundtrip(s);
+   Check(s.SupplyChannelSite()==i && s.ExpeditionMask()==(1u<<i)-1,"Supply interaction must start a channel, not grant immediate progress");
+   Tick(s,1,hz);Check(s.SupplyChannelProgress()>.32f && s.SupplyChannelProgress()<.35f,"Supply channel timing");
+   Simulation restored;Check(restored.Load(s.Save()) && restored.SupplyChannelSite()<0,"Loading must not resume an unattended supply channel");
+   s.StopMovement();Check(s.SupplyChannelSite()<0,"Menu/control cancellation must clear supply recovery");
+   s.Update(.001f,c);Tick(s,3.05f,hz);
    Check(s.ExpeditionMask()==(1u<<(i+1))-1,"Supply cache interaction");
+   s.Update(.001f,c);Check(s.SupplyChannelSite()<0,"Recovered caches must not restart or duplicate rewards");
   }
   Check(s.FrontierReady() && s.DefeatedCount()==0,"Supply quest requires unwanted kills");
   Talk(s,QuestAction::CompleteFrontier);Check(s.Experience()==xp+250,"Supply reward");Roundtrip(s);
@@ -413,6 +419,15 @@ void Views() {
  const auto root=std::filesystem::current_path()/"southern-check";std::filesystem::create_directories(root);
  Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),1280,720,L"Southern checks",false),"Hidden window");
  Renderer r;Check(r.Initialize(window.GetHandle(),1280,720),"Renderer");
+ {
+  auto s=Veteran(ClassId::Warrior);Talk(s,QuestAction::AcceptFrontier);
+  const auto p=s.ExpeditionSite(0);Warp(s,{p.x,p.z-1.3f});
+  Game g;g.Initialize();Check(g.RestoreSnapshot(s.Save()),"Supply recovery view");g.OpenPanel(ui::Panel::None);
+  Command begin;begin.interact=true;g.ExecuteCommand(begin,.001f);
+  for(int n=0;n<90;++n)g.ExecuteCommand({},.01f);
+  Check(g.State().SupplyChannelSite()==0,"Supply channel must remain visible in the live game");
+  r.BeginFrame();g.Render(r);Capture(r,root/"supply-channel.png");
+ }
  // Review the actual localized entry/exit interface, rather than a UI mockup.
  {
   auto veteran=Veteran(ClassId::Mage,16);const auto npc=QuestLocation(QuestId::Watch15);

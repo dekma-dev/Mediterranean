@@ -1,4 +1,5 @@
 #include "game/Simulation.h"
+#include "game/EnemyAssistance.h"
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -24,6 +25,40 @@ bool HasFeedback(const rpg::Simulation& game,rpg::FeedbackKind kind) {
 }
 
 int main() {
+  {
+    rpg::Enemy caller,receiver;caller.id=1;receiver.id=2;
+    caller.state=rpg::EnemyState::Pursuing;caller.position={0,8};receiver.position=receiver.home={0,11};
+    Require(rpg::CanRequestAssistance(caller,receiver,{0,0}),"Nearby camp allies must be eligible for assistance");
+    receiver.kind=rpg::EnemyKind::Wolf;
+    Require(!rpg::CanRequestAssistance(caller,receiver,{0,0}),"Humanoids must not recruit wildlife");
+    caller.kind=rpg::EnemyKind::Wolf;
+    Require(rpg::CanRequestAssistance(caller,receiver,{0,0}),"Wolves must assist their own pack");
+    receiver.kind=rpg::EnemyKind::Boar;
+    Require(!rpg::CanRequestAssistance(caller,receiver,{0,0}),"Different wildlife species must not share aggression");
+    caller.kind=receiver.kind=rpg::EnemyKind::Raider;
+    receiver.state=rpg::EnemyState::Returning;
+    Require(!rpg::CanRequestAssistance(caller,receiver,{0,0}),"Returning actors cannot be recruited");
+    receiver.state=rpg::EnemyState::Idle;
+    Require(!rpg::CanRequestAssistance(caller,receiver,{0,-10}),"Assistance must respect the recipient home leash");
+    for(int hz:{30,60,144}) {
+      rpg::Simulation group;Require(group.Load(duel),"Assistance fixture loads");
+      auto& actors=const_cast<std::vector<rpg::Enemy>&>(group.Enemies());
+      for(auto& actor:actors)actor.health=0;
+      auto& leader=actors[0];auto& recruit=actors[1];
+      leader.health=leader.MaxHealth();leader.position=leader.home={-4,12.7f};leader.state=rpg::EnemyState::Pursuing;leader.rooted=10;
+      recruit.health=recruit.MaxHealth();recruit.position=recruit.home={-4,16.2f};recruit.state=rpg::EnemyState::Idle;
+      for(int frame=0;frame<int(hz*.4f);++frame)group.Update(1.f/hz,{});
+      Require(recruit.state==rpg::EnemyState::Idle,"An ally must have a readable response delay");
+      leader.health=0;
+      for(int frame=0;frame<int(hz*.4f);++frame)group.Update(1.f/hz,{});
+      Require(recruit.state==rpg::EnemyState::Idle&&recruit.assistance==0,"Lost callers must cancel pending assistance");
+      leader.health=leader.MaxHealth();leader.state=rpg::EnemyState::Pursuing;leader.rooted=10;
+      for(int frame=0;frame<int(hz*.4f);++frame)group.Update(1.f/hz,{});
+      Require(recruit.state==rpg::EnemyState::Idle,"A renewed alert must restart the response delay");
+      for(int frame=0;frame<int(hz*.4f);++frame)group.Update(1.f/hz,{});
+      Require(recruit.state==rpg::EnemyState::Pursuing,"Nearby ally outside ordinary detection must join after the delay");
+    }
+  }
   {
     rpg::Simulation radial;
     auto& actors=const_cast<std::vector<rpg::Enemy>&>(radial.Enemies());

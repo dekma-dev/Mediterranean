@@ -1,4 +1,7 @@
 // Player-facing Russian catalog. English strings remain stable simulation/save identifiers.
+{"Supply recovery interrupted. Press E to try again.", "Сбор припасов прерван. Нажмите E, чтобы повторить."},
+{"Recovering supplies. Remain still for three seconds.", "Сбор припасов. Не двигайтесь три секунды."},
+{"This site has already been recovered.", "Этот тайник уже обследован."},
 {"PARRY WINDOW", "ОКНО ПАРИРОВАНИЯ"},
 {"Face the incoming strike", "Встречайте удар лицом к противнику"},
 {"Fire imprint", "Огонь"},

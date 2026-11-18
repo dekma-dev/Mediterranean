@@ -1,3 +1,9 @@
+## Cooperative enemy assistance (2026-11-18)
+
+- Pull one humanoid near a second idle hostile. With both allies visible to one another and the second actor able to see the player, the second should turn toward the player and join after about 0.65 s, even just beyond its normal 9 m detection range. The allies must be within 5.5 m and the player within the receiver's home leash.
+- Break visibility or defeat the caller during awareness: no delayed recruitment should remain. A new alert must wait again. Walls must block recruitment. Returning actors must finish returning normally rather than being pulled back by allies.
+- Repeat with wolves and boars: same-species nearby packs can assist; humanoids must not call wildlife and wolves must not call boars. Training targets, sparring guards and bosses remain outside this assistance system. Check a saved/reloaded encounter and the existing encounter rehearsal separately.
+
 ## Render memory and CPU scheduling (2026-11-18)
 
 - Launch the freshly rebuilt Release `RPGNative.exe`, verify its path in Task Manager, and compare the same Full HD village route, camera distance and settings. Observe CPU, working set and private allocation separately. Debug or an uncapped hidden workload is not the same performance condition as live VSync play.
