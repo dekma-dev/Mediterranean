@@ -87,6 +87,7 @@ public:
   bool Initialize(bool muteOutput=false);
   bool RoomAvailable() const {return room_.Voice()!=nullptr;}
   unsigned SpatialUpdateErrors() const {return spatialUpdateErrors_;}
+  unsigned ActiveSpatialVoices() const {return activeSpatialVoices_;}
   void Suspend(bool value);
   void Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds=1.f/60,float cameraYaw=0,const presentation::CreatureContacts* contacts=nullptr,bool menu=false,const sound::Audition* audition=nullptr);
 private:
@@ -101,6 +102,7 @@ private:
   float acousticClock_=0,enclosureTarget_=0;
   bool roomDirty_=false;
   unsigned spatialUpdateErrors_=0;
+  unsigned activeSpatialVoices_=0;
   IXAudio2SourceVoice* music_=nullptr;
   IXAudio2SourceVoice* menuMusic_=nullptr;
   IXAudio2SourceVoice* combatMusic_=nullptr;

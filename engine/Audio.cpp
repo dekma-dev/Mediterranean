@@ -669,6 +669,7 @@ void Audio::Suspend(bool value) {
   else engine_->StartEngine();
 }
 void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds,float cameraYaw,const presentation::CreatureContacts* contacts,bool menu,const sound::Audition* audition) {
+  activeSpatialVoices_=0;
   if(!music_ || suspended_) return;
   musicGain_=sound::MusicGain(musicGain_,musicVolume,seconds);
   const float dt=std::isfinite(seconds)?std::clamp(seconds,0.f,.1f):0;
@@ -748,13 +749,18 @@ void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicV
   std::array<float,12> levels{};
   for(size_t v=0;v<voices_.size();++v) {
     XAUDIO2_VOICE_STATE status{}; voices_[v]->GetState(&status);
-    if(!status.BuffersQueued) voiceLevels_[v]=voicePeaks_[v]=0;
+    if(!status.BuffersQueued) {
+      voiceLevels_[v]=voicePeaks_[v]=0;
+      attachedActors_[v]=~0u;voiceEnvelopes_[v]=nullptr;
+      continue; // No audible source: avoid filters, matrices and spatial math.
+    }
     // A release or cancelled channel fades its preparation once; a later cast
     // cannot revive the previous tail. Physical impacts retain their full tail.
     if(preparation_[v] && (!(menu?audition->preparing:sound::Preparing(state)) || preparationGain_[v]<1)) {
       preparationGain_[v]*=std::exp(-dt/.035f);
-      if(preparationGain_[v]<.005f){voices_[v]->Stop();voices_[v]->FlushSourceBuffers();voiceLevels_[v]=voicePeaks_[v]=0;}
+      if(preparationGain_[v]<.005f){voices_[v]->Stop();voices_[v]->FlushSourceBuffers();voiceLevels_[v]=voicePeaks_[v]=0;continue;}
     }
+    ++activeSpatialVoices_;
     const auto place=spatial_[v]?sound::Place3D({origins_[v].x-player.x,heights_[v]-listener.y,origins_[v].z-player.z},cameraYaw):sound::Placement{};
     if(traceAcoustics&&status.BuffersQueued)
       obstructionTargets_[v]=environmental_[v]&&spatial_[v]?acousticWorld_->Obstruction({origins_[v].x,heights_[v],origins_[v].z},listener):0;
@@ -781,6 +787,6 @@ void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicV
   }
   effectGain_=sound::MixGain(effectGain_,peakLoad,seconds);
   for(size_t v=0;v<voices_.size();++v)
-    voices_[v]->SetVolume(std::clamp(effectsVolume,0.f,1.f)*effectGain_*levels[v],mixOperation);
+    if(voiceLevels_[v]>0)voices_[v]->SetVolume(std::clamp(effectsVolume,0.f,1.f)*effectGain_*levels[v],mixOperation);
   if(FAILED(engine_->CommitChanges(mixOperation)))++spatialUpdateErrors_;
 }

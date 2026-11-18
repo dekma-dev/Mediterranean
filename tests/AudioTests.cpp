@@ -583,6 +583,8 @@ int main() {
     if(device.Initialize(true)) {
       Require(device.RoomAvailable(),"Native muted runtime must create the room bus on this endpoint");
       simulation=rpg::Simulation{};
+      device.Update(simulation,0,0,1);
+      Require(device.ActiveSpatialVoices()==0,"Idle effects must not submit twelve silent spatial voices");
       for(int frame=0;frame<13;++frame) {
         command={}; command.jump=frame==0 || frame==10;
         simulation.Update(.05f,command); device.Update(simulation,0,1,1,.05f);
@@ -617,6 +619,7 @@ int main() {
       for(int frame=0;frame<90;++frame)device.Update(simulation,3,0,0,1.f/60,0,nullptr,true);
       sound::Audition audition;audition.Reset();audition.preparing=true;audition.Add(sound::Cue::HolyGather);
       device.Update(simulation,3,.35f,.7f,.05f,0,nullptr,true,&audition);
+      Require(device.ActiveSpatialVoices()>0,"A reused idle voice must regain spatial processing on its first cast frame");
       audition.ClearFrame();audition.preparing=false;audition.Add(sound::Cue::HolyJudgment);
       device.Update(simulation,3,.35f,.7f,.05f,0,nullptr,true,&audition);
       for(int frame=0;frame<20;++frame){audition.ClearFrame();device.Update(simulation,3,.35f,.7f,.05f,0,nullptr,true,&audition);}
