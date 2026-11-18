@@ -29,6 +29,26 @@ int wmain(int argc,wchar_t** argv){try {
     if(frame%15==0)Check(renderer.Capture((out/("frame-"+std::to_string(frame)+".png")).wstring()),"Capture");
     Check(renderer.EndFrame(false),"Present");
   }
+  {
+    Game search;search.Initialize();
+    Check(search.RestoreSnapshot("MEDITERRANEAN 1\n-4.2 -8.5 100 0 0 0\n0 0 0 0\n-11.8 -8 80 0\n4 9 0 0\n0 12 0 0\n"),"Search fixture");
+    search.OpenPanel(ui::Panel::None);
+    auto& guard=const_cast<rpg::Enemy&>(search.State().Enemies()[0]);
+    guard.home=guard.position;guard.state=rpg::EnemyState::Pursuing;
+    guard.hasSeenPlayer=true;guard.lastSeenPlayer={-11.8f,-7};guard.searchFacing=0;
+    std::ofstream perception(out/"search.csv");perception<<"frame,x,z,facing,lostSight,state,playerHealth\n";
+    for(int frame=0;frame<=420;++frame) {
+      if(frame)search.ExecuteCommand({},1.f/60);
+      perception<<frame<<','<<guard.position.x<<','<<guard.position.z<<','<<guard.facing<<','<<guard.lostSightTime<<','<<int(guard.state)<<','<<search.State().Health()<<'\n';
+      if(frame%60==0) {
+        renderer.BeginFrame();search.Render(renderer,false);
+        renderer.SetCamera({-16,15,-18},{-8,1,-8});
+        Check(renderer.Capture((out/("search-"+std::to_string(frame)+".png")).wstring()),"Search capture");
+        Check(renderer.EndFrame(false),"Search present");
+      }
+    }
+    Check(search.State().Health()==100 && guard.state!=rpg::EnemyState::Pursuing,"Search must end without hitting through cover");
+  }
   Check(renderer.ValidateDebugMessages(),"D3D validation");
   std::cout<<"PASS: native formation sequence and actual attack trace\n";
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

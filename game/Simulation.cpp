@@ -1338,7 +1338,8 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
   enemy.attackCooldown=std::max(0.f,enemy.attackCooldown-dt);
   const float distance=Length(Difference(player_,enemy.position));
   const EnemyState previous=enemy.state;
-  const bool sight=HasLineOfSight(enemy.position,player_);
+  bool sight=(enemy.state==EnemyState::Pursuing ||
+    (enemy.state==EnemyState::Idle && distance<(enemy.Beast()?6.5f:9.f))) && HasLineOfSight(enemy.position,player_);
   const bool perception=!enemy.Boss() && enemy.kind!=EnemyKind::Trainer && enemy.kind!=EnemyKind::Dummy;
   if (enemy.state==EnemyState::Idle && distance<(enemy.Beast()?6.5f:9.f) && sight)
     enemy.state=EnemyState::Pursuing;
@@ -1348,7 +1349,7 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
       HasLineOfSight(ally.position,enemy.position)&&HasLineOfSight(enemy.position,player_)) {alerted=true;break;}
     enemy.assistance=alerted?enemy.assistance+dt:0;
     if(alerted)enemy.facing=motion::FollowAngle(enemy.facing,std::atan2(player_.x-enemy.position.x,player_.z-enemy.position.z),5.f,dt);
-    if(enemy.assistance>=.65f) {enemy.state=EnemyState::Pursuing;enemy.repathTimer=0;enemy.path.clear();enemy.waypoint=0;}
+    if(enemy.assistance>=.65f) {enemy.state=EnemyState::Pursuing;sight=true;enemy.repathTimer=0;enemy.path.clear();enemy.waypoint=0;}
   } else enemy.assistance=0;
   if(enemy.state==EnemyState::Pursuing && perception) {
     if(sight) {

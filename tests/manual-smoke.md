@@ -1,3 +1,15 @@
+## World interaction feedback (2026-11-19)
+
+- Start supply recovery, a court seal, the astral anchor and a beacon hold. Check the action-dock name, progress, remaining time and Russian/English labels. Completion must show a brief success result; moving or cancelling must show interruption, never success.
+- Recover a supply cache. Its sack stack must disappear while its barrel remains. Save/load and turn in the assignment: the goods must stay collected. Starting a fresh character must show the initial goods again.
+- Inspect active recovery on the sloping caravan route: the small progress arc must follow the ground. Repeat at small/Full HD/wide windows and 80/100/120 percent action scale. Nameplates and evasion text must not overlap the meter. Combat casting may replace the brief interaction receipt.
+
+## Enemy sight memory (2026-11-19)
+
+- Pull an ordinary enemy, break sight behind a house and move along its far side. The enemy should investigate the last visible point, look around and return after five seconds without seeing you, rather than mirror the hidden movement. Reappear before expiry: ordinary pursuit must resume immediately.
+- Repeat with terrain cover, a ranged enemy and a pack. Observe committed attack warnings; cover must still prevent blocked contacts. Root/stun an enemy before hiding and ensure the search deadline does not shorten that control.
+- Save/load while hidden: positions must remain and the enemy must search locally. Verify boss/training behavior and the existing home leash. Test caravan guards returning to their patrol after abandoning the search.
+
 ## Southern caravan patrols (2026-11-18)
 
 - Accept Wheels in the mud and observe all three caches from outside detection range. Each pair must leave, pause at distant posts and return. Wait for a clear approach and collect each cache with E without killing or disabling the guards; compare this with fighting or using control.

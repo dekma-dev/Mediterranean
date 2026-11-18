@@ -1057,8 +1057,8 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  plates.Reserve(mapBounds.x,mapBounds.y,mapBounds.w,mapBounds.h);plates.Reserve(1016,194,250,183);
  const auto dockBounds=actionTransform.Map(Rect{328,592,624,118});
  plates.Reserve(dockBounds.x,dockBounds.y,dockBounds.w,dockBounds.h);
- if(combatLayout && (ReadPlayerCast(s).ability>=0 || castReceipt_.Opacity()>0)) {
-  const auto meter=castTransform.Map(Rect{445,530,360,28});plates.Reserve(meter.x,meter.y,meter.w,meter.h);
+ if(combatLayout && (ReadPlayerCast(s).ability>=0 || castReceipt_.Opacity()>0 || ReadWorldInteraction(s).Active() || worldInteraction_.Opacity()>0)) {
+  const auto meter=castTransform.Map(Rect{445,510,360,48});plates.Reserve(meter.x,meter.y,meter.w,meter.h);
  }
  if(combatLayout && ReadOpportunity(s).phase!=OpportunityView::Phase::None){
   const auto rail=castTransform.Map(Rect{475,559,330,31});plates.Reserve(rail.x,rail.y,rail.w,rail.h);
@@ -1473,7 +1473,8 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
        c.Frame({x,578,8,8},earned?colors[n]:Color{.08f,.07f,.06f,opacity},earned?colors[n]:border);}
    }
    c.RectFill({480,588,320*fraction,1},{classAccent.x,classAccent.y,classAccent.z,opacity*.85f});
- }else if(s.EvasionSeconds()>0) c.Center(505,505,270,"EVASION / "+Seconds(s.EvasionSeconds())+"s",12,classAccent);
+ }else if(s.EvasionSeconds()>0 && !ReadWorldInteraction(s).Active() && worldInteraction_.Opacity()<=0)
+   c.Center(505,505,270,"EVASION / "+Seconds(s.EvasionSeconds())+"s",12,classAccent);
  const auto cast=ReadPlayerCast(s);
  const float receipt=castReceipt_.Opacity();
  if(cast.ability>=0 || receipt>0) {
@@ -1489,6 +1490,24 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.FitText(486,538,preparing?238.f:174.f,s.Spell(ability).name,11,{ink.x,ink.y,ink.z,opacity});
    c.Center(preparing?740.f:668.f,538,preparing?57.f:129.f,preparing?Seconds(cast.remaining)+"s":castReceipt_.interrupted?"Interrupted":"Released",11,{ink.x,ink.y,ink.z,opacity});
    regions_.push_back({{445,530,360,28},{},false});
+ }
+ else {
+   const auto current=ReadWorldInteraction(s);
+   const auto action=current.Active()?current:worldInteraction_.action;
+   const float opacity=current.Active()?1.f:worldInteraction_.Opacity();
+   if(action.Active() && opacity>0) {
+     const bool done=!current.Active() && worldInteraction_.completed;
+     const Color accent=current.Active()?Color{.72f,.56f,.29f,opacity}:
+       done?Color{.40f,.68f,.38f,opacity}:Color{.73f,.28f,.18f,opacity};
+     c.Center(475,514,330,current.Active()?"Remain still to finish":done?"Action completed":"Action interrupted",11,{ink.x,ink.y,ink.z,opacity});
+     c.Skin({475,534,330,21},8,{1,1,1,opacity});
+     const float progress=std::clamp(action.progress,0.f,1.f);
+     c.Gradient({480,538,320*progress,13},accent,{accent.x*.35f,accent.y*.35f,accent.z*.35f,opacity});
+     if(current.Active())c.Line(480+320*progress,537,480+320*progress,552,1.5f,{1,.89f,.62f,opacity});
+     c.FitText(486,538,245,action.name,11,{ink.x,ink.y,ink.z,opacity});
+     c.Center(740,538,57,current.Active()?Seconds(action.duration*(1-progress))+"s":done?"Done":"Stopped",11,{ink.x,ink.y,ink.z,opacity});
+     regions_.push_back({{475,510,330,48},{},false});
+   }
  }
  }
  // Keep the combat center for casts and abilities. Utility navigation belongs

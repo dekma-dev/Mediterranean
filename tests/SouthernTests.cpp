@@ -2,6 +2,7 @@
 #include "game/BuildLayout.h"
 #include "game/ClassEffects.h"
 #include "game/SupplyPatrol.h"
+#include "game/WorldInteraction.h"
 #include "engine/Renderer.h"
 #include "engine/BenchmarkStats.h"
 #include "platform/Win32Window.h"
@@ -12,6 +13,7 @@
 #include <cmath>
 #include <chrono>
 #include <algorithm>
+#include <limits>
 namespace {
 using namespace rpg;
 void Check(bool b,const char* message) {if(!b) {std::cerr<<message<<'\n';std::exit(1);}}
@@ -122,6 +124,16 @@ void Patrols() {
   Check(restored.Enemies()[0].state==EnemyState::Idle && restored.Enemies()[0].patrolReady,"A returned guard must resume its patrol");
  }
 }
+void AnchorFeedback() {
+ Simulation s;Check(s.Load("MEDITERRANEAN 3\n0 11.2 100 0 3 25\n2 1 0 0\n2\n0 0 0 0\n100 -4 7 0 0 0 3 0 0\n101 4 9 0 0 0 3 0 0\n102 0 12 0 0 0 3 0 0\n"),"Anchor feedback fixture");
+ Command begin;begin.interact=true;s.Update(.001f,begin);
+ ui::WorldInteractionReceipt receipt;receipt.Update(.001f,s);
+ Check(receipt.active && receipt.action.kind==ui::WorldAction::Anchor,"Anchor channel descriptor");
+ Tick(s,1);receipt.Update(.01f,s);const float progress=receipt.action.progress;
+ receipt.Update(std::numeric_limits<float>::quiet_NaN(),s);Check(receipt.action.progress==progress,"Invalid UI timestep changed feedback");
+ Tick(s,2.1f);receipt.Update(.01f,s);Check(receipt.completed && receipt.action.progress==1,"Anchor success must follow real quest transition");
+ receipt.Reset();receipt.Update(.01f,s);Check(receipt.Opacity()==0,"Loading a finished objective must not replay completion");
+}
 void Campaign() {
  for(int hz:{30,144}) {
   auto s=Veteran(ClassId::Warrior);const int xp=s.Experience();
@@ -135,6 +147,8 @@ void Campaign() {
    // This preserves the nonlethal route without disabling combat in production.
    for(auto& e:const_cast<std::vector<Enemy>&>(s.Enemies()))e.stunned=10;
    Check(s.SupplyChannelSite()==i && s.ExpeditionMask()==(1u<<i)-1,"Supply interaction must start a channel, not grant immediate progress");
+   ui::WorldInteractionReceipt receipt;receipt.Update(.001f,s);
+   Check(receipt.active && receipt.action.kind==ui::WorldAction::Supply && receipt.action.site==i,"Supply receipt identity");
    Tick(s,1,hz);Check(s.SupplyChannelProgress()>.32f && s.SupplyChannelProgress()<.35f,"Supply channel timing");
    {
     auto attacked=s;auto& e=const_cast<std::vector<Enemy>&>(attacked.Enemies())[0];
@@ -145,12 +159,18 @@ void Campaign() {
    }
    Simulation restored;Check(restored.Load(s.Save()) && restored.SupplyChannelSite()<0,"Loading must not resume an unattended supply channel");
    s.StopMovement();Check(s.SupplyChannelSite()<0,"Menu/control cancellation must clear supply recovery");
-   s.Update(.001f,c);Tick(s,3.05f,hz);
+   receipt.Update(.01f,s);Check(!receipt.active && !receipt.completed && receipt.Opacity()>0,"Cancelled collection must show interruption, not success");
+   s.Update(.001f,c);receipt.Update(.001f,s);Tick(s,3.05f,hz);receipt.Update(.01f,s);
+   Check(receipt.completed && receipt.action.progress==1 && ui::SupplyRecovered(s,i),"Actual supply credit must drive completed feedback and world state");
+   for(int n=0;n<8;++n)receipt.Update(.2f,s);
+   Check(receipt.Opacity()==0,"Completion feedback must expire");
+   receipt.Reset();Check(!receipt.active && receipt.Opacity()==0,"Reset must discard world interaction feedback");
    Check(s.ExpeditionMask()==(1u<<(i+1))-1,"Supply cache interaction");
    s.Update(.001f,c);Check(s.SupplyChannelSite()<0,"Recovered caches must not restart or duplicate rewards");
   }
   Check(s.FrontierReady() && s.DefeatedCount()==0,"Supply quest requires unwanted kills");
   Talk(s,QuestAction::CompleteFrontier);Check(s.Experience()==xp+250,"Supply reward");Roundtrip(s);
+  for(int site=0;site<3;++site)Check(ui::SupplyRecovered(s,site),"Turn-in must not restore collected world supplies");
   Talk(s,QuestAction::AcceptFrontier);Check(s.RitualActive() && s.RitualStage()==0 && !s.FrontierReady(),"Vigil started or completed prematurely");
   const auto beacon=WorldMap::ritualSite;Warp(s,{beacon.x,beacon.z+1.6f});Command c;c.interact=true;s.Update(.001f,c);
   Check(s.RitualStage()==1 && s.DefeatedCount()==4,"Wave did not activate exactly two enemies");
@@ -164,7 +184,10 @@ void Campaign() {
     Check(s.RitualCharge()==0 && s.RitualStage()==1,"Leaving beacon advanced ritual");
     Warp(s,{beacon.x,beacon.z+1.6f});Tick(s,2,hz);
    }
+   ui::WorldInteractionReceipt beaconReceipt;beaconReceipt.Update(.001f,s);
+   Check(beaconReceipt.action.kind==ui::WorldAction::Beacon,"Beacon must expose its actual hold progress");
    Tick(s,2.02f,hz);Check(s.RitualStage()==wave+1,"Wave transition failed");Roundtrip(s);
+   beaconReceipt.Update(.001f,s);Check(beaconReceipt.completed,"Wave transition must complete the correct beacon hold");
   }
   Check(s.FrontierReady(),"Vigil never completed");Talk(s,QuestAction::CompleteFrontier);
   Check(s.Experience()==xp+500 && s.RitualStage()==0,"Vigil reward or cleanup");
@@ -251,7 +274,10 @@ void Siege() {
     c={};c.haltMovement=true;s.Update(.01f,c);Check(s.CourtChannelSite()<0,"Escape did not cancel channel");
     c={};c.interact=true;s.Update(.001f,c);Tick(s,1,hz);
    }
+   ui::WorldInteractionReceipt sealReceipt;sealReceipt.Update(.001f,s);
+   Check(sealReceipt.action.kind==ui::WorldAction::Seal && sealReceipt.action.site==site,"Seal receipt identity");
    Tick(s,1.52f,hz);Check((s.CourtSeals()&(1u<<site))!=0,"Seal never completed");Roundtrip(s);
+   sealReceipt.Update(.001f,s);Check(sealReceipt.completed,"Seal completion must be based on its actual durable bit");
    c={};c.interact=true;s.Update(.01f,c);Check(s.CourtChannelSite()<0,"Completed seal restarted");
   }
   Check(s.CourtWardCount()==0 && !s.FrontierReady(),"Captain must still be defeated");
@@ -494,10 +520,22 @@ void Views() {
   auto s=Veteran(ClassId::Warrior);Talk(s,QuestAction::AcceptFrontier);
   const auto p=s.ExpeditionSite(0);Warp(s,{p.x,p.z-1.3f});
   Game g;g.Initialize();Check(g.RestoreSnapshot(s.Save()),"Supply recovery view");g.OpenPanel(ui::Panel::None);
+  for(auto& e:const_cast<std::vector<Enemy>&>(g.State().Enemies()))e.stunned=10;
+  g.SetCameraOrbit(.35f,.42f,5.f);
+  r.BeginFrame();g.Render(r);Capture(r,root/"supply-intact.png");
   Command begin;begin.interact=true;g.ExecuteCommand(begin,.001f);
   for(int n=0;n<90;++n)g.ExecuteCommand({},.01f);
   Check(g.State().SupplyChannelSite()==0,"Supply channel must remain visible in the live game");
   r.BeginFrame();g.Render(r);Capture(r,root/"supply-channel.png");
+  Command stop;stop.haltMovement=true;g.ExecuteCommand(stop,.01f);
+  r.BeginFrame();g.Render(r);Capture(r,root/"supply-interrupted.png");
+  g.ExecuteCommand(begin,.001f);
+  for(int n=0;n<301;++n)g.ExecuteCommand({},.01f);
+  Check(ui::SupplyRecovered(g.State(),0),"Native completed store state");
+  r.BeginFrame();g.Render(r);Capture(r,root/"supply-completed.png");
+  Check(g.RestoreSnapshot(g.State().Save()),"Completed stores snapshot");g.OpenPanel(ui::Panel::None);
+  Check(ui::SupplyRecovered(g.State(),0),"Loading must keep supplies absent");
+  r.BeginFrame();g.Render(r);Capture(r,root/"supply-loaded.png");
  }
  // Review the actual localized entry/exit interface, rather than a UI mockup.
  {
@@ -565,5 +603,5 @@ void Views() {
  Check(r.ValidateDebugMessages(),"Southern D3D validation");
 }
 }
-int main() try {Regions();Patrols();Campaign();Spells();Siege();TacticalContacts();ReplayEncounters();TacticalAreas();Views();std::cout<<"PASS: southern routes, patrols, waves, court siege/migration, veteran replays, tactical areas and native scenes\n";}
+int main() try {Regions();Patrols();AnchorFeedback();Campaign();Spells();Siege();TacticalContacts();ReplayEncounters();TacticalAreas();Views();std::cout<<"PASS: southern routes, patrols, world interaction feedback, waves, court siege/migration, veteran replays, tactical areas and native scenes\n";}
 catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 1;}

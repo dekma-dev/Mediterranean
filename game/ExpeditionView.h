@@ -1,5 +1,6 @@
 #pragma once
 #include "game/Simulation.h"
+#include "game/WorldInteraction.h"
 #include "engine/Renderer.h"
 
 namespace expeditionview {
@@ -34,6 +35,26 @@ inline void CampDetails(Renderer& r) {
   }
 }
 inline void Draw(Renderer& r,const rpg::Simulation& s,float time) {
+  for(int i=0;i<3;++i) {
+    const auto p=rpg::WorldMap::expeditionSites[6+i];
+    if(std::hypot(p.x-s.Player().x,p.z-s.Player().z)>65)continue;
+    const float ground=rpg::WorldMap::Height(p);
+    if(!ui::SupplyRecovered(s,i))
+      r.DrawAuthoredAsset(authored::Asset::SackStack,{p.x+.42f,ground,p.z+.16f},{.65f,.65f,.65f});
+    if(s.SupplyChannelSite()!=i)continue;
+    const float progress=std::clamp(s.SupplyChannelProgress(),0.f,1.f);
+    const auto at=[&](float angle,float radius)->DirectX::XMFLOAT3 {
+      const rpg::Vec2 q{p.x+std::sin(angle)*radius,p.z+std::cos(angle)*radius};
+      return {q.x,rpg::WorldMap::Height(q)+.065f,q.z};
+    };
+    // Terrain-following interaction progress, separate from combat warnings.
+    for(int n=0;n<32;++n) {
+      const float a=n*6.2831853f/32,b=(n+1)*6.2831853f/32;
+      r.DrawEffectRibbon(at(a,.83f),at(a,.88f),at(b,.88f),at(b,.83f),{.44f,.35f,.20f,.23f});
+      const float end=std::min(b,progress*6.2831853f);
+      if(end>a)r.DrawEffectRibbon(at(a,.83f),at(a,.88f),at(end,.88f),at(end,.83f),{.85f,.65f,.32f,.75f});
+    }
+  }
   for(const auto p:camps) {
     if(std::hypot(p.x-s.Player().x,p.z-s.Player().z)>38) continue;
     const float x=p.x+1.65f,z=p.z-2.26f,y=rpg::WorldMap::Height(p)+2.60f;

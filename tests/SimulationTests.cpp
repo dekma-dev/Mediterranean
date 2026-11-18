@@ -98,6 +98,11 @@ int main() {
   const std::string chasing="MEDITERRANEAN 2\n12 1 100 0 0 0\n2 0 0 0\n0 0 0 0\n100 -4 7 80 0 0 0\n101 8 1 80 0 0 1\n102 0 12 80 0 0 0\n";
   rpg::Simulation navigator;
   Require(navigator.Load(chasing),"Navigation scenario must be a valid save");
+  // Navigation still must route around the tower when the pursuer knows the
+  // destination. Perception memory is transient and deliberately not invented
+  // by loading an occluded encounter, so seed this pathfinding fixture explicitly.
+  auto& pursuer=const_cast<rpg::Enemy&>(navigator.Enemies()[1]);
+  pursuer.hasSeenPlayer=true;pursuer.lastSeenPlayer=navigator.Player();
   command={};
   for (int i=0;i<180;++i) navigator.Update(.05f,command);
   Require(Distance(navigator.Enemies()[1].position,navigator.Player())<2,

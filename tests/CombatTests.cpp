@@ -42,11 +42,12 @@ void Perception() {
        fixture.Map().CanTravel(guard,seen,.05f)&&!fixture.Map().CanTravel(guard,hiddenA,.05f)&&!fixture.Map().CanTravel(guard,hiddenB,.05f)){found=true;break;}
   }
   Require(found,"Need real two-sided building occlusion fixture");
+  std::cout<<"Perception wall fixture: guard "<<guard.x<<','<<guard.z<<"; hidden "<<hiddenA.x<<','<<hiddenA.z<<'\n';
   for(int hz:{30,60,144}) {
     auto sim=fixture;RelocateObserver(sim,seen);
     auto& actors=const_cast<std::vector<rpg::Enemy>&>(sim.Enemies());
     for(auto& e:actors){e.health=0;e.state=rpg::EnemyState::Dead;}
-    auto& e=actors[0];e.position=e.home=guard;e.health=80;e.attackCooldown=10;e.state=rpg::EnemyState::Idle;
+    auto& e=actors[0];e.position=e.home=guard;e.health=80;e.state=rpg::EnemyState::Idle;
     // The saved format correctly bounds cooldown; the fixture only needs a
     // short non-attacking observation before the target moves behind cover.
     e.attackCooldown=1;sim.Update(1.f/hz,{});
@@ -61,11 +62,20 @@ void Perception() {
     }
     auto reacquire=a;RelocateObserver(reacquire,seen);reacquire.Update(1.f/hz,{});
     Require(reacquire.Enemies()[0].lostSightTime==0 && reacquire.Enemies()[0].state==rpg::EnemyState::Pursuing,"Sight reacquisition must immediately resume combat");
+    auto controlled=b;auto& pinned=const_cast<rpg::Enemy&>(controlled.Enemies()[0]);pinned.stunned=4;
+    const auto pinnedPosition=pinned.position;
+    for(int frame=0;frame<hz*3;++frame)controlled.Update(1.f/hz,{});
+    Require(pinned.state==rpg::EnemyState::Pursuing && pinned.stunned>.9f &&
+      std::hypot(pinned.position.x-pinnedPosition.x,pinned.position.z-pinnedPosition.z)<.0001f,
+      "Search timeout must not clear a still-active control effect or move its target");
     for(int frame=0;frame<hz*3;++frame)a.Update(1.f/hz,{});
     Require(a.Enemies()[0].state!=rpg::EnemyState::Pursuing,"Lost target must release the pursuit after bounded search");
     rpg::Simulation loaded;Require(loaded.Load(b.Save()),"Searching encounter save must load");
+    auto& resumed=const_cast<rpg::Enemy&>(loaded.Enemies()[0]);resumed.home=b.Enemies()[0].home;
+    const auto resumePosition=resumed.position;
     loaded.Update(.01f,{});
-    Require(std::hypot(loaded.Enemies()[0].lastSeenPlayer.x-hiddenB.x,loaded.Enemies()[0].lastSeenPlayer.z-hiddenB.z)>.5f,"Load must not invent knowledge of a hidden target");
+    Require(resumed.hasSeenPlayer && std::hypot(resumed.lastSeenPlayer.x-resumePosition.x,resumed.lastSeenPlayer.z-resumePosition.z)<.001f,
+      "Loading an occluded pursuit must search locally, not invent the hidden player's position");
   }
 }
 }

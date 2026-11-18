@@ -138,7 +138,8 @@ void DrawScenery(Renderer& r,const rpg::WorldMap& map) {
     const auto site=rpg::WorldMap::expeditionSites[i];const auto elevation=r.Elevate(map.Height(site));
     if(i>=6) {
       r.DrawAuthoredAsset(authored::Asset::Barrel,{site.x,0,site.z},{1,1,1});
-      r.DrawAuthoredAsset(authored::Asset::SackStack,{site.x+.42f,0,site.z+.16f},{.65f,.65f,.65f});continue;
+      // Recoverable stores are drawn from live quest state, outside this cache.
+      continue;
     }
     r.DrawMesh(M::Rock,{site.x,.55f,site.z},{.7f,1.1f,.5f},rock,S::Stone);
     r.DrawMesh(M::Crystal,{site.x,1.3f,site.z},{.16f,.3f,.16f},i<3?XMFLOAT4{.7f,.26f,.10f,1}:XMFLOAT4{.3f,.55f,.75f,1},S::Glow);
