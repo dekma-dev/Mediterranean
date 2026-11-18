@@ -9,6 +9,7 @@
 #include <sstream>
 
 void Require(bool condition,const char* message) { if(!condition) { std::cerr<<message<<'\n'; std::exit(1); } }
+void RunAcousticsTests();
 bool Has(const sound::Events& events,sound::Cue cue) {
   return std::find(events.cues.begin(),events.cues.begin()+events.count,cue)!=events.cues.begin()+events.count;
 }
@@ -73,10 +74,12 @@ void FocusedCombatAudio(){
  }
 }
 int main() {
+  RunAcousticsTests();
   {
     sound::Audition audition;sound::Events events;
     audition.Reset();audition.preparing=true;audition.Add(sound::Cue::FireGather);
     Require(events.Preview(audition) && events.count==1 && events.cues[0]==sound::Cue::FireGather,"New stage generation must reset old voices and accept preparation");
+    Require(!events.environmental[0]&&!events.spatial[0],"Character-stage previews must stay independent of world acoustics");
     Require(!events.Preview(audition) && events.count==0,"Stage frame replay duplicated a cue");
     audition.ClearFrame();audition.preparing=false;audition.Add(sound::Cue::FireHeavy);
     Require(!events.Preview(audition) && events.count==1 && events.cues[0]==sound::Cue::FireHeavy,"Stage release missing");
@@ -169,6 +172,8 @@ int main() {
         ++preparations;
         Require(cues.spatial[i] && std::hypot(cues.origins[i].x-enemy.position.x,cues.origins[i].z-enemy.position.z)<.01f,
           "Enemy preparation must originate at the committed caster");
+        Require(cues.environmental[i]&&cues.attachedActors[i]==enemy.id&&std::isfinite(cues.heights[i]),
+          "Enemy warning must retain its stable emitter and environmental routing");
       }
     }
     Require(preparations==1 && enemy.windup>0,"Preparation must sound once at commitment, not every windup frame");
@@ -576,10 +581,36 @@ int main() {
   {
     Audio device;
     if(device.Initialize(true)) {
+      Require(device.RoomAvailable(),"Native muted runtime must create the room bus on this endpoint");
       simulation=rpg::Simulation{};
       for(int frame=0;frame<13;++frame) {
         command={}; command.jump=frame==0 || frame==10;
         simulation.Update(.05f,command); device.Update(simulation,0,1,1,.05f);
+      }
+      {
+        rpg::Simulation fight;auto& actors=const_cast<std::vector<rpg::Enemy>&>(fight.Enemies());
+        for(auto& actor:actors){actor.health=0;actor.state=rpg::EnemyState::Dead;}
+        auto& actor=actors.front();actor.kind=rpg::EnemyKind::Raider;actor.health=actor.MaxHealth();
+        actor.state=rpg::EnemyState::Pursuing;actor.position=actor.home={fight.Player().x,fight.Player().z+1.8f};
+        actor.facing=3.14159265f;fight.Update(1.f/60,{});
+        sound::Events accepted;accepted.Update(fight);Require(Has(accepted,sound::Cue::EnemyPrepare),"Native wall test needs a real accepted warning");
+        device.Update(fight,6,0,1,1.f/60);
+        sound::AcousticWorld world(fight.Map());bool blocked=false;
+        for(const auto& wall:fight.Map().Obstacles()){
+          if(wall.kind!=rpg::PropKind::Building)continue;
+          const float dx=wall.center.x-fight.Player().x,dz=wall.center.z-fight.Player().z,d=std::hypot(dx,dz);
+          if(d<.1f)continue;const float extra=std::hypot(wall.halfX,wall.halfZ)+1;
+          const rpg::Vec2 point{wall.center.x+dx/d*extra,wall.center.z+dz/d*extra};
+          if(std::hypot(point.x-fight.Player().x,point.z-fight.Player().z)>=17)continue;
+          if(world.Obstruction({point.x,fight.Map().Height(point)+1.25f,point.z},
+              {fight.Player().x,fight.WorldHeight()+1.55f,fight.Player().z})<.8f)continue;
+          actor.position=point;blocked=true;break;
+        }
+        Require(blocked,"Native wall test must use an actually obstructed world source");
+        for(int frame=0;frame<14;++frame){fight.Update(0,{});device.Update(fight,6,0,1,.05f);}
+        actor.position={fight.Player().x,fight.Player().z+1.8f};
+        for(int frame=0;frame<14;++frame){fight.Update(0,{});device.Update(fight,6,0,.5f,.05f);}
+        Require(device.SpatialUpdateErrors()==0,"Moving live emitters behind/from real architecture must update native filters and sends");
       }
       device.Update(simulation,1,0,0); device.Suspend(true); device.Suspend(true);
       device.Suspend(false); device.Update(simulation,2,0,0);
@@ -591,6 +622,7 @@ int main() {
       for(int frame=0;frame<20;++frame){audition.ClearFrame();device.Update(simulation,3,.35f,.7f,.05f,0,nullptr,true,&audition);}
       audition.Reset();device.Update(simulation,3,.35f,.7f,.05f,0,nullptr,true,&audition);
       for(int frame=0;frame<90;++frame)device.Update(simulation,4,0,0,1.f/60,0,nullptr,false);
+      Require(device.SpatialUpdateErrors()==0,"Runtime source filters, dry/wet sends and atomic commits must succeed");
       std::cout<<"Muted XAudio2 device startup, stage preparation/release/cancel, suspend/resume and cleanup exercised.\n";
     } else std::cout<<"No audio endpoint available; silent initialization fallback exercised.\n";
   }

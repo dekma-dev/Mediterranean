@@ -24,7 +24,8 @@ public:
   void SetLoading(bool enabled) { loading_=enabled;if(enabled && hwnd_) {InvalidateRect(hwnd_,nullptr,FALSE);UpdateWindow(hwnd_);} }
   float ConsumeWheel() { const float result = wheel_; wheel_ = 0; return result; }
   std::string ConsumeText() { auto result=std::move(text_);text_.clear();return result; }
-  bool SetMouseLook(bool enabled);
+  // Accepted world gestures only; UI button presses never own native capture.
+  bool SetMouseLook(unsigned buttons);
   bool MouseLook() const { return mouseLook_; }
   MouseMotion::Delta ConsumeMouseMotion() { return mouseMotion_.Consume(); }
   bool ConsumeInputCancellation() { const bool result=inputCancelled_; inputCancelled_=false; return result; }
@@ -41,8 +42,9 @@ private:
   bool fullscreen_ = false;
   bool visible_ = false;
   bool loading_=false;
-  bool mouseLook_=false,inputCancelled_=false,rightPress_=false;
-  POINT rightAnchor_{};
+  bool mouseLook_=false,inputCancelled_=false;
+  unsigned pressedButtons_=0,lookButtons_=0;
+  POINT leftAnchor_{},rightAnchor_{};
   MouseMotion mouseMotion_;
   WINDOWPLACEMENT windowed_{sizeof(WINDOWPLACEMENT)};
 };

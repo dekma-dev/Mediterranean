@@ -1,4 +1,5 @@
 #include "game/CombatEffects.h"
+#include "game/ImpactPressure.h"
 #include "game/ClassEffects.h"
 #include "game/SpellVfx.h"
 #include "game/CastEffects.h"
@@ -635,6 +636,14 @@ void CombatEffects::Render(Renderer& renderer,const castfx::Attachments* caster)
       renderer.DrawEffectGlow(mote,.045f+Noise(burst.seed+i*7)*.035f,tint);
     }
   }
+  // Main hits and hostile warnings already own their budgets. Four recent
+  // pressure fronts share a 960-vertex allowance; refraction has its own cap.
+  std::array<const Burst*,maxBursts> pressureOrder{};std::size_t pressureCount=0;
+  for(const auto& burst:bursts_)if(impactfx::PressureAt(burst.event,burst.age).strength>0)pressureOrder[pressureCount++]=&burst;
+  std::sort(pressureOrder.begin(),pressureOrder.begin()+pressureCount,[](const auto* a,const auto* b){return a->age==b->age?a->seed>b->seed:a->age<b->age;});
+  const auto pressureLimit=std::min(Renderer::maxEffectVertices,renderer.EffectVertices()+960u);
+  for(std::size_t n=0;n<std::min<std::size_t>(4,pressureCount);++n)
+    impactfx::DrawPressure(renderer,impactfx::PressureAt(pressureOrder[n]->event,pressureOrder[n]->age),renderer.EffectVertices()+240<=pressureLimit);
   impacts_.Render(renderer);
   // Last cosmetic priority: never displace current danger, release or hit
   // geometry. At most six recent patches share a 900-vertex allowance.

@@ -798,6 +798,18 @@ float4 EffectColor(EffectOut i) {
   float sceneDistance=(.1*farPlane)/max(.0001,farPlane-z*(farPlane-.1));
   float soft=saturate((sceneDistance-i.viewDepth)/(tile==1 || tile==2?.24:.065));
   result=float4(texel.rgb*i.tint.rgb,saturate(texel.a*i.tint.a)*border*soft*i.fog);
+ } else if(i.uv.z>=5.5) {
+  // Continuous rolling dust/condensation, alpha blended rather than luminous.
+  // U is measured along the whole world ribbon and advected by accepted age.
+  float x=i.uv.x,y=i.uv.y;
+  float curl=sin(x*3.2+y*5)*.17;
+  float n=Noise(float2(x*2.4+curl,y*4.1-x*.3));
+  float detail=Noise(float2(x*6.2-y*2,y*8.7));
+  float body=pow(saturate(sin(y*3.14159265)),.75);
+  float mask=smoothstep(.22,.66,n*.7+detail*.3)*body;
+  float z=effectSceneDepth.Load(int3((int2)i.p.xy,0)),farPlane=eyeAndHud.w<0?20:280;
+  float sceneDepth=(.1*farPlane)/max(.0001,farPlane-z*(farPlane-.1));
+  result=float4(i.tint.rgb*(.58+.65*n),mask*i.tint.a*saturate((sceneDepth-i.viewDepth)/.18)*i.fog);
  } else if(i.uv.z>=4.5) {
   // Continuous silver/gold strands inside a broad, translucent wake. The
   // material flows along a world-space curve, independently of tessellation.
@@ -892,4 +904,5 @@ float4 PSSky(SkyOut i) : SV_TARGET {
 }
 )"
 #include "engine/SpellGlowShader.inc"
+#include "engine/PressureShader.inc"
 ;

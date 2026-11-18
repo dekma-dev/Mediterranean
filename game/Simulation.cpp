@@ -46,47 +46,17 @@ void Simulation::Move(Vec2& p, Vec2 displacement, float radius) {
 }
 
 float Simulation::CameraDistance(Vec2 origin,float originY,Vec2 direction,float slope,float desired) const {
-  // Looking up retracts the boom before its near plane can enter the flat floor.
+  // Only terrain limits the boom. Props may occlude the actor: trees, roofs,
+  // walls and awnings must never auto-zoom the camera into the character.
+  if(!std::isfinite(origin.x) || !std::isfinite(origin.z) || !std::isfinite(originY) ||
+     !std::isfinite(direction.x) || !std::isfinite(direction.z) || !std::isfinite(slope) ||
+     !std::isfinite(desired) || desired<=0)return .25f;
+  desired=std::clamp(desired,.25f,18.f);
   if (slope<-.0001f) desired=std::min(desired,std::max(.25f,(originY-.30f)/-slope));
-  // Conservative camera bounds include pitched roofs, chimneys and tree crowns.
   for (float d=.3f;d<desired;d+=.1f) {
     const Vec2 p{origin.x+direction.x*d,origin.z+direction.z*d};
     const float worldY=originY+slope*d;
     if(worldY<map_.Height(p)+.30f) return std::max(.25f,d-.2f);
-    for (const auto& o : map_.Obstacles()) {
-      const float ground=map_.Height(o.center),y=worldY-ground;
-      // Above the counter, test the open frame and bowed cloth separately.
-      // A full-height box would pull the ordinary shop camera into the player.
-      if (o.kind==PropKind::Counter && y>o.height+.1f) {
-        const float dx=std::abs(p.x-o.center.x),dz=p.z-o.center.z;
-        for (float side : {-1.f,1.f})
-          if (y<2.72f && std::abs(p.x-o.center.x-side*(o.halfX-.06f))<.18f && std::abs(dz)<.21f)
-            return std::max(.25f,d-.2f);
-        const bool brace=y>2.05f && y<2.7f && dx>.5f && dx<o.halfX+.15f && std::abs(dz)<.2f;
-        const float depth=std::clamp(dz/1.35f,-.5f,.5f);
-        const float roofY=2.63f+.10f*std::cos(depth*3.14159265f)-.12f*depth;
-        const bool cloth=dx<1.435f && std::abs(dz)<.735f &&
-          (std::abs(y-roofY)<.06f || (dz<-.60f && y>2.50f && y<2.75f));
-        if (brace || cloth) return std::max(.25f,d-.2f);
-        continue;
-      }
-      // The crown begins above the character's shoulders. Extending its wide
-      // bounds down to the ground traps the camera beside the training post.
-      // The player may stand underneath foliage. If the shoulder focus already
-      // overlaps a crown, clipping at its entry (t=0) traps the camera inside
-      // the player's torso. In that case retain trunk collision and allow the
-      // boom to leave the foliage volume; solid walls still block normally.
-      const float focusY=originY-ground;
-      // Include a shoulder-height focus just below the leaves: an upward boom
-      // can otherwise enter the enlarged crown before it has room to leave it.
-      const bool focusInCrown=o.kind==PropKind::Tree && focusY>=1.2f && focusY<o.CameraHeight() &&
-        std::abs(origin.x-o.center.x)<o.CameraHalfX()+.15f && std::abs(origin.z-o.center.z)<o.CameraHalfZ()+.15f;
-      const bool belowCrown=o.kind==PropKind::Tree && (y<1.65f || focusInCrown);
-      const float halfX=belowCrown?o.halfX:o.CameraHalfX();
-      const float halfZ=belowCrown?o.halfZ:o.CameraHalfZ();
-      if (y < o.CameraHeight() && y > -.2f && std::abs(p.x-o.center.x)<halfX+.15f &&
-        std::abs(p.z-o.center.z)<halfZ+.15f) return std::max(.25f,d-.2f);
-    }
   }
   return desired;
 }

@@ -98,7 +98,10 @@ private:
  static float Safe(float n,float low,float high,float fallback){return std::isfinite(n)?std::clamp(n,low,high):fallback;}
  void AdvanceOne(Particle& p,float dt,const CollisionWorld& world){
   p.age=std::min(double(p.lifetime),p.age+dt);
-  const auto target=unsigned(std::floor(p.age/step+1e-6));
+  // Float frame subdivisions can straddle an exact tick by a few tenths of
+  // a microsecond. Snap that numerical noise so velocity-dependent tails do
+  // not select different fixed states at the same requested presentation time.
+  const auto target=unsigned(std::floor(p.age/step+1e-4));
   while(p.ticks<target){++p.ticks;p.previous=p.position;
    if(p.resting)continue;
    const float h=float(step),decay=std::exp(-p.drag*h);

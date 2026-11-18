@@ -11,7 +11,7 @@ float4 PSGlowSource(EffectOut i) : SV_TARGET {
  uint kind=(uint)round(i.uv.z);
  i.p.xy*=glowScreen.xy;
  float4 c=EffectColor(i);
- if(kind==9 || kind==10) return 0; // smoke and dust scatter; they do not emit
+ if(kind==6 || kind==9 || kind==10) return 0; // smoke and dust scatter; they do not emit
  float farPlane=eyeAndHud.w<0?20:280;
  float z=effectSceneDepth.Load(int3((int2)i.p.xy,0));
  float sceneDepth=(.1*farPlane)/max(.0001,farPlane-z*(farPlane-.1));

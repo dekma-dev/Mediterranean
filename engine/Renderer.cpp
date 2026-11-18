@@ -99,6 +99,7 @@ bool Renderer::Resize(int width, int height) {
  ID3D11ShaderResourceView* empty=nullptr;context_->PSSetShaderResources(15,1,&empty);
  context_->OMSetRenderTargets(0,nullptr,nullptr); target_.Reset(); depth_.Reset();effectDepthView_.Reset();effectDepthResource_.Reset();
  ID3D11ShaderResourceView* noGlow=nullptr;context_->PSSetShaderResources(16,1,&noGlow);
+ context_->PSSetShaderResources(18,1,&noGlow);pressureView_.Reset();pressureCopy_.Reset();pressureCount_=pressureSubmitted_=pressurePasses_=0;
  for(auto& view:glowViews_)view.Reset();for(auto& target:glowTargets_)target.Reset();glowWidth_=glowHeight_=0;
  if (!Check(swapChain_->ResizeBuffers(0,width,height,DXGI_FORMAT_UNKNOWN,0),L"Resize swap chain")) return false;
  return CreateTargets(width,height);
@@ -355,6 +356,7 @@ void Renderer::BeginFrame() {
  effects_.clear(); groundMarks_.clear();cloudSprites_.clear();cloudVertices_.clear(); effectVertices_=0;
  spellVolumeCount_=0;spellVolumeCoverage_=0;
  spellGlowPasses_=0;
+ pressureCount_=pressureSubmitted_=pressurePasses_=0;pressureClosed_=false;
  spellFieldCount_=0;
  for (auto& batch : world_) batch.clear();
  bodyCount_=handCount_=0;
@@ -1001,6 +1003,7 @@ void Renderer::DrawSpellVolume(SpellMedium medium,XMFLOAT3 center,XMFLOAT3 direc
  ++spellVolumeCount_;spellVolumeCoverage_+=coverage;
 }
 bool Renderer::FlushEffects() {
+ if(!CompositePressure())return false;
  if(groundMarks_.empty() && effects_.empty() && cloudSprites_.empty())return true;
  const bool glow=spellGlowEnabled_ && (!effects_.empty() || !cloudSprites_.empty());
  if(glow){if(!CreateSpellGlow())return false;const float black[4]={};context_->ClearRenderTargetView(glowTargets_[0].Get(),black);}
@@ -1112,6 +1115,7 @@ bool Renderer::CreateUiArtwork() {
 }
 bool Renderer::FlushHud() {
  if (!FlushWorld() || !FlushEffects()) return false;
+ pressureClosed_=true;
  if (hud_.empty()) return true;
  const UINT stride=sizeof(Vertex),offset=0;
  context_->IASetVertexBuffers(0,1,hudVertices_.GetAddressOf(),&stride,&offset);

@@ -2,6 +2,7 @@
 #include <Windows.h>
 #include <array>
 #include <algorithm>
+#include <cmath>
 #include <string>
 class Input {
 public:
@@ -43,11 +44,13 @@ public:
     const POINT mouse=frame.screen;
     // A released/restarted native capture can move the desktop cursor between
     // samples. Do not reinterpret that transition as camera movement.
-    const bool moving=focused && wasFocused_ && held_[VK_RBUTTON] && dragging_ &&
+    const unsigned buttons=(held_[VK_LBUTTON]?MK_LBUTTON:0u)|(held_[VK_RBUTTON]?MK_RBUTTON:0u);
+    const bool moving=focused && wasFocused_ && (buttons&dragging_) &&
       (frame.relativeMouse || !wasRelative_);
     dx_ = moving ? (frame.relativeMouse?frame.mouseX:float(mouse.x-previous_.x)) : 0;
     dy_ = moving ? (frame.relativeMouse?frame.mouseY:float(mouse.y-previous_.y)) : 0;
-    previous_ = mouse; dragging_ = held_[VK_RBUTTON]; wasFocused_ = focused; wasRelative_=frame.relativeMouse;
+    if(!std::isfinite(dx_) || !std::isfinite(dy_)) dx_=dy_=0;
+    previous_ = mouse; dragging_ = buttons; wasFocused_ = focused; wasRelative_=frame.relativeMouse;
     clientX_=float(frame.client.x); clientY_=float(frame.client.y);
     width_=float(frame.width); height_=float(frame.height);
   }
@@ -55,7 +58,7 @@ public:
   // held buttons/keys on the next sample without generating presses/releases
   // from another window or from a native move/menu loop.
   void CancelGestures() {
-    wasFocused_=dragging_=wasRelative_=false;
+    wasFocused_=wasRelative_=false;dragging_=0;
     held_.fill(false); pressed_.fill(false); released_.fill(false);
     dx_=dy_=0;
     characters_.clear();
@@ -97,7 +100,8 @@ private:
   POINT previous_{};
   float dx_ = 0, dy_ = 0;
   float clientX_ = -1, clientY_ = -1,width_ = 1280,height_ = 720;
-  bool wasFocused_ = false, dragging_ = false,wasRelative_=false,capsLock_=false;
+  unsigned dragging_=0;
+  bool wasFocused_ = false,wasRelative_=false,capsLock_=false;
   bool nativeText_=false;
   std::string characters_;
   bool nativeClipboard_=false;

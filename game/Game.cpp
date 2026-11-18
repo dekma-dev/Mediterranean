@@ -53,7 +53,7 @@ void Game::Initialize() {
   // the first accepted hit. No scenery allocations occur during combat.
   (void)impactfx::Environment();
   worldView_.Reset();
-  interface_.SetOnly(ui::Panel::None); LoadHotbarSettings(); orbiting_=false;
+  interface_.SetOnly(ui::Panel::None); LoadHotbarSettings(); CancelOrbit();
   yaw_=0; pitch_=.45f; distance_=10;
   ResetMotion();
 }
@@ -117,9 +117,16 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   ui::Event event;
   if (!input.Focused()) CancelUiGesture();
   const bool uiVisible=hudVisible_ || interface_.HasPanels() || simulation_.Health()<=0;
+  const bool worldGesture=orbitButtons_!=0;
   if (uiVisible && input.Focused())
     event=interface_.Pointer(input.ClientX(),input.ClientY(),input.Width(),input.Height(),
-      input.Pressed(VK_LBUTTON),input.Pressed(VK_RBUTTON),input.Held(VK_LBUTTON),input.Released(VK_LBUTTON));
+      !worldGesture && input.Pressed(VK_LBUTTON),!worldGesture && input.Pressed(VK_RBUTTON),
+      !worldGesture && input.Held(VK_LBUTTON),!worldGesture && input.Released(VK_LBUTTON));
+  // An actor press may become a free-look drag. Commit the original actor only
+  // on a stationary release; moving the camera must not silently retarget combat.
+  if(event.action==ui::Action::SelectActor && input.Pressed(VK_LBUTTON)) {
+    pendingWorldTarget_=event.value>0?rpg::EntityId(event.value):0;event={};
+  }
   rpg::Command command;
   command.uiClick=event.action!=ui::Action::None || previousUi!=interface_.StateKey();
   switch (event.action) {
@@ -240,24 +247,46 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   default: break;
   }
   const bool pointerCaptured=uiVisible && interface_.PointerOverUi();
+  const unsigned priorOrbit=orbitButtons_;
   // Pointer actions above can open or close a modal panel in this very frame.
   command.haltMovement=interface_.CapturesMovement() || !input.Focused();
-  if (!input.Focused() || interface_.CapturesMovement() || interface_.Dragging() || (orbiting_ && pointerCaptured)) CancelOrbit();
-  else if (!input.Held(VK_RBUTTON)) orbiting_=false;
-  if (input.Pressed(VK_RBUTTON))
-    orbiting_=!pointerCaptured && !interface_.CapturesMovement() && !interface_.Dragging();
+  const bool cameraBlocked=!input.Focused() || interface_.CapturesMovement() || interface_.Dragging() || pointerCaptured ||
+    previousUi!=interface_.StateKey() || input.Pressed(VK_F11) || input.Pressed(VK_F9);
+  if(cameraBlocked) CancelOrbit();
+  else {
+    const bool releasedLeft=(orbitButtons_&MK_LBUTTON) && input.Released(VK_LBUTTON);
+    orbitButtons_&=(input.Held(VK_LBUTTON)?MK_LBUTTON:0u)|(input.Held(VK_RBUTTON)?MK_RBUTTON:0u);
+    if(input.Pressed(VK_LBUTTON)) {
+      orbitButtons_|=MK_LBUTTON;leftOrbitTravel_=0;leftOrbitDragged_=false;
+      if(!(orbitButtons_&MK_RBUTTON))freeLook_=true;
+    }
+    if(input.Pressed(VK_RBUTTON)) {orbitButtons_|=MK_RBUTTON;freeLook_=false;}
+    if((orbitButtons_&MK_LBUTTON) && !(orbitButtons_&MK_RBUTTON))freeLook_=true;
+    if(orbitButtons_&MK_RBUTTON) {leftOrbitDragged_=true;pendingWorldTarget_=0;}
+    if(orbitButtons_&MK_LBUTTON) {
+      if(orbitButtons_&priorOrbit)leftOrbitTravel_+=std::hypot(input.MouseX(),input.MouseY());
+      if(leftOrbitTravel_>4)leftOrbitDragged_=true;
+    }
+    if(releasedLeft) {
+      if(!leftOrbitDragged_ && pendingWorldTarget_) {command.selectActor=pendingWorldTarget_;command.uiClick=true;}
+      pendingWorldTarget_=0;
+    }
+  }
   if (!interface_.CapturesMovement()) {
     if (!pointerCaptured && !interface_.Dragging()) {
-      yaw_=std::remainder(yaw_+(orbiting_?input.MouseX()*.006f:0),motion::tau);
-      pitch_=std::clamp(pitch_+(orbiting_?input.MouseY()*.004f:0),-.75f,1.1f);
+      // Do not inherit motion from a held UI button when the other button
+      // starts a fresh world gesture. Only an already-owned drag supplies it.
+      const bool orbitMotion=(orbitButtons_&priorOrbit)!=0;
+      yaw_=std::remainder(yaw_+(orbitMotion?input.MouseX()*.006f:0),motion::tau);
+      pitch_=std::clamp(pitch_+(orbitMotion?input.MouseY()*.004f:0),-.75f,1.1f);
       if (std::isfinite(wheel)) distance_=std::clamp(distance_-wheel,3.f,18.f);
     }
     const float forward=float(input.Held('W'))-float(input.Held('S'));
     const float right=float(input.Held('D'))-float(input.Held('A'));
     // Predict the same filtered heading used by UpdateCamera below. Steering
     // against the raw target makes WASD drift sideways during fast mouse turns.
-    const float movementYaw=motion::FollowAngle(cameraYaw_,yaw_,30.f,dt);
-    command.steerFacing=orbiting_ && input.Focused(); command.facingYaw=movementYaw;
+    const float movementYaw=freeLook_?movementYaw_:motion::FollowAngle(cameraYaw_,yaw_,30.f,dt);
+    command.steerFacing=(orbitButtons_&MK_RBUTTON) && input.Focused(); command.facingYaw=movementYaw;
     command.movement={std::sin(movementYaw)*forward+std::cos(movementYaw)*right,
       std::cos(movementYaw)*forward-std::sin(movementYaw)*right};
     command.sprint=input.Held(VK_SHIFT); command.jump=input.Pressed(VK_SPACE);
@@ -565,10 +594,12 @@ void Game::SetCameraOrbit(float yaw,float pitch,float distance) {
   if (!std::isfinite(yaw) || !std::isfinite(pitch) || !std::isfinite(distance)) return;
   yaw_=std::remainder(yaw,6.2831853f);
   pitch_=std::clamp(pitch,-.75f,1.1f); distance_=std::clamp(distance,3.f,18.f);
+  freeLook_=false;
   // Explicit positioning is used by captures/tools; interactive input sets targets.
   UpdateCamera(0,true);
 }
 void Game::ResetMotion() {
+  freeLook_=false;movementYaw_=yaw_;
   creatureSteps_.Reset();
   interface_.ResetCombatFeedback();
   ++audioGeneration_;
@@ -595,6 +626,7 @@ void Game::UpdateCamera(float dt,bool immediate) {
   // dragging the entire camera through the full ballistic arc.
   const float height=rpg::WorldMap::Height(simulation_.Player())+simulation_.Height()*.35f+1.4f;
   cameraYaw_=immediate?yaw_:motion::FollowAngle(cameraYaw_,yaw_,30.f,dt);
+  if(!freeLook_)movementYaw_=cameraYaw_;
   cameraPitch_=immediate?pitch_:motion::Ease(cameraPitch_,pitch_,30.f,dt);
   cameraHeight_=immediate?height:motion::Ease(cameraHeight_,height,18.f,dt);
   const rpg::Vec2 direction{-std::sin(cameraYaw_)*std::cos(cameraPitch_),-std::cos(cameraYaw_)*std::cos(cameraPitch_)};

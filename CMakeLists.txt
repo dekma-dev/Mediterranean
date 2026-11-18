@@ -43,7 +43,7 @@ set(scene_shader_header "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>/SceneBy
 add_custom_command(OUTPUT "${scene_shader_header}"
   COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>"
   COMMAND $<TARGET_FILE:SceneShaderCompiler> "${scene_shader_header}"
-  DEPENDS SceneShaderCompiler engine/SceneShader.h engine/SpellVolumeShader.inc engine/SpellGlowShader.inc engine/SpellFieldShader.inc
+  DEPENDS SceneShaderCompiler engine/SceneShader.h engine/SpellVolumeShader.inc engine/SpellGlowShader.inc engine/SpellFieldShader.inc engine/PressureShader.inc
   COMMENT "Compiling embedded DirectX 11 shaders"
   VERBATIM)
 
@@ -131,9 +131,12 @@ add_library(MediterraneanClient STATIC
   engine/Engine.cpp
   engine/Audio.cpp
   engine/AcousticDesign.cpp
+  engine/WorldAcoustics.cpp
+  engine/RoomReverb.cpp
   engine/RecordedAudio.cpp
   engine/Renderer.cpp
   engine/RendererGlow.cpp
+  engine/RendererPressure.cpp
   engine/RendererField.cpp
   game/SpellVfx.cpp
   game/SpellFlight.cpp
@@ -165,6 +168,7 @@ add_library(MediterraneanClient STATIC
   game/CharacterRig.cpp
   game/CombatEffects.cpp
   game/ImpactParticles.cpp
+  game/ImpactPressure.cpp
   game/ClassEffects.cpp
   game/Interface.cpp
   game/InterfaceState.cpp
@@ -330,7 +334,7 @@ if (BUILD_TESTING)
   add_test(NAME OldStyleArtTests COMMAND OldStyleArtTests)
   target_link_libraries(PlayerBodyTests PRIVATE MediterraneanClient)
   add_test(NAME PlayerBodyTests COMMAND PlayerBodyTests)
-  add_executable(AudioTests tests/AudioTests.cpp)
+  add_executable(AudioTests tests/AudioTests.cpp tests/AcousticsTests.cpp)
   target_link_libraries(AudioTests PRIVATE MediterraneanClient)
   add_test(NAME AudioTests COMMAND AudioTests)
   add_executable(RecordedAudioTests tests/RecordedAudioTests.cpp)
@@ -347,6 +351,9 @@ if (BUILD_TESTING)
   add_executable(ParticlePhysicsTests tests/ParticlePhysicsTests.cpp)
   target_include_directories(ParticlePhysicsTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
   add_test(NAME ParticlePhysicsTests COMMAND ParticlePhysicsTests)
+  add_executable(PressureEffectsTests tests/PressureEffectsTests.cpp)
+  target_link_libraries(PressureEffectsTests PRIVATE MediterraneanClient)
+  add_test(NAME PressureEffectsTests COMMAND PressureEffectsTests)
   add_executable(ImpactParticlesTests tests/ImpactParticlesTests.cpp)
   target_link_libraries(ImpactParticlesTests PRIVATE MediterraneanClient)
   add_test(NAME ImpactParticlesTests COMMAND ImpactParticlesTests)
@@ -425,6 +432,9 @@ if (BUILD_TESTING)
   add_executable(MotionTests tests/MotionTests.cpp)
   target_link_libraries(MotionTests PRIVATE MediterraneanClient)
   add_test(NAME MotionTests COMMAND MotionTests)
+  add_executable(CameraControlsTests tests/CameraControlsTests.cpp)
+  target_link_libraries(CameraControlsTests PRIVATE MediterraneanClient)
+  add_test(NAME CameraControlsTests COMMAND CameraControlsTests)
   add_executable(InterfaceTests tests/InterfaceTests.cpp)
   target_link_libraries(InterfaceTests PRIVATE MediterraneanClient)
   target_compile_definitions(InterfaceTests PRIVATE RPG_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")

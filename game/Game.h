@@ -26,7 +26,8 @@ public:
   std::wstring WindowTitle() const;
   bool TakeFullscreenRequest() { const bool value=fullscreenRequest_; fullscreenRequest_=false; return value; }
   bool QuitRequested() const { return quitRequested_; }
-  bool WantsMouseLook() const { return orbiting_; }
+  bool WantsMouseLook() const { return orbitButtons_!=0; }
+  unsigned MouseLookButtons() const { return orbitButtons_; }
   void SetFullscreenState(bool enabled) { interface_.fullscreen=enabled; }
   void OpenPanel(ui::Panel panel) { interface_.SetOnly(panel); }
   void ShowPanel(ui::Panel panel) { interface_.Show(panel); }
@@ -83,7 +84,10 @@ private:
   float cameraYaw_=0,cameraPitch_=.45f,cameraHeight_=1.4f;
   bool debugOverlay_ = false;
   bool hudVisible_ = true;
-  bool orbiting_ = false;
+  unsigned orbitButtons_=0;
+  bool freeLook_=false,leftOrbitDragged_=false;
+  float movementYaw_=0,leftOrbitTravel_=0;
+  rpg::EntityId pendingWorldTarget_=0;
   ui::Interface interface_;
   bool fullscreenRequest_ = false,quitRequested_ = false;
   bool SaveProgress();
@@ -91,5 +95,5 @@ private:
   void ResetMotion();
   void UpdateFaces(float dt);
   void UpdateCamera(float dt,bool immediate=false);
-  void CancelOrbit() { orbiting_=false; yaw_=cameraYaw_; pitch_=cameraPitch_; }
+  void CancelOrbit() { orbitButtons_=0;pendingWorldTarget_=0;leftOrbitTravel_=0;leftOrbitDragged_=false; yaw_=cameraYaw_; pitch_=cameraPitch_; }
 };

@@ -1,5 +1,9 @@
 # Dawnwatch sound direction
 
+## Environmental combat response — 2026-11-18
+
+Spatial effects now use source height, terrain/solid-wall obstruction, smooth gain and native low-pass filtering. One shared short-reflection bus varies with nearby architecture; own feedback remains centered and UI/music/stage previews stay dry. Moving enemy warnings retain their actor attachment, while confirmed contacts retain their accepted point. Load/menu/mute/focus boundaries clear delayed energy safely. This supersedes the October 23 absence of occlusion and source tracking; it does not introduce HRTF, Doppler or full room geometry. See [implementation, before/after audition and limits](world-acoustics-2026-11-18.md).
+
 ## Enemy anticipation — 2026-10-25
 
 Enemy attack commitment now emits one spatial preparation cue before release. Ordinary preparation uses a short cloth/metal tension sound; boss preparation uses a lower resonant load. These original synthesized samples last 0.32 and 0.48 seconds and are generated once at startup. They are attack-onset accents, not looping cast tracks: an interrupted cast may retain the short sound tail but cannot produce another preparation or impact from the audio system. Existing release cues remain separate.

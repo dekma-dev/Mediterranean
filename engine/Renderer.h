@@ -119,6 +119,8 @@ public:
   void DrawGroundMark(DirectX::XMFLOAT3 a,DirectX::XMFLOAT3 b,DirectX::XMFLOAT3 c,DirectX::XMFLOAT3 d,DirectX::XMFLOAT4 color);
   void DrawEffectRing(DirectX::XMFLOAT3 center,float radius,DirectX::XMFLOAT4 color);
   void DrawEffectStreak(DirectX::XMFLOAT3 from,DirectX::XMFLOAT3 to,float width,DirectX::XMFLOAT4 color);
+  void DrawPressureRibbon(DirectX::XMFLOAT3 a,DirectX::XMFLOAT3 b,DirectX::XMFLOAT3 c,DirectX::XMFLOAT3 d,
+    float from,float to,float age,DirectX::XMFLOAT4 color);
   enum class EffectArt { Flame, Smoke, Dust, Ice, Arcane, Slash, Sparks, Seal };
   enum class SpellMedium { Fire, Frost, Arcane, Holy };
   // Oriented participating media, evaluated along the viewing ray rather than
@@ -146,6 +148,13 @@ public:
   // blended without bloom; cells outside the footprint are never submitted.
   void DrawAttackField(DirectX::XMFLOAT2 center,const AttackField&,const AttackSurface&);
   void SetSpellGlowEnabled(bool enabled) { spellGlowEnabled_=enabled; }
+  // World-only, depth-clipped air displacement. UI and danger geometry are
+  // composed afterwards. Eight ellipsoids share one scissored scene-copy pass.
+  void DrawPressureWave(DirectX::XMFLOAT3 center,DirectX::XMFLOAT3 radii,float facing,float age,float strength,unsigned style=0);
+  void SetPressureEnabled(bool enabled){pressureEnabled_=enabled;}
+  unsigned PressureWaveCount()const{return pressureSubmitted_;}
+  unsigned PressurePasses()const{return pressurePasses_;}
+  std::size_t PressureBytes()const{return pressureCopy_?std::size_t(width_)*height_*4:0;}
   unsigned SpellGlowPasses() const { return spellGlowPasses_; }
   std::size_t SpellGlowBytes() const { return std::size_t(glowWidth_)*glowHeight_*8*3; }
   // Half extents in metres. Cloud sprites use sorted alpha; luminous sprites
@@ -196,6 +205,17 @@ private:
   void PrepareCloudLight();
   bool FlushWorld();
   bool FlushEffects();
+  bool CompositePressure();
+  struct PressureWave {DirectX::XMFLOAT4 centerStrength,radiiAge,axisStyle;};
+  std::array<PressureWave,8> pressureWaves_{};
+  unsigned pressureCount_=0,pressureSubmitted_=0,pressurePasses_=0;
+  bool pressureEnabled_=true,pressureClosed_=false;
+  Microsoft::WRL::ComPtr<ID3D11Texture2D> pressureCopy_;
+  Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> pressureView_;
+  Microsoft::WRL::ComPtr<ID3D11Buffer> pressureConstants_;
+  Microsoft::WRL::ComPtr<ID3D11VertexShader> pressureVertex_;
+  Microsoft::WRL::ComPtr<ID3D11PixelShader> pressurePixel_;
+  Microsoft::WRL::ComPtr<ID3D11RasterizerState> pressureRasterizer_;
   bool CreateSpellGlow();
   void EmitSpellGlow(UINT vertices);
   void CompositeSpellGlow();

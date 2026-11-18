@@ -213,20 +213,20 @@ int main(int argc,char** argv) {
     Require(range>0 && range<18 && 1.4f+std::sin(pitch)*range>=.2999f,
       "Upward-looking cameras must retract above the floor before rendering.");
   }
-  Require(simulation.CameraDistance({3,-15},2.65f,{0,1},0,3)<2,
-    "An orbiting camera must stop before entering the supply canopy.");
-  Require(simulation.CameraDistance({3,-15},.5f,{0,1},0,3)<2,
-    "The stall counter must still stop a low camera.");
+  Require(simulation.CameraDistance({3,-15},2.65f,{0,1},0,3)==3,
+    "The supply canopy must not auto-zoom the camera.");
+  Require(simulation.CameraDistance({3,-15},.5f,{0,1},0,3)==3,
+    "The stall counter may occlude a low camera without zooming it.");
   Require(simulation.CameraDistance({3,-15},1.6f,{0,1},0,3)==3,
     "The open space above the counter must not collapse the camera distance.");
-  Require(simulation.CameraDistance({1.96f,-15},1.6f,{0,1},0,3)<2,
-    "The stall uprights must stop the camera even in the open bay.");
+  Require(simulation.CameraDistance({1.96f,-15},1.6f,{0,1},0,3)==3,
+    "The stall uprights must not collapse the boom.");
   Require(simulation.CameraDistance({3,-15},2.95f,{0,1},0,3)==3,
     "A camera above the cloth must not collide with an empty bounding box.");
   Require(simulation.CameraDistance({3,-10},1.4f,{0,-std::cos(.45f)},std::sin(.45f),10)==10,
     "The normal shop camera must clear the awning instead of collapsing into the player.");
-  Require(simulation.CameraDistance({8,-13},5.2f,{0,1},0,4)<2.5f,
-    "The watch hall's decorated gable must remain inside the camera envelope.");
+  Require(simulation.CameraDistance({8,-13},5.2f,{0,1},0,4)==4,
+    "The watch hall gable must not force camera movement.");
   const std::string returning="MEDITERRANEAN 3\n0 -10 100 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
     "100 -4 5 80 0 0 2 0 3.14159\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
   Require(simulation.Load(returning),"Returning enemy fixture must load");

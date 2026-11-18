@@ -4,29 +4,32 @@
 #include <windowsx.h>
 #include <algorithm>
 
-bool Win32Window::SetMouseLook(bool enabled) {
-  if (!enabled) { EndMouseLook(); return true; }
+bool Win32Window::SetMouseLook(unsigned buttons) {
+  buttons&=MK_LBUTTON|MK_RBUTTON;
+  if (!buttons) { EndMouseLook(); return true; }
   if (GetForegroundWindow()!=hwnd_ || IsIconic(hwnd_) || !IsWindowVisible(hwnd_) ||
-      !(GetAsyncKeyState(VK_RBUTTON)&0x8000)) {
+      ((buttons&MK_LBUTTON) && !(GetAsyncKeyState(VK_LBUTTON)&0x8000)) ||
+      ((buttons&MK_RBUTTON) && !(GetAsyncKeyState(VK_RBUTTON)&0x8000))) {
     EndMouseLook(true); return false;
   }
-  if (mouseLook_) return true;
-  if (!rightPress_) return false;
-  POINT client=rightAnchor_; RECT bounds{};
+  if ((pressedButtons_&buttons)!=buttons) return false;
+  if (mouseLook_) { lookButtons_=buttons;return true; }
+  const POINT anchor=(buttons&MK_RBUTTON)?rightAnchor_:leftAnchor_;
+  POINT client=anchor; RECT bounds{};
   if (!ScreenToClient(hwnd_,&client) || !GetClientRect(hwnd_,&bounds) || !PtInRect(&bounds,client)) return false;
   const RAWINPUTDEVICE mouse{0x01,0x02,0,hwnd_}; // Foreground only; retain UI button messages.
   if (!RegisterRawInputDevices(&mouse,1,sizeof(mouse))) return false;
   mouseMotion_.Reset();
-  mouseLook_=true;
+  mouseLook_=true;lookButtons_=buttons;
   SetCapture(hwnd_);
-  const RECT pin{rightAnchor_.x,rightAnchor_.y,rightAnchor_.x+1,rightAnchor_.y+1};
+  const RECT pin{anchor.x,anchor.y,anchor.x+1,anchor.y+1};
   if (GetCapture()!=hwnd_ || !ClipCursor(&pin)) { EndMouseLook(true); return false; }
   SetCursor(nullptr);
   return true;
 }
 
 void Win32Window::EndMouseLook(bool cancelGesture) {
-  rightPress_=false;
+  pressedButtons_=lookButtons_=0;
   mouseMotion_.Reset();
   // UI gestures also need cancellation when no camera capture is active.
   // Keep the notification latched if focus leaves and returns in one pump.
@@ -84,14 +87,23 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
       if(count>0) window->text_.append(bytes,count);
     }
     return 0;
+  case WM_LBUTTONDOWN:
   case WM_RBUTTONDOWN:
     if (window) {
-      window->rightAnchor_={GET_X_LPARAM(lparam),GET_Y_LPARAM(lparam)};
-      window->rightPress_=ClientToScreen(hwnd,&window->rightAnchor_)!=FALSE;
+      const unsigned button=msg==WM_LBUTTONDOWN?MK_LBUTTON:MK_RBUTTON;
+      auto& anchor=msg==WM_LBUTTONDOWN?window->leftAnchor_:window->rightAnchor_;
+      anchor={GET_X_LPARAM(lparam),GET_Y_LPARAM(lparam)};
+      if(ClientToScreen(hwnd,&anchor))window->pressedButtons_|=button;
     }
     return 0;
+  case WM_LBUTTONUP:
   case WM_RBUTTONUP:
-    if (window) window->EndMouseLook();
+    if (window) {
+      const unsigned button=msg==WM_LBUTTONUP?MK_LBUTTON:MK_RBUTTON;
+      window->pressedButtons_&=~button;window->lookButtons_&=~button;
+      // Releasing either button must not end the other accepted world drag.
+      if(window->mouseLook_ && !window->lookButtons_)window->EndMouseLook();
+    }
     return 0;
   case WM_INPUT: {
     if (window && window->mouseLook_ && GetForegroundWindow()==hwnd) {

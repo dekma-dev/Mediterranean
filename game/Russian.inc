@@ -1235,7 +1235,7 @@
 {"Release", "Выпуск"},
 {"Swing", "Замах"},
 {"Recovery", "Завершение"},
-{"WASD  Move     RMB  Orbit     F11  Display", "WASD Движение     ПКМ Камера     F11 Экран"},
+{"WASD Move   LMB View   RMB Turn   F11 Display", "WASD Ходьба   ЛКМ Обзор   ПКМ Поворот   F11 Экран"},
 {"Frontier outfit", "Снаряжение пограничника"},
 {"Fits highlighted slot / ", "Подходит в выделенную ячейку / "},
 {"Drag gear to your bag. Right-click to remove.", "Перетащите вещь в сумку. ПКМ — снять."},

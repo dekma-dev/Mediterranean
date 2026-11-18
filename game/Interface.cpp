@@ -1508,7 +1508,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   }
  }
  c.Text(22,674,std::to_string(s.Gold())+" gold",16,gold);
- c.Text(22,695,"WASD  Move     RMB  Orbit     F11  Display",11,muted);
+ c.Text(22,695,"WASD Move   LMB View   RMB Turn   F11 Display",11,muted);
  if (!characterOpen && panel!=Panel::Quest) c.Wrap(22,614,std::min(385.f,actionTransform.X(328)-34),s.Message(),14,ink,3);
  if (panel==Panel::None && s.Health()>0) {
   const auto prompt=s.InteractionPrompt();

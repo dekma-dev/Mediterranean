@@ -1,3 +1,27 @@
+## Environmental combat audio (2026-11-18)
+
+- Use the four current classes in open terrain, beside village stone walls and in the northern court. Listen for a short architectural return rather than the same dry sound everywhere. Compare the two `environment-combat-*.wav` files from AudioTests: open 0–12 s, courtyard 12–24 s, obstructed courtyard 24–36 s; Warrior/Mage/Scout/Priest every three seconds.
+- Move around the corner of a building while a distant enemy or existing impact sounds. Gain and brightness must change smoothly without a full-volume first transient. A hill between source and player must muffle it; a visible tree crown alone must not. Above a low wall/ridge, sound must become clear again. The listener follows the hero, not a camera hidden behind a tree.
+- Follow a moving wolf/boar or hostile preparing an attack, then rotate the view: their onset should follow the actor while an already-confirmed contact stays at its hit position. Friendly UI clicks, cooldown notices and character-stage demonstrations must remain clear and dry.
+- Immediately after a loud impact, mute Effects, load, Alt+Tab or return to character selection. Old reflected energy must not replay on resume or enter the creation scene. Lower Effects while a tail decays and check that the tail also quiets. Restore ordinary music volume and verify enemy warnings remain understandable during repeated attacks.
+- Test headphones, a mono endpoint and the normal speaker configuration if available. Stereo directions are explicit; multichannel output uses native routing. These checks are listening acceptance, not covered by a silent automated pass.
+
+## Stable camera and dual-button orbit (2026-11-18)
+
+- Walk under crowns and the supply awning, then behind buildings. The selected distance must remain steady while scenery hides the hero. Orbit at several wheel distances; confirm ordinary zoom still eases and looking upward does not put the camera underground.
+- Hold LMB over the world and look around/up/down: the cursor stays hidden at its press position, while the planted champion keeps facing forward. Hold W during free look and release LMB: travel must not suddenly turn toward the camera. Use RMB to reconnect heading to the view.
+- Press both mouse buttons in either order and release either first. The remaining accepted gesture must keep working without a cursor jump; releasing the last restores the cursor. A button initially held over UI must not inherit a later world gesture.
+- Click a friendly actor, enemy or dummy to select it; drag LMB from that actor to orbit instead, retaining the previous target. Check hotbar/bag dragging, inventory right-clicks, minimap clicks and incoming-threat selection. None should become camera input.
+- Cancel either drag with Esc, Alt+Tab, F11, loading, character selection, native window movement or a newly opened panel. Held buttons must not restart it. Verify fresh gestures afterward and at screen edges. Hidden tests do not replace this physical capture/focus check.
+
+## Combat pressure and rolling terrain fronts (2026-11-18)
+
+- Use strong Warrior, Scout, Mage and Priest attacks near patterned scenery and on slopes. After the bright contact, look for a brief expanding air disturbance and a low rolling ground front. Steel should spread across the cut, arrows remain narrow, and magical/holy impacts expand broadly. The front is cosmetic and must not change hit range or damage.
+- Put a solid wall between the camera and the impact. A hidden wave must not distort that wall. Move a foreground actor across the effect; its silhouette must not smear into the background. Rotate close to the impact: refraction should reduce/skip a camera-enclosing lens rather than cover the screen.
+- Open C/I/N while combat continues, inspect portraits, then resize/fullscreen and return to character selection. HUD text/icons and portraits must stay sharp, old pressure fronts must not replay, and idle frames must not keep applying a post-process.
+- Compare ordinary/heavy hits at low/high refresh rates. Check particle tails at exact contact/physics boundaries, the short-lived rolling front and its expiry. In a crowded fight, enemy cone/annulus contours must remain legible through the new dust.
+- Inspect `build-pressure-review/accepted/combat-motion.mp4` alongside the prior `build-impact-physics/crowded/` recording. Use the event and budget CSVs to separate visual changes from gameplay changes; these offline captures do not establish real-time FPS or full reference parity.
+
 ## Physical combat aftermath (2026-11-18)
 
 - With Warrior, Mage, Scout and Priest, hit a target on level ground, a hillside and beside a building. Watch beyond the initial flash: steel sparks, directional splinters, embers/ice and golden fragments should have a separate fall, contact and fade. Nothing should keep travelling through a solid wall or below terrain. Crossed ice surfaces should tumble and settle against the slope. Small dust puffs should begin at the landing point.

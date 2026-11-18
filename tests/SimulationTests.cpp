@@ -16,13 +16,13 @@ int main() {
   Require(!game.CanStand({-8,-8}),"Building interior must block movement");
   Require(!game.CanStand({rpg::WorldMap::halfWidth+1,0}),"Island edge must block movement");
   Require(game.CanStand({0,0}),"Main path must remain walkable");
-  Require(game.CameraDistance({0,-8},1.4f,{-1,0},0,10)<6,"Camera must pull forward before entering a building");
-  Require(game.CameraDistance({0,-8},5.7f,{-1,0},0,10)<5,"Camera must avoid the pitched roof above the wall bounds");
+  Require(game.CameraDistance({0,-8},1.4f,{-1,0},0,10)==10,"Occluding buildings must not shorten the camera boom");
+  Require(game.CameraDistance({0,-8},5.7f,{-1,0},0,10)==10,"Roofs must not force automatic camera zoom");
   // The old east clearing is now a sloping bank. Isolate trunk/crown collision
   // at the still-level southern verge, rather than intersecting the new ground.
-  Require(game.CameraDistance({-10,-14},2.2f,{-1,0},0,6)<2.2f,"Camera must avoid the tree crown, not only its trunk");
+  Require(game.CameraDistance({-10,-14},2.2f,{-1,0},0,6)==6,"Tree crowns may occlude the player without moving the camera");
   const float belowCrown=game.CameraDistance({-10,-14},1.4f,{-1,0},0,6);
-  Require(belowCrown>3 && belowCrown<4,"Below foliage the camera must avoid the trunk without colliding with empty air");
+  Require(belowCrown==6,"Tree trunks must not shorten the selected distance either");
   Require(game.CameraDistance({12,-3.8f},1.4f,{0,-std::cos(.45f)},std::sin(.45f),7)>6.5f,
     "Training-post camera must be able to retreat underneath the tree crown");
   Require(game.CameraDistance({0,-8},8.f,{-1,0},0,10)==10,"Camera above the roof envelope should remain unobstructed");

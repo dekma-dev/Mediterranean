@@ -543,7 +543,7 @@ void Engine::Tick(double deltaSeconds) {
   }
   game_->SetFullscreenState(window_->Fullscreen());
   if (game_->QuitRequested()) { window_->SetMouseLook(false); running_=false; return; }
-  if (!window_->SetMouseLook(game_->WantsMouseLook())) game_->CancelUiGesture();
+  if (!window_->SetMouseLook(game_->MouseLookButtons())) game_->CancelUiGesture();
 
   renderer_->BeginFrame();
   if(wasChoosing && !game_->ChoosingCharacter()) {

@@ -32,6 +32,11 @@ int main(){
   Require(Dot(a.Position()-b.Position(),a.Position()-b.Position())<1e-8f,"Refresh rate changed interpolated particle trajectory");
  }
  Require(reference.CollisionCount()>0,"A falling fragment must hit the floor");
+ for(float rate:{22.f,60.f,144.f,1000.f}){
+  Pool boundary;boundary.Spawn(Seed(),0,world);float elapsed=0;
+  while(elapsed<.15f-1e-7f){const float dt=std::min(1/rate,.15f-elapsed);boundary.Advance(dt,world);elapsed+=dt;}
+  Require(boundary.Items()[0].ticks==18,"Float subdivision noise selected a different velocity at an exact fixed tick");
+ }
  TestWorld hard,earth;hard.hardness=1;earth.hardness=.1f;Pool stone,soil;
  p=Seed();p.position={0,.12f,0};p.velocity={0,-3,0};p.drag=0;p.bounce=1;
  stone.Spawn(p,0,hard);soil.Spawn(p,0,earth);Advance(stone,hard,.12f,60);Advance(soil,earth,.12f,60);

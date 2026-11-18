@@ -87,8 +87,11 @@ float MixGain(float previous,float peakLoad,float seconds) {
   return previous>=target?target:previous+(target-previous)*-std::expm1(-dt/.18f);
 }
 Placement Place(rpg::Vec2 offset,float cameraYaw) {
-  if(!std::isfinite(offset.x) || !std::isfinite(offset.z) || !std::isfinite(cameraYaw)) return {0,0,0};
-  const float distance=std::hypot(offset.x,offset.z);
+  return Place3D({offset.x,0,offset.z},cameraYaw);
+}
+Placement Place3D(AcousticPoint offset,float cameraYaw) {
+  if(!particles::Finite(offset) || !std::isfinite(cameraYaw)) return {0,0,0};
+  const float distance=std::hypot(std::hypot(offset.x,offset.z),offset.y);
   // Preserve nearby warning readability; soften the edge of the 18 m range.
   const float fade=std::clamp((18.f-distance)/4.f,0.f,1.f);
   const float gain=fade*fade*(3-2*fade)/(1+.025f*distance*distance);
@@ -475,7 +478,8 @@ bool Events::Preview(const Audition& audition) {
   if(reset || auditionSequence!=audition.sequence) {
     for(unsigned i=0;i<std::min<unsigned>(audition.count,unsigned(audition.cues.size()));++i)
       if(unsigned(audition.cues[i])<unsigned(Cue::Count)) {
-        origins[count]={};spatial[count]=false;cues[count++]=audition.cues[i];
+        origins[count]={};spatial[count]=environmental[count]=false;heights[count]=0;
+        attachedActors[count]=~0u;cues[count++]=audition.cues[i];
       }
   }
   auditionRevision=audition.revision;auditionSequence=audition.sequence;
@@ -483,15 +487,24 @@ bool Events::Preview(const Audition& audition) {
 }
 void Events::Update(const rpg::Simulation& state,const presentation::CreatureContacts* contacts) {
   count=0;
-  rpg::Vec2 origin{};bool placed=false;
-  const auto add=[&](Cue cue) { if(count<cues.size()) {origins[count]=origin;spatial[count]=placed;cues[count++]=cue;} };
+  rpg::Vec2 origin=state.Player();bool placed=false;float height=state.WorldHeight()+1.25f;
+  rpg::EntityId attached=0;
+  const auto add=[&](Cue cue) { if(count<cues.size()) {
+    origins[count]=origin;spatial[count]=placed;heights[count]=height;attachedActors[count]=attached;
+    environmental[count]=cue!=Cue::UiClick&&cue!=Cue::ReserveReady&&cue!=Cue::CastCancelled;
+    cues[count++]=cue;
+  } };
   using K=rpg::CombatVisualKind;
   for(size_t i=0;i<state.VisualEventCount();++i) {
     const auto& event=state.VisualEvents()[i];
     const auto p=state.Player();
     if(std::hypot(event.position.x-p.x,event.position.z-p.z)>18) continue;
     origin=event.position;
+    height=std::max(event.height,state.Map().Height(origin)+.08f);attached=~0u;
     placed=event.kind==K::BeastBite || event.kind==K::BeastCharge || event.kind==K::EnemyPrepare || event.kind==K::BossPrepare || event.kind==K::EnemySwing || event.kind==K::EnemyLance || event.kind==K::EnemyQuake || event.kind==K::EnemyTempest || event.kind==K::EnemyExecution || event.kind==K::Hit || event.kind==K::HeavyHit || event.kind==K::Interrupt;
+    if(event.kind==K::EnemyPrepare||event.kind==K::BossPrepare||event.kind==K::EnemySwing||event.kind==K::BeastBite||event.kind==K::BeastCharge)
+      attached=event.actor;
+    if(!placed){attached=0;height=state.WorldHeight()+1.25f;}
     switch(event.kind) {
     case K::Strike:
       add(event.school==rpg::ClassId::Demonologist?Cue::Rend:Cue::Strike);
@@ -538,7 +551,7 @@ void Events::Update(const rpg::Simulation& state,const presentation::CreatureCon
     case K::DashStart: case K::DashStop: case K::DashImpact: break;
     }
   }
-  placed=false;
+  placed=false;origin=state.Player();height=state.WorldHeight()+.08f;attached=0;
   if(state.Health()>0) {
     if(state.JumpedThisUpdate()) add(Cue::Jump);
     if(state.LandingSpeed()>0) add(GroundCue(state.Map(),state.Player(),true));
@@ -565,18 +578,20 @@ void Events::Update(const rpg::Simulation& state,const presentation::CreatureCon
       // Habitat roaming is only .65 m/s; boar contacts must remain audible
       // there too, rather than appearing only after pursuit accelerates them.
       if(distance(i)>12 || e.strength<.15f)continue;
-      origin={e.position.x,e.position.z};placed=true;
+      origin={e.position.x,e.position.z};height=e.position.y+.08f;placed=true;attached=~0u;
       add(CreatureGroundCue(state.Map(),origin,e.hoof));++accepted;
     }
   }
 }
 }
 Audio::~Audio() {
+  if(engine_)engine_->StopEngine();
   for(auto* voice:ambience_) if(voice) voice->DestroyVoice();
   for(auto* voice:voices_) if(voice) voice->DestroyVoice();
   if(music_) music_->DestroyVoice();
   if(menuMusic_) menuMusic_->DestroyVoice();
   if(combatMusic_) combatMusic_->DestroyVoice();
+  room_.Shutdown();
   if(master_) master_->DestroyVoice();
   if(engine_) engine_->Release();
   if(ownsCom_) CoUninitialize();
@@ -588,6 +603,9 @@ bool Audio::Initialize(bool muteOutput) {
   if(FAILED(XAudio2Create(&engine_,0,XAUDIO2_DEFAULT_PROCESSOR)) || FAILED(engine_->CreateMasteringVoice(&master_))) return false;
   if(muteOutput && FAILED(master_->SetVolume(0))) return false;
   XAUDIO2_VOICE_DETAILS details{};master_->GetVoiceDetails(&details);outputChannels_=details.InputChannels;
+  // Reverb is optional: a missing native effect must not silence the game.
+  room_.Initialize(engine_,master_);
+  acousticWorld_=std::make_unique<sound::AcousticWorld>(rpg::WorldMap{});
   WAVEFORMATEX format{}; format.wFormatTag=WAVE_FORMAT_PCM; format.nChannels=1;
   format.nSamplesPerSec=sound::sampleRate; format.wBitsPerSample=16;
   format.nBlockAlign=2; format.nAvgBytesPerSec=sound::sampleRate*2;
@@ -604,7 +622,9 @@ bool Audio::Initialize(bool muteOutput) {
   sound::WaveView menuTrack,worldTrack,combatTrack;
   recordedMusic_=sound::MusicRecording(0,menuTrack) && sound::MusicRecording(1,worldTrack) && sound::MusicRecording(2,combatTrack);
   if(!recordedMusic_){score_=sound::GenerateMusic();menuScore_=sound::GenerateMenuMusic();combatScore_=sound::GenerateCombatLayer();}
-  for(auto*& voice:voices_) if(FAILED(engine_->CreateSourceVoice(&voice,&format))) return false;
+  XAUDIO2_SEND_DESCRIPTOR routes[]={{0,master_},{0,room_.Voice()}};
+  XAUDIO2_VOICE_SENDS sends{room_.Voice()?2u:1u,routes};
+  for(auto*& voice:voices_) if(FAILED(engine_->CreateSourceVoice(&voice,&format,XAUDIO2_VOICE_USEFILTER,XAUDIO2_DEFAULT_FREQ_RATIO,nullptr,&sends))) return false;
   if(FAILED(engine_->CreateSourceVoice(&music_,recordedMusic_?&worldTrack.format.wfx:&format))) return false;
   if(FAILED(engine_->CreateSourceVoice(&menuMusic_,recordedMusic_?&menuTrack.format.wfx:&format))) return false;
   if(FAILED(engine_->CreateSourceVoice(&combatMusic_,recordedMusic_?&combatTrack.format.wfx:&format))) return false;
@@ -631,7 +651,14 @@ bool Audio::Initialize(bool muteOutput) {
   return SUCCEEDED(music_->Start(0,1)) && SUCCEEDED(menuMusic_->Start(0,1)) && SUCCEEDED(combatMusic_->Start(0,1)) && SUCCEEDED(engine_->CommitChanges(1));
 }
 void Audio::ClearEffects() {
+  // Reset the shared delay lines only while their processing thread is stopped.
+  // The dirty flag avoids a stop/restart on every muted/menu frame.
+  const bool resetRoom=roomDirty_&&room_.Voice();
+  if(resetRoom&&!suspended_)engine_->StopEngine();
   for(auto* voice:voices_) if(voice) { voice->Stop(); voice->FlushSourceBuffers(); }
+  if(resetRoom){room_.Reset();if(!suspended_)engine_->StartEngine();}
+  roomDirty_=false;acousticClock_=0;enclosureTarget_=0;acousticResponses_={};obstructionTargets_.fill(0);
+  environmental_.fill(false);attachedActors_.fill(~0u);
   voiceLevels_.fill(0); voicePeaks_.fill(0); voicePriorities_.fill(0); spatial_.fill(false); voiceEnvelopes_.fill(nullptr); effectGain_=.85f;
 }
 void Audio::Suspend(bool value) {
@@ -665,9 +692,20 @@ void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicV
     if(events_.Preview(*audition))ClearEffects();
   } else events_.Update(state,contacts);
   if(effectsVolume<=0) { ClearEffects(); return; }
+  if(room_.Voice())room_.Voice()->SetVolume(std::clamp(effectsVolume,0.f,1.f));
   // Apply the voice changes as one XAudio2 operation set so a new effect never
   // starts with the preceding frame's louder sparse-mix gain.
   constexpr UINT32 mixOperation=1;
+  const auto player=state.Player();
+  const sound::AcousticPoint listener{player.x,state.WorldHeight()+1.55f,player.z};
+  acousticClock_-=dt;const bool traceAcoustics=!menu&&acousticClock_<=0;
+  if(traceAcoustics){acousticClock_=.05f;enclosureTarget_=acousticWorld_->Enclosure(listener);}
+  // Resolve moving warning/creature emitters once per update. Contact tails
+  // keep their accepted point; dead/missing emitters freeze rather than jump.
+  for(const auto& actor:state.Combatants())if(actor.health>0)
+    for(size_t v=0;v<voices_.size();++v)if(attachedActors_[v]==actor.id&&voiceLevels_[v]>0){
+      origins_[v]=actor.position;heights_[v]=state.Map().Height(actor.position)+actor.ContactHeight();
+    }
   for(size_t v=0;v<voices_.size();++v){XAUDIO2_VOICE_STATE status{};voices_[v]->GetState(&status);
     if(!status.BuffersQueued)voicePriorities_[v]=0;
     else if(voiceEnvelopes_[v])voicePriorities_[v]=sound::TailPriority(voicePriorities_[v],voiceEnvelopes_[v]->Peak(status.SamplesPlayed));}
@@ -695,6 +733,14 @@ void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicV
       voicePriorities_[v]=priority;
       preparation_[v]=sound::IsPreparation(cue);preparationGain_[v]=1;
       origins_[v]=events_.origins[i];spatial_[v]=events_.spatial[i];
+      environmental_[v]=!menu&&events_.environmental[i];heights_[v]=events_.heights[i];attachedActors_[v]=events_.attachedActors[i];
+      if(environmental_[v]&&attachedActors_[v]!=~0u&&attachedActors_[v]!=0)
+        for(const auto& actor:state.Combatants())if(actor.id==attachedActors_[v]){
+          origins_[v]=actor.position;heights_[v]=state.Map().Height(actor.position)+actor.ContactHeight();break;
+        }
+      obstructionTargets_[v]=environmental_[v]&&spatial_[v]?acousticWorld_->Obstruction({origins_[v].x,heights_[v],origins_[v].z},listener):0;
+      // Initialize before Start: the first transient cannot leak through a wall.
+      acousticResponses_[v]={obstructionTargets_[v],environmental_[v]?enclosureTarget_:0};
       voice->Start(0,mixOperation);
     }
   }
@@ -709,20 +755,32 @@ void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicV
       preparationGain_[v]*=std::exp(-dt/.035f);
       if(preparationGain_[v]<.005f){voices_[v]->Stop();voices_[v]->FlushSourceBuffers();voiceLevels_[v]=voicePeaks_[v]=0;}
     }
-    const auto player=state.Player();
-    const auto place=spatial_[v]?sound::Place({origins_[v].x-player.x,origins_[v].z-player.z},cameraYaw):sound::Placement{};
-    levels[v]=voiceLevels_[v]*place.gain*(preparation_[v]?preparationGain_[v]:1.f);
+    const auto place=spatial_[v]?sound::Place3D({origins_[v].x-player.x,heights_[v]-listener.y,origins_[v].z-player.z},cameraYaw):sound::Placement{};
+    if(traceAcoustics&&status.BuffersQueued)
+      obstructionTargets_[v]=environmental_[v]&&spatial_[v]?acousticWorld_->Obstruction({origins_[v].x,heights_[v],origins_[v].z},listener):0;
+    acousticResponses_[v].Update(obstructionTargets_[v],environmental_[v]?enclosureTarget_:0,dt);
+    const auto& response=acousticResponses_[v];
+    const XAUDIO2_FILTER_PARAMETERS filter{LowPassOnePoleFilter,response.FilterCoefficient(),1};
+    if(FAILED(voices_[v]->SetFilterParameters(&filter,mixOperation)))++spatialUpdateErrors_;
+    levels[v]=voiceLevels_[v]*place.gain*(preparation_[v]?preparationGain_[v]:1.f)*response.DirectGain();
+    if(room_.Voice()){
+      const float wet=environmental_[v]?response.WetSend():0;
+      const float matrix[]={place.left*wet,place.right*wet};
+      if(FAILED(voices_[v]->SetOutputMatrix(room_.Voice(),1,2,matrix,mixOperation)))++spatialUpdateErrors_;
+      if(status.BuffersQueued&&wet>0)roomDirty_=true;
+    }
     if(outputChannels_==2) {
       const float matrix[]={place.left,place.right};
-      voices_[v]->SetOutputMatrix(master_,1,2,matrix,mixOperation);
+      if(FAILED(voices_[v]->SetOutputMatrix(master_,1,2,matrix,mixOperation)))++spatialUpdateErrors_;
     }
     // Mono and surround endpoints retain XAudio2's native routing; attenuation
     // still applies. Stereo gets equal-power pan, including already-playing tails.
     const float peak=voiceEnvelopes_[v]?voiceEnvelopes_[v]->Peak(status.SamplesPlayed):voicePeaks_[v];
-    peakLoad+=levels[v]*peak;
+    // Reserve headroom for the wet bus, including already-decaying reflections.
+    peakLoad+=levels[v]*peak*(environmental_[v]&&room_.Voice()?1.25f:1.f);
   }
   effectGain_=sound::MixGain(effectGain_,peakLoad,seconds);
   for(size_t v=0;v<voices_.size();++v)
     voices_[v]->SetVolume(std::clamp(effectsVolume,0.f,1.f)*effectGain_*levels[v],mixOperation);
-  engine_->CommitChanges(mixOperation);
+  if(FAILED(engine_->CommitChanges(mixOperation)))++spatialUpdateErrors_;
 }

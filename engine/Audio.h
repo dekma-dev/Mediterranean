@@ -2,10 +2,13 @@
 #include "game/Simulation.h"
 #include "game/CreatureContacts.h"
 #include "engine/EffectEnvelope.h"
+#include "engine/WorldAcoustics.h"
+#include "engine/RoomReverb.h"
 #include <xaudio2.h>
 #include <array>
 #include <cstdint>
 #include <vector>
+#include <memory>
 
 namespace sound {
 constexpr unsigned sampleRate=22050;
@@ -52,6 +55,7 @@ float MixGain(float previous,float peakLoad,float seconds);
 float MusicGain(float previous,float target,float seconds);
 struct Placement { float gain=1,left=.70710678f,right=.70710678f; };
 Placement Place(rpg::Vec2 offset,float cameraYaw);
+Placement Place3D(AcousticPoint offset,float cameraYaw);
 // Presentation-only cues from the character stage. Never writes world events.
 struct Audition {
   std::array<Cue,4> cues{};
@@ -66,6 +70,9 @@ struct Events {
   std::array<Cue,24> cues{}; unsigned count=0;
   std::array<rpg::Vec2,24> origins{};
   std::array<bool,24> spatial{};
+  std::array<bool,24> environmental{};
+  std::array<float,24> heights{};
+  std::array<rpg::EntityId,24> attachedActors{}; // ~0u: fixed accepted contact
   float stepDistance=0;
   unsigned warriorSwings=0;
   unsigned auditionRevision=~0u,auditionSequence=~0u;
@@ -78,11 +85,22 @@ class Audio {
 public:
   ~Audio();
   bool Initialize(bool muteOutput=false);
+  bool RoomAvailable() const {return room_.Voice()!=nullptr;}
+  unsigned SpatialUpdateErrors() const {return spatialUpdateErrors_;}
   void Suspend(bool value);
   void Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds=1.f/60,float cameraYaw=0,const presentation::CreatureContacts* contacts=nullptr,bool menu=false,const sound::Audition* audition=nullptr);
 private:
   IXAudio2* engine_=nullptr;
   IXAudio2MasteringVoice* master_=nullptr;
+  sound::RoomReverb room_;
+  std::unique_ptr<sound::AcousticWorld> acousticWorld_;
+  std::array<sound::AcousticResponse,12> acousticResponses_{};
+  std::array<float,12> obstructionTargets_{},heights_{};
+  std::array<bool,12> environmental_{};
+  std::array<rpg::EntityId,12> attachedActors_{};
+  float acousticClock_=0,enclosureTarget_=0;
+  bool roomDirty_=false;
+  unsigned spatialUpdateErrors_=0;
   IXAudio2SourceVoice* music_=nullptr;
   IXAudio2SourceVoice* menuMusic_=nullptr;
   IXAudio2SourceVoice* combatMusic_=nullptr;

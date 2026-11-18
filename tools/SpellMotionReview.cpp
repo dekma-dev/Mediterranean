@@ -88,7 +88,7 @@ int wmain(int argc,wchar_t** argv){try{
   std::vector<Scene>{{rpg::ClassId::Mage,0,"fire"},{rpg::ClassId::Mage,1,"heavy-fire"},{rpg::ClassId::Mage,5,"frost"},
   {rpg::ClassId::Mage,13,"arcane"},{rpg::ClassId::Mage,14,"thermal"},{rpg::ClassId::Priest,1,"holy"}};
  std::ofstream manifest(out/"events.csv");manifest<<"scene,frame,seconds,event\n";
- std::ofstream budgets(out/"budgets.csv");budgets<<"scene,max_effect_vertices,max_lights,max_draw_calls,max_spell_volumes\n";
+ std::ofstream budgets(out/"budgets.csv");budgets<<"scene,max_effect_vertices,max_lights,max_draw_calls,max_spell_volumes,max_pressure_waves,max_pressure_passes,pressure_bytes\n";
  std::unique_ptr<Movie> movie;if(!checkOnly)movie=std::make_unique<Movie>(out/"combat-motion.mp4");unsigned sceneIndex=0;
  for(const auto& scene:scenes){
   Game game;game.Initialize();Check(game.RestoreSnapshot(Hero(scene.school,major).Save()),"Review snapshot");
@@ -127,7 +127,7 @@ int wmain(int argc,wchar_t** argv){try{
   bool released=false,contact=false,prepared=false,chainSpent=false;int releaseFrame=-1,hitFrame=-1;
   bool readyCaptured=false,opportunityReady=false,opportunitySpent=false;
   int rotationStep=0,nextCastFrame=20,readyFrame=-1;
-  unsigned peakVertices=0,peakLights=0,peakDraws=0,peakVolumes=0;
+  unsigned peakVertices=0,peakLights=0,peakDraws=0,peakVolumes=0,peakPressure=0,peakPressurePasses=0;std::size_t pressureBytes=0;
   for(int frame=0;frame<duration*fps;++frame){
    rpg::Command command;if(frame==20 && !opportunities && !chains){command.selectActor=100;command.ability=scene.ability;}
    if(priest && scene.ability==10 && frame==20){enemy.kind=rpg::EnemyKind::Wraith;enemy.windup=enemy.WindupDuration();enemy.facing=3.14159265f;}
@@ -176,6 +176,7 @@ int wmain(int argc,wchar_t** argv){try{
    if(r.EffectVertices()>peakVertices){peakVertices=r.EffectVertices();std::filesystem::copy_file(image,out/(std::string(scene.name)+"-dense.png"),std::filesystem::copy_options::overwrite_existing);}
    peakLights=std::max(peakLights,r.CombatLightCount());peakDraws=std::max(peakDraws,r.LastDrawCalls());
    peakVolumes=std::max(peakVolumes,r.SpellVolumeCount());
+   peakPressure=std::max(peakPressure,r.PressureWaveCount());peakPressurePasses=std::max(peakPressurePasses,r.PressurePasses());pressureBytes=std::max(pressureBytes,r.PressureBytes());
    if(opportunities && !readyCaptured && game.State().DisciplineSeconds()>0 && readyFrame>=0 && frame>=readyFrame+15){readyCaptured=true;
     std::filesystem::copy_file(image,out/(std::string(scene.name)+"-ready.png"),std::filesystem::copy_options::overwrite_existing);}
    if(opportunities && scene.school==rpg::ClassId::Mage && frame==130)
@@ -186,14 +187,15 @@ int wmain(int argc,wchar_t** argv){try{
    if(frame==releaseFrame+3 && released)std::filesystem::copy_file(image,out/(std::string(scene.name)+"-flight.png"),std::filesystem::copy_options::overwrite_existing);
    if(frame==releaseFrame+8 && released)std::filesystem::copy_file(image,out/(std::string(scene.name)+"-travel.png"),std::filesystem::copy_options::overwrite_existing);
    if(frame==hitFrame+5 && contact)std::filesystem::copy_file(image,out/(std::string(scene.name)+"-contact.png"),std::filesystem::copy_options::overwrite_existing);
+   if(frame==hitFrame+12 && contact)std::filesystem::copy_file(image,out/(std::string(scene.name)+"-pressure.png"),std::filesystem::copy_options::overwrite_existing);
    if(frame==hitFrame+48 && contact)std::filesystem::copy_file(image,out/(std::string(scene.name)+"-aftermath.png"),std::filesystem::copy_options::overwrite_existing);
    if(fields && frame==hitFrame+75 && contact)std::filesystem::copy_file(image,out/(std::string(scene.name)+"-sustain.png"),std::filesystem::copy_options::overwrite_existing);
   }
   Check(released && contact,"Review spell did not produce real release/contact");
   if(opportunities)Check(opportunityReady && opportunitySpent,"Review did not earn and consume a real class opportunity");
   if(chains)Check(rotationStep==4 && chainSpent,"Review missed its four-action chain");
-  Check(peakVertices<=Renderer::maxEffectVertices && peakLights<=4 && peakVolumes<=24,"Review exceeded effects budgets");
-  budgets<<scene.name<<','<<peakVertices<<','<<peakLights<<','<<peakDraws<<','<<peakVolumes<<'\n';
+  Check(peakVertices<=Renderer::maxEffectVertices && peakLights<=4 && peakVolumes<=24 && peakPressure<=8 && peakPressurePasses<=1,"Review exceeded effects budgets");
+  budgets<<scene.name<<','<<peakVertices<<','<<peakLights<<','<<peakDraws<<','<<peakVolumes<<','<<peakPressure<<','<<peakPressurePasses<<','<<pressureBytes<<'\n';
   std::cout<<scene.name<<": real release/contact recorded at 60 Hz\n"<<std::flush;++sceneIndex;
  }
  if(movie){movie->Finish();Check(r.ValidateDebugMessages(),"DirectX review warnings");}MFShutdown();
