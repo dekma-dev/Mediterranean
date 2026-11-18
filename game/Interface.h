@@ -10,7 +10,7 @@ namespace ui {
 enum class LoadingStage { World,Chronicles,Sound,Entering };
 void RenderLoading(Renderer& renderer,LoadingStage stage);
 enum class Panel { None,Menu,Character,Inventory,Map,Journal,Merchant,Build,Quest };
-enum class Action { None,Hotbar,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview,MusicVolume,EffectsVolume,Build,SelectTalent,LearnTalent,QuestConfirm,QuestPage,SelectSpell,ConfirmTalentReset,ResetTalents,CancelTalentReset,BuildPage,SelectLoadout,SelectBuildPreset,RequestBuildApply,RequestBuildStore,ConfirmBuild,CancelBuild,PlanBuild,EditBuild,DraftTalent,CharacterSelection,SelectJournal,InspectStat,InspectStatus,SelectThreat,SelectActor,Language,EndReplay,TrackHunt };
+enum class Action { None,Hotbar,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview,MusicVolume,EffectsVolume,Build,SelectTalent,LearnTalent,QuestConfirm,QuestPage,SelectSpell,ConfirmTalentReset,ResetTalents,CancelTalentReset,BuildPage,SelectLoadout,SelectBuildPreset,RequestBuildApply,RequestBuildStore,ConfirmBuild,CancelBuild,PlanBuild,EditBuild,DraftTalent,CharacterSelection,SelectJournal,InspectStat,InspectStatus,SelectThreat,SelectActor,Language,EndReplay,TrackHunt,ActionBarSize };
 using Item=rpg::Item;
 struct Rect { float x,y,w,h; bool Contains(float px,float py) const { return px>=x && py>=y && px<x+w && py<y+h; } };
 struct Layout {
@@ -34,6 +34,12 @@ void ApplyItem(rpg::Command& command,const rpg::Simulation& simulation,Item item
 class Interface {
 public:
   static constexpr int hotbarSlots=20;
+  int ActionBarPercent() const { return actionBarPercent_; }
+  void SetActionBarPercent(int percent) {
+    percent=std::clamp(percent,80,120);
+    if(percent==actionBarPercent_) return;
+    actionBarPercent_=percent;CancelDrag();InvalidateHitRegions();hoverTime_=0;
+  }
   static std::string BindingLabel(int slot) {
     if(slot<0 || slot>=hotbarSlots) return {};
     return std::string(slot>=10?"Ctrl+":"")+(slot%10==9?"0":std::to_string(slot%10+1));
@@ -121,6 +127,7 @@ public:
   bool audioAvailable=false;
   rpg::Vec2 waypoint{},pendingWaypoint{};
 private:
+  int actionBarPercent_=100;
   HealthTrail playerHealth_,targetHealth_;
   DamageDirection damageDirection_;
   CastReceipt castReceipt_;

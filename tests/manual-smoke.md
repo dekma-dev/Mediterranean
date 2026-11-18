@@ -1,3 +1,11 @@
+## Larger action dock and complete spell cards (2026-11-18)
+
+- Restart the current play build and compare the default two action rows at 1920x1080: larger icons, legible binding plates and separate cooldown/ready/chain cues. At 960x600, 1440p, ultrawide and 4K, verify the dock stays on screen and clear of utility buttons. Esc -> Action bar size must adjust 80-120%, retain the choice on restart and preserve every class binding.
+- Move spells within/between both rows and from N. Drop onto another spell, an empty cell, the narrow gap between cells and the decorative window frame. Gaps/the frame must keep the original binding. Dropping onto the world or right-clicking the cell must remove it. Change resolution or dock size during a drag: no stale drop or unintended cast.
+- Hover long Warrior/Mage/Scout/Priest descriptions in Russian and English on both rows, including newly learned abilities. Inspect the final sentence, readiness, cooldown, range and removal hint; the card must stay above the hovered row without text crossing its border. Inspect the destination highlight and cursor-centered artwork during a drag.
+- Cast while an enemy is preparing its attack. Player cast, opportunity timer, target windup and actual ability rows must remain separate. Compare 80%, 100% and 120%; verify casting, queue timing and key bindings remain unchanged. Return to character selection through Esc and enter again.
+- In an isolated test profile, change the `.hotbars` file from another writer before changing size in the first game. The game must show a save error and retain the external file; resizing must never save or roll back character progress.
+
 ## Fire flow and release/contact continuity (2026-11-13)
 
 - Compare `build-vfx-flight/movie-before/combat-motion.mp4` and `movie-final/combat-motion.mp4` at normal speed, then cast basic/heavy fire and thermal rupture in the world and creation preview. Gathering must follow the moving hands; release, three twisting flame sheets and the stretched core must form one action. Orbit around flight: it must retain volume, and material flow must cross geometry joins without beads.

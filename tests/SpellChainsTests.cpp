@@ -127,7 +127,7 @@ void Native(Renderer& r,const std::filesystem::path& output) {
  Check(cells.size()==116,"Missing available spell illustrations");
  for(auto size:{std::pair<int,int>{960,600},{1920,1080},{2560,1080}}) {
   Check(r.Resize(size.first,size.second),"Spell review resize");const ui::Layout layout(float(size.first),float(size.second));
-  const auto bars=ui::HudTransform::At(float(size.first),float(size.second),640,710);
+  const auto bars=ui::ActionHudLayout::At(float(size.first),float(size.second)).bars;
   for(auto id:{ClassId::Warrior,ClassId::Scout,ClassId::Mage,ClassId::Priest}) {
    auto state=Hero(id);ui::Interface hud;const auto saved=state.Save();
    const auto draw=[&] {r.BeginFrame();hud.Render(r,state,.5f,false);Check(r.EndFrame(false),"Hotbar edit draw");};

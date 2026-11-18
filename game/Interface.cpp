@@ -989,9 +989,10 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
 
 void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bool debug,float cameraYaw) {
  Canvas c(renderer); regions_.clear();
- const auto actionTransform=HudTransform::At(float(renderer.Width()),float(renderer.Height()),640,710);
+ const auto actionHud=ActionHudLayout::At(float(renderer.Width()),float(renderer.Height()),ActionBarPercent());
+ const auto actionTransform=actionHud.bars;
  const auto warningTransform=HudTransform::At(float(renderer.Width()),float(renderer.Height()),608,s.Sparring() || s.SparringReportTime()>0?205.f:24.f);
- const auto castTransform=HudTransform::At(float(renderer.Width()),float(renderer.Height()),640,586);
+ const auto castTransform=actionHud.casts;
  const auto mapTransform=HudTransform::At(float(renderer.Width()),float(renderer.Height()),1280,0);
  struct StatusTip { std::string name,description,value; };
  std::vector<StatusTip> statusTips;
@@ -1054,6 +1055,11 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  if(s.TargetActor() || s.FriendlyTarget()>=0) plates.Reserve(anchors.target.x,anchors.target.y,257,70);
  const auto mapBounds=mapTransform.Map(Rect{1090,3,176,178});
  plates.Reserve(mapBounds.x,mapBounds.y,mapBounds.w,mapBounds.h);plates.Reserve(1016,194,250,183);
+ const auto dockBounds=actionTransform.Map(Rect{328,592,624,118});
+ plates.Reserve(dockBounds.x,dockBounds.y,dockBounds.w,dockBounds.h);
+ if(combatLayout && (ReadPlayerCast(s).ability>=0 || castReceipt_.Opacity()>0)) {
+  const auto meter=castTransform.Map(Rect{445,530,360,28});plates.Reserve(meter.x,meter.y,meter.w,meter.h);
+ }
  if(combatLayout && ReadOpportunity(s).phase!=OpportunityView::Phase::None){
   const auto rail=castTransform.Map(Rect{475,559,330,31});plates.Reserve(rail.x,rail.y,rail.w,rail.h);
  }
@@ -1353,6 +1359,9 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  const float xp=s.Level()==rpg::levelCap?1.f:float(s.Experience()-s.LevelStartExperience())/(s.NextLevelExperience()-s.LevelStartExperience());
  const auto drawHotbars=[&]() {
  HudSection section(c,regions_,mouseX_,mouseY_,actionTransform);
+ // Gaps and ornament belong to the dock too: dropping between two cells
+ // must not be mistaken for removing the spell into the world.
+ regions_.push_back({{328,592,624,118},{},false});
  c.Window({344,648,592,62}); c.Scroll(329,676,-1,1.5f); c.Scroll(951,676,1,1.5f);
  c.Window({344,592,592,57});
  c.RectFill({442,650,397,2},border); c.RectFill({442,650,397*xp,2},{.55f,.63f,.29f,1});
@@ -1399,7 +1408,14 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     }
   }
   if(i==4) c.Center(x+32,y+32,18,std::to_string(s.Potions()),12,ink);
-  c.Text(x+4,y+1,BindingLabel(slotIndex),slotIndex<10?13.f:10.f,ink);
+  // A dark key plate keeps the binding legible over bright spell artwork.
+  const float keyWidth=slotIndex<10?14.f:42.f;
+  c.Gradient({x+3,y+2,keyWidth,13},{.015f,.014f,.012f,.94f},{.04f,.03f,.02f,.65f});
+  c.Text(x+5,y+1,BindingLabel(slotIndex),slotIndex<10?13.f:11.f,{1,.94f,.76f,1});
+  if(dragging_ && dragSpell_>=0 && hover) {
+    c.Frame({x+1,y+1,52,49},{0,0,0,0},{.95f,.79f,.41f,1});
+    c.Line(x+5,y+48,x+49,y+48,2,{1,.91f,.68f,1});
+  }
   if(i>=0 && i==s.QueuedAttack()) {
     c.Line(x+4,y+47,x+50,y+47,3,classAccent);
     c.Center(x,y+33,54,"NEXT",10,ink);
@@ -1493,13 +1509,16 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  }
  c.Text(22,674,std::to_string(s.Gold())+" gold",16,gold);
  c.Text(22,695,"WASD  Move     RMB  Orbit     F11  Display",11,muted);
- if (!characterOpen && panel!=Panel::Quest) c.Wrap(22,614,385,s.Message(),14,ink,3);
+ if (!characterOpen && panel!=Panel::Quest) c.Wrap(22,614,std::min(385.f,actionTransform.X(328)-34),s.Message(),14,ink,3);
  if (panel==Panel::None && s.Health()>0) {
   const auto prompt=s.InteractionPrompt();
   if (!prompt.empty() && !nearbyCombat && !s.Attacking() && !s.CastingRecovery()) {
    const float w=std::min(510.f,c.Width(prompt,14)+30);c.Frame({640-w/2,360,w,27});c.Center(640-w/2,365,w,prompt,14,gold);
   }
-  if (s.Channeling()) { c.RectFill({470,586,340,3},border); c.RectFill({470,586,340*s.ChannelProgress(),3},blue); }
+  if (s.Channeling()) {
+    HudSection section(c,regions_,mouseX_,mouseY_,castTransform);
+    c.RectFill({470,586,340,3},border); c.RectFill({470,586,340*s.ChannelProgress(),3},blue);
+  }
  }
 
  // Independent side windows: no world dimming, keyboard movement remains live.
@@ -1742,7 +1761,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  } else if (panel!=Panel::None) {
   if(panel==Panel::Menu) {c.RectFill({0,0,1280,720},{0,0,0,.16f}); regions_.clear();}
   if (panel==Panel::Menu) {
-   c.Window({476,148,328,538}); c.Banner({490,137,300,34},"MEDITERRANEAN",20);
+   c.Window({476,148,328,566}); c.Banner({490,137,300,34},"MEDITERRANEAN",20);
    c.Center(476,177,328,"Dawnwatch expedition",12,muted);
    button({496,197,288,34},"Return to game  /  Esc",Action::Close);
    button({496,241,139,32},"Character  /  C",Action::Character); button({645,241,139,32},"Inventory  /  I",Action::Inventory);
@@ -1774,10 +1793,14 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Text(500,502,"Language",13,ink);
    button({586,498,94,28},"Русский",Action::Language,0,localization::language!=localization::Language::Russian);
    button({690,498,94,28},"English",Action::Language,1,localization::language!=localization::Language::English);
-   button({496,540,288,32},"Save & choose character",Action::CharacterSelection);
-   button({496,580,288,32},"Exit to desktop",Action::Quit);
-   c.Center(476,624,328,audioAvailable?"Click a meter to set volume; first mark mutes.":"Audio unavailable / levels retained",11,muted);
-   if (!menuNotice.empty()) c.Wrap(496,649,288,menuNotice,11,gold,2);
+   c.Text(500,535,"Action bar size / "+std::to_string(ActionBarPercent())+"%",13,ink);
+   button({712,531,30,25},"-",Action::ActionBarSize,-10,ActionBarPercent()>80);
+   button({752,531,30,25},"+",Action::ActionBarSize,10,ActionBarPercent()<120);
+   c.Text(500,556,"1-0 / Ctrl+1-0  /  Drag to arrange",10,muted);
+   button({496,578,288,32},"Save & choose character",Action::CharacterSelection);
+   button({496,618,288,32},"Exit to desktop",Action::Quit);
+   c.Center(476,662,328,audioAvailable?"Click a meter to set volume; first mark mutes.":"Audio unavailable / levels retained",11,muted);
+   if (!menuNotice.empty()) c.Wrap(496,683,288,menuNotice,11,gold,2);
    return;
   }
   if (panel==Panel::Build) {
@@ -2171,35 +2194,39 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    const int ability=HotbarSpell(it->event.value,s.Class());if(ability<0) break; const bool potion=ability==4;
    const std::string detail=potion?"Restores up to 40 health.":SpellEffect(s,ability);
    const std::string status=potion?(s.Health()<=0?"DEFEATED":s.Potions()==0?"NO POTIONS":s.Health()>=s.MaxHealth()?"FULL HEALTH":s.PotionCooldown()>0?"COOLDOWN":"READY"):s.AbilityStatus(ability);
-   // Use the hovered row's actual placement. The old fixed card floated in
-   // the battlefield after the action bar became compact.
+   // Measure translated prose before anchoring the complete card above its
+   // row. Fixed two-line boxes silently hid class-chain rules in Russian.
    const float slotX=(it->rect.x-actionTransform.x)/actionTransform.scale;
    const float slotY=(it->rect.y-actionTransform.y)/actionTransform.scale;
    HudSection section(c,regions_,mouseX_,mouseY_,actionTransform);
    const float x=std::clamp(slotX-120,345.f,605.f);
-   const float lift=slotY-621;
-   c.Window({x,403+lift,330,210});
-   AbilityArtwork(c,{x+14,417+lift,36,36},ability,s.Class());
-   c.FitText(x+61,416+lift,253,potion?"Healing draught":s.Spell(ability).name,18,gold);
-   c.Text(x+61,439+lift,"KEY "+BindingLabel(it->event.value)+" / "+
+   const auto detailLines=c.Lines(302,detail,13);
+   const auto descriptionLines=c.Lines(302,potion?"Restores health immediately. Shares a three-second potion cooldown.":s.Spell(ability).description,11);
+   const float detailHeight=float(detailLines.size())*18,descriptionHeight=float(descriptionLines.size())*16;
+   const float height=158+detailHeight+descriptionHeight,top=slotY-8-height;
+   c.Window({x,top,330,height});
+   AbilityArtwork(c,{x+14,top+14,36,36},ability,s.Class());
+   c.FitText(x+61,top+13,253,potion?"Healing draught":s.Spell(ability).name,18,gold);
+   c.FitText(x+61,top+36,253,"KEY "+BindingLabel(it->event.value)+" / "+
      (potion?"CONSUMABLE":ability==6?"SIGNATURE":ability==5?"TECHNIQUE":ability==7?"SETUP":"CLASS ABILITY"),10,muted);
-   c.Line(x+14,461+lift,x+316,461+lift,1,border);
-   c.Wrap(x+14,470+lift,302,detail,13,ink,2);
-   c.Wrap(x+14,510+lift,302,potion?"Restores health immediately. Shares a three-second potion cooldown.":s.Spell(ability).description,11,muted,2);
+   c.Line(x+14,top+58,x+316,top+58,1,border);
+   for(std::size_t row=0;row<detailLines.size();++row)c.Text(x+14,top+67+float(row)*18,detailLines[row],13,ink,true);
+   for(std::size_t row=0;row<descriptionLines.size();++row)c.Text(x+14,top+71+detailHeight+float(row)*16,descriptionLines[row],11,muted,true);
+   const float footer=top+77+detailHeight+descriptionHeight;
    const float remaining=potion?s.PotionCooldown():s.Cooldown(ability);
-   c.FitText(x+14,548+lift,302,"Cooldown: "+Number(potion?3.f:s.AbilityCooldown(ability))+"s"+
+   c.FitText(x+14,footer,302,"Cooldown: "+Number(potion?3.f:s.AbilityCooldown(ability))+"s"+
      (potion?"  /  Stock: "+std::to_string(s.Potions()):ability!=3?"  /  "+std::string(ability==2 && s.RetreatMobility()?"Travel: ":"Range: ")+Number(s.Spell(ability).range)+" m":""),12,muted);
    const Color readiness=status=="READY"?Color{.57f,.84f,.40f,1}:Color{1,.64f,.40f,1};
-   c.Gradient({x+12,571+lift,306,28},{readiness.x,readiness.y,readiness.z,.16f},{.02f,.025f,.02f,.4f});
-   c.FitText(x+20,578+lift,290,status+(remaining>0?" / "+Seconds(remaining)+"s remaining":""),12,readiness);
-   c.FitText(x+14,602+lift,302,"Right-click: unbind / drag outside: remove",10,muted);
+   c.Gradient({x+12,footer+21,306,25},{readiness.x,readiness.y,readiness.z,.16f},{.02f,.025f,.02f,.4f});
+   c.FitText(x+20,footer+27,290,status+(remaining>0?" / "+Seconds(remaining)+"s remaining":""),12,readiness);
+   c.FitText(x+14,footer+51,302,"Right-click: unbind / drag outside: remove",10,muted);
   }
   break;
  }
  if(dragging_ && dragSpell_>=0) {
    {
    // Retain the pointer as the pivot so the carried icon does not jump.
-   HudSection section(c,regions_,mouseX_,mouseY_,HudTransform::At(float(renderer.Width()),float(renderer.Height()),mouseX_,mouseY_));
+   HudSection section(c,regions_,mouseX_,mouseY_,{actionTransform.scale,mouseX_*(1-actionTransform.scale),mouseY_*(1-actionTransform.scale)});
    c.Frame({mouseX_-23,mouseY_-23,46,46},dark,gold);
    AbilityArtwork(c,{mouseX_-20,mouseY_-20,40,40},dragSpell_,s.Class());
    }

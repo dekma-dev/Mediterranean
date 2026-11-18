@@ -128,6 +128,10 @@ void Game::Update(double seconds,const Input& input,float wheel) {
     break;
   case ui::Action::MusicVolume: interface_.musicVolume=std::clamp(interface_.musicVolume+event.value,0,100); break;
   case ui::Action::EffectsVolume: interface_.effectsVolume=std::clamp(interface_.effectsVolume+event.value,0,100); break;
+  case ui::Action::ActionBarSize:
+    interface_.SetActionBarPercent(interface_.ActionBarPercent()+event.value);
+    interface_.menuNotice=SaveHotbarSettings()?"":"Could not save action-bar settings.";
+    break;
   case ui::Action::Close: interface_.Close(static_cast<ui::Panel>(event.value)); break;
   case ui::Action::Menu: interface_.Escape(); break;
   case ui::Action::Character: interface_.Toggle(ui::Panel::Character); break;
@@ -755,6 +759,13 @@ void Game::LoadHotbarSettings() {
   auto file=rosterFile_;file+=L".hotbars";
   if(profile::Read(file,content)==profile::ReadResult::Ready && interface_.LoadHotbars(content)) savedHotbars_=content;
 }
+bool Game::SaveHotbarSettings() {
+  auto file=rosterFile_;file+=L".hotbars";
+  const auto bars=interface_.SaveHotbars();
+  if(savedHotbars_ && *savedHotbars_==bars) return true;
+  if(profile::Write(file,bars,savedHotbars_?&*savedHotbars_:nullptr)!=profile::WriteResult::Saved) return false;
+  savedHotbars_=bars;return true;
+}
 bool Game::SaveProgress() {
   const auto content=simulation_.Save();
   const auto result=profile::Write(saveFile_,content,savedSnapshot_?&*savedSnapshot_:nullptr);
@@ -765,12 +776,7 @@ bool Game::SaveProgress() {
   case profile::WriteResult::Error:simulation_.Notify("Save failed. Previous save retained. Check project folder access.");break;
   }
   if(result==profile::WriteResult::Saved) {
-    auto file=rosterFile_;file+=L".hotbars";
-    const auto bars=interface_.SaveHotbars();
-    if(!savedHotbars_ || *savedHotbars_!=bars) {
-      if(profile::Write(file,bars,savedHotbars_?&*savedHotbars_:nullptr)==profile::WriteResult::Saved) savedHotbars_=bars;
-      else simulation_.Notify("Progress saved; action-bar settings could not be saved (external change or file access).");
-    }
+    if(!SaveHotbarSettings()) simulation_.Notify("Progress saved; action-bar settings could not be saved (external change or file access).");
   }
   return result==profile::WriteResult::Saved;
 }

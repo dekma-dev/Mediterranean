@@ -6,6 +6,8 @@
 #include "engine/Renderer.h"
 #include "platform/Win32Window.h"
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -13,14 +15,19 @@
 namespace {
 void Check(bool value,const char* message) { if(!value) throw std::runtime_error(message); }
 void DensityChecks(Renderer& renderer) {
- for(auto size:{std::pair<int,int>{960,600},{1280,720},{1920,1080},{2560,1080}}) {
+ for(auto size:{std::pair<int,int>{960,600},{1280,720},{1920,1080},{2560,1080},{2560,1440},{3840,2160}}) for(int percent:{80,100,120}) {
   Check(renderer.Resize(size.first,size.second),"Density resize");
   const ui::Layout layout(float(size.first),float(size.second));
-  const auto bars=ui::HudTransform::At(float(size.first),float(size.second),640,710);
-  Check(bars.scale<=1 && bars.scale>=.68f,"Unbounded combat density");
-  Check(size.second<1080?bars.scale==1:54*bars.scale*layout.scale<56,"Desktop action slots still inflate with the panel canvas");
+  const auto geometry=ui::ActionHudLayout::At(float(size.first),float(size.second),percent);
+  const auto bars=geometry.bars;
+  const float pixels=54*bars.scale*layout.scale;
+  Check(pixels>=32 && pixels<=130,"Action buttons became unreadable or unbounded");
+  if(size.second==1080 && percent==100) Check(pixels>=80 && pixels<=82,"Full HD defaults must provide visibly larger 81-pixel controls");
   Check(std::abs(bars.X(640)-640)<.001f && std::abs(bars.Y(710)-710)<.001f,"Bottom-center action anchor drifted");
+  Check(bars.X(328)>220 && bars.X(952)<1034 && bars.Y(592)>565 && bars.Y(710)<=710,"Dock escaped its reserved space");
+  Check(geometry.casts.Y(590)<bars.Y(592) && geometry.casts.X(805)<786,"Cast stack overlaps dock or target cast");
   rpg::Simulation state;ui::Interface hud;const auto save=state.Save();
+  hud.SetActionBarPercent(percent);
   for(int slot=0;slot<20;++slot)hud.AssignHotbar(0,slot,state.Class());
   const auto render=[&]{renderer.BeginFrame();hud.Render(renderer,state,0,false);Check(renderer.EndFrame(false),"Density frame");};
   const auto pointer=[&](int slot,bool press,bool held,bool release,bool right=false) {
@@ -40,15 +47,70 @@ void DensityChecks(Renderer& renderer) {
   hud.Pointer(layout.x+640*layout.scale,layout.y+350*layout.scale,float(size.first),float(size.second),false,false,true,false);
   hud.Pointer(layout.x+640*layout.scale,layout.y+350*layout.scale,float(size.first),float(size.second),false,false,false,true);
   Check(hud.HotbarSpell(19,state.Class())==-1,"Compact drag into the world did not unbind");
+  hud.AssignHotbar(0,0,state.Class());render();pointer(0,true,true,false);
+  for(bool release:{false,true})hud.Pointer(layout.x+bars.X(406)*layout.scale,layout.y+bars.Y(678)*layout.scale,
+    float(size.first),float(size.second),false,false,!release,release);
+  Check(hud.HotbarSpell(0,state.Class())==0 && hud.PointerOverUi(),"Dropping between slots removed an ability or exposed world input");
   const auto map=ui::HudTransform::At(float(size.first),float(size.second),1280,0);
   const auto event=hud.Pointer(layout.x+map.X(1170)*layout.scale,layout.y+map.Y(94)*layout.scale,float(size.first),float(size.second),true,false);
   Check(event.action==ui::Action::Map,"Compact minimap hit is detached from the artwork");
   hud.AssignHotbar(0,0,state.Class());render();pointer(0,true,true,false);
   hud.Pointer(600,650,float(size.first+1),float(size.second),false,false,false,true);
   Check(!hud.Dragging() && hud.HotbarSpell(0,state.Class())==0,"Resize removed a spell using stale density bounds");
+  render();pointer(0,true,true,false);pointer(19,false,true,false);
+  Check(hud.Dragging(),"Scale-change fixture must begin a real drag");
+  hud.SetActionBarPercent(percent==120?80:120);
+  pointer(19,false,false,true);
+  Check(!hud.Dragging() && hud.HotbarSpell(0,state.Class())==0 && hud.HotbarSpell(19,state.Class())==-1,"Changing dock size completed a stale drag");
   Check(state.Save()==save,"Layout or binding edits changed gameplay");
  }
  Check(renderer.Resize(1920,1080),"Restore density renderer");
+}
+void ActionSettingsChecks(Renderer& renderer,const std::filesystem::path& output) {
+ const auto folder=output/("action-settings-"+std::to_string(GetTickCount64()));
+ std::filesystem::create_directories(folder);
+ const auto file=folder/"patrol.save",settings=folder/"patrol.save.hotbars";
+ const auto write=[](const auto& path,const std::string& text){std::ofstream stream(path,std::ios::binary);stream<<text;stream.close();Check(bool(stream),"Settings fixture write");};
+ const auto read=[](const auto& path){std::ifstream stream(path,std::ios::binary);return std::string(std::istreambuf_iterator<char>(stream),{});};
+ rpg::Simulation hero;const auto original=hero.Save();write(file,original);
+ ui::Interface bindings;bindings.SetActionBarPercent(80);bindings.MoveHotbar(0,19,hero.Class());write(settings,bindings.SaveHotbars());
+ const auto enter=[&](Game& game,Input& input,Input::Frame& frame) {
+   game.Initialize();game.ChooseCharacter(file);frame.focused=true;frame.width=1920;frame.height=1080;
+   input.Update(frame);game.Update(.01,input,0);
+   frame.down[VK_RETURN]=true;input.Update(frame);game.Update(.01,input,0);
+   frame.down[VK_RETURN]=false;input.Update(frame);game.Update(.01,input,0);
+   input.Update(frame);game.Update(.01,input,0);Check(!game.ChoosingCharacter(),"Settings fixture did not enter the saved hero");
+   game.OpenPanel(ui::Panel::Menu);
+ };
+ const auto render=[&](Game& game){renderer.BeginFrame();game.Render(renderer);Check(renderer.EndFrame(false),"Settings menu render");};
+ const auto plus=[&](Game& game,Input& input,Input::Frame& frame) {
+   render(game);frame.client=frame.screen={1150,815}; // 767,543 on the 1280x720 canvas.
+   frame.down[VK_LBUTTON]=true;input.Update(frame);game.Update(.01,input,0);
+   frame.down[VK_LBUTTON]=false;input.Update(frame);game.Update(.01,input,0);
+ };
+ Game first;Input input;Input::Frame frame;enter(first,input,frame);plus(first,input,frame);
+ ui::Interface loaded;Check(loaded.LoadHotbars(read(settings)) && loaded.ActionBarPercent()==90 && loaded.HotbarSpell(19,hero.Class())==0,"Menu resize did not persist immediately with the existing bindings");
+ Game restarted;Input next;Input::Frame nextFrame;enter(restarted,next,nextFrame);plus(restarted,next,nextFrame);
+ Check(loaded.LoadHotbars(read(settings)) && loaded.ActionBarPercent()==100,"Restart did not restore action size");
+ loaded.SetActionBarPercent(120);const auto external=loaded.SaveHotbars();write(settings,external);
+ plus(first,input,frame);Check(read(settings)==external,"A stale settings writer replaced an external change");
+ Check(read(file)==original,"Changing HUD size wrote character progress");
+ renderer.BeginFrame();first.Render(renderer);
+ Check(renderer.Capture((output/"settings-conflict.png").wstring()) && renderer.EndFrame(false),"Settings conflict capture");
+ // Render the same world at the endpoints, including Russian settings and
+ // a tooltip over the enlarged modifier row. Only bounded PNGs are produced.
+ restarted.OpenPanel(ui::Panel::None);
+ for(int percent:{80,100,120}) {
+   ui::Interface hud;hud.SetActionBarPercent(percent);
+   renderer.BeginFrame();restarted.Render(renderer,false);hud.Render(renderer,restarted.State(),0,false);
+   Check(renderer.Capture((output/("action-size-"+std::to_string(percent)+".png")).wstring()) && renderer.EndFrame(false),"Action size world capture");
+   if(percent==120) {
+     const auto bars=ui::ActionHudLayout::At(1920,1080,percent).bars;
+     hud.Pointer(bars.X(377)*1.5f,bars.Y(622)*1.5f,1920,1080,false,false);
+     for(int n=1;n<=10;++n){renderer.BeginFrame();restarted.Render(renderer,false);hud.Render(renderer,restarted.State(),n*.05f,false);
+       if(n==10)Check(renderer.Capture((output/"action-tooltip-120.png").wstring()),"Enlarged tooltip capture");Check(renderer.EndFrame(false),"Tooltip frame");}
+   }
+ }
 }
 void CombatTextChecks() {
   rpg::CombatFeedback feedback{{1,2},rpg::FeedbackKind::Damage,72,.3f,9};
@@ -340,6 +402,7 @@ int main(int argc,char** argv) {
   // control captures from full encounters under the original per-run limit.
   if(mode!="--world") {
    DensityChecks(renderer);
+   ActionSettingsChecks(renderer,output);
    TargetReceiptChecks(renderer,output);
    AbilityFeedbackChecks(&renderer,output);
    WorldPickChecks(renderer);

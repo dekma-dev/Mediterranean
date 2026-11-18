@@ -1,5 +1,6 @@
 {
-  "HOTBARS 8\n": "Versioned hotbar file header",
+  "HOTBARS 9\n": "Versioned hotbar file header",
+  "-character-": "Generated character profile filename segment",
   "CHAINS": "Versioned save cooldown record",
   "CHAINS ": "Versioned save cooldown record",
   "Windowed startup did not preserve requested size/aspect or fit the desktop.": "Developer diagnostic/capture identifier; not a normal game UI message",

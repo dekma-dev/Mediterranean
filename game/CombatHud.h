@@ -19,6 +19,22 @@ struct HudTransform {
   float Y(float value) const {return y+value*scale;}
   template<class T> T Map(T rect) const {return {X(rect.x),Y(rect.y),rect.w*scale,rect.h*scale};}
 };
+// Action artwork is deliberately larger than the compact minimap/warning HUD.
+// Keep a single transform for drawing, picking, tooltips and carried spells.
+struct ActionHudLayout {
+  HudTransform bars,casts;
+  static ActionHudLayout At(float width,float height,int percent=100) {
+    const float canvas=std::min(width/1280.f,height/720.f);
+    const float desktop=std::isfinite(canvas) && canvas>0?std::min(1.f,2.f/canvas):1.f;
+    const float scale=desktop*std::clamp(percent,80,120)/100.f;
+    const HudTransform bars{scale,640*(1-scale),710*(1-scale)};
+    // Grow down from the cast stack into the dock, never into the unit frames.
+    // Bound the cast width separately to clear the target's windup meter;
+    // anchor its lower edge to the dock's actual top so the two cannot collide.
+    const float castScale=std::min(scale,.8f);
+    return {bars,{castScale,640*(1-castScale),bars.Y(592)-2*scale-590*castScale}};
+  }
+};
 struct HudAnchor { float x,y; };
 struct CombatHudLayout {
   HudAnchor player,target;

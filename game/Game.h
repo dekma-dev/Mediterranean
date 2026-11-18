@@ -62,6 +62,7 @@ private:
   std::filesystem::path saveFile_,rosterFile_;
   std::optional<std::string> savedSnapshot_,savedHotbars_;
   void LoadHotbarSettings();
+  bool SaveHotbarSettings();
   ui::CharacterSelection selection_;
   bool choosingCharacter_=false,inputBarrier_=false;
   rpg::Simulation simulation_;

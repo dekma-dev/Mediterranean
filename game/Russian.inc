@@ -1985,3 +1985,8 @@
 {"A mobile spark deals 85% basic damage and grants one Faith. Alternate with Radiance on the same target within five seconds to build a chain. This spark does not consume Benediction.", "Искра на ходу наносит 85% обычного урона и даёт одну Веру. Чередуйте с Сиянием по той же цели в течение пяти секунд, чтобы продолжить связку. Искра не расходует Благословение."},
 {"Level 3. A mobile litany deals 55% heavy damage, exposes for four seconds and grants one Faith and a 12-point ward. Adds a chain step after either basic spell on the same target.", "Уровень 3. Литания на ходу наносит 55% сильного урона, раскрывает цель на четыре секунды, даёт одну Веру и щит на 12. Продолжает связку после любого обычного заклинания по той же цели."},
 {"Level 4. A mobile verdict deals 115% heavy damage. A two-step chain adds 40% heavy damage; three steps add 60%. Consumes the chain on contact and restores eight health per step with an eight-point ward per step.", "Уровень 4. Приговор на ходу наносит 115% сильного урона. Связка из двух звеньев добавляет 40% сильного урона; из трёх — 60%. При попадании расходует связку, восстанавливает по восемь здоровья и даёт по восемь щита за звено."},
+{"Action bar size", "Размер панели умений"},
+{"1-0 / Ctrl+1-0  /  Drag to arrange", "1–0 / Ctrl+1–0  /  Перетащите для перестановки"},
+{"Could not save action-bar settings.", "Не удалось сохранить настройки панели умений."},
+{"Create spell volumes", "Создание объёмов заклинаний"},
+{"Create spell field constants", "Создание параметров полей заклинаний"},

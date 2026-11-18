@@ -280,6 +280,17 @@ int main() {
   Require(copied.LoadHotbars(bindings) && copied.SaveHotbars()==bindings,"Hotbar bindings round trip");
   Require(!copied.LoadHotbars(bindings+"junk") && copied.SaveHotbars()==bindings,"Malformed settings must preserve bindings");
   {
+    copied.SetActionBarPercent(120);const auto scaled=copied.SaveHotbars();ui::Interface reload;
+    Require(reload.LoadHotbars(scaled) && reload.ActionBarPercent()==120 && reload.SaveHotbars()==scaled,"Action size and class bindings must round trip together");
+    for(const auto invalid:{"79","121","nan"}) {
+      auto broken=scaled;broken.replace(broken.find("120"),3,invalid);
+      Require(!reload.LoadHotbars(broken) && reload.SaveHotbars()==scaled,"Invalid action size partially changed saved bindings");
+    }
+    auto legacy=scaled;legacy.replace(0,std::string("HOTBARS 9\n120\n").size(),"HOTBARS 8\n");
+    Require(reload.LoadHotbars(legacy) && reload.ActionBarPercent()==100 && reload.HotbarSpell(9,rpg::ClassId::Warrior)==0,"Existing bindings must migrate with readable default size");
+    Require(!reload.LoadHotbars(scaled.substr(0,scaled.size()/2)) && reload.ActionBarPercent()==100,"Truncated file changed action size");
+  }
+  {
     std::string legacy="HOTBARS 3\n";
     for(int id=0;id<int(rpg::ClassId::Count);++id) legacy+="0 1 2 3 4 5 6 -1 -1 -1\n";
     ui::Interface migrated;Require(migrated.LoadHotbars(legacy),"Version 3 hotbar rejected");
@@ -773,7 +784,7 @@ int main() {
     Require(closeBag.action==ui::Action::Close && closeBag.value==int(ui::Panel::Inventory),"Bag close must identify only the bag.");
     Require(click(1040,580).action==ui::Action::None && screen.PointerOverWindow(),"Blank bag surface must capture its pointer.");
     Require(click(680,380).action==ui::Action::None && !screen.PointerOverWindow(),"World gap must remain available for camera orbit.");
-    const auto actionTransform=ui::HudTransform::At(float(size.first),float(size.second),640,710);
+    const auto actionTransform=ui::ActionHudLayout::At(float(size.first),float(size.second),screen.ActionBarPercent()).bars;
     const auto barClick=[&](float x,float y){return click(actionTransform.X(x),actionTransform.Y(y));};
     Require(barClick(493,681).action==ui::Action::None,"Dash requires an available target with side windows open.");
     const auto beforeDash=simulation.Save();
@@ -855,6 +866,9 @@ int main() {
     }
     Require(click(735,512).action==ui::Action::Language && click(735,512).value==1,
       "English selector must remain clickable at every UI scale");
+    Require(click(727,543).action==ui::Action::ActionBarSize && click(727,543).value==-10 &&
+      click(767,543).action==ui::Action::ActionBarSize && click(767,543).value==10,"Action-bar sizing controls are not clickable");
+    Require(click(640,594).action==ui::Action::CharacterSelection && click(640,634).action==ui::Action::Quit,"Added setting obscured character selection or exit");
     localization::language=localization::Language::English;
     renderer.BeginFrame();screen.Render(renderer,simulation,0,false);
     Require(renderer.Capture(L"menu-english-"+std::to_wstring(size.first)+L".png") && renderer.EndFrame(false),"English menu capture");
@@ -1249,7 +1263,7 @@ int main() {
     ui::Interface hud; const ui::Layout layout(float(size.first),float(size.second));
     renderer.BeginFrame(); hud.Render(renderer,state,0,false); Require(renderer.EndFrame(false),"Combat HUD layout failed");
     const auto before=state.Save();
-    const auto bars=ui::HudTransform::At(float(size.first),float(size.second),640,710);
+    const auto bars=ui::ActionHudLayout::At(float(size.first),float(size.second)).bars;
     const auto event=hud.Pointer(layout.x+bars.X(466)*layout.scale,layout.y+bars.Y(681)*layout.scale,
       float(size.first),float(size.second),true,false);
     Require(event.action==ui::Action::None,"Cooling ability must remain disabled despite new progress indicators");

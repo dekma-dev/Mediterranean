@@ -24,14 +24,16 @@ std::vector<StatusEffect> TargetStatusEffects(const rpg::Enemy& enemy) {
   return result;
 }
 std::string Interface::SaveHotbars() const {
-  std::ostringstream out;out<<"HOTBARS 8\n";
+  std::ostringstream out;out<<"HOTBARS 9\n"<<actionBarPercent_<<'\n';
   for(const auto& bar:hotbars_) {for(int spell:bar) out<<spell<<' ';out<<'\n';}
   return out.str();
 }
 bool Interface::LoadHotbars(const std::string& data) {
   if(data.size()>4096) return false;
   std::istringstream in(data);std::string tag;int version=0;
-  if(!(in>>tag>>version) || tag!="HOTBARS" || (version<1 || version>8)) return false;
+  if(!(in>>tag>>version) || tag!="HOTBARS" || (version<1 || version>9)) return false;
+  int percent=100;
+  if(version>=9 && (!(in>>percent) || percent<80 || percent>120)) return false;
   auto candidate=hotbars_;
   for(auto& bar:candidate) {
     // Old layouts retain every existing binding; new modifier slots start empty.
@@ -40,7 +42,7 @@ bool Interface::LoadHotbars(const std::string& data) {
       if(!(in>>bar[slot]) || bar[slot] < -1 || bar[slot]>(version==1?4:version==2?5:version==3?6:version<6?7:version==6?9:version==7?11:14)) return false;
   }
   in>>std::ws;if(!in.eof()) return false;
-  hotbars_=candidate;CancelDrag();InvalidateHitRegions();return true;
+  hotbars_=candidate;actionBarPercent_=percent;CancelDrag();InvalidateHitRegions();return true;
 }
 void Interface::Show(Panel next) {
   CancelBuildConfirmation();
