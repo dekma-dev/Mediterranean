@@ -6,6 +6,7 @@
 #include "SceneBytecode.generated.h"
 #include "engine/Shadow.h"
 #include "engine/InstanceTransform.h"
+#include "engine/SurfaceStorage.h"
 #include <cmath>
 #include <d3d11sdklayers.h>
 #include <cstring>
@@ -71,6 +72,9 @@ bool Renderer::Initialize(HWND window, int width, int height,const visual::BodyG
   swapChain_.Reset(); device_.Reset(); context_.Reset(); hr=create(0);
  }
  if (!Check(hr,L"Create DirectX 11 device")) return false;
+ // Windows 8+ event completion is optional on older DXGI implementations.
+ // A missing event path retains normal driver scheduling, not a busy loop.
+ gpuQueue_.Initialize(device_.Get());
  ComPtr<IDXGIFactory> factory;
  if (SUCCEEDED(swapChain_->GetParent(IID_PPV_ARGS(factory.GetAddressOf()))))
   factory->MakeWindowAssociation(window,DXGI_MWA_NO_ALT_ENTER);
@@ -146,9 +150,20 @@ bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
  catch(const std::exception& exception) {
   const std::string message=exception.what();error_=L"Blender collection: "+std::wstring(message.begin(),message.end());return false;
  }
- for (unsigned i=0;i<meshCount;++i) {
-  auto mesh=i>=authored::firstMesh?(*authoredMeshes)[i-authored::firstMesh].geometry:
-    previewBody && visual::IsBodyMesh(static_cast<visual::Mesh>(i))?previewBody->mesh:visual::BuildMesh(static_cast<visual::Mesh>(i));
+ // Put skinned meshes first. Their global vertex indices now share a compact
+ // weight prefix; static terrain/scenery never fetches this input stream.
+ // This preserves draw indexing without a zero-filled weight for every rock,
+ // leaf and terrain vertex, or additional vertex-buffer binds per draw.
+ for(unsigned group=0;group<2;++group) for (unsigned i=0;i<meshCount;++i) {
+  const auto kind=static_cast<visual::Mesh>(i);
+  const bool skinned=visual::IsBodyMesh(kind)||visual::IsGarmentMesh(kind)||visual::IsHandMesh(kind)||authored::Animated(i);
+  if(skinned!=(group==0))continue;
+  visual::Geometry generated;
+  const visual::Geometry* source=nullptr;
+  if(i>=authored::firstMesh)source=&(*authoredMeshes)[i-authored::firstMesh].geometry;
+  else if(previewBody&&visual::IsBodyMesh(kind))source=&previewBody->mesh;
+  else {generated=visual::BuildMesh(kind);source=&generated;}
+  const auto& mesh=*source;
   auto& range=meshes_[i]; range.start=static_cast<UINT>(indices.size()); range.count=static_cast<UINT>(mesh.indices.size());
   for (auto index : mesh.indices) indices.push_back(index+static_cast<UINT>(vertices.size()));
   for (const auto& v : mesh.vertices) range.radius=std::max(range.radius,std::sqrt(v.position.x*v.position.x+v.position.y*v.position.y+v.position.z*v.position.z));
@@ -167,7 +182,7 @@ bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
     influences.insert(influences.end(),weights.begin(),weights.end());
   } else if(authored::Animated(i)) {
     for(const auto& vertex:mesh.vertices) influences.push_back(authored::Influence(authored::Asset((i-authored::firstMesh)/authored::lodCount),vertex.position));
-  } else influences.resize(vertices.size());
+  }
  }
  // A LOD swap must retain a conservative bound for every reduction level.
  for(unsigned a=0;a<authored::assetCount;++a) {
@@ -248,8 +263,9 @@ bool Renderer::CreateSurfaceMaterials() {
  struct Apartment {bool owned;~Apartment(){if(owned)CoUninitialize();}} scope{SUCCEEDED(apartment)};
  ComPtr<IWICImagingFactory> factory;
  if(!Check(CoCreateInstance(CLSID_WICImagingFactory,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(factory.GetAddressOf())),L"Create surface decoder"))return false;
- constexpr UINT size=2048,layers=6;
- for(unsigned map=0;map<2;++map) {
+ for(unsigned group=0;group<2;++group)for(unsigned map=0;map<2;++map) {
+  const UINT size=visual::SurfaceSize(group),layers=visual::SurfaceLayers(group);
+  const unsigned viewIndex=group*2+map;
   D3D11_TEXTURE2D_DESC desc{};desc.Width=desc.Height=size;desc.ArraySize=layers;
   desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;desc.SampleDesc.Count=1;
   desc.BindFlags=D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_RENDER_TARGET;desc.MiscFlags=D3D11_RESOURCE_MISC_GENERATE_MIPS;
@@ -258,7 +274,7 @@ bool Renderer::CreateSurfaceMaterials() {
   texture->GetDesc(&desc);
   for(unsigned layer=0;layer<layers;++layer) {
    const auto module=GetModuleHandleW(nullptr);
-   const auto resource=FindResourceW(module,MAKEINTRESOURCEW(320+layer*2+map),RT_RCDATA);
+   const auto resource=FindResourceW(module,MAKEINTRESOURCEW(320+visual::SurfaceSource(group,layer)*2+map),RT_RCDATA);
    const auto loaded=resource?LoadResource(module,resource):nullptr;
    auto* bytes=loaded?static_cast<BYTE*>(LockResource(loaded)):nullptr;
    if(!bytes){error_=L"Embedded surface material missing; rebuild the complete executable.";return false;}
@@ -271,25 +287,15 @@ bool Renderer::CreateSurfaceMaterials() {
       !Check(decoder->GetFrame(0,frame.GetAddressOf()),L"Read surface frame"))return false;
    UINT width=0,height=0;
    if(!Check(frame->GetSize(&width,&height),L"Read surface dimensions"))return false;
-   const UINT sourceSize=(layer==3||layer==5)?1024:2048;
-   if(width!=sourceSize||height!=sourceSize){error_=L"Surface dimensions do not match the material manifest.";return false;}
-   // The retained roof/coat fields are 1K. Expand only those layers for the
-   // uniform DX11 array; imported photographic materials retain native 2K.
-   ComPtr<IWICBitmapScaler> scaler;
-   IWICBitmapSource* source=frame.Get();
-   if(sourceSize!=size) {
-    if(!Check(factory->CreateBitmapScaler(scaler.GetAddressOf()),L"Create surface scaler") ||
-       !Check(scaler->Initialize(frame.Get(),size,size,WICBitmapInterpolationModeLinear),L"Scale retained surface field"))return false;
-    source=scaler.Get();
-   }
+   if(width!=size||height!=size){error_=L"Surface dimensions do not match the material manifest.";return false;}
    if(!Check(factory->CreateFormatConverter(converter.GetAddressOf()),L"Create surface converter") ||
-      !Check(converter->Initialize(source,GUID_WICPixelFormat32bppRGBA,WICBitmapDitherTypeNone,nullptr,0,WICBitmapPaletteTypeCustom),L"Convert surface map"))return false;
+      !Check(converter->Initialize(frame.Get(),GUID_WICPixelFormat32bppRGBA,WICBitmapDitherTypeNone,nullptr,0,WICBitmapPaletteTypeCustom),L"Convert surface map"))return false;
    std::vector<BYTE> pixels(std::size_t(size)*size*4);
    if(!Check(converter->CopyPixels(nullptr,size*4,UINT(pixels.size()),pixels.data()),L"Read surface pixels"))return false;
    context_->UpdateSubresource(texture.Get(),D3D11CalcSubresource(0,layer,desc.MipLevels),nullptr,pixels.data(),size*4,0);
   }
-  if(!Check(device_->CreateShaderResourceView(texture.Get(),nullptr,surfaceViews_[map].ReleaseAndGetAddressOf()),L"Create detailed surface view"))return false;
-  context_->GenerateMips(surfaceViews_[map].Get());
+  if(!Check(device_->CreateShaderResourceView(texture.Get(),nullptr,surfaceViews_[viewIndex].ReleaseAndGetAddressOf()),L"Create detailed surface view"))return false;
+  context_->GenerateMips(surfaceViews_[viewIndex].Get());
   for(UINT dimension=size;dimension;dimension/=2)materialBytes_+=std::size_t(dimension)*dimension*4*layers;
  }
  return true;
@@ -348,6 +354,7 @@ bool Renderer::CreateMaterials() {
 void Renderer::BeginFrame() {
  combatLights_.Reset();
  drawCalls_=0; frameFailed_=false; portrait_=false; skyPending_=true;
+ if(!Check(gpuQueue_.Begin(),L"Wait for queued GPU frame")){frameFailed_=true;return;}
  cloudLightUpdates_=0;
  context_->OMSetBlendState(nullptr,nullptr,0xffffffff);
  triangles_=0;
@@ -780,7 +787,8 @@ bool Renderer::FlushWorld() {
  }
  if(bodyCount_) {
   // Structured storage keeps 32 actors with 32 joints beyond the 64 KiB cbuffer limit.
-  context_->UpdateSubresource(skinConstants_.Get(),0,nullptr,bodyPalettes_.data(),0,0);
+  const D3D11_BOX used{0,0,0,UINT(bodyCount_*sizeof(visual::BodyPalette)),1,1};
+  context_->UpdateSubresource(skinConstants_.Get(),0,&used,bodyPalettes_.data(),0,0);
  }
  context_->VSSetShaderResources(9,1,skinPaletteView_.GetAddressOf());
  context_->PSSetShaderResources(9,1,skinPaletteView_.GetAddressOf());
@@ -826,6 +834,8 @@ bool Renderer::FlushWorld() {
    context_->PSSetShaderResources(4,1,terrainView_.GetAddressOf());
    ID3D11ShaderResourceView* surfaces[]={surfaceViews_[0].Get(),surfaceViews_[1].Get()};
    context_->PSSetShaderResources(10,2,surfaces);
+   ID3D11ShaderResourceView* smallSurfaces[]={surfaceViews_[2].Get(),surfaceViews_[3].Get()};
+   context_->PSSetShaderResources(19,2,smallSurfaces);
    context_->PSSetSamplers(2,1,fontSampler_.GetAddressOf());
   }
   unsigned skinActive=0;
@@ -1164,6 +1174,7 @@ bool Renderer::EndFrame(bool vsync) {
  lastBodyLodCounts_=bodyLodCounts_;
  lastAttachmentLodCounts_=attachmentLodCounts_;
  gpuTimer_.End(context_.Get());
+ if(!Check(gpuQueue_.End(),L"Signal queued GPU frame"))return false;
  return Check(swapChain_->Present(vsync?1:0,0),L"Present frame");
 }
 

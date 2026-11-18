@@ -1,5 +1,7 @@
 # Performance baseline and clock audit
 
+Current optimization evidence (2026-11-18): see [render memory and CPU scheduling review](performance-review-2026-11-18.md). Current suite reports distinguish summed process CPU from elapsed frame/phase time, report GPU event waits, and sample working/private memory per scene. Ambient noncombat effects no longer invalidate the workload. The historical measurements below predate the expanded world and must not be used as its current performance baseline.
+
 Checkpoint: 2026-10-23. This completes the reporting portion of roadmap R1, not the entire visual/performance acceptance milestone.
 
 ## Run

@@ -1,3 +1,10 @@
+## Render memory and CPU scheduling (2026-11-18)
+
+- Launch the freshly rebuilt Release `RPGNative.exe`, verify its path in Task Manager, and compare the same Full HD village route, camera distance and settings. Observe CPU, working set and private allocation separately. Debug or an uncapped hidden workload is not the same performance condition as live VSync play.
+- Fight with ordinary audio active, open C/I/N/M, inspect the character portrait, then return to character selection and enter the world repeatedly. Warm caches may grow initially; memory should stabilize rather than increase every cycle. Inspect roof/fur detail, actors, hands, garments, shadows and portrait ownership for corruption.
+- Orbit with LMB/RMB, resize/window/fullscreen with F11, Alt+Tab, minimize and restore, then exit with work still queued. No frozen frame, stale portrait, device error or busy background CPU loop should appear. Verify cursor release and existing focus suspension still work.
+- Run `--benchmark-suite-1080p` as documented in `docs/performance-review-2026-11-18.md`. Check nonzero queue event waits on supported DXGI, actual process CPU separately from frame wall time, unchanged workload activity and all four captures. Do not add waiting duration to CPU work or add GPU allocation counts to process memory.
+
 ## Environmental combat audio (2026-11-18)
 
 - Use the four current classes in open terrain, beside village stone walls and in the northern court. Listen for a short architectural return rather than the same dry sound everywhere. Compare the two `environment-combat-*.wav` files from AudioTests: open 0–12 s, courtyard 12–24 s, obstructed courtyard 24–36 s; Warrior/Mage/Scout/Priest every three seconds.

@@ -362,6 +362,11 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
   const auto original=game_->State().Save();
   const char* names[]={"Stationary spawn HUD","Village walking and orbit","Repeated combat and orbit","Merchant, character and bag"};
   LARGE_INTEGER frequency{},start{},updated{},rendered{},finish{}; QueryPerformanceFrequency(&frequency);
+  const auto processCpu=[](){FILETIME created{},exited{},kernel{},user{};
+    if(!GetProcessTimes(GetCurrentProcess(),&created,&exited,&kernel,&user))return 0.0;
+    const auto ticks=[](FILETIME t){return double((std::uint64_t(t.dwHighDateTime)<<32)|t.dwLowDateTime);};
+    return (ticks(kernel)+ticks(user))*1e-7;
+  };
   std::ofstream report{std::filesystem::path(reportPath)};
   report<<std::fixed<<std::setprecision(3)
     <<"Workload report version: 3\nBuild stamp: "<<__DATE__<<' '<<__TIME__
@@ -379,6 +384,9 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
     <<"Combat replays a 3-second window; GPU observations retain every ready sample from measured frames.\n"
     <<"GPU warmup samples excluded by origin frame; outstanding queries at workload end are not waited on.\n"
     <<"CPU phases: simulation/camera; scene/HUD preparation (may flush portraits); final submission/present.\n"
+    <<"CPU phase distributions are wall time, including waits; process CPU is summed user/kernel time across threads.\n"
+    <<"GPU completion queue: "<<(renderer_->GpuQueueAvailable()?"two event-backed in-flight frames":"driver fallback")<<'\n'
+    <<"Queue waits are included in frame/prepare wall time, not additive CPU work or presentation latency.\n"
     <<"Not interactive FPS, a long-session test or a GPU trace. No player saves written.\n";
   for (int scene=0;scene<4;++scene) {
     game_->Initialize(); game_->OpenPanel(ui::Panel::None); game_->SetCameraOrbit(0,.45f,10);
@@ -400,6 +408,7 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
     std::array<unsigned,2> attachmentPeak{};
     const rpg::Vec2 route[]={{3,-10},{3,-6},{0,-6},{0,-10}}; unsigned waypoint=0;
     std::uint64_t firstMeasuredGpuFrame=0;
+    double firstProcessCpu=0,firstQueueWait=0;
     for (int frame=0;frame<690;++frame) {
       if (scene==2 && frame%180==0 && !game_->RestoreSnapshot(combat)) return false;
       rpg::Command command;
@@ -410,7 +419,7 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
       }
       if (scene==2) { command.nextTarget=frame%180==0; if (frame%180==80) command.ability=0; }
       QueryPerformanceCounter(&start);
-      if(frame==90) firstMeasuredGpuFrame=renderer_->GpuFrame()+1;
+      if(frame==90) {firstMeasuredGpuFrame=renderer_->GpuFrame()+1;firstProcessCpu=processCpu();firstQueueWait=renderer_->GpuQueueWaitMilliseconds();}
       game_->ExecuteCommand(command,1.f/60);
       if (scene==1 || scene==2) game_->SetCameraOrbit(frame*.012f,.4f+.18f*std::sin(frame*.021f),7.5f+1.5f*std::sin(frame*.017f));
       QueryPerformanceCounter(&updated);
@@ -433,10 +442,14 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
       if (game_->State().Health()<health) ++hits;
       for (const auto& enemy : game_->State().Enemies()) if (enemy.windup>0) { ++windups; break; }
     }
-    if ((scene==1 && distance<10) || (scene==2 && (windups==0 || hits==0 || effectFrames==0)) || (scene!=2 && effectFrames>0)) {
+    // Roaming creature footsteps and ambient presentation now use the same
+    // bounded effect stream outside combat. They are legitimate work here.
+    if ((scene==1 && distance<10) || (scene==2 && (windups==0 || hits==0 || effectFrames==0))) {
       error_=L"Benchmark workload did not exercise movement or combat."; return false;
     }
     report<<"\n"<<names[scene];
+    report<<"\nProcess CPU time per measured frame ms: "<<(processCpu()-firstProcessCpu)*1000/600;
+    report<<"\nGPU queue event wait per measured frame ms: "<<(renderer_->GpuQueueWaitMilliseconds()-firstQueueWait)/600;
     diagnostics::WriteDistribution(report,"CPU frame",cpu);
     diagnostics::WriteDistribution(report,"CPU update",updateCpu);
     diagnostics::WriteDistribution(report,"CPU prepare",renderCpu);
@@ -447,6 +460,9 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
       <<"\nPeak simplified / omitted attachments: "<<attachmentPeak[0]<<" / "<<attachmentPeak[1]
       <<"\nCombat effect frames / peak vertices: "<<effectFrames<<" / "<<effectPeak
       <<"\nWalked distance / windup frames / received hits: "<<distance<<" / "<<windups<<" / "<<hits<<'\n';
+    PROCESS_MEMORY_COUNTERS_EX sceneMemory{};sceneMemory.cb=sizeof(sceneMemory);
+    if(GetProcessMemoryInfo(GetCurrentProcess(),reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&sceneMemory),sizeof(sceneMemory)))
+      report<<"Working set / private MiB: "<<sceneMemory.WorkingSetSize/1048576.0<<" / "<<sceneMemory.PrivateUsage/1048576.0<<'\n';
     if(fullHd) {
       const auto capture=reportPath+L".scene-"+std::to_wstring(scene)+L".png";
       if(!renderer_->Capture(capture)) { error_=renderer_->Error(); return false; }

@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include "engine/GpuTimer.h"
+#include "engine/GpuFrameQueue.h"
 #include "engine/Geometry.h"
 #include "engine/Skinning.h"
 #include "engine/HandSkinning.h"
@@ -16,6 +17,9 @@
 #include <functional>
 class Renderer {
 public:
+  ~Renderer(){gpuQueue_.Reset();}
+  bool GpuQueueAvailable() const {return gpuQueue_.Available();}
+  double GpuQueueWaitMilliseconds() const {return gpuQueue_.WaitMilliseconds();}
   // Expanded highlands share one bounded upload across color and shadow passes.
   static constexpr unsigned maxWorldInstances=8192;
   // Optional immutable preview mesh replaces all three body LODs for this
@@ -301,6 +305,7 @@ private:
   Microsoft::WRL::ComPtr<ID3D11Device> device_;
   Microsoft::WRL::ComPtr<ID3D11DeviceContext> context_;
   Microsoft::WRL::ComPtr<IDXGISwapChain> swapChain_;
+  GpuFrameQueue gpuQueue_;
   Microsoft::WRL::ComPtr<ID3D11RenderTargetView> target_;
   Microsoft::WRL::ComPtr<ID3D11DepthStencilView> depth_;
   Microsoft::WRL::ComPtr<ID3D11DepthStencilView> effectDepthView_;
@@ -322,7 +327,7 @@ private:
   unsigned cloudLightUpdates_=0;
   Microsoft::WRL::ComPtr<ID3D11InputLayout> worldLayout_;
   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> materialView_,shadowView_;
-  std::array<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>,2> surfaceViews_;
+  std::array<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>,4> surfaceViews_;
   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> terrainView_;
   std::array<Microsoft::WRL::ComPtr<ID3D11DepthStencilView>,visual::shadowLayers> shadowDepth_;
   Microsoft::WRL::ComPtr<ID3D11SamplerState> surfaceSampler_,shadowSampler_;

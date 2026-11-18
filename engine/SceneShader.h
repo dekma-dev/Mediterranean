@@ -24,6 +24,8 @@ Texture2D<float4> effectArtwork : register(t14);
 Texture2D<float> effectSceneDepth : register(t15);
 Texture2DArray surfaceColor : register(t10);
 Texture2DArray surfaceNormal : register(t11);
+Texture2DArray surfaceColorSmall : register(t19);
+Texture2DArray surfaceNormalSmall : register(t20);
 // x = world half extent, y = last texel-center world coordinate. A zero
 // extent selects the analytic reference path for regression diagnostics.
 cbuffer CloudField : register(b3) { float4 cloudField; };
@@ -551,13 +553,25 @@ float4 PSMain(VOut i) : SV_TARGET {
   // Poly Haven measured coverage: bark 1 m, wood/plaster 2 m, stone 1.8 m.
   float repeat=i.material==16?1:i.material==17?5:i.material==3||i.material==4?.5:i.material==2?1/1.8:1.2;
   float3 q=i.tp*repeat;
-  float4 cx=surfaceColor.Sample(surfaceSampler,float3(q.zy,surfaceLayer));
-  float4 cy=surfaceColor.Sample(surfaceSampler,float3(q.xz,surfaceLayer));
-  float4 cz=surfaceColor.Sample(surfaceSampler,float3(q.xy,surfaceLayer));
+  float4 cx,cy,cz;float3 nx,ny,nz;
+  [branch] if(surfaceLayer==3 || surfaceLayer==5) {
+   int layer=surfaceLayer==3?0:1;
+   cx=surfaceColorSmall.Sample(surfaceSampler,float3(q.zy,layer));
+   cy=surfaceColorSmall.Sample(surfaceSampler,float3(q.xz,layer));
+   cz=surfaceColorSmall.Sample(surfaceSampler,float3(q.xy,layer));
+   nx=surfaceNormalSmall.Sample(surfaceSampler,float3(q.zy,layer)).xyz*2-1;
+   ny=surfaceNormalSmall.Sample(surfaceSampler,float3(q.xz,layer)).xyz*2-1;
+   nz=surfaceNormalSmall.Sample(surfaceSampler,float3(q.xy,layer)).xyz*2-1;
+  } else {
+   int layer=surfaceLayer==4?3:surfaceLayer;
+   cx=surfaceColor.Sample(surfaceSampler,float3(q.zy,layer));
+   cy=surfaceColor.Sample(surfaceSampler,float3(q.xz,layer));
+   cz=surfaceColor.Sample(surfaceSampler,float3(q.xy,layer));
+   nx=surfaceNormal.Sample(surfaceSampler,float3(q.zy,layer)).xyz*2-1;
+   ny=surfaceNormal.Sample(surfaceSampler,float3(q.xz,layer)).xyz*2-1;
+   nz=surfaceNormal.Sample(surfaceSampler,float3(q.xy,layer)).xyz*2-1;
+  }
   float4 tex=cx*weights.x+cy*weights.y+cz*weights.z;
-  float3 nx=surfaceNormal.Sample(surfaceSampler,float3(q.zy,surfaceLayer)).xyz*2-1;
-  float3 ny=surfaceNormal.Sample(surfaceSampler,float3(q.xz,surfaceLayer)).xyz*2-1;
-  float3 nz=surfaceNormal.Sample(surfaceSampler,float3(q.xy,surfaceLayer)).xyz*2-1;
   float3 gradient=weights.x*float3(0,-nx.y,-nx.x)/max(nx.z,.25)+weights.y*float3(-ny.x,0,-ny.y)/max(ny.z,.25)+weights.z*float3(-nz.x,-nz.y,0)/max(nz.z,.25);
   // Imported normals already encode metric surface slopes. Only the locally
   // generated roof/fur fields store height slopes per texture repeat.
