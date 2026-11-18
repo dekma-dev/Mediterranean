@@ -1,3 +1,15 @@
+## Southern caravan patrols (2026-11-18)
+
+- Accept Wheels in the mud and observe all three caches from outside detection range. Each pair must leave, pause at distant posts and return. Wait for a clear approach and collect each cache with E without killing or disabling the guards; compare this with fighting or using control.
+- Follow a patrol beside buildings. Root/stun it, slow it, provoke it and retreat beyond its home leash. Check physical clearance, no sliding during control, ordinary pursuit/warnings and resumed walking after returning home.
+- Save/load during a patrol: actual positions must remain, with no teleport or duplicated loot. Patrol timing may restart. Complete and turn in all three caches; verify the original reward only once. Inspect Tessa's explanation in Russian and English.
+
+## Melee formation recovery (2026-11-18)
+
+- Pull two or three ordinary humanoid melee enemies together. Between swings, crowded enemies should take different nearby angles while facing the player. A lone enemy should not circle for decoration. The next windup must begin normally; its direction and origin must then stay fixed.
+- Repeat by a doorway, tree and sloped path, and while kiting. Enemies must neither cross walls/player/allies nor endlessly choose an obstructed flank. Root/stun one actor and verify neighbours never push it; slowing an actor must also slow its side steps.
+- Kill a neighbour, save/load and retreat beyond the home leash. No vacant formation slot or tactical state should remain. Confirm that bosses, wolves, boars, ranged casters and training targets retain their previous behavior.
+
 ## Southern caravan supply recovery (2026-11-18)
 
 - In Wheels in the mud, press E beside a missing cache. The tracker expands to show a labelled three-second progress meter. No objective credit should arrive on the input frame. Collect all three and return to Tessa for the existing single reward.

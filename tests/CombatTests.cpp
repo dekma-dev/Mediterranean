@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <sstream>
 
 namespace {
 void Require(bool value,const char* message) {
@@ -22,9 +23,55 @@ bool HasFeedback(const rpg::Simulation& game,rpg::FeedbackKind kind) {
   for (const auto& event : game.Feedback()) if (event.kind==kind) return true;
   return false;
 }
+void RelocateObserver(rpg::Simulation& sim,rpg::Vec2 p) {
+  const auto actors=sim.Enemies();auto save=sim.Save();
+  const auto begin=save.find('\n',save.find("PROFILE "))+1,end=save.find('\n',begin);
+  std::istringstream in(save.substr(begin,end-begin));float x,z,h,f;int q,g;in>>x>>z>>h>>f>>q>>g;
+  std::ostringstream out;out<<p.x<<' '<<p.z<<' '<<h<<' '<<f<<' '<<q<<' '<<g;
+  save.replace(begin,end-begin,out.str());Require(sim.Load(save),"Perception observer relocation must load");
+  const_cast<std::vector<rpg::Enemy>&>(sim.Enemies())=actors;
+}
+void Perception() {
+  rpg::Simulation fixture;Require(fixture.Load(duel),"Perception fixture");
+  rpg::Vec2 guard{},seen{},hiddenA{},hiddenB{};bool found=false;
+  for(const auto& wall:fixture.Map().Obstacles()) {
+    if(wall.kind!=rpg::PropKind::Building || wall.halfX>4 || wall.halfZ<1.3f)continue;
+    guard={wall.center.x-wall.halfX-1,wall.center.z};seen={guard.x,guard.z+1};
+    hiddenA={wall.center.x+wall.halfX+1,wall.center.z-.5f};hiddenB={hiddenA.x,wall.center.z+.5f};
+    if(fixture.CanStand(guard,.45f)&&fixture.CanStand(seen)&&fixture.CanStand(hiddenA)&&fixture.CanStand(hiddenB)&&
+       fixture.Map().CanTravel(guard,seen,.05f)&&!fixture.Map().CanTravel(guard,hiddenA,.05f)&&!fixture.Map().CanTravel(guard,hiddenB,.05f)){found=true;break;}
+  }
+  Require(found,"Need real two-sided building occlusion fixture");
+  for(int hz:{30,60,144}) {
+    auto sim=fixture;RelocateObserver(sim,seen);
+    auto& actors=const_cast<std::vector<rpg::Enemy>&>(sim.Enemies());
+    for(auto& e:actors){e.health=0;e.state=rpg::EnemyState::Dead;}
+    auto& e=actors[0];e.position=e.home=guard;e.health=80;e.attackCooldown=10;e.state=rpg::EnemyState::Idle;
+    // The saved format correctly bounds cooldown; the fixture only needs a
+    // short non-attacking observation before the target moves behind cover.
+    e.attackCooldown=1;sim.Update(1.f/hz,{});
+    Require(e.hasSeenPlayer && e.state==rpg::EnemyState::Pursuing,"Visible target must create an observation");
+    auto a=sim,b=sim;RelocateObserver(a,hiddenA);RelocateObserver(b,hiddenB);
+    for(int frame=0;frame<hz*3;++frame){a.Update(1.f/hz,{});b.Update(1.f/hz,{});
+      const auto& first=a.Enemies()[0];const auto& second=b.Enemies()[0];
+      Require(std::hypot(first.lastSeenPlayer.x-seen.x,first.lastSeenPlayer.z-seen.z)<.001f,"Hidden movement must not update last seen position");
+      Require(std::hypot(first.position.x-second.position.x,first.position.z-second.position.z)<.001f,"Different hidden targets must produce identical searches");
+      Require(std::abs(motion::AngleDelta(first.facing,second.facing))<.001f,"Search facing must not track a hidden target");
+      Require(a.Health()==100 && b.Health()==100,"Search must not hit through a wall");
+    }
+    auto reacquire=a;RelocateObserver(reacquire,seen);reacquire.Update(1.f/hz,{});
+    Require(reacquire.Enemies()[0].lostSightTime==0 && reacquire.Enemies()[0].state==rpg::EnemyState::Pursuing,"Sight reacquisition must immediately resume combat");
+    for(int frame=0;frame<hz*3;++frame)a.Update(1.f/hz,{});
+    Require(a.Enemies()[0].state!=rpg::EnemyState::Pursuing,"Lost target must release the pursuit after bounded search");
+    rpg::Simulation loaded;Require(loaded.Load(b.Save()),"Searching encounter save must load");
+    loaded.Update(.01f,{});
+    Require(std::hypot(loaded.Enemies()[0].lastSeenPlayer.x-hiddenB.x,loaded.Enemies()[0].lastSeenPlayer.z-hiddenB.z)>.5f,"Load must not invent knowledge of a hidden target");
+  }
+}
 }
 
 int main() {
+  Perception();
   {
     rpg::Enemy caller,receiver;caller.id=1;receiver.id=2;
     caller.state=rpg::EnemyState::Pursuing;caller.position={0,8};receiver.position=receiver.home={0,11};

@@ -1,6 +1,7 @@
 #include "game/Game.h"
 #include "game/BuildLayout.h"
 #include "game/ClassEffects.h"
+#include "game/SupplyPatrol.h"
 #include "engine/Renderer.h"
 #include "engine/BenchmarkStats.h"
 #include "platform/Win32Window.h"
@@ -73,6 +74,52 @@ void Regions() {
  for(int completed:{13,14,15}) {
   auto s=Veteran(ClassId::Warrior,completed);Talk(s,QuestAction::AcceptFrontier);
   for(const auto& e:s.Enemies()) {Check(map.CanStand(e.home,.45f),"Enemy camp inside prop");Check(!map.FindPath(QuestLocation(s.CurrentQuest()),e.home).empty(),"Enemy camp inaccessible");}
+ }
+}
+void Patrols() {
+ for(int hz:{30,144}) {
+  auto s=Veteran(ClassId::Warrior);Talk(s,QuestAction::AcceptFrontier);Warp(s,{0,-10});
+  const auto initial=s.Enemies();std::array<float,6> travel{},furthest{};
+  std::array<float,3> window{},longest{};
+  std::array<bool,3> recovered{};
+  for(int frame=0;frame<hz*45;++frame) {
+   const auto before=s.Enemies();s.Update(1.f/hz,{});
+   for(int i=0;i<6;++i){const auto& e=s.Enemies()[i];
+    Check(e.state==EnemyState::Idle,"Distant observer must not trigger patrol combat");
+    const float step=std::hypot(e.position.x-before[i].position.x,e.position.z-before[i].position.z);
+    Check(step<1.11f/hz,"Patrol teleported or exceeded walking speed");
+    Check(s.Map().CanTravel(before[i].position,e.position,.45f),"Patrol crossed scenery");
+    travel[i]+=step;furthest[i]=std::max(furthest[i],std::hypot(e.position.x-e.home.x,e.position.z-e.home.z));
+    Check(std::hypot(e.position.x-e.home.x,e.position.z-e.home.z)<=10.01f,"Patrol moved its home leash");
+   }
+   for(int site=0;site<3;++site){auto p=s.ExpeditionSite(site);p.z-=1.3f;bool safe=true;
+    for(const auto& e:s.Enemies())if(std::hypot(e.position.x-p.x,e.position.z-p.z)<9.3f)safe=false;
+    window[site]=safe?window[site]+1.f/hz:0;longest[site]=std::max(longest[site],window[site]);
+    if(!recovered[site] && window[site]>=.5f && window[site]<.5f+1.01f/hz) {
+      // Relocate only the test observer; retain the live guards' exact route
+      // phases so loading cannot manufacture an artificial collection window.
+      auto attempt=s;const auto live=s.Enemies();Warp(attempt,p);
+      const_cast<std::vector<Enemy>&>(attempt.Enemies())=live;
+      Command collect;collect.interact=true;attempt.Update(.001f,collect);Tick(attempt,3.1f,hz);
+      recovered[site]=(attempt.ExpeditionMask()&(1u<<site))!=0;
+      Check(attempt.DefeatedCount()==0,"Nonlethal patrol check must not remove guards");
+    }
+   }
+  }
+  for(int i=0;i<6;++i){std::cout<<"Patrol "<<i<<": travel "<<travel[i]<<", range "<<furthest[i]<<'\n';Check(travel[i]>15 && furthest[i]>5,"Guard must complete visible out-and-back patrols");}
+  for(int i=0;i<3;++i){std::cout<<"Cache "<<i<<": safe window "<<longest[i]<<'\n';Check(longest[i]>3.5f,"A supply cache must have an observable nonlethal recovery window");Check(recovered[i],"Actual live patrol must permit uninterrupted nonlethal collection");}
+  Roundtrip(s);
+  auto& actor=const_cast<Enemy&>(s.Enemies()[0]);const auto p=actor.position;actor.rooted=1;
+  Tick(s,.8f,hz);Check(std::hypot(actor.position.x-p.x,actor.position.z-p.z)<.00001f,"Root must stop patrol movement");
+  Simulation restored;Check(restored.Load(s.Save()),"Moving patrol save must load");
+  for(int i=0;i<6;++i)Check(std::hypot(restored.Enemies()[i].position.x-s.Enemies()[i].position.x,restored.Enemies()[i].position.z-s.Enemies()[i].position.z)<.0001f,"Load must not teleport patrols home");
+  const auto guard=restored.Enemies()[0].position;
+  Warp(restored,guard);restored.Update(.01f,{});
+  Check(restored.Enemies()[0].state==EnemyState::Pursuing,"A patrol must notice a nearby player before continuing its walk");
+  Warp(restored,{0,-10});restored.Update(.01f,{});
+  Check(restored.Enemies()[0].state==EnemyState::Returning,"A provoked patrol must retain its original home leash");
+  Tick(restored,20,hz);
+  Check(restored.Enemies()[0].state==EnemyState::Idle && restored.Enemies()[0].patrolReady,"A returned guard must resume its patrol");
  }
 }
 void Campaign() {
@@ -430,6 +477,20 @@ void Views() {
  Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),1280,720,L"Southern checks",false),"Hidden window");
  Renderer r;Check(r.Initialize(window.GetHandle(),1280,720),"Renderer");
  {
+  auto s=Veteran(ClassId::Warrior);Talk(s,QuestAction::AcceptFrontier);Warp(s,{0,-10});
+  Game patrol;patrol.Initialize();Check(patrol.RestoreSnapshot(s.Save()),"Patrol native fixture");patrol.OpenPanel(ui::Panel::None);
+  std::ofstream trace(root/"patrol.csv");trace<<"frame,id,x,z,state\n";
+  for(int frame=0;frame<=900;++frame) {
+   if(frame)patrol.ExecuteCommand({},1.f/60);
+   if(frame%60==0)for(const auto& e:patrol.State().Enemies())trace<<frame<<','<<e.id<<','<<e.position.x<<','<<e.position.z<<','<<int(e.state)<<'\n';
+   if(frame==0 || frame==900) {
+    r.BeginFrame();patrol.Render(r,false);const float y=WorldMap::Height({-53,-98});
+    r.SetCamera({-52,y+19,-79},{-53,y,-98});
+    Capture(r,root/(frame==0?"patrol-start.png":"patrol-away.png"));
+   }
+  }
+ }
+ {
   auto s=Veteran(ClassId::Warrior);Talk(s,QuestAction::AcceptFrontier);
   const auto p=s.ExpeditionSite(0);Warp(s,{p.x,p.z-1.3f});
   Game g;g.Initialize();Check(g.RestoreSnapshot(s.Save()),"Supply recovery view");g.OpenPanel(ui::Panel::None);
@@ -504,5 +565,5 @@ void Views() {
  Check(r.ValidateDebugMessages(),"Southern D3D validation");
 }
 }
-int main() try {Regions();Campaign();Spells();Siege();TacticalContacts();ReplayEncounters();TacticalAreas();Views();std::cout<<"PASS: southern routes, waves, court siege/migration, veteran replays, tactical areas and native scenes\n";}
+int main() try {Regions();Patrols();Campaign();Spells();Siege();TacticalContacts();ReplayEncounters();TacticalAreas();Views();std::cout<<"PASS: southern routes, patrols, waves, court siege/migration, veteran replays, tactical areas and native scenes\n";}
 catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 1;}

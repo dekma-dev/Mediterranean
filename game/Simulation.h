@@ -39,6 +39,12 @@ struct Enemy {
   float snared=0,rooted=0,stunned=0,exposed=0; // transient combat effects
   float respawn=0,roamTime=0;
   float assistance=0; // transient awareness; never persisted
+  Vec2 patrolEnd{};
+  float patrolWait=0;
+  bool patrolReady=false,patrolReturning=false; // transient route, home remains the leash anchor
+  Vec2 lastSeenPlayer{};
+  float lostSightTime=0,searchFacing=0;
+  bool hasSeenPlayer=false; // transient perception; never reconstruct a hidden player from a save
   bool elite=false;
   bool Beast() const {return kind==EnemyKind::Wolf || kind==EnemyKind::Boar;}
   float ContactHeight() const {return kind==EnemyKind::Wolf?.72f:kind==EnemyKind::Boar?.85f:1.25f;}
@@ -421,6 +427,7 @@ private:
   bool HasLineOfSight(Vec2 from, Vec2 to) const;
   void UpdateEnemy(Enemy& enemy, float dt,float frameTail);
   void AdvanceEnemy(Enemy& enemy,float dt,float frameTail);
+  void AdvanceSupplyPatrol(Enemy& enemy,float dt);
   void MoveEnemy(Enemy& enemy,Vec2 displacement,bool steer=true);
   void SeparateEnemies(float dt);
   void Emit(FeedbackKind kind,Vec2 position,int amount = 0);

@@ -1,5 +1,7 @@
 #include "game/Simulation.h"
 #include "game/EnemyAssistance.h"
+#include "game/EnemyTactics.h"
+#include "game/SupplyPatrol.h"
 #include "game/Motion.h"
 #include <algorithm>
 #include <cmath>
@@ -1297,13 +1299,48 @@ void Simulation::MoveEnemy(Enemy& enemy,Vec2 displacement,bool steer) {
   }
 }
 
+void Simulation::AdvanceSupplyPatrol(Enemy& enemy,float dt) {
+  const float previousSpeed=enemy.movementSpeed;
+  const bool wasWaiting=enemy.patrolWait>0;
+  enemy.movementSpeed=0;
+  if(!SuppliesActive() || ReplayActive() || enemy.id<100 || enemy.id>=106 ||
+     enemy.Beast() || enemy.Boss() || enemy.rooted>0 || enemy.stunned>0 || enemy.assistance>0) return;
+  if(!enemy.patrolReady) {
+    enemy.patrolEnd=SupplyPatrolEnd(map_,enemy.home,ExpeditionSite(int(enemy.id-100)/2));
+    enemy.patrolReady=true;enemy.patrolWait=1.f+float((enemy.id-100)/2);
+  }
+  if(Length(Difference(enemy.patrolEnd,enemy.home))<.1f)return;
+  if(enemy.patrolWait>0) {
+    const float wait=std::min(dt,enemy.patrolWait);enemy.patrolWait-=wait;dt-=wait;
+    if(dt<=0)return;
+  }
+  const Vec2 goal=enemy.patrolReturning?enemy.home:enemy.patrolEnd;
+  const auto delta=Difference(goal,enemy.position);const float distance=Length(delta);
+  if(distance<.03f) {
+    enemy.patrolReturning=!enemy.patrolReturning;
+    enemy.patrolWait=enemy.patrolReturning?6.f:2.f;return;
+  }
+  const float desired=std::atan2(delta.x,delta.z);
+  enemy.facing=motion::Turn(enemy.facing,desired,3.f,dt);
+  const float alignment=std::max(0.f,std::cos(motion::AngleDelta(enemy.facing,desired)));
+  enemy.movementSpeed=wasWaiting?0:previousSpeed;
+  const float step=std::min(distance,motion::Travel(enemy.movementSpeed,
+    std::min(1.1f,distance*4.f)*alignment*(enemy.snared>0?.45f:1.f),3.f,dt));
+  const auto before=enemy.position;
+  MoveEnemy(enemy,{delta.x/distance*step,delta.z/distance*step},false);
+  const float moved=Length(Difference(enemy.position,before));
+  enemy.movementDistance+=moved;if(moved<step*.5f)enemy.movementSpeed=0;
+}
+
 void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
   if (enemy.health<=0) { enemy.state=EnemyState::Dead; enemy.windup=enemy.movementSpeed=0; return; }
   if (health_<=0) return;
   enemy.attackCooldown=std::max(0.f,enemy.attackCooldown-dt);
   const float distance=Length(Difference(player_,enemy.position));
   const EnemyState previous=enemy.state;
-  if (enemy.state==EnemyState::Idle && distance<(enemy.Beast()?6.5f:9.f) && HasLineOfSight(enemy.position,player_))
+  const bool sight=HasLineOfSight(enemy.position,player_);
+  const bool perception=!enemy.Boss() && enemy.kind!=EnemyKind::Trainer && enemy.kind!=EnemyKind::Dummy;
+  if (enemy.state==EnemyState::Idle && distance<(enemy.Beast()?6.5f:9.f) && sight)
     enemy.state=EnemyState::Pursuing;
   if(enemy.state==EnemyState::Idle && !ReplayActive() && !CourtProtected(enemy)) {
     bool alerted=false;
@@ -1313,14 +1350,29 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
     if(alerted)enemy.facing=motion::FollowAngle(enemy.facing,std::atan2(player_.x-enemy.position.x,player_.z-enemy.position.z),5.f,dt);
     if(enemy.assistance>=.65f) {enemy.state=EnemyState::Pursuing;enemy.repathTimer=0;enemy.path.clear();enemy.waypoint=0;}
   } else enemy.assistance=0;
+  if(enemy.state==EnemyState::Pursuing && perception) {
+    if(sight) {
+      enemy.lastSeenPlayer=player_;enemy.hasSeenPlayer=true;enemy.lostSightTime=0;
+      enemy.searchFacing=std::atan2(player_.x-enemy.position.x,player_.z-enemy.position.z);
+    } else {
+      if(!enemy.hasSeenPlayer) {
+        enemy.lastSeenPlayer=enemy.position;enemy.searchFacing=enemy.facing;enemy.hasSeenPlayer=true;
+        enemy.path.clear();enemy.waypoint=0;enemy.repathTimer=0;
+      }
+      enemy.lostSightTime=std::min(5.f,enemy.lostSightTime+dt);
+      if(enemy.lostSightTime>=5.f && enemy.windup<=0 && enemy.rooted<=0 && enemy.stunned<=0)
+        enemy.state=EnemyState::Returning;
+    }
+  }
   if (enemy.state==EnemyState::Pursuing && (Length(Difference(player_,enemy.home))>(enemy.Beast()?20.f:13.f) || health_<=0))
     enemy.state=EnemyState::Returning;
-  if (enemy.state==EnemyState::Returning) enemy.windup=0;
+  if (enemy.state==EnemyState::Returning) {enemy.windup=0;enemy.hasSeenPlayer=false;enemy.lostSightTime=0;}
   if (enemy.state==EnemyState::Returning && Length(Difference(enemy.position,enemy.home))<.015f) {
     enemy.position=enemy.home; enemy.health=enemy.MaxHealth(); enemy.state=EnemyState::Idle; enemy.path.clear();
     enemy.bossAttack=enemy.nextBossAttack=0;
+    enemy.patrolReturning=false;enemy.patrolWait=2.f;
   }
-  if (enemy.state==EnemyState::Idle) { enemy.movementSpeed=0; return; }
+  if (enemy.state==EnemyState::Idle) { AdvanceSupplyPatrol(enemy,dt); return; }
   if(enemy.stunned>0 && (enemy.windup<=0 || enemy.Interruptible())) {enemy.windup=enemy.movementSpeed=0;return;}
   // Commit facing and position during a windup. Players can step outside its cone,
   // move away, or interrupt it with heavy strike before the impact is resolved.
@@ -1363,6 +1415,27 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
     }
     return;
   }
+  if(sight && !CourtProtected(enemy)) {
+    const auto goal=MeleeRecoveryGoal(enemy,player_,Combatants(),[&](Vec2 p) {
+      return map_.CanTravel(enemy.position,p,.45f) && HasLineOfSight(p,player_);
+    });
+    const auto delta=Difference(goal,enemy.position);
+    const float room=Length(delta);
+    if(room>.001f) {
+      // Keep the torso on the threat while the existing directional locomotion
+      // performs the side step. The last 250 ms of recovery settles for a cast.
+      enemy.facing=motion::Turn(enemy.facing,std::atan2(player_.x-enemy.position.x,player_.z-enemy.position.z),10.f,dt);
+      const float travel=std::min(room,motion::Travel(enemy.movementSpeed,
+        std::min(1.35f,room*6.f)*(enemy.snared>0?.45f:1.f),8.f,dt));
+      const auto before=enemy.position;
+      // Do not let general chase steering replace a chosen flank with an
+      // inward detour through the player when another actor blocks this arc.
+      MoveEnemy(enemy,{delta.x/room*travel,delta.z/room*travel},false);
+      enemy.movementDistance+=Length(Difference(enemy.position,before));
+      enemy.path.clear();enemy.waypoint=0;enemy.repathTimer=0;
+      return;
+    }
+  }
   if(enemy.kind==EnemyKind::Wolf && enemy.state==EnemyState::Pursuing && enemy.attackCooldown>0 &&
     distance<3.2f && enemy.rooted<=0 && HasLineOfSight(enemy.position,player_)) {
     const float toward=std::atan2(player_.x-enemy.position.x,player_.z-enemy.position.z);
@@ -1402,16 +1475,18 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
     enemy.path.clear();enemy.waypoint=0;enemy.repathTimer=0;
     return;
   }
-  Vec2 goal=enemy.state==EnemyState::Pursuing?player_:enemy.home;
+  const bool searching=enemy.state==EnemyState::Pursuing && perception && !sight;
+  Vec2 goal=enemy.state==EnemyState::Pursuing?(searching?enemy.lastSeenPlayer:player_):enemy.home;
   if (enemy.state==EnemyState::Pursuing && !map_.CanStand(goal,.45f)) {
     // The player has a slightly smaller collision radius. Find a reachable approach
     // position when the player stands too close to a wall for an enemy center.
     float nearest=1000;
     for (int i=0;i<16;++i) {
       const float angle=i*6.2831853f/16;
-      const Vec2 approach{player_.x+std::cos(angle)*1.3f,player_.z+std::sin(angle)*1.3f};
+      const auto centre=searching?enemy.lastSeenPlayer:player_;
+      const Vec2 approach{centre.x+std::cos(angle)*1.3f,centre.z+std::sin(angle)*1.3f};
       const float distanceToEnemy=Length(Difference(approach,enemy.position));
-      if (distanceToEnemy<nearest && map_.CanStand(approach,.45f) && HasLineOfSight(approach,player_)) {
+      if (distanceToEnemy<nearest && map_.CanStand(approach,.45f) && HasLineOfSight(approach,centre)) {
         nearest=distanceToEnemy; goal=approach;
       }
     }
@@ -1429,14 +1504,15 @@ void Simulation::AdvanceEnemy(Enemy& enemy,float dt,float frameTail) {
     enemy.waypoint=0; enemy.repathTimer=.65f;
   }
   const bool pursuing=enemy.state==EnemyState::Pursuing;
-  const bool clearSight=pursuing && HasLineOfSight(enemy.position,player_);
+  const bool clearSight=pursuing && sight;
   // Consume reached waypoints in the same update instead of idling for a frame.
   while (enemy.waypoint<enemy.path.size() && Length(Difference(enemy.path[enemy.waypoint],enemy.position))<.001f)
     ++enemy.waypoint;
   const float standOff=enemy.kind==EnemyKind::Boar?3.4f:enemy.Boss()?3.8f:enemy.kind==EnemyKind::Wraith?5.5f:1.6f;
   const bool navigating=!(clearSight && distance<=standOff) && remaining>.001f && enemy.waypoint<enemy.path.size();
-  const auto heading=navigating?Difference(enemy.path[enemy.waypoint],enemy.position):Difference(player_,enemy.position);
-  const float desiredFacing=std::atan2(heading.x,heading.z);
+  const auto heading=navigating?Difference(enemy.path[enemy.waypoint],enemy.position):Difference(goal,enemy.position);
+  const float desiredFacing=searching && !navigating?
+    enemy.searchFacing+std::sin(enemy.lostSightTime*2.f)*.65f:std::atan2(heading.x,heading.z);
   enemy.facing=motion::Turn(enemy.facing,desiredFacing,10.f,dt);
   const float alignment=std::max(0.f,std::cos(motion::AngleDelta(enemy.facing,desiredFacing)));
   // Close range alone is not arrival: a trunk/corner can still block the swing.
