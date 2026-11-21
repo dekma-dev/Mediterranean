@@ -49,6 +49,18 @@ Models, faces, icons, class kits and audio assets are unchanged.
 
 ## Verification
 
+Final checks on 2026-11-21:
+
+- LocalizationTests, InterfaceTests, AreaLootTests, QuestTrackingTests,
+  PopulationTests and QuestDialogueTests pass in Ninja Release (43.65 seconds)
+  and Visual Studio Debug (134.94 seconds) on the final sources.
+- Rebuilt `build-ninja-release/RPGNative.exe` and
+  `build-local/Debug/RPGNative.exe`.
+- `git diff --check` passes. The broad localization audit reports only the
+  ten previously known engine diagnostic captions, with no new untranslated
+  player-facing text.
+- No downloads, model/source-art edits, system changes, commit or push.
+
 `QuestTrackingTests` covers simultaneous objectives, switching selection,
 untracked cache progress, real weapon contacts, the mandatory-leader rule,
 readiness, actual delivery, campaign hand-off, completed campaigns,
@@ -63,8 +75,9 @@ Native captures are under `quest-tracking-review` in each build output:
 progress, selected objective, ready, loaded, inventory and batched notices
 beside a speaker/in the open world, at 1280x720,
 960x600 and 2560x1080. Progress at 1280, selected at 960 and readiness at
-ultrawide were inspected; the resulting counter-readability correction is
-included in the final sources.
+ultrawide were inspected. Final batched notices at 1280 were also inspected
+both beside a speaker and in the open world. The resulting counter-readability
+and E-prompt clearance corrections are included in the final sources.
 
 Final build/test results are recorded in `progress.md`. Remaining manual
 acceptance: follow several assignments through a live hostile route, check
