@@ -148,7 +148,9 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   case ui::Action::Inventory: interface_.Toggle(ui::Panel::Inventory); break;
   case ui::Action::Map: interface_.Toggle(ui::Panel::Map); break;
   case ui::Action::Journal: interface_.Toggle(ui::Panel::Journal); break;
-  case ui::Action::TrackHunt: simulation_.TrackHunt(event.value); break;
+  case ui::Action::TrackHunt:
+    simulation_.TrackHunt(event.value);interface_.hasWaypoint=false;interface_.InvalidateHitRegions();break;
+  case ui::Action::CollectLoot: command.collectLoot=true; break;
   case ui::Action::SelectJournal:
     if (event.value>=-1 && event.value<rpg::frontierQuestCount+8) {
       interface_.journalSelection=event.value; if(event.value==-1)simulation_.TrackHunt(-1); interface_.InvalidateHitRegions();

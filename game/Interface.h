@@ -5,6 +5,7 @@
 #include "game/CombatHud.h"
 #include "game/WorldInteraction.h"
 #include "game/NavigationRoute.h"
+#include "game/QuestTracking.h"
 #include <vector>
 #include <cstdint>
 class Renderer;
@@ -12,7 +13,7 @@ namespace ui {
 enum class LoadingStage { World,Chronicles,Sound,Entering };
 void RenderLoading(Renderer& renderer,LoadingStage stage);
 enum class Panel { None,Menu,Character,Inventory,Map,Journal,Merchant,Build,Quest };
-enum class Action { None,Hotbar,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview,MusicVolume,EffectsVolume,Build,SelectTalent,LearnTalent,QuestConfirm,QuestPage,SelectSpell,ConfirmTalentReset,ResetTalents,CancelTalentReset,BuildPage,SelectLoadout,SelectBuildPreset,RequestBuildApply,RequestBuildStore,ConfirmBuild,CancelBuild,PlanBuild,EditBuild,DraftTalent,CharacterSelection,SelectJournal,InspectStat,InspectStatus,SelectThreat,SelectActor,Language,EndReplay,TrackHunt,ActionBarSize };
+enum class Action { None,Hotbar,Close,Menu,Character,Inventory,Map,Journal,Save,Load,Fullscreen,Quit,SelectItem,UseItem,Ability,ClearWaypoint,PlaceWaypoint,InventoryChange,Purchase,Sell,Buyback,RotatePreview,MusicVolume,EffectsVolume,Build,SelectTalent,LearnTalent,QuestConfirm,QuestPage,SelectSpell,ConfirmTalentReset,ResetTalents,CancelTalentReset,BuildPage,SelectLoadout,SelectBuildPreset,RequestBuildApply,RequestBuildStore,ConfirmBuild,CancelBuild,PlanBuild,EditBuild,DraftTalent,CharacterSelection,SelectJournal,InspectStat,InspectStatus,SelectThreat,SelectActor,Language,EndReplay,TrackHunt,ActionBarSize,CollectLoot };
 using Item=rpg::Item;
 struct Rect { float x,y,w,h; bool Contains(float px,float py) const { return px>=x && py>=y && px<x+w && py<y+h; } };
 struct Layout {
@@ -73,6 +74,7 @@ public:
   void UpdateCombatFeedback(float dt,const rpg::Simulation& simulation) {
     castReceipt_.Update(dt,simulation);
     worldInteraction_.Update(dt,simulation);
+    questActivity_.Update(dt,simulation);
     targetCastReceipt_.Update(dt,simulation);
     abilityFeedback_.Update(dt,simulation);
     damageDirection_.Advance(dt,simulation.Health()>0);
@@ -83,7 +85,7 @@ public:
         damageDirection_.Hit(event.facing,std::clamp(event.elapsed,0.f,dt));
     }
   }
-  void ResetCombatFeedback() { navigation_.Reset();playerHealth_.Reset();targetHealth_.Reset();damageDirection_.Reset();castReceipt_.Reset();worldInteraction_.Reset();targetCastReceipt_.Reset();abilityFeedback_.Reset(); }
+  void ResetCombatFeedback() { navigation_.Reset();questActivity_.Reset();playerHealth_.Reset();targetHealth_.Reset();damageDirection_.Reset();castReceipt_.Reset();worldInteraction_.Reset();targetCastReceipt_.Reset();abilityFeedback_.Reset(); }
   const AbilityFeedback& AbilitySignals() const {return abilityFeedback_;}
   const TargetCastReceipt& TargetCastSignal() const {return targetCastReceipt_;}
   bool CapturesMovement() const { return panel==Panel::Menu; }
@@ -136,6 +138,7 @@ private:
   CastReceipt castReceipt_;
   WorldInteractionReceipt worldInteraction_;
   NavigationRoute navigation_;
+  QuestActivity questActivity_;
   TargetCastReceipt targetCastReceipt_;
   AbilityFeedback abilityFeedback_;
   std::array<std::array<int,hotbarSlots>,int(rpg::ClassId::Count)> hotbars_=[] {

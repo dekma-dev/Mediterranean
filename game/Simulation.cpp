@@ -704,9 +704,7 @@ void Simulation::Interact() {
     message_=SuppliesActive()?(expeditionMask_==7?"All three caches recovered. Return to Tessa.":"Supplies recovered. The atlas marks the next cache."):
       expeditionMask_==7?"All three sites secured. Return to the expedition leader.":"Site recorded. The atlas marks the next objective.";return;
   }
-  const bool nearbyLoot=std::any_of(enemies_.begin(),enemies_.end(),[&](const Enemy& e) {
-    return e.health<=0 && !e.looted && Length(Difference(player_,e.position))<=2.5f && HasLineOfSight(player_,e.position);
-  });
+  const bool nearbyLoot=NearbyLoot().bodies>0;
   if (!nearbyLoot && NearQuartermaster()) {
     if (CanTrade()) { tradeRequested_=true; message_="Quartermaster: supplies and equipment for the Dawnwatch patrol."; }
     else message_="Land before speaking to the quartermaster.";
@@ -740,23 +738,8 @@ void Simulation::Interact() {
     speakerQuest=id;break;
   }
   if (speakerQuest==QuestId::None) {
-    Enemy* nearest=nullptr; float best=2.5f;
-    for (auto& enemy : CombatantsMutable()) {
-      const float distance=Length(Difference(player_,enemy.position));
-      if (enemy.health<=0 && !enemy.looted && distance<=best && HasLineOfSight(player_,enemy.position)) {
-        nearest=&enemy; best=distance;
-      }
-    }
-    if (nearest) {
-      if(nearest->Beast()) {
-        const auto bit=std::uint64_t(1)<<(nearest->id-population::beastBase);
-        const bool first=!(beastLoot_&bit);nearest->looted=true;beastLoot_|=bit;if(first)gold_+=2;
-        message_=first?"Searched the beast's remains. Found 2 gold.":"These hunting grounds have already yielded their spoils.";return;
-      }
-      if (!inventory_.Add(Item::Potion)) { message_="Your bag is full. Make room before looting."; return; }
-      nearest->looted=true; gold_+=5;
-      message_="Looted 5 gold and one healing potion. Q uses a potion.";
-    } else if (Length(Difference(player_,WorldMap::astralAnchor))>2.5f)
+    if (NearbyLoot().bodies>0) CollectNearbyLoot();
+    else if (Length(Difference(player_,WorldMap::astralAnchor))>2.5f)
       message_="Move near a resident, survey stone, astral anchor or loot bag and press E.";
     return;
   }
@@ -767,6 +750,49 @@ void Simulation::Interact() {
   message_=std::string(DescribeQuest(speakerQuest).speaker)+": read the assignment and its rewards.";
 }
 
+bool Simulation::LootAccessible(const Enemy& enemy) const {
+  return health_>0 && !ReplayActive() && !sparring_ && enemy.health<=0 && !enemy.looted &&
+    enemy.kind!=EnemyKind::Dummy && enemy.kind!=EnemyKind::Trainer &&
+    Length(Difference(player_,enemy.position))<=2.5f && HasLineOfSight(player_,enemy.position);
+}
+LootSummary Simulation::NearbyLoot() const {
+  LootSummary result;
+  for(const auto& enemy:Combatants())if(LootAccessible(enemy)) {
+    ++result.bodies;
+    if(enemy.Beast()) {
+      const auto bit=std::uint64_t(1)<<(enemy.id-population::beastBase);
+      if(!(beastLoot_&bit))result.gold+=2;
+    } else {result.gold+=5;++result.potions;}
+  }
+  return result;
+}
+void Simulation::CollectNearbyLoot() {
+  std::vector<Enemy*> candidates;
+  for(auto& enemy:CombatantsMutable())if(LootAccessible(enemy))candidates.push_back(&enemy);
+  if(candidates.empty())return;
+  // Stable nearest-first acceptance makes a partly full bag deterministic.
+  std::sort(candidates.begin(),candidates.end(),[&](const Enemy* a,const Enemy* b) {
+    const float da=Length(Difference(player_,a->position)),db=Length(Difference(player_,b->position));
+    return da==db?a->id<b->id:da<db;
+  });
+  LootSummary result;result.remaining=4;
+  for(auto* enemy:candidates) {
+    if(enemy->Beast()) {
+      const auto bit=std::uint64_t(1)<<(enemy->id-population::beastBase);
+      if(!(beastLoot_&bit)){gold_+=2;result.gold+=2;}
+      beastLoot_|=bit;
+    } else {
+      // A corpse's original bundle is atomic: failed potion insertion retains
+      // both the gold and the corpse, without suppressing other eligible loot.
+      if(!inventory_.Add(Item::Potion)){++result.blocked;continue;}
+      gold_+=5;result.gold+=5;++result.potions;
+    }
+    enemy->looted=true;++result.bodies;
+  }
+  lootReport_=result;
+  message_=result.blocked?"Some spoils remain. Make room in your bag and collect again.":
+    result.gold?"Nearby spoils collected.":"These hunting grounds have already yielded their spoils.";
+}
 bool Simulation::CanReadSurvey(Vec2 site) const {
   const auto delta=Difference(player_,site);const float distance=Length(delta);
   if(distance<.55f || distance>2.3f) return false;
@@ -880,6 +906,8 @@ void Simulation::Update(float seconds,const Command& command) {
   for(auto& dummy:dummies_) dummy.damagedThisUpdate=false;
   if (!std::isfinite(seconds) || seconds<=0) return;
   const float dt=std::min(seconds,.05f);
+  lootReport_.remaining=std::max(0.f,lootReport_.remaining-dt);
+  if(health_<=0)lootReport_={};
   replayReportTime_=std::max(0.f,replayReportTime_-dt);
   if(command.endReplay && ReplayActive()) {EndReplay(false);return;}
   if(ReplayActive() && health_>0 && !FrontierReady()) replayReport_.seconds+=dt;
@@ -1075,8 +1103,9 @@ void Simulation::Update(float seconds,const Command& command) {
   // Establish the movement state before ground-only interactions. Otherwise a
   // purchase or training request on the activation frame sees an idle actor.
   if (command.ability==2 && !command.haltMovement) UseAbility(2,dt);
-  if (command.interact) Interact();
-  if (!command.interact) ConfirmQuest(command.questAction);
+  if(command.collectLoot) CollectNearbyLoot();
+  else if (command.interact) Interact();
+  if (!command.interact && !command.collectLoot) ConfirmQuest(command.questAction);
   const auto previousWeapon=inventory_.Worn(GearSlot::Weapon);
   if (command.equipWeapon) {
     const auto next=HasRewardWeapon() && !RewardWeaponEquipped()?Item::Watchguard:Item::Starter;

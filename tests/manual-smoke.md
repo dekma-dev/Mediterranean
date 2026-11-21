@@ -1,3 +1,16 @@
+## Simultaneous quest tracking (2026-11-21)
+
+- Accept several provincial commissions. Keep the campaign selected, then collect a record cache or defeat a required creature: the unselected row must update and a brief central notice must show the actual progress. Repeated increments of one task must replace its notice. A leader hunt must remain unfinished until the required leader is defeated.
+- Click each right-hand row while walking. Its full instructions and walking route must replace the previous selection without a pause or opened menu. Place a manual pin in M, close the atlas, then select a quest: the pin must clear and the quest route resume. J/header must still open the journal.
+- Complete and deliver a commission. Expect a gold question mark before delivery, then removal and a reward-received notice only after the actual turn-in. Save/load, change character, die/recover and enter/leave a veteran rehearsal: old progress must not replay as fresh activity. Finishing the whole campaign must not offer its final chapter again.
+- Check all seven entries at 960x600, Full HD and ultrawide, with 80/100/120 percent action-bar scales. Inspect notice readability during real multi-enemy combat. Open I and verify that the hidden tracker cannot take inventory clicks; the world below the tracker must remain available for camera gestures.
+
+## Nearby spoils (2026-11-21)
+
+- Defeat a group, approach several remains and inspect the live gold/potion totals. E and the card's collect button must collect all eligible remains within 2.5 m and clear their loot markers. Out-of-reach/occluded remains must stay in the world. Neither card nor collection should capture movement.
+- Fill the bag, leave one potion place and retry a group: exactly one original bundle should fit. The receipt must show only accepted items and the remaining count. Make room using I and retry; there must be no lost rewards or duplicate gold. Wildlife gold must still be collectible with a full bag.
+- Save/load after collection, leave the card's reach before clicking, and test beside a quest giver. Loading must not replay receipts; stale clicks must not collect remote loot; E must retain dialogue priority while the dedicated button collects only loot. Check the card at 960x600, Full HD and ultrawide, and after its fade for released camera input.
+
 ## Province walking guidance (2026-11-21)
 
 - Open M during the southern supply assignment: the dotted route must reach an accessible side of the nearest uncollected cache. Walk it with live patrols, collect all three caches, and return to Tessa. Each collection must switch the destination. The route avoids scenery, not enemies.

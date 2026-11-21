@@ -218,6 +218,10 @@ void Simulation::Respawn() {
 
 std::string Simulation::Objective() const {
   if(trackedHunt_>=0 && !ReplayActive())return std::string(DescribeQuest(QuestId(int(QuestId::Hunt1)+trackedHunt_)).title)+"\n"+HuntSummary(trackedHunt_);
+  return CampaignObjective();
+}
+
+std::string Simulation::CampaignObjective() const {
   if(anchorQuest_==AnchorQuest::Complete) {
     if(frontierCompleted_==frontierQuestCount && !ReplayActive()) return "THE FRONTIER RECONNECTED\nRevisit Radan, Ilar or Vesna for veteran rehearsals";
     const auto& quest=DescribeQuest(CurrentQuest());
@@ -328,9 +332,8 @@ std::string Simulation::InteractionPrompt() const {
   if (anchorQuest_==AnchorQuest::Active && DefeatedCount()==3 &&
     Distance(player_,WorldMap::astralAnchor)<=2.5f && HasLineOfSight(player_,WorldMap::astralAnchor))
     return "E STABILIZE ASTRAL ANCHOR";
-  for (const auto& enemy : Combatants())
-    if (enemy.health<=0 && !enemy.looted && Distance(player_,enemy.position)<=2.5f && HasLineOfSight(player_,enemy.position))
-      return enemy.Beast()?"E SEARCH BEAST REMAINS":"E LOOT - 5 GOLD AND A POTION";
+  if(const auto loot=NearbyLoot();loot.bodies>0)
+    return "E COLLECT NEARBY SPOILS / "+std::to_string(loot.bodies);
   if (NearQuartermaster()) return "E BROWSE QUARTERMASTER SUPPLIES";
   if (Distance(player_,WorldMap::trainingPost)<=2.5f && HasLineOfSight(player_,WorldMap::trainingPost))
     return anchorQuest_==AnchorQuest::Complete?"E START SPARRING - NO XP OR LOOT":"TRAINING UNLOCKS AFTER BOTH QUESTS";

@@ -1070,12 +1070,32 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  });
  for(std::size_t i=0;i<worldCount;++i) regions_.push_back({worldTargets[i].body,{Action::SelectActor,int(worldTargets[i].id)},true});
  const bool combatLayout=!HasPanels();
+ const auto interactionPrompt=s.InteractionPrompt();
+ const bool showInteractionPrompt=panel==Panel::None && s.Health()>0 && !interactionPrompt.empty() &&
+   !nearbyCombat && !s.Attacking() && !s.CastingRecovery();
+ const auto quests=ReadQuestTracking(s);
+ const bool showTracker=!inventoryOpen || panel!=Panel::None;
+ const float questTextHeight=std::min(120.f,float(c.Lines(231,s.Objective(),13).size())*17);
+ unsigned otherQuests=0;for(unsigned i=0;i<quests.count;++i)otherQuests+=!quests.entries[i].selected;
+ const Rect tracker{1016,194,250,72+questTextHeight+44*otherQuests+(s.SupplyChannelSite()>=0?22.f:0.f)};
+ const bool showQuestNotices=combatLayout && !s.Sparring() && s.SparringReportTime()<=0 && !s.ReplayActive();
+ unsigned noticeCount=0;
+ if(showQuestNotices)for(const auto& n:questActivity_.Notices())if(n.remaining>0)++noticeCount;
+ // Keep the E instruction clear. Retain the newest two notices near a usable
+ // object; the third may use that space only when no instruction is drawn.
+ noticeCount=std::min(noticeCount,showInteractionPrompt?2u:3u);
+ if(noticeCount)plates.Reserve(394,177,492,72.f*noticeCount);
+ const auto nearbyLoot=s.NearbyLoot();const auto& lootReport=s.LastLoot();
+ const bool lootCard=combatLayout && s.Health()>0 && (nearbyLoot.bodies>0 || lootReport.remaining>0);
+ const Rect lootBounds{22,474,std::min(300.f,actionTransform.X(328)-34),128};
+ if(lootCard)plates.Reserve(lootBounds.x,lootBounds.y,lootBounds.w,lootBounds.h);
  const auto incoming=ReadIncomingAttacks(s);
  const auto anchors=CombatHudAnchors(!combatLayout);
  plates.Reserve(anchors.player.x-3,anchors.player.y,246,70);
  if(s.TargetActor() || s.FriendlyTarget()>=0) plates.Reserve(anchors.target.x,anchors.target.y,257,70);
  const auto mapBounds=mapTransform.Map(Rect{1090,3,176,178});
- plates.Reserve(mapBounds.x,mapBounds.y,mapBounds.w,mapBounds.h);plates.Reserve(1016,194,250,183);
+ plates.Reserve(mapBounds.x,mapBounds.y,mapBounds.w,mapBounds.h);
+ if(showTracker)plates.Reserve(tracker.x,tracker.y,tracker.w,tracker.h);
  const auto dockBounds=actionTransform.Map(Rect{328,592,624,118});
  plates.Reserve(dockBounds.x,dockBounds.y,dockBounds.w,dockBounds.h);
  if(combatLayout && (ReadPlayerCast(s).ability>=0 || castReceipt_.Opacity()>0 || ReadWorldInteraction(s).Active() || worldInteraction_.Opacity()>0)) {
@@ -1334,20 +1354,18 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  c.Banner({1118,158,104,23},"Atlas  [M]",12);
  regions_.push_back({{1090,13,160,168},{Action::Map},true});
  }
- if (!inventoryOpen || panel!=Panel::None) {
-  const auto lines=c.Lines(231,s.Objective(),13);
-  const float textHeight=std::min(120.f,float(lines.size())*17);
-  const Rect tracker{1016,194,250,72+textHeight+(s.SupplyChannelSite()>=0?22.f:0.f)};
+ if (showTracker) {
   // Text and a quiet backing preserve the view of the world. The actual entry
   // opens the journal, rather than behaving as a dead decorative rectangle.
   c.Gradient(tracker,{.025f,.021f,.016f,.60f},{.025f,.021f,.016f,.12f});
   c.Line(1020,217,1262,217,1,{.58f,.45f,.25f,.75f});
   c.FitText(1028,198,195,s.ReplayActive()?"VETERAN REHEARSAL":"EXPEDITION",12,gold);
   c.Center(1234,198,25,"J",12,gold);
-  c.Paragraph({1028,225,231,textHeight},s.Objective(),13,ink,4);
+  c.Paragraph({1028,225,231,questTextHeight},s.Objective(),13,ink,4);
+  c.Line(1020,225,1020,225+questTextHeight,2,{gold.x,gold.y,gold.z,.8f});
   regions_.push_back({tracker,{Action::Journal},true});
   if(tracker.Contains(mouseX_,mouseY_)) c.Line(1020,222,1020,tracker.y+tracker.h-5,2,gold);
-  float footer=225+textHeight+3;
+  float footer=225+questTextHeight+3;
   if(s.RitualActive() && s.RitualStage()>0 && s.RitualStage()<4) {
     c.RectFill({1028,footer-5,230,3},border);c.RectFill({1028,footer-5,230*s.RitualCharge(),3},{.36f,.65f,.79f,1});
   }
@@ -1358,6 +1376,17 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.RectFill({1028,footer,230,16},border);
     c.RectFill({1029,footer+1,228*s.SupplyChannelProgress(),14},{.38f,.30f,.10f,1});
     c.Center(1028,footer+1,230,"Recovering supplies",11,ink);footer+=22;
+  }
+  for(unsigned i=0;i<quests.count;++i) {
+    const auto& q=quests.entries[i];if(q.selected)continue;
+    const Rect row{1020,footer,242,42};const bool hover=row.Contains(mouseX_,mouseY_);
+    const bool ready=q.stage==rpg::QuestStage::TurnIn;
+    c.Line(row.x,footer,1260,footer,1,{.58f,.45f,.25f,.35f});
+    if(hover)c.Gradient(row,{.30f,.24f,.13f,pointerHeld_?.62f:.38f},{.10f,.09f,.06f,.15f});
+    c.Center(1024,footer+5,15,ready?"?":q.stage==rpg::QuestStage::Offer?"!":"-",16,ready?gold:muted);
+    c.FitText(1043,footer+5,209,q.title,12,hover || ready?gold:ink);
+    c.FitText(1043,footer+23,209,q.summary,11,ready?gold:muted);
+    regions_.push_back({row,{Action::TrackHunt,q.route},true});footer+=44;
   }
   if(navigation_.Status()!=NavigationRoute::State::None) {
    const Color tint=hasWaypoint?Color{.56f,.76f,.88f,1}:gold;
@@ -1372,6 +1401,20 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.FitText(1058,footer+16,196,navigation_.Status()==NavigationRoute::State::Arrived?"Destination reached":
      navigation_.Status()==NavigationRoute::State::Unreachable?"No walkable route":
      std::to_string(int(std::ceil(navigation_.Distance())))+" m on foot",12,ink);
+  }
+ }
+ if(showQuestNotices) {
+  float y=177;unsigned drawn=0;
+  for(const auto& n:questActivity_.Notices())if(n.remaining>0) {
+    if(drawn>=noticeCount)break;++drawn;
+    const float opacity=n.Opacity(),slide=(1-std::clamp((5-n.remaining)/.2f,0.f,1.f))*5;
+    const Color accent{gold.x,gold.y,gold.z,opacity};const float top=y+slide;
+    c.Gradient({394,top,492,68},{.025f,.021f,.016f,.62f*opacity},{.025f,.021f,.016f,.08f*opacity});
+    c.Center(406,top+3,468,n.Label(),10,accent);
+    c.Center(406,top+17,468,n.title,17,{ink.x,ink.y,ink.z,opacity});
+    if(c.Lines(468,n.detail,13).size()==1)c.Center(406,top+39,468,n.detail,13,accent);
+    else c.Paragraph({406,top+37,468,28},n.detail,13,accent,2);
+    y+=72;
   }
  }
  if (s.Sparring() || s.SparringReportTime()>0) {
@@ -1563,12 +1606,30 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   }
  }
  c.Text(22,674,std::to_string(s.Gold())+" gold",16,gold);
+ if(lootCard) {
+  const bool receipt=lootReport.remaining>0;
+  const auto& shown=receipt?lootReport:nearbyLoot;
+  const float alpha=nearbyLoot.bodies?1.f:std::clamp(lootReport.remaining/.6f,0.f,1.f);
+  const auto lootTint=[&](Color color){color.w*=alpha;return color;};
+  const auto box=lootBounds;const float x=box.x,y=box.y,w=box.w;
+  c.Skin(box,16,{1,1,1,alpha});
+  c.FitText(x+14,y+10,w-28,receipt?(shown.gold || shown.potions?"SPOILS RECEIVED":shown.blocked?"BAG IS FULL":"REMAINS SEARCHED"):"NEARBY SPOILS",14,lootTint(gold));
+  c.FitText(x+14,y+31,w-28,std::string(receipt?"Searched remains: ":"Within reach: ")+std::to_string(shown.bodies),11,lootTint(muted));
+  c.Oval(x+26,y+65,8,8,lootTint(gold));c.Ring(x+26,y+65,5,lootTint(border),1);
+  c.FitText(x+42,y+57,w*.46f-42,(receipt?"+":"")+std::to_string(shown.gold)+" gold",13,lootTint(ink));
+  Icon(c,{x+w*.48f,y+50,30,30},Item::Potion,alpha);
+  c.FitText(x+w*.48f+36,y+57,w*.52f-48,(receipt?"+":"")+std::to_string(shown.potions)+" potions",13,lootTint(ink));
+  regions_.push_back({box,{},false});
+  if(nearbyLoot.bodies) {
+   button({x+12,y+91,w-24,27},receipt && shown.blocked?"Collect remaining spoils":"Collect all nearby spoils",Action::CollectLoot);
+   if(receipt && shown.blocked)c.FitText(x+14,y+78,w-28,"Left on remains: "+std::to_string(shown.blocked),10,{1,.67f,.35f,1});
+  } else c.FitText(x+14,y+96,w-28,shown.blocked?"Unclaimed spoils remain":shown.gold || shown.potions?"Stored in your bag and purse":"No additional spoils",11,lootTint(muted));
+ }
  c.Text(22,695,"WASD Move   LMB View   RMB Turn   F11 Display",11,muted);
  if (!characterOpen && panel!=Panel::Quest) c.Wrap(22,614,std::min(385.f,actionTransform.X(328)-34),s.Message(),14,ink,3);
  if (panel==Panel::None && s.Health()>0) {
-  const auto prompt=s.InteractionPrompt();
-  if (!prompt.empty() && !nearbyCombat && !s.Attacking() && !s.CastingRecovery()) {
-   const float w=std::min(510.f,c.Width(prompt,14)+30);c.Frame({640-w/2,360,w,27});c.Center(640-w/2,365,w,prompt,14,gold);
+  if (showInteractionPrompt) {
+   const float w=std::min(510.f,c.Width(interactionPrompt,14)+30);c.Frame({640-w/2,360,w,27});c.Center(640-w/2,365,w,interactionPrompt,14,gold);
   }
   if (s.Channeling()) {
     HudSection section(c,regions_,mouseX_,mouseY_,castTransform);

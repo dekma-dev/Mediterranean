@@ -99,8 +99,10 @@ struct Command {
   TradeCommand trade;
   bool steerFacing=false;
   float facingYaw=0;
+  bool collectLoot=false; // Explicit loot-card request; never opens NPC dialogue.
 };
 enum class Quest { Available, Active, Return, Complete };
+struct LootSummary { int bodies=0,gold=0,potions=0,blocked=0; float remaining=0; };
 enum class AnchorQuest { Locked, Available, Active, Return, Complete };
 enum class FeedbackKind { Damage, Hurt, Heal, Experience, LevelUp, Miss, Interrupt, Absorb };
 struct CombatFeedback {
@@ -354,10 +356,13 @@ public:
   float ChannelProgress() const { return channelRemaining_>0?1-channelRemaining_/channelDuration:0; }
   bool Channeling() const { return channelRemaining_>0; }
   std::string Objective() const;
+  std::string CampaignObjective() const;
   std::string InteractionPrompt() const;
   Vec2 ObjectivePosition() const;
   float Cooldown(int index) const { return ValidSpell(index)?cooldowns_[index]:0; }
   const std::string& Message() const { return message_; }
+  LootSummary NearbyLoot() const;
+  const LootSummary& LastLoot() const { return lootReport_; }
   std::string Save() const;
   bool Load(const std::string& data);
   void Notify(const std::string& message) { message_ = message; }
@@ -365,6 +370,9 @@ public:
   static constexpr std::array<float,4> abilityCooldowns{spells[0].cooldown,spells[1].cooldown,spells[2].cooldown,spells[3].cooldown};
   static constexpr float channelDuration = 3.f;
 private:
+  LootSummary lootReport_;
+  bool LootAccessible(const Enemy& enemy) const;
+  void CollectNearbyLoot();
   std::vector<Enemy> beasts_;
   EnemyRange<Enemy> CombatantsMutable() {return {enemies_.data(),enemies_.size(),beasts_.data(),beasts_.size()};}
   std::array<int,6> hunts_{};
