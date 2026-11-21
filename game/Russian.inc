@@ -1,4 +1,9 @@
 // Player-facing Russian catalog. English strings remain stable simulation/save identifiers.
+{"Route to waypoint", "Путь к метке"},
+{"Route to objective", "Путь к цели задания"},
+{"Destination reached", "Вы у цели"},
+{"No walkable route", "Проход не найден"},
+{" m on foot", " м пешком"},
 {"Breaking the seal", "Разрушение печати"},
 {"Stabilizing the anchor", "Стабилизация якоря"},
 {"Securing the beacon", "Укрепление маяка"},

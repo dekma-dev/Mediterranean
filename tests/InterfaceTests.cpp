@@ -845,8 +845,9 @@ int main() {
       overlay.Close(ui::Panel::Inventory);overlay.hasWaypoint=true;draw();
       float waypointRow=-1;
       for(float y=230;y<400;++y) if(hover(1120,y)) waypointRow=y;
-      Require(waypointRow>0,"Tracker waypoint extension must block camera input");
-      overlay.hasWaypoint=false;draw();Require(!hover(1120,waypointRow),"Removed waypoint must release its old tracker region");
+      Require(waypointRow>0,"Tracker guidance must block camera input");
+      overlay.hasWaypoint=false;draw();Require(hover(1120,waypointRow),"Objective guidance must retain the shared route row after clearing a pin");
+      Require(!hover(1120,waypointRow+2),"Guidance must not capture the world below its bounds");
     }
     screen.panel=ui::Panel::Menu;
     renderer.BeginFrame(); screen.Render(renderer,simulation,0,false); Require(renderer.EndFrame(false),"Menu render failed.");

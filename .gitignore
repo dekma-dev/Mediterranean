@@ -9,3 +9,8 @@ saves/
 /scripts/export-player-body.py
 /scripts/export-player-head.py
 /assets/authored/*.blend1
+
+/class-design.md
+/locations-design.md
+/icons-spells-items-design.md
+/story-design.md

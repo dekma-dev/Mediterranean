@@ -460,7 +460,7 @@ void TalentIcon(Canvas& c,Rect rect,int index,float alpha=1,rpg::ClassId id=rpg:
 }
 Point MapPoint(Rect a,rpg::Vec2 p) { const float depth=rpg::WorldMap::surveyDepth,span=depth*a.w/a.h;
  return {a.x+(p.x+span*.5f)/span*a.w,a.y+(.5f-p.z/depth)*a.h}; }
-void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoint,rpg::Vec2 pin) {
+void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoint,rpg::Vec2 pin,const NavigationRoute& route) {
  if (compact) {
   const auto p=c.P(a.x,a.y);
   c.r.DrawRoundMapArtwork(p.x,p.y,a.w*c.layout.scale/c.r.Width(),a.h*c.layout.scale/c.r.Height());
@@ -506,6 +506,26 @@ void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoin
   c.Line(x,y,x+span,y,1,mapInk);
   for (float t : {0.f,.5f,1.f}) c.Line(x+span*t,y-3,x+span*t,y+3,.8f,mapInk);
   lettering(x,y+5,"0",10); lettering(x+span-14,y+5,"5 m",10);
+ }
+ // Ink dots follow the same clearance-tested polyline as the walking guide.
+ // Clip each dot to the paper/round minimap rather than leaking into its frame.
+ if(route.Status()==NavigationRoute::State::Travelling) {
+  auto previous=MapPoint(a,sim.Player());float carry=0;int budget=1024;
+  const float spacing=compact?3.5f:7.f,radius=compact?.8f:1.7f;
+  for(const auto point:route.Points()) {
+   const auto next=MapPoint(a,point);const float length=std::hypot(next.x-previous.x,next.y-previous.y);
+   if(length>.001f) {
+    for(;carry<length && budget>0;carry+=spacing,--budget) {
+     const float t=carry/length,x=previous.x+(next.x-previous.x)*t,y=previous.y+(next.y-previous.y)*t;
+     if(!a.Contains(x-radius,y-radius) || !a.Contains(x+radius,y+radius) ||
+       (compact && std::hypot(x-a.x-a.w*.5f,y-a.y-a.h*.5f)>a.w*.5f-4))continue;
+     c.Oval(x,y,radius+1,radius+1,{.24f,.18f,.10f,.95f});
+     c.Oval(x,y,radius,radius,waypoint?Color{.39f,.70f,.83f,1}:Color{.95f,.76f,.37f,1});
+    }
+    carry-=length;
+   }
+   previous=next;if(budget<=0)break;
+  }
  }
  const auto marker=[&](rpg::Vec2 position,Color tint,float radius) {
   const auto p=MapPoint(a,position); c.Oval(p.x,p.y,radius+1,radius+1,{.08f,.12f,.13f,1}); c.Oval(p.x,p.y,radius,radius,tint);
@@ -1011,6 +1031,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  renderedClass_=s.Class();
  const float healthSeconds=time-lastRenderTime_;
  const float frameSeconds=std::clamp(healthSeconds,0.f,.05f);lastRenderTime_=time;
+ navigation_.Update(frameSeconds,s,hasWaypoint,waypoint);
  playerHealth_.Update(s.Health(),s.MaxHealth(),0,healthSeconds);
  if(const auto* target=s.TargetActor()) targetHealth_.Update(target->health,target->MaxHealth(),target->id,healthSeconds);
  else targetHealth_.Reset();
@@ -1302,7 +1323,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  {
  HudSection section(c,regions_,mouseX_,mouseY_,mapTransform);
  c.Oval(1170,94,81,81,{.025f,.04f,.02f,1});
- Atlas(c,s,{1096,20,148,148},true,hasWaypoint,waypoint);
+ Atlas(c,s,{1096,20,148,148},true,hasWaypoint,waypoint,navigation_);
  c.Ring(1170,94,77,{.30f,.33f,.10f,1},5); c.Ring(1170,94,80,gold,1.5f); c.Ring(1170,94,74,gold,1);
  for (int i=0;i<16;++i) {
   const float a=i*6.2831853f/16;
@@ -1316,7 +1337,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  if (!inventoryOpen || panel!=Panel::None) {
   const auto lines=c.Lines(231,s.Objective(),13);
   const float textHeight=std::min(120.f,float(lines.size())*17);
-  const Rect tracker{1016,194,250,52+textHeight+(hasWaypoint?21.f:0.f)+(s.SupplyChannelSite()>=0?22.f:0.f)};
+  const Rect tracker{1016,194,250,72+textHeight+(s.SupplyChannelSite()>=0?22.f:0.f)};
   // Text and a quiet backing preserve the view of the world. The actual entry
   // opens the journal, rather than behaving as a dead decorative rectangle.
   c.Gradient(tracker,{.025f,.021f,.016f,.60f},{.025f,.021f,.016f,.12f});
@@ -1338,10 +1359,20 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
     c.RectFill({1029,footer+1,228*s.SupplyChannelProgress(),14},{.38f,.30f,.10f,1});
     c.Center(1028,footer+1,230,"Recovering supplies",11,ink);footer+=22;
   }
-  const auto objective=s.ObjectivePosition();
-  if (s.TrackedHunt()>=0 || s.ReplayActive() || s.AnchorState()!=rpg::AnchorQuest::Complete || s.FrontierCompleted()<rpg::frontierQuestCount)
-   c.Text(1028,footer,std::to_string(int(std::ceil(std::hypot(s.Player().x-objective.x,s.Player().z-objective.z))))+" m to objective",11,gold);
-  if (hasWaypoint) c.Text(1028,footer+20,"Waypoint  "+std::to_string(int(std::ceil(std::hypot(s.Player().x-waypoint.x,s.Player().z-waypoint.z))))+" m",11,{.56f,.76f,.88f,1});
+  if(navigation_.Status()!=NavigationRoute::State::None) {
+   const Color tint=hasWaypoint?Color{.56f,.76f,.88f,1}:gold;
+   c.Ring(1040,footer+15,12,{.49f,.39f,.23f,.85f},1);
+   if(navigation_.Status()==NavigationRoute::State::Travelling) {
+    const auto next=navigation_.Points().front();
+    const float angle=std::atan2(next.x-s.Player().x,next.z-s.Player().z)-cameraYaw;
+    const auto turn=[&](float x,float y)->Point{return {1040+std::cos(angle)*x-std::sin(angle)*y,footer+15+std::sin(angle)*x+std::cos(angle)*y};};
+    c.Triangle(turn(0,-9),turn(-5,6),turn(5,6),tint);
+   } else c.Diamond(1040,footer+15,4,4,tint);
+   c.FitText(1058,footer,196,hasWaypoint?"Route to waypoint":"Route to objective",11,tint);
+   c.FitText(1058,footer+16,196,navigation_.Status()==NavigationRoute::State::Arrived?"Destination reached":
+     navigation_.Status()==NavigationRoute::State::Unreachable?"No walkable route":
+     std::to_string(int(std::ceil(navigation_.Distance())))+" m on foot",12,ink);
+  }
  }
  if (s.Sparring() || s.SparringReportTime()>0) {
   regions_.push_back({{470,105,506,81},{},false});
@@ -2061,7 +2092,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
   blockWindow(frame); c.Banner({frame.x+27,frame.y-9,frame.w-85,39},map?"Atlas of Dawnwatch":"Expedition journal",23);
   close({frame.x+frame.w-38,frame.y+9,27,27},panel);
   if (map) {
-   const Rect mapRect{155,126,645,480}; c.Frame({151,122,653,488}); Atlas(c,s,mapRect,false,hasWaypoint,waypoint);
+   const Rect mapRect{155,126,645,480}; c.Frame({151,122,653,488}); Atlas(c,s,mapRect,false,hasWaypoint,waypoint,navigation_);
    regions_.push_back({mapRect,{Action::PlaceWaypoint},true});
    const bool surveying=mapRect.Contains(mouseX_,mouseY_);
    const float depth=rpg::WorldMap::surveyDepth,span=depth*mapRect.w/mapRect.h;
@@ -2092,11 +2123,13 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.Text(840,319,"SURVEY KEY",11,gold);
    for (int i=0;i<6;++i) { c.Oval(842,346+i*21.f,3,3,legend[i].first); c.Text(854,338+i*21.f,legend[i].second,12,muted); }
    c.Frame({827,478,298,75},{.07f,.06f,.04f,1});
-   c.Text(840,489,hasWaypoint?"MARKED DESTINATION":"YOUR BEARINGS",11,gold);
-   const auto bearing=hasWaypoint?waypoint:s.Player();
+   c.Text(840,489,hasWaypoint?"Route to waypoint":"Route to objective",11,gold);
+   const auto bearing=navigation_.Status()==NavigationRoute::State::None?s.Player():navigation_.Destination();
    c.FitText(840,509,272,s.Map().AreaName(bearing),16,ink);
-   c.FitText(840,533,272,hasWaypoint?std::to_string(int(std::ceil(std::hypot(s.Player().x-waypoint.x,s.Player().z-waypoint.z))))+
-     " m straight-line distance":"Click ground to mark / right-click to clear",11,muted);
+   c.FitText(840,533,272,navigation_.Status()==NavigationRoute::State::Arrived?"Destination reached":
+     navigation_.Status()==NavigationRoute::State::Unreachable?"No walkable route":
+     navigation_.Status()==NavigationRoute::State::Travelling?std::to_string(int(std::ceil(navigation_.Distance())))+" m on foot":
+     "Click ground to mark / right-click to clear",11,muted);
    if (hasWaypoint) button({833,562,286,39},"Clear waypoint",Action::ClearWaypoint);
    c.Text(156,619,"Markers guide you; they do not move your character automatically.",13,muted);
   } else {

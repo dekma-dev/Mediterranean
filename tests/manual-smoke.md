@@ -1,3 +1,9 @@
+## Province walking guidance (2026-11-21)
+
+- Open M during the southern supply assignment: the dotted route must reach an accessible side of the nearest uncollected cache. Walk it with live patrols, collect all three caches, and return to Tessa. Each collection must switch the destination. The route avoids scenery, not enemies.
+- Place a pin on traversable ground, close M, and turn with both LMB/RMB. The tracker arrow must indicate the next route leg relative to the camera. Clear the pin: guidance must resume the objective. Walk around a building or off the route, then check the new approach and distance.
+- At 720p, Full HD and ultrawide, check route dots stay inside the atlas/minimap and under markers. The tracker row must remain clickable without intercepting the world below it. Check Russian/English captions, death, loading and switching characters for stale paths.
+
 ## World interaction feedback (2026-11-19)
 
 - Start supply recovery, a court seal, the astral anchor and a beacon hold. Check the action-dock name, progress, remaining time and Russian/English labels. Completion must show a brief success result; moving or cancelling must show interruption, never success.

@@ -4,6 +4,7 @@
 #include "game/DamageDirection.h"
 #include "game/CombatHud.h"
 #include "game/WorldInteraction.h"
+#include "game/NavigationRoute.h"
 #include <vector>
 #include <cstdint>
 class Renderer;
@@ -82,7 +83,7 @@ public:
         damageDirection_.Hit(event.facing,std::clamp(event.elapsed,0.f,dt));
     }
   }
-  void ResetCombatFeedback() { playerHealth_.Reset();targetHealth_.Reset();damageDirection_.Reset();castReceipt_.Reset();worldInteraction_.Reset();targetCastReceipt_.Reset();abilityFeedback_.Reset(); }
+  void ResetCombatFeedback() { navigation_.Reset();playerHealth_.Reset();targetHealth_.Reset();damageDirection_.Reset();castReceipt_.Reset();worldInteraction_.Reset();targetCastReceipt_.Reset();abilityFeedback_.Reset(); }
   const AbilityFeedback& AbilitySignals() const {return abilityFeedback_;}
   const TargetCastReceipt& TargetCastSignal() const {return targetCastReceipt_;}
   bool CapturesMovement() const { return panel==Panel::Menu; }
@@ -134,6 +135,7 @@ private:
   DamageDirection damageDirection_;
   CastReceipt castReceipt_;
   WorldInteractionReceipt worldInteraction_;
+  NavigationRoute navigation_;
   TargetCastReceipt targetCastReceipt_;
   AbilityFeedback abilityFeedback_;
   std::array<std::array<int,hotbarSlots>,int(rpg::ClassId::Count)> hotbars_=[] {

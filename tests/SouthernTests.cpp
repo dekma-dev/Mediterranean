@@ -78,6 +78,34 @@ void Regions() {
   for(const auto& e:s.Enemies()) {Check(map.CanStand(e.home,.45f),"Enemy camp inside prop");Check(!map.FindPath(QuestLocation(s.CurrentQuest()),e.home).empty(),"Enemy camp inaccessible");}
  }
 }
+void GuidedDelivery() {
+ for(int hz:{30,144}) {
+  auto s=Veteran(ClassId::Warrior);Talk(s,QuestAction::AcceptFrontier);
+  // Isolate traversal and interaction; live patrol windows have their own test.
+  for(auto& enemy:const_cast<std::vector<Enemy>&>(s.Enemies()))enemy.stunned=1000;
+  ui::NavigationRoute route;
+  for(int leg=0;leg<4;++leg) {
+   route.Update(.25f,s,false,{});int frames=0;
+   while(route.Status()!=ui::NavigationRoute::State::Arrived && frames++<hz*90) {
+    Check(!route.Points().empty(),"Caravan guidance lost its walking route");
+    const auto p=s.Player(),next=route.Points().front();const float d=std::hypot(next.x-p.x,next.z-p.z);
+    Command walk;const float k=std::min(1.f,d*1.2f)/std::max(d,.001f);
+    walk.movement={(next.x-p.x)*k,(next.z-p.z)*k};s.Update(1.f/hz,walk);route.Update(1.f/hz,s,false,{});
+   }
+   Check(frames<hz*90,"Guided caravan leg became stuck");s.StopMovement();Tick(s,.35f,hz);
+   Command interact;interact.interact=true;s.Update(1.f/hz,interact);
+   if(leg<3) {
+    Check(s.SupplyChannelSite()>=0,"Guidance endpoint cannot interact with the solid cache");Tick(s,3.1f,hz);
+    unsigned mask=s.ExpeditionMask();int count=0;for(;mask;mask>>=1)count+=mask&1u;
+    Check(count==leg+1,"Guided recovery did not credit the next cache");
+   } else {
+    Check(s.QuestPrimaryAction()==QuestAction::CompleteFrontier,"Guided delivery cannot talk to Tessa");
+    Command complete;complete.questAction=QuestAction::CompleteFrontier;s.Update(.01f,complete);
+    Check(s.FrontierCompleted()==14,"Guided delivery did not finish the assignment");
+   }
+  }
+ }
+}
 void Patrols() {
  for(int hz:{30,144}) {
   auto s=Veteran(ClassId::Warrior);Talk(s,QuestAction::AcceptFrontier);Warp(s,{0,-10});
@@ -569,6 +597,12 @@ void Views() {
   auto s=Veteran(ClassId::Warrior,chapter);Talk(s,QuestAction::AcceptFrontier);Roundtrip(s);
   Game g;g.Initialize();Check(g.RestoreSnapshot(s.Save()),"Scene save");g.SetCameraOrbit(2.8f,.45f,13);
   r.BeginFrame();g.Render(r);Capture(r,root/("region-"+std::to_string(chapter)+".png"));
+  if(chapter==13) {
+   Warp(s,WorldMap::spawn);Check(g.RestoreSnapshot(s.Save()),"Caravan approach snapshot");
+   g.OpenPanel(ui::Panel::Map);r.BeginFrame();g.Render(r);Capture(r,root/"navigation-caravan-atlas.png");
+   g.OpenPanel(ui::Panel::None);g.SetCameraOrbit(.65f,.45f,10);
+   r.BeginFrame();g.Render(r);Capture(r,root/"navigation-caravan-hud.png");
+  }
   r.BeginFrame();g.Render(r,false);r.SetCamera({0,100,-160},{0,7,-60});Capture(r,root/("overview-"+std::to_string(chapter)+".png"));
   if(chapter==14) {
    Warp(s,{-86,-89.4f});Command c;c.interact=true;s.Update(.001f,c);Clear(s);Tick(s,1.8f);
@@ -603,5 +637,5 @@ void Views() {
  Check(r.ValidateDebugMessages(),"Southern D3D validation");
 }
 }
-int main() try {Regions();Patrols();AnchorFeedback();Campaign();Spells();Siege();TacticalContacts();ReplayEncounters();TacticalAreas();Views();std::cout<<"PASS: southern routes, patrols, world interaction feedback, waves, court siege/migration, veteran replays, tactical areas and native scenes\n";}
+int main() try {Regions();GuidedDelivery();Patrols();AnchorFeedback();Campaign();Spells();Siege();TacticalContacts();ReplayEncounters();TacticalAreas();Views();std::cout<<"PASS: southern routes, guided caravan delivery, patrols, world interaction feedback, waves, court siege/migration, veteran replays, tactical areas and native scenes\n";}
 catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 1;}
