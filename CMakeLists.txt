@@ -131,6 +131,7 @@ add_library(MediterraneanClient STATIC
   engine/Engine.cpp
   engine/Audio.cpp
   engine/AudioDelivery.cpp
+  engine/AudioFrame.cpp
   engine/AcousticDesign.cpp
   engine/WorldAcoustics.cpp
   engine/RoomReverb.cpp
@@ -382,6 +383,10 @@ if (BUILD_TESTING)
   add_executable(AudioTests tests/AudioTests.cpp tests/AcousticsTests.cpp)
   target_link_libraries(AudioTests PRIVATE MediterraneanClient)
   add_test(NAME AudioTests COMMAND AudioTests)
+  add_executable(AudioFrameTests tests/AudioFrameTests.cpp)
+  target_link_libraries(AudioFrameTests PRIVATE MediterraneanClient)
+  add_test(NAME AudioFrameTests COMMAND AudioFrameTests)
+  set_tests_properties(AudioFrameTests PROPERTIES TIMEOUT 90)
   add_executable(RecordedAudioTests tests/RecordedAudioTests.cpp)
   target_link_libraries(RecordedAudioTests PRIVATE MediterraneanClient)
   add_test(NAME RecordedAudioTests COMMAND RecordedAudioTests)

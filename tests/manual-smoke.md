@@ -1,3 +1,11 @@
+## Owned audio publication (2026-11-25)
+
+- Run `AudioFrameTests`, `AudioTests`, `RecordedAudioTests`, `CommandExecutionTests`, `ScenePublicationTests`, `ExecutionTests`, `GraphicsLifecycleTests` and `InterfaceTests` in Release and Debug. Confirm that the native logs exercised the muted XAudio2 endpoint rather than reporting a skip.
+- With Mage, Scout and Priest, begin a charged attack, cancel it and immediately accept another cast. The cancelled preparation must fade independently; the new gathering sound must start once. Repeat with recovery/healing and character-creation auditions. Warrior attacks, steps and actual impacts should retain their original samples and timing.
+- Let a wolf/boar pursue without attacking, then try an active sparring session. Combat music should engage in both cases and release through the existing hold/fade after the threat ends. Compare ordinary campaign enemies as well.
+- Listen to a warning from a moving enemy near a wall. Kill/remove its source and let another actor appear: the old tail must stay at its final position, without jumping to the replacement. Load, switch character, mute and Alt-Tab during preparations; no previous-session cue should resume.
+- Inspect `Audio publication / emitters / owned bytes` in replay/benchmark reports and `Audio device frames / rejected / submitted cues` in interactive shutdown diagnostics. Ordinary playback should not reject frames. These counters measure ownership/delivery, not subjective audio quality or an FPS improvement. See `docs/audio-publication-2026-11-25.md`.
+
 ## Owned combat/world publication (2026-11-25)
 
 - Root/snare the first practice mannequin, then start sparring with E. The prop and its control aura must both disappear; an existing projectile keeps its last destination instead of switching to the trainer. Stop sparring: the prop returns, and any unexpired status fades in without an old envelope flashing.

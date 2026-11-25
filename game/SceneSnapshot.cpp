@@ -39,6 +39,7 @@ PlayerFrame CapturePlayer(const rpg::Simulation& s) {
   p.attackFlash=s.AttackFlash();p.hurtFlash=s.HurtFlash();p.attackSeconds=s.AttackSeconds();
   p.attackRate=s.AttackRate();p.recoveryProgress=s.RecoveryProgress();p.attackAbility=s.AttackAbility();
   p.classId=s.Class();p.grounded=s.Grounded();p.dashing=s.Dashing();p.dashed=s.DashedThisUpdate();
+  p.jumped=s.JumpedThisUpdate();
   p.attacking=s.Attacking();p.heavy=s.HeavyAttack();p.technique=s.TechniqueAttack();
   p.signature=s.SignatureAttack();p.opening=s.OpeningAttack();p.recovery=s.CastingRecovery();
   p.retreat=s.RetreatMobility();p.outfit=CharacterOutfit::From(s.Items(),s.Class(),s.Look());

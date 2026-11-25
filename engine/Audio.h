@@ -2,6 +2,7 @@
 #include "game/Simulation.h"
 #include "game/CommandExecution.h"
 #include "game/CreatureContacts.h"
+#include "game/SceneSnapshot.h"
 #include "engine/EffectEnvelope.h"
 #include "engine/WorldAcoustics.h"
 #include "engine/RoomReverb.h"
@@ -29,6 +30,7 @@ Cue ReleaseCue(rpg::ClassId school,int ability,bool heavy);
 Cue ContactCue(rpg::ClassId school,int ability,bool heavy);
 bool IsPreparation(Cue cue);
 bool Preparing(const rpg::Simulation& state);
+bool Preparing(const presentation::PlayerFrame& player);
 std::vector<std::int16_t> Generate(Cue cue,unsigned variant=0);
 unsigned EffectVariants(Cue cue);
 std::vector<std::int16_t> GenerateMusic();
@@ -43,6 +45,7 @@ struct AmbientMix {
   void Reset() {levels.fill(0);}
 };
 bool CombatThreat(const rpg::Simulation& state);
+bool CombatThreat(const presentation::SceneSnapshot& scene);
 struct MusicIntensity {
   float value=0,hold=0;
   void Update(bool threat,float seconds);
@@ -66,6 +69,12 @@ struct Audition {
   void Reset() { ++revision;count=0;preparing=false; }
   void Add(Cue cue) { if(count<cues.size()) {cues[count++]=cue;++sequence;} }
 };
+struct EmitterIdentity {
+  rpg::EnemyKind kind=rpg::EnemyKind::Raider;
+  int rank=0;
+  rpg::Vec2 home{};
+  bool valid=false;
+};
 // Pure event collection, independent of the audio device and playback.
 struct Events {
   std::array<Cue,24> cues{}; unsigned count=0;
@@ -74,12 +83,16 @@ struct Events {
   std::array<bool,24> environmental{};
   std::array<float,24> heights{};
   std::array<rpg::EntityId,24> attachedActors{}; // ~0u: fixed accepted contact
+  std::array<std::uint64_t,24> preparationTokens{};
+  std::array<EmitterIdentity,24> emitterIdentities{};
+  std::uint64_t preparationSerial=0;
   float stepDistance=0;
   unsigned warriorSwings=0;
   unsigned auditionRevision=~0u,auditionSequence=~0u;
   unsigned dropped=0;
   void Reset() { *this={}; }
   void Update(const rpg::Simulation& state,const presentation::CreatureContacts* contacts=nullptr,const rpg::StepEvents* accepted=nullptr);
+  void Update(const presentation::SceneSnapshot&,const rpg::WorldMap&,const presentation::CreatureContacts*,const rpg::StepEvents&);
   bool Preview(const Audition& audition);
 };
 // Bounded bridge from simulation/presentation steps to the device update.
@@ -96,10 +109,43 @@ public:
   unsigned Pending()const{return count_;}
   const Statistics& Stats()const{return stats_;}
 private:
-  struct Entry {Cue cue{};rpg::Vec2 origin{};float height=0,age=0;bool spatial=false,environmental=false;rpg::EntityId actor=0;};
+  struct Entry {Cue cue{};rpg::Vec2 origin{};float height=0,age=0;bool spatial=false,environmental=false;rpg::EntityId actor=0;std::uint64_t preparationToken=0;EmitterIdentity identity;};
   std::array<Entry,capacity> pending_{};
   unsigned count_=0;
   Statistics stats_;
+};
+
+struct Emitter {
+  rpg::EntityId id=0;
+  rpg::EnemyKind kind=rpg::EnemyKind::Raider;
+  int rank=0;
+  rpg::Vec2 home{};
+  AcousticPoint position{};
+};
+// Owned device input. Reuse its emitter capacity when publishing; copy the frame
+// if it must outlive the next publication. No Simulation/actor/audition pointers.
+struct Frame {
+  std::uint64_t sequence=0,preparationToken=0;
+  unsigned generation=0;
+  rpg::Vec2 player{};
+  float worldHeight=0,cameraYaw=0,seconds=0,musicVolume=0,effectsVolume=0;
+  bool alive=false,preparing=false,threat=false,menu=false,hasAudition=false;
+  Events events;
+  Audition audition;
+  std::vector<Emitter> emitters;
+  void Capture(const presentation::SceneSnapshot&);
+  const Emitter* Find(rpg::EntityId) const;
+  bool Valid() const;
+  std::size_t Bytes()const{return sizeof(*this)+emitters.capacity()*sizeof(Emitter);}
+};
+// Once an attached actor disappears or changes spawn identity, its existing
+// sound tail stays at its last accepted point. Reused IDs cannot recapture it.
+struct Attachment {
+  rpg::EntityId id=~0u;
+  Emitter identity;
+  bool bound=false,orphaned=false;
+  void Bind(rpg::EntityId actor,const Frame&,const EmitterIdentity& accepted={});
+  bool Resolve(const Frame&,AcousticPoint& point);
 };
 }
 class Audio {
@@ -109,8 +155,13 @@ public:
   bool RoomAvailable() const {return room_.Voice()!=nullptr;}
   unsigned SpatialUpdateErrors() const {return spatialUpdateErrors_;}
   unsigned ActiveSpatialVoices() const {return activeSpatialVoices_;}
+  struct Statistics {std::uint64_t frames=0,rejected=0,submitted=0;};
+  const Statistics& Stats()const{return stats_;}
+  struct VoiceView {rpg::EntityId actor=~0u;sound::AcousticPoint position{};bool orphaned=false,preparation=false;float preparationGain=0;std::uint64_t token=0;};
+  std::array<VoiceView,12> Voices()const;
   void Suspend(bool value);
   void Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds=1.f/60,float cameraYaw=0,const presentation::CreatureContacts* contacts=nullptr,bool menu=false,const sound::Audition* audition=nullptr,const sound::Events* accepted=nullptr);
+  void Update(const sound::Frame& frame);
 private:
   IXAudio2* engine_=nullptr;
   IXAudio2MasteringVoice* master_=nullptr;
@@ -120,6 +171,13 @@ private:
   std::array<float,12> obstructionTargets_{},heights_{};
   std::array<bool,12> environmental_{};
   std::array<rpg::EntityId,12> attachedActors_{};
+  std::array<sound::Attachment,12> attachments_{};
+  std::array<std::uint64_t,12> preparationTokens_{};
+  std::uint64_t lastFrame_=0;
+  Statistics stats_;
+  sound::Frame legacyFrame_;
+  sound::Events legacyEvents_;
+  unsigned legacyGeneration_=~0u;
   float acousticClock_=0,enclosureTarget_=0;
   bool roomDirty_=false;
   unsigned spatialUpdateErrors_=0;

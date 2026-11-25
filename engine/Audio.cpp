@@ -364,15 +364,16 @@ void MusicIntensity::Update(bool threat,float seconds) {
     value*=std::exp(-(dt-held)/3.f);
   }
 }
-bool CombatThreat(const rpg::Simulation& state) {
-  if(state.Health()<=0) return false;
-  if(state.Attacking()) return true;
-  const auto player=state.Player();
-  for(const auto& enemy:state.Enemies())
-    if(enemy.health>0 && enemy.state==rpg::EnemyState::Pursuing &&
-      std::hypot(enemy.position.x-player.x,enemy.position.z-player.z)<18) return true;
-  return false;
+bool CombatThreat(const rpg::Simulation& state) {presentation::SceneSnapshot scene;scene.Capture(state,0);return CombatThreat(scene);}
+
+bool CombatThreat(const presentation::SceneSnapshot& scene) {
+  const auto& p=scene.Player();if(p.health<=0)return false;if(p.attacking)return true;
+  const auto threat=[&](const presentation::ActorFrame& e){return e.health>0 && e.state==rpg::EnemyState::Pursuing &&
+    std::hypot(e.position.x-p.position.x,e.position.z-p.position.z)<18;};
+  for(const auto& e:scene.Combatants())if(threat(e))return true;
+  return scene.Sparring() && threat(scene.Trainer());
 }
+
 std::array<float,3> AmbientWeights(rpg::Vec2 p) {
   if(!std::isfinite(p.x) || !std::isfinite(p.z)) return {};
   const auto proximity=[&](rpg::Vec2 center,float radius) {
@@ -458,6 +459,7 @@ Cue PreparationCue(rpg::ClassId school,int ability){
  return Cue::Cast;
 }
 bool IsPreparation(Cue cue){return cue==Cue::Cast || cue==Cue::BowDraw || cue==Cue::FireGather || cue==Cue::FrostGather || cue==Cue::ArcaneGather || cue==Cue::HolyGather;}
+bool Preparing(const presentation::PlayerFrame& p){return p.health>0 && (p.recovery || (p.attacking && p.attackSeconds<combat::StrokeStart(p.heavy)));}
 bool Preparing(const rpg::Simulation& state){return state.Health()>0 && (state.CastingRecovery() || (state.Attacking() && state.AttackSeconds()<combat::StrokeStart(state.HeavyAttack())));}
 Cue ReleaseCue(rpg::ClassId school,int ability,bool heavy){
  if(school==rpg::ClassId::Scout)return ability==9 || ability==11?Cue::BowDeadeye:ability==12?Cue::BowTwin:(ability==8 || ability==14)?Cue::BowVolley:heavy?Cue::BowHeavy:Cue::Bow;
@@ -479,15 +481,23 @@ bool Events::Preview(const Audition& audition) {
     for(unsigned i=0;i<std::min<unsigned>(audition.count,unsigned(audition.cues.size()));++i)
       if(unsigned(audition.cues[i])<unsigned(Cue::Count)) {
         origins[count]={};spatial[count]=environmental[count]=false;heights[count]=0;
-        attachedActors[count]=~0u;cues[count++]=audition.cues[i];
+        attachedActors[count]=~0u;emitterIdentities[count]={};preparationTokens[count]=IsPreparation(audition.cues[i])?++preparationSerial:0;cues[count++]=audition.cues[i];
       }
   }
   auditionRevision=audition.revision;auditionSequence=audition.sequence;
   return reset;
 }
 void Events::Update(const rpg::Simulation& state,const presentation::CreatureContacts* contacts,const rpg::StepEvents* accepted) {
+  presentation::SceneSnapshot scene;scene.Capture(state,0);
+  rpg::StepEvents events;if(accepted)events=*accepted;else {
+    events.count=std::min(state.VisualEventCount(),events.values.size());
+    std::copy_n(state.VisualEvents().begin(),events.count,events.values.begin());
+  }
+  Update(scene,state.Map(),contacts,events);
+}
+void Events::Update(const presentation::SceneSnapshot& state,const rpg::WorldMap& map,const presentation::CreatureContacts* contacts,const rpg::StepEvents& accepted) {
   count=dropped=0;
-  rpg::Vec2 origin=state.Player();bool placed=false;float height=state.WorldHeight()+1.25f;
+  rpg::Vec2 origin=state.Player().position;bool placed=false;float height=state.Player().worldHeight+1.25f;
   rpg::EntityId attached=0;
   const auto add=[&](Cue cue) {
     if(count==cues.size()) {
@@ -496,25 +506,28 @@ void Events::Update(const rpg::Simulation& state,const presentation::CreatureCon
       if(CuePriority(cue)<=CuePriority(cues[lowest]))return;
       for(unsigned i=lowest;i+1<count;++i) {
         cues[i]=cues[i+1];origins[i]=origins[i+1];spatial[i]=spatial[i+1];heights[i]=heights[i+1];
-        attachedActors[i]=attachedActors[i+1];environmental[i]=environmental[i+1];
+        attachedActors[i]=attachedActors[i+1];environmental[i]=environmental[i+1];preparationTokens[i]=preparationTokens[i+1];emitterIdentities[i]=emitterIdentities[i+1];
       }
       --count;
     }
     origins[count]=origin;spatial[count]=placed;heights[count]=height;attachedActors[count]=attached;
     environmental[count]=cue!=Cue::UiClick&&cue!=Cue::ReserveReady&&cue!=Cue::CastCancelled;
-    cues[count++]=cue;
+    emitterIdentities[count]={};
+    if(const auto* actor=state.FindActor(attached))emitterIdentities[count]={actor->kind,actor->rank,actor->home,true};
+    else if(attached && attached!=~0u)attachedActors[count]=~0u;
+    preparationTokens[count]=IsPreparation(cue)?preparationSerial:0;cues[count++]=cue;
   };
   using K=rpg::CombatVisualKind;
-  for(size_t i=0;i<(accepted?std::min(accepted->count,accepted->values.size()):state.VisualEventCount());++i) {
-    const auto& event=accepted?accepted->values[i]:state.VisualEvents()[i];
-    const auto p=state.Player();
+  for(size_t i=0;i<std::min(accepted.count,accepted.values.size());++i) {
+    const auto& event=accepted.values[i];
+    const auto p=state.Player().position;
     if(std::hypot(event.position.x-p.x,event.position.z-p.z)>18) continue;
     origin=event.position;
-    height=std::max(event.height,state.Map().Height(origin)+.08f);attached=~0u;
+    height=std::max(event.height,map.Height(origin)+.08f);attached=~0u;
     placed=event.kind==K::BeastBite || event.kind==K::BeastCharge || event.kind==K::EnemyPrepare || event.kind==K::BossPrepare || event.kind==K::EnemySwing || event.kind==K::EnemyLance || event.kind==K::EnemyQuake || event.kind==K::EnemyTempest || event.kind==K::EnemyExecution || event.kind==K::Hit || event.kind==K::HeavyHit || event.kind==K::Interrupt;
     if(event.kind==K::EnemyPrepare||event.kind==K::BossPrepare||event.kind==K::EnemySwing||event.kind==K::BeastBite||event.kind==K::BeastCharge)
       attached=event.actor;
-    if(!placed){attached=0;height=state.WorldHeight()+1.25f;}
+    if(!placed){attached=0;height=state.Player().worldHeight+1.25f;}
     switch(event.kind) {
     case K::Strike:
       add(event.school==rpg::ClassId::Demonologist?Cue::Rend:Cue::Strike);
@@ -526,7 +539,7 @@ void Events::Update(const rpg::Simulation& state,const presentation::CreatureCon
     case K::UiClick:add(Cue::UiClick);break;
       case K::DisciplineReady:case K::ReserveReady:add(Cue::ReserveReady);break;
     case K::CastCancelled:add(Cue::CastCancelled);break;
-    case K::CastStart:add(PreparationCue(event.school,event.ability));break;
+    case K::CastStart:++preparationSerial;add(PreparationCue(event.school,event.ability));break;
     case K::EnemyPrepare: {
       auto cue=Cue::EnemyPrepare;
       for(const auto& actor:state.Combatants())if(actor.id==event.actor) {
@@ -561,35 +574,35 @@ void Events::Update(const rpg::Simulation& state,const presentation::CreatureCon
     case K::DashStart: case K::DashStop: case K::DashImpact: break;
     }
   }
-  placed=false;origin=state.Player();height=state.WorldHeight()+.08f;attached=0;
-  if(state.Health()>0) {
-    if(state.JumpedThisUpdate()) add(Cue::Jump);
-    if(state.LandingSpeed()>0) add(GroundCue(state.Map(),state.Player(),true));
-    if(state.DashedThisUpdate()) add(Cue::Dash);
-    if(state.Grounded()) {
-      stepDistance+=state.GroundMovementDistance();
-      if(stepDistance>=1.35f) { stepDistance=std::fmod(stepDistance,1.35f); add(GroundCue(state.Map(),state.Player())); }
+  placed=false;origin=state.Player().position;height=state.Player().worldHeight+.08f;attached=0;
+  if(state.Player().health>0) {
+    if(state.Player().jumped) add(Cue::Jump);
+    if(state.Player().landingSpeed>0) add(GroundCue(map,state.Player().position,true));
+    if(state.Player().dashed) add(Cue::Dash);
+    if(state.Player().grounded) {
+      stepDistance+=state.Player().groundMovementDistance;
+      if(stepDistance>=1.35f) { stepDistance=std::fmod(stepDistance,1.35f); add(GroundCue(map,state.Player().position)); }
     } else stepDistance=0;
-    if(state.GroundMovementDistance()==0) stepDistance=0;
+    if(state.Player().groundMovementDistance==0) stepDistance=0;
   } else stepDistance=0;
-  if(contacts && state.Health()>0) {
+  if(contacts && state.Player().health>0) {
     // At most three nearby ground sounds per frame; combat/player cues already
     // occupy their slots. Stable nearest-first selection avoids distant spam.
     std::array<unsigned,presentation::CreatureContacts::capacity> order{};
     const auto n=std::min<unsigned>(contacts->count,unsigned(order.size()));
     for(unsigned i=0;i<n;++i)order[i]=i;
-    const auto distance=[&](unsigned i){const auto& p=contacts->events[i].position;return std::hypot(p.x-state.Player().x,p.z-state.Player().z);};
+    const auto distance=[&](unsigned i){const auto& p=contacts->events[i].position;return std::hypot(p.x-state.Player().position.x,p.z-state.Player().position.z);};
     std::sort(order.begin(),order.begin()+n,[&](unsigned a,unsigned b){
       const auto da=distance(a),db=distance(b);return da==db?a<b:da<db;
     });
-    unsigned accepted=0;
-    for(unsigned j=0;j<n && accepted<3;++j) {
+    unsigned emittedSteps=0;
+    for(unsigned j=0;j<n && emittedSteps<3;++j) {
       const auto i=order[j];const auto& e=contacts->events[i];
       // Habitat roaming is only .65 m/s; boar contacts must remain audible
       // there too, rather than appearing only after pursuit accelerates them.
       if(distance(i)>12 || e.strength<.15f)continue;
       origin={e.position.x,e.position.z};height=e.position.y+.08f;placed=true;attached=~0u;
-      add(CreatureGroundCue(state.Map(),origin,e.hoof));++accepted;
+      add(CreatureGroundCue(map,origin,e.hoof));++emittedSteps;
     }
   }
 }
@@ -668,7 +681,7 @@ void Audio::ClearEffects() {
   for(auto* voice:voices_) if(voice) { voice->Stop(); voice->FlushSourceBuffers(); }
   if(resetRoom){room_.Reset();if(!suspended_)engine_->StartEngine();}
   roomDirty_=false;acousticClock_=0;enclosureTarget_=0;acousticResponses_={};obstructionTargets_.fill(0);
-  environmental_.fill(false);attachedActors_.fill(~0u);
+  environmental_.fill(false);attachedActors_.fill(~0u);attachments_={};preparationTokens_.fill(0);preparation_.fill(false);preparationGain_.fill(0);
   voiceLevels_.fill(0); voicePeaks_.fill(0); voicePriorities_.fill(0); spatial_.fill(false); voiceEnvelopes_.fill(nullptr); effectGain_=.85f;
 }
 void Audio::Suspend(bool value) {
@@ -679,6 +692,27 @@ void Audio::Suspend(bool value) {
   else engine_->StartEngine();
 }
 void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds,float cameraYaw,const presentation::CreatureContacts* contacts,bool menu,const sound::Audition* audition,const sound::Events* accepted) {
+  presentation::SceneSnapshot scene;scene.Capture(state,0);legacyFrame_.Capture(scene);
+  if(generation!=legacyGeneration_){legacyEvents_.Reset();legacyGeneration_=generation;}
+  if(accepted)legacyFrame_.events=*accepted;else {legacyEvents_.Update(state,contacts);legacyFrame_.events=legacyEvents_;}
+  legacyFrame_.preparationToken=accepted?accepted->preparationSerial:legacyEvents_.preparationSerial;
+  legacyFrame_.sequence=lastFrame_+1;legacyFrame_.generation=generation;
+  legacyFrame_.musicVolume=musicVolume;legacyFrame_.effectsVolume=effectsVolume;
+  legacyFrame_.seconds=std::isfinite(seconds)?std::clamp(seconds,0.f,.1f):seconds;legacyFrame_.cameraYaw=cameraYaw;
+  legacyFrame_.menu=menu;legacyFrame_.hasAudition=audition!=nullptr;legacyFrame_.audition=audition?*audition:sound::Audition{};
+  Update(legacyFrame_);
+}
+std::array<Audio::VoiceView,12> Audio::Voices()const{
+  std::array<VoiceView,12> result{};for(unsigned i=0;i<result.size();++i)
+    result[i]={attachedActors_[i],{origins_[i].x,heights_[i],origins_[i].z},attachments_[i].orphaned,preparation_[i],preparationGain_[i],preparationTokens_[i]};
+  return result;
+}
+void Audio::Update(const sound::Frame& frame) {
+  if(!frame.Valid() || frame.sequence<=lastFrame_){++stats_.rejected;return;}
+  lastFrame_=frame.sequence;++stats_.frames;
+  const auto generation=frame.generation;const auto musicVolume=frame.musicVolume,effectsVolume=frame.effectsVolume,seconds=frame.seconds,cameraYaw=frame.cameraYaw;
+  const bool menu=frame.menu;const auto* audition=frame.hasAudition?&frame.audition:nullptr;
+
   activeSpatialVoices_=0;
   if(!music_ || suspended_) return;
   musicGain_=sound::MusicGain(musicGain_,musicVolume,seconds);
@@ -690,34 +724,34 @@ void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicV
     generation_=generation; ClearEffects(); events_.Reset(); variations_.fill(0);intensity_.Reset();
     ambientMix_.Reset();
   }
-  if(menu || state.Health()<=0) intensity_.Reset();
-  else intensity_.Update(sound::CombatThreat(state),seconds);
+  if(menu || !frame.alive) intensity_.Reset();
+  else intensity_.Update(frame.threat,seconds);
   music_->SetVolume(musicGain_*(recordedMusic_?.62f:.38f)*(1-menuBlend_)*(recordedMusic_?1-intensity_.value:1));
   menuMusic_->SetVolume(musicGain_*(recordedMusic_?.62f:.38f)*menuBlend_);
   combatMusic_->SetVolume(musicGain_*(recordedMusic_?.60f:.30f)*intensity_.value*(1-menuBlend_));
-  ambientMix_.Update(state.Player(),intensity_.value,seconds);
+  ambientMix_.Update(frame.player,intensity_.value,seconds);
   for(size_t i=0;i<ambience_.size();++i)
     ambience_[i]->SetVolume(menu?0:std::clamp(effectsVolume,0.f,1.f)*.35f*ambientMix_.levels[i]);
   if(menu) {
     if(!audition){ClearEffects();return;}
     if(events_.Preview(*audition))ClearEffects();
-  } else if(accepted)events_=*accepted;
-  else events_.Update(state,contacts);
+  } else events_=frame.events;
+  const auto preparationToken=menu?events_.preparationSerial:frame.preparationToken;
   if(effectsVolume<=0) { ClearEffects(); return; }
   if(room_.Voice())room_.Voice()->SetVolume(std::clamp(effectsVolume,0.f,1.f));
   // Apply the voice changes as one XAudio2 operation set so a new effect never
   // starts with the preceding frame's louder sparse-mix gain.
   constexpr UINT32 mixOperation=1;
-  const auto player=state.Player();
-  const sound::AcousticPoint listener{player.x,state.WorldHeight()+1.55f,player.z};
+  const auto player=frame.player;
+  const sound::AcousticPoint listener{player.x,frame.worldHeight+1.55f,player.z};
   acousticClock_-=dt;const bool traceAcoustics=!menu&&acousticClock_<=0;
   if(traceAcoustics){acousticClock_=.05f;enclosureTarget_=acousticWorld_->Enclosure(listener);}
   // Resolve moving warning/creature emitters once per update. Contact tails
   // keep their accepted point; dead/missing emitters freeze rather than jump.
-  for(const auto& actor:state.Combatants())if(actor.health>0)
-    for(size_t v=0;v<voices_.size();++v)if(attachedActors_[v]==actor.id&&voiceLevels_[v]>0){
-      origins_[v]=actor.position;heights_[v]=state.Map().Height(actor.position)+actor.ContactHeight();
-    }
+  for(size_t v=0;v<voices_.size();++v)if(voiceLevels_[v]>0){
+    sound::AcousticPoint point;
+    if(attachments_[v].Resolve(frame,point)){origins_[v]={point.x,point.z};heights_[v]=point.y;}
+  }
   for(size_t v=0;v<voices_.size();++v){XAUDIO2_VOICE_STATE status{};voices_[v]->GetState(&status);
     if(!status.BuffersQueued)voicePriorities_[v]=0;
     else if(voiceEnvelopes_[v])voicePriorities_[v]=sound::TailPriority(voicePriorities_[v],voiceEnvelopes_[v]->Peak(status.SamplesPlayed));}
@@ -746,10 +780,10 @@ void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicV
       preparation_[v]=sound::IsPreparation(cue);preparationGain_[v]=1;
       origins_[v]=events_.origins[i];spatial_[v]=events_.spatial[i];
       environmental_[v]=!menu&&events_.environmental[i];heights_[v]=events_.heights[i];attachedActors_[v]=events_.attachedActors[i];
-      if(environmental_[v]&&attachedActors_[v]!=~0u&&attachedActors_[v]!=0)
-        for(const auto& actor:state.Combatants())if(actor.id==attachedActors_[v]){
-          origins_[v]=actor.position;heights_[v]=state.Map().Height(actor.position)+actor.ContactHeight();break;
-        }
+      attachments_[v].Bind(attachedActors_[v],frame,events_.emitterIdentities[i]);
+      sound::AcousticPoint point;
+      if(environmental_[v] && attachments_[v].Resolve(frame,point)){origins_[v]={point.x,point.z};heights_[v]=point.y;}
+      preparationTokens_[v]=events_.preparationTokens[i];++stats_.submitted;
       obstructionTargets_[v]=environmental_[v]&&spatial_[v]?acousticWorld_->Obstruction({origins_[v].x,heights_[v],origins_[v].z},listener):0;
       // Initialize before Start: the first transient cannot leak through a wall.
       acousticResponses_[v]={obstructionTargets_[v],environmental_[v]?enclosureTarget_:0};
@@ -767,7 +801,7 @@ void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicV
     }
     // A release or cancelled channel fades its preparation once; a later cast
     // cannot revive the previous tail. Physical impacts retain their full tail.
-    if(preparation_[v] && (!(menu?audition->preparing:sound::Preparing(state)) || preparationGain_[v]<1)) {
+    if(preparation_[v] && (!(menu?audition->preparing:frame.preparing) || preparationTokens_[v]!=preparationToken || preparationGain_[v]<1)) {
       preparationGain_[v]*=std::exp(-dt/.035f);
       if(preparationGain_[v]<.005f){voices_[v]->Stop();voices_[v]->FlushSourceBuffers();voiceLevels_[v]=voicePeaks_[v]=0;continue;}
     }

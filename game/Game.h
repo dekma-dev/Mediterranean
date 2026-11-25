@@ -58,6 +58,7 @@ public:
   FrameResult ExecuteFrame(const rpg::Command& command,float seconds);
   const rpg::CommandSchedule::Statistics& ScheduleStats() const {return schedule_.Stats();}
   sound::Events TakeSoundEvents(){return soundDelivery_.Take();}
+  const sound::Frame& TakeAudioFrame(float seconds);
   const sound::DeliveryQueue::Statistics& SoundDeliveryStats()const{return soundDelivery_.Stats();}
   const rpg::ExecutionStats& StepStats()const{return execution_.Stats();}
   void BeginCommandTrace(std::size_t capacity=90){execution_.BeginTrace(simulation_,capacity);}
@@ -96,6 +97,7 @@ private:
   presentation::SceneSnapshot scene_;
   sound::Events soundEvents_;
   sound::DeliveryQueue soundDelivery_;
+  sound::Frame audioFrame_;
   void PresentStep(const rpg::StepReceipt& step);
   void Notify(const std::string& message){execution_.InvalidateTrace();simulation_.Notify(message);}
   WorldView worldView_;

@@ -371,11 +371,20 @@ rpg::StepReceipt Game::ExecuteCommand(const rpg::Command& command,float seconds)
   PresentStep(step);
   // Resets cancel old transients instead of replaying pre-reset receipts.
   if(generation==audioGeneration_) {
-    soundEvents_.Update(simulation_,&creatureSteps_,&step.events);
+    soundEvents_.Update(scene_,simulation_.Map(),&creatureSteps_,step.events);
     soundDelivery_.Append(soundEvents_);
   }
   execution_.RecordPresentation(std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count());
   return step;
+}
+const sound::Frame& Game::TakeAudioFrame(float seconds){
+  audioFrame_.Capture(scene_);++audioFrame_.sequence;audioFrame_.generation=audioGeneration_;
+  audioFrame_.events=soundDelivery_.Take();audioFrame_.preparationToken=soundEvents_.preparationSerial;
+  audioFrame_.musicVolume=MusicVolume();audioFrame_.effectsVolume=EffectsVolume();audioFrame_.cameraYaw=cameraYaw_;
+  audioFrame_.seconds=std::isfinite(seconds)?std::clamp(seconds,0.f,.1f):0;
+  audioFrame_.menu=choosingCharacter_;audioFrame_.hasAudition=choosingCharacter_;
+  audioFrame_.audition=choosingCharacter_?selection_.PreviewAudio():sound::Audition{};
+  return audioFrame_;
 }
 std::string Game::StepDiagnostics()const {
   const auto& step=execution_.Stats();const auto& sound=soundDelivery_.Stats();std::ostringstream out;
@@ -389,6 +398,7 @@ std::string Game::StepDiagnostics()const {
     <<"\nAccepted / dropped visual events: "<<step.events<<" / "<<step.droppedEvents
     <<"\nScene revision / sequence / actors / bytes / storage growths: "<<scene_.Revision()<<" / "<<scene_.Sequence()<<" / "<<scene_.Combatants().size()<<" / "<<scene_.Bytes()<<" / "<<scene_.StorageGrowths()
     <<"\nSound accepted / delivered / expired / dropped / peak: "<<sound.accepted<<" / "<<sound.delivered<<" / "<<sound.expired<<" / "<<sound.dropped<<" / "<<sound.peak<<'\n';
+  out<<"Audio publication / emitters / owned bytes: "<<audioFrame_.sequence<<" / "<<audioFrame_.emitters.size()<<" / "<<audioFrame_.Bytes()<<'\n';
   return out.str();
 }
 void Game::PresentStep(const rpg::StepReceipt& step) {

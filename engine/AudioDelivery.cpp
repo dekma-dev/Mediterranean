@@ -13,7 +13,7 @@ void DeliveryQueue::Advance(float seconds) {
 void DeliveryQueue::Append(const Events& events) {
   stats_.dropped+=events.dropped;
   for(unsigned i=0;i<std::min<unsigned>(events.count,unsigned(events.cues.size()));++i){
-    const Entry incoming{events.cues[i],events.origins[i],events.heights[i],0,events.spatial[i],events.environmental[i],events.attachedActors[i]};
+    const Entry incoming{events.cues[i],events.origins[i],events.heights[i],0,events.spatial[i],events.environmental[i],events.attachedActors[i],events.preparationTokens[i],events.emitterIdentities[i]};
     if(unsigned(incoming.cue)>=unsigned(Cue::Count)){++stats_.dropped;continue;}
     if(count_==capacity) {
       unsigned lowest=0;for(unsigned j=1;j<count_;++j)if(CuePriority(pending_[j].cue)<CuePriority(pending_[lowest].cue))lowest=j;
@@ -39,7 +39,8 @@ Events DeliveryQueue::Take() {
   }
   for(unsigned i=0;i<count_;++i)if(keep[i]){const auto& entry=pending_[i];const auto j=result.count++;
     result.cues[j]=entry.cue;result.origins[j]=entry.origin;result.heights[j]=entry.height;
-    result.spatial[j]=entry.spatial;result.environmental[j]=entry.environmental;result.attachedActors[j]=entry.actor;}
+    result.spatial[j]=entry.spatial;result.environmental[j]=entry.environmental;result.attachedActors[j]=entry.actor;
+    result.preparationTokens[j]=entry.preparationToken;result.emitterIdentities[j]=entry.identity;}
   stats_.delivered+=result.count;count_=0;return result;
 }
 }

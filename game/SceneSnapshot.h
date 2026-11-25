@@ -48,7 +48,7 @@ struct PlayerFrame {
   float dashPhase=0,attackFlash=0,hurtFlash=0,attackSeconds=-1,attackRate=1,recoveryProgress=0;
   int attackAbility=-1;
   rpg::ClassId classId=rpg::ClassId::Warrior;
-  bool grounded=true,dashing=false,dashed=false,attacking=false,heavy=false;
+  bool grounded=true,dashing=false,dashed=false,jumped=false,attacking=false,heavy=false;
   bool technique=false,signature=false,opening=false,recovery=false,retreat=false;
   float barrier=0,evasionSeconds=0,frostSeconds=0,disciplineSeconds=0,guardWindow=0;
   rpg::Vec2 frostPosition{};
