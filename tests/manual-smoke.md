@@ -1,3 +1,9 @@
+## Memory lifetime follow-up (2026-11-26)
+
+- Run `MemoryLifetimeTests` in Release and Debug, serially with other native tests. It checks renderer/window/audio teardown, 24 resizes/class loads, font replacement, actual four-class combat/audio and warmed session memory. `MemoryLifetimeTests --soak` extends the session to 18,000 rendered frames / 300 simulated seconds. No player saves are written and native sound is muted.
+- During normal Release play, repeat character changes, casts, C/I/M panels, fullscreen/windowed transitions and Alt-Tab. Watch RPGNative.exe private bytes, handles and dedicated GPU memory after warmup. A retained high-water mark alone is not a leak; look for continuing growth over repeated equivalent cycles. Verify that animations, input, shadow edges, effects and UI remain unchanged.
+- `MemoryLifetimeTests --isolate-platform` separates windows, device creation, WIC decoding, hardware/WARP swap chains and GPU completion events. The local hardware path's two retained handles per swap-chain generation are reproducible without game rendering; see `docs/memory-lifetime-2026-11-26.md`. Do not interpret this as evidence that normal frames leak textures or recreate devices.
+
 ## GPU work budget and presentation pacing (2026-11-26)
 
 - Launch the normal game executable: character selection/creation should stay within 30 FPS, gameplay within 60 FPS. VSync may limit delivery further. Inventory/map/Escape windows retain the gameplay rate because the world remains live. Check movement, cast durations and short key taps across transitions.
