@@ -17,7 +17,9 @@ void RemoveRecord(std::string& save,const char* tag) {
   const auto at=save.find(tag); Require(at!=std::string::npos,"Expected save record."); save.erase(at,save.find('\n',at)-at+1);
 }
 void LegacyVersion(std::string& save,const char* version) {
+  // Version 23 added CHAINS before WILDERNESS; it is not part of v4-v7.
   save.erase(save.find("WILDERNESS "));
+  RemoveRecord(save,"CHAINS ");
   save.replace(14,save.find('\n')-14,version); RemoveRecord(save,"LOADOUTS "); RemoveRecord(save,"BUILD "); RemoveRecord(save,"PROFILE "); RemoveRecord(save,"APPEARANCE "); RemoveRecord(save,"SURVEY "); RemoveRecord(save,"TECHNIQUE "); RemoveRecord(save,"SIGNATURE "); RemoveRecord(save,"OPENING "); RemoveRecord(save,"ENCOUNTERS"); RemoveRecord(save,"EXPEDITION "); RemoveRecord(save,"SOUTHERN "); RemoveRecord(save,"COURT ");
 }
 void TrimRecord(std::string& save,const char* tag,int count) {

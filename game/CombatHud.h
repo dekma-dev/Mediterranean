@@ -94,7 +94,7 @@ struct CastReceipt {
     const float duration=interrupted?.48f:.28f;
     return ability<0?0:1-std::clamp(age/duration,0.f,1.f);
   }
-  void Update(float dt,const rpg::Simulation& state) {
+  template<class State> void Update(float dt,const State& state) {
     if(!std::isfinite(dt) || dt<=0 || dt>.25f || state.Health()<=0) {Reset();return;}
     if(school!=state.Class())Reset();school=state.Class();age+=dt;
     const auto cast=ReadPlayerCast(state);bool released=false;int action=-1;float elapsed=0;
@@ -129,7 +129,7 @@ struct TargetCastReceipt {
     const float life=result==Result::Interrupted?.85f:result==Result::Stopped?.45f:.35f;
     return result==Result::None?0:1-std::clamp(age/life,0.f,1.f);
   }
-  void Update(float dt,const rpg::Simulation& state) {
+  template<class State> void Update(float dt,const State& state) {
     const auto* target=state.TargetActor();
     if(!std::isfinite(dt)||dt<=0||dt>.25f||state.Health()<=0||!target||target->health<=0||target->kind==rpg::EnemyKind::Dummy){Reset();return;}
     if(actor!=target->id){Reset();actor=target->id;}
@@ -164,7 +164,7 @@ struct AbilityFeedback {
   void Reset(){*this=AbilityFeedback{};}
   float Ready(int ability) const {return ability<0 || ability>=int(readyAge.size())?0:std::max(0.f,1-readyAge[ability]/.55f);}
   float Used(int ability) const {return ability<0 || ability>=int(useAge.size())?0:std::max(0.f,1-useAge[ability]/.24f);}
-  void Update(float dt,const rpg::Simulation& state) {
+  template<class State> void Update(float dt,const State& state) {
     if(!std::isfinite(dt) || dt<=0 || dt>.25f || state.Health()<=0){Reset();return;}
     if(school!=state.Class())Reset();school=state.Class();
     for(int i=0;i<int(previous.size());++i){

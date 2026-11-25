@@ -42,7 +42,7 @@ public:
     effects_.CancelTrail(0); playerAnimation_.pose.attackSeconds=-1; playerPose_.attack=playerPose_.attackVelocity=0;
     playerAnimation_.authoredWeapon={};playerAnimation_.pose.authoredStrikeWeight=0;
     simulation_.CloseQuestDialogue(); if (interface_.panel==ui::Panel::Quest) interface_.Close(ui::Panel::Quest);
-    scene_.Capture(simulation_,scene_.Sequence()); }
+    scene_.Capture(simulation_,scene_.Sequence());hud_.Capture(simulation_,scene_.Sequence());interface_.AdvanceHud(0,hud_); }
   rpg::StepReceipt ExecuteCommand(const rpg::Command& command,float seconds=.01f);
   struct FrameResult {
     bool tradeRequested=false,boundary=false;
@@ -65,6 +65,8 @@ public:
   rpg::ReplayResult VerifyCommandTrace()const{return execution_.VerifyTrace();}
   std::string StepDiagnostics()const;
   const presentation::SceneSnapshot& Scene() const {return scene_;}
+  const ui::HudSnapshot& Hud()const{return hud_;}
+  const ui::Interface& HudInterface()const{return interface_;}
   const rpg::Simulation& State() const { return simulation_; }
   const motion::Actor& PlayerPose() const { return playerPose_; }
   const motion::Actor& EnemyPose(std::size_t index) const { return enemyActors_.at(index).motion; }
@@ -95,6 +97,7 @@ private:
   rpg::CommandExecution execution_;
   rpg::CommandSchedule schedule_;
   presentation::SceneSnapshot scene_;
+  ui::HudSnapshot hud_;
   sound::Events soundEvents_;
   sound::DeliveryQueue soundDelivery_;
   sound::Frame audioFrame_;

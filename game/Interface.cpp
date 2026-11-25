@@ -43,7 +43,7 @@ std::string Seconds(float value) {
 std::string Number(float value) {
  std::ostringstream text; text<<std::setprecision(4)<<value; return text.str();
 }
-std::string SpellEffect(const rpg::Simulation& s,int ability) {
+std::string SpellEffect(const HudSnapshot& s,int ability) {
  if(ability>=8) {
    return Number((ability==12?s.StrikeDamage():s.HeavyDamage())*rpg::AdvancedDamageMultiplier(s.Class(),ability))+" base damage / level "+std::to_string(rpg::SpellLevel(ability));
  }
@@ -61,7 +61,7 @@ std::string SpellEffect(const rpg::Simulation& s,int ability) {
    (s.HasTalent(rpg::Talent::Mercy)?" / "+Number(s.MendHealing()+20)+" at low HP":"")+
    (rpg::ClassRecoveryBarrier(s.Class())>0?" / "+Number(rpg::ClassRecoveryBarrier(s.Class()))+" ward":"");
 }
-std::string TalentEffect(const rpg::Simulation& s,int index) {
+template<class State> std::string TalentEffect(const State& s,int index) {
  const auto info=s.TalentDefinition(index);
  if(info.strike || info.heavy) return "+"+Number(info.strike)+" basic / +"+Number(info.heavy)+" heavy damage";
  if(info.health) return "+"+Number(info.health)+" maximum health";
@@ -292,7 +292,7 @@ struct Canvas {
   }
  }
  // Painted armor crest with a live level/threat medallion.
- void Portrait(float x,float y,const rpg::Simulation& s,const rpg::Enemy* enemy=nullptr,int friendly=-1) {
+ void Portrait(float x,float y,const HudSnapshot& s,const HudActor* enemy=nullptr,int friendly=-1) {
   Skin({x-29,y-29,58,59},17);
   Gradient({x-24,y-24,48,47},{.16f,.20f,.22f,1},{.025f,.035f,.045f,1});
   const auto p=P(x-24,y-24);
@@ -460,7 +460,7 @@ void TalentIcon(Canvas& c,Rect rect,int index,float alpha=1,rpg::ClassId id=rpg:
 }
 Point MapPoint(Rect a,rpg::Vec2 p) { const float depth=rpg::WorldMap::surveyDepth,span=depth*a.w/a.h;
  return {a.x+(p.x+span*.5f)/span*a.w,a.y+(.5f-p.z/depth)*a.h}; }
-void Atlas(Canvas& c,const rpg::Simulation& sim,Rect a,bool compact,bool waypoint,rpg::Vec2 pin,const NavigationRoute& route) {
+void Atlas(Canvas& c,const HudSnapshot& sim,Rect a,bool compact,bool waypoint,rpg::Vec2 pin,const NavigationRoute& route) {
  if (compact) {
   const auto p=c.P(a.x,a.y);
   c.r.DrawRoundMapArtwork(p.x,p.y,a.w*c.layout.scale/c.r.Width(),a.h*c.layout.scale/c.r.Height());
@@ -1007,7 +1007,24 @@ void RenderCharacterSelection(Renderer& renderer,const CharacterSelection& selec
  if(selection.PageAge()<.20f)c.RectFill({22,156,302,438},{.018f,.025f,.028f,.30f*std::pow(1-selection.PageAge()/.20f,2.f)});
 }
 
-void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bool debug,float cameraYaw) {
+void Interface::AdvanceHud(float seconds,const HudSnapshot& s) {
+ const float healthSeconds=seconds;
+ const float frameSeconds=std::clamp(healthSeconds,0.f,.05f);
+ navigation_.Update(frameSeconds,s.Map(),s.Player(),hasWaypoint?waypoint:s.ObjectivePosition(),s.Health()>0 && (hasWaypoint || s.TrackedHunt()>=0 || s.ReplayActive() || s.AnchorState()!=rpg::AnchorQuest::Complete || s.FrontierCompleted()<rpg::frontierQuestCount),hasWaypoint);
+ playerHealth_.Update(s.Health(),s.MaxHealth(),0,healthSeconds);
+ if(const auto* target=s.TargetActor()) targetHealth_.Update(target->health,target->MaxHealth(),target->id,healthSeconds);
+ else targetHealth_.Reset();
+ if(std::hypot(mouseX_-hoverX_,mouseY_-hoverY_)>3) hoverTime_=0;
+ else hoverTime_=std::min(1.f,hoverTime_+frameSeconds);
+ hoverX_=mouseX_;hoverY_=mouseY_;
+}
+// Compatibility path for isolated callers. The actual Game update publishes
+// and advances explicitly; repeated native draws do not tick HUD clocks.
+void Interface::Render(Renderer& r,const rpg::Simulation& state,float time,bool debug,float yaw) {
+ HudSnapshot frame;frame.Capture(state,0);AdvanceHud(time-lastRenderTime_,frame);lastRenderTime_=time;
+ Render(r,frame,time,debug,yaw);
+}
+void Interface::Render(Renderer& renderer,const HudSnapshot& s,float time,bool debug,float cameraYaw) {
  Canvas c(renderer); regions_.clear();
  const auto actionHud=ActionHudLayout::At(float(renderer.Width()),float(renderer.Height()),ActionBarPercent());
  const auto actionTransform=actionHud.bars;
@@ -1029,22 +1046,13 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    statusTips.push_back({name,description,value});
  };
  renderedClass_=s.Class();
- const float healthSeconds=time-lastRenderTime_;
- const float frameSeconds=std::clamp(healthSeconds,0.f,.05f);lastRenderTime_=time;
- navigation_.Update(frameSeconds,s,hasWaypoint,waypoint);
- playerHealth_.Update(s.Health(),s.MaxHealth(),0,healthSeconds);
- if(const auto* target=s.TargetActor()) targetHealth_.Update(target->health,target->MaxHealth(),target->id,healthSeconds);
- else targetHealth_.Reset();
- if(std::hypot(mouseX_-hoverX_,mouseY_-hoverY_)>3) hoverTime_=0;
- else hoverTime_=std::min(1.f,hoverTime_+frameSeconds);
- hoverX_=mouseX_;hoverY_=mouseY_;
  renderedState_=StateKey(); renderedWidth_=float(renderer.Width()); renderedHeight_=float(renderer.Height());
  if (!renderer.HasMapArtwork() && !renderer.SetMapArtwork(BuildMapArtwork(s.Map()),512)) return;
  // Collect projected bodies first. Near bodies win overlapping picks; visible
  // nameplates are then packed separately and retain the actor's stable identity.
- struct WorldTarget { rpg::EntityId id; Rect body; const char* name; const rpg::Enemy* actor; float depth; bool friendly,selected; };
+ struct WorldTarget { rpg::EntityId id; Rect body; const char* name; const HudActor* actor; float depth; bool friendly,selected; };
  std::array<WorldTarget,128> worldTargets{};std::size_t worldCount=0;WorldPlates plates;bool nearbyCombat=false;
- const auto worldTarget=[&](rpg::EntityId id,rpg::Vec2 position,const char* name,bool friendly,const rpg::Enemy* actor=nullptr) {
+ const auto worldTarget=[&](rpg::EntityId id,rpg::Vec2 position,const char* name,bool friendly,const HudActor* actor=nullptr) {
   const float distance=std::hypot(position.x-s.Player().x,position.z-s.Player().z);
   if(worldCount==worldTargets.size() || distance>22 || !s.Map().CanTravel(s.Player(),position,.05f)) return;
   Point head,foot;float depth=0;
@@ -1089,7 +1097,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
  const bool lootCard=combatLayout && s.Health()>0 && (nearbyLoot.bodies>0 || lootReport.remaining>0);
  const Rect lootBounds{22,474,std::min(300.f,actionTransform.X(328)-34),128};
  if(lootCard)plates.Reserve(lootBounds.x,lootBounds.y,lootBounds.w,lootBounds.h);
- const auto incoming=ReadIncomingAttacks(s);
+ const auto& incoming=s.Incoming();
  const auto anchors=CombatHudAnchors(!combatLayout);
  plates.Reserve(anchors.player.x-3,anchors.player.y,246,70);
  if(s.TargetActor() || s.FriendlyTarget()>=0) plates.Reserve(anchors.target.x,anchors.target.y,257,70);
@@ -1227,7 +1235,7 @@ void Interface::Render(Renderer& renderer,const rpg::Simulation& s,float time,bo
    c.FitText(board.x+8,board.y+3,324,"INCOMING ATTACKS / SELECT",11,gold);
    regions_.push_back({board,{},false});
    for(unsigned i=0;i<incoming.count;++i) {
-    const auto& row=incoming.rows[i];const auto& enemy=*row.enemy;
+    const auto& row=incoming.rows[i];const auto& enemy=row.actor;
     const float y=board.y+24+i*36;
     const Rect hit{board.x+5,y-2,330,34};
     const bool selected=s.TargetActor() && s.TargetActor()->id==enemy.id;

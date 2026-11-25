@@ -365,7 +365,8 @@ rpg::StepReceipt Game::ExecuteCommand(const rpg::Command& command,float seconds)
   const auto step=execution_.Advance(simulation_,seconds,command);
   const auto start=std::chrono::steady_clock::now();
   scene_.Capture(simulation_,step.sequence);
-  if(step.seconds<=0)return step;
+  hud_.Capture(simulation_,step.sequence,&step.events);
+  if(step.seconds<=0){interface_.AdvanceHud(0,hud_);return step;}
   const auto generation=audioGeneration_;
   soundDelivery_.Advance(step.seconds);
   PresentStep(step);
@@ -399,6 +400,7 @@ std::string Game::StepDiagnostics()const {
     <<"\nScene revision / sequence / actors / bytes / storage growths: "<<scene_.Revision()<<" / "<<scene_.Sequence()<<" / "<<scene_.Combatants().size()<<" / "<<scene_.Bytes()<<" / "<<scene_.StorageGrowths()
     <<"\nSound accepted / delivered / expired / dropped / peak: "<<sound.accepted<<" / "<<sound.delivered<<" / "<<sound.expired<<" / "<<sound.dropped<<" / "<<sound.peak<<'\n';
   out<<"Audio publication / emitters / owned bytes: "<<audioFrame_.sequence<<" / "<<audioFrame_.emitters.size()<<" / "<<audioFrame_.Bytes()<<'\n';
+  out<<"HUD revision / sequence / actors / bytes / growths: "<<hud_.Revision()<<" / "<<hud_.Sequence()<<" / "<<hud_.Combatants().size()<<" / "<<hud_.Bytes()<<" / "<<hud_.StorageGrowths()<<'\n';
   return out.str();
 }
 void Game::PresentStep(const rpg::StepReceipt& step) {
@@ -417,7 +419,8 @@ void Game::PresentStep(const rpg::StepReceipt& step) {
   // Runtime wildlife belongs to Simulation; the old ambient preview is test-only.
   atmosphereTime_=std::fmod(atmosphereTime_+dt,1800.0);
   if (command.restart || (wasDead && scene_.Player().health>0) || wasReplay!=scene_.Replay()) { worldView_.ResetWildlife(); ResetMotion(); return; }
-  interface_.UpdateCombatFeedback(dt,simulation_);
+  interface_.UpdateCombatFeedback(dt,hud_);
+  interface_.AdvanceHud(dt,hud_);
   effects_.Advance(dt);
   sustained_.Update(scene_,dt);
   for (std::size_t i=0;i<step.events.count;++i) {
@@ -678,6 +681,7 @@ void Game::ResetMotion() {
   freeLook_=false;movementYaw_=yaw_;
   creatureSteps_.Reset();
   interface_.ResetCombatFeedback();
+  hud_.Capture(simulation_,scene_.Sequence());interface_.AdvanceHud(0,hud_);
   ++audioGeneration_;
   effects_.Reset();
   sustained_.Reset();
@@ -858,7 +862,7 @@ void Game::Render(Renderer& renderer,bool showInterface) {
       renderer.DrawText(screen.x+offset.x/renderer.Width(),screen.y+offset.y/renderer.Height(),view.text,{.025f,.018f,.012f,view.opacity*.9f},size);
     renderer.DrawText(screen.x,screen.y,view.text,{view.color[0],view.color[1],view.color[2],view.opacity},size);
   }
-  if (drawInterface) interface_.Render(renderer,simulation_,time_,debugOverlay_,cameraYaw_);
+  if (drawInterface) interface_.Render(renderer,hud_,time_,debugOverlay_,cameraYaw_);
 }
 
 std::wstring Game::WindowTitle() const {

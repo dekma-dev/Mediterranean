@@ -1,4 +1,5 @@
 #include "game/Simulation.h"
+#include "game/BuildRead.h"
 #include "game/EnemyAssistance.h"
 #include "game/EnemyTactics.h"
 #include "game/SupplyPatrol.h"
@@ -31,9 +32,7 @@ bool Simulation::CreateCharacter(ClassId id,const std::string& name,Appearance l
   if(!ValidClass(id) || !ValidCharacterName(name) || !look.Valid()) return false;
   *this=Simulation{};class_=id;nickname_=name;appearance_=look;health_=MaxHealth();return true;
 }
-float Simulation::BuildBonus(unsigned mask,float TalentInfo::*stat) const {
-  float value=0;for(int i=0;i<int(Talent::Count);++i) if(rpg::HasTalent(mask,Talent(i))) value+=TalentDefinition(i).*stat;return value;
-}
+float Simulation::BuildBonus(unsigned mask,float TalentInfo::*stat) const { return ClassBuildBonus(class_,mask,stat); }
 float Simulation::DamageReduction() const {
   float value=ClassInfo().armor+BuildBonus(build_,&TalentInfo::armor);
   for (int i=0;i<Inventory::gearCount;++i) value+=DescribeItem(inventory_.Worn(GearSlot(i))).armor;

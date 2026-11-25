@@ -12,7 +12,7 @@ struct WorldInteraction {
   const char* name="";
   bool Active() const {return kind!=WorldAction::None;}
 };
-inline bool SupplyRecovered(const rpg::Simulation& s,int site) {
+template<class State> bool SupplyRecovered(const State& s,int site) {
   return site>=0 && site<3 && (s.FrontierCompleted()>13 ||
     (s.FrontierCompleted()==13 && (s.ExpeditionMask()&(1u<<site))));
 }
@@ -31,7 +31,7 @@ struct WorldInteractionReceipt {
   float remaining=0;
   void Reset(){*this={};}
   float Opacity() const {return active?1.f:std::clamp(remaining/.35f,0.f,1.f);}
-  void Update(float dt,const rpg::Simulation& s) {
+  template<class State> void Update(float dt,const State& s) {
     if(!std::isfinite(dt) || dt<=0 || dt>.25f)return;
     if(s.Health()<=0){Reset();return;}
     const auto now=ReadWorldInteraction(s);

@@ -1,5 +1,5 @@
 #pragma once
-#include "game/Simulation.h"
+#include "game/HudSnapshot.h"
 #include "game/HealthTrail.h"
 #include "game/DamageDirection.h"
 #include "game/CombatHud.h"
@@ -34,6 +34,11 @@ struct StatusEffect { const char* name; const char* description; int icon; float
 std::vector<StatusEffect> TargetStatusEffects(const rpg::Enemy& enemy);
 ItemSummary SummarizeItem(const rpg::Simulation& simulation,Item item);
 void ApplyItem(rpg::Command& command,const rpg::Simulation& simulation,Item item,int bagSlot=-1);
+bool Owned(const HudSnapshot&,Item);
+bool Equipped(const HudSnapshot&,Item);
+bool CanUse(const HudSnapshot&,Item);
+ItemSummary SummarizeItem(const HudSnapshot&,Item);
+std::vector<StatusEffect> TargetStatusEffects(const HudActor&);
 class Interface {
 public:
   static constexpr int hotbarSlots=20;
@@ -71,7 +76,11 @@ public:
   void InvalidateHitRegions() { regions_.clear(); renderedState_=~std::uint64_t(0); }
   bool Dragging() const { return dragging_; }
   void Render(Renderer& renderer,const rpg::Simulation& simulation,float time,bool debug,float cameraYaw=0);
-  void UpdateCombatFeedback(float dt,const rpg::Simulation& simulation) {
+  void Render(Renderer& renderer,const HudSnapshot& snapshot,float time,bool debug,float cameraYaw=0);
+  void AdvanceHud(float seconds,const HudSnapshot& snapshot);
+  const HealthTrail& PlayerHealthSignal()const{return playerHealth_;}
+  const NavigationRoute& Navigation()const{return navigation_;}
+  template<class State> void UpdateCombatFeedback(float dt,const State& simulation) {
     castReceipt_.Update(dt,simulation);
     worldInteraction_.Update(dt,simulation);
     questActivity_.Update(dt,simulation);
@@ -92,6 +101,7 @@ public:
   // Layouts are independent per class and saved with expedition settings.
   std::string SaveHotbars() const;
   std::string OpportunityBindings(const rpg::Simulation& state) const;
+  std::string OpportunityBindings(const HudSnapshot& state) const;
   bool LoadHotbars(const std::string& data);
   int HotbarSpell(int slot,rpg::ClassId id) const {
     return slot>=0 && slot<hotbarSlots?hotbars_[rpg::ValidClass(id)?int(id):0][slot]:-1;

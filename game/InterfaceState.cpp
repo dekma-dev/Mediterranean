@@ -3,18 +3,20 @@
 #include <cmath>
 #include <sstream>
 namespace ui {
-std::string Interface::OpportunityBindings(const rpg::Simulation& s) const {
+template<class State> std::string OpportunityKeys(const Interface& ui,const State& s) {
   std::string result;int count=0;std::array<bool,rpg::spells.size()> seen{};
-  for(int slot=0;slot<hotbarSlots;++slot){
-    const int ability=HotbarSpell(slot,s.Class());
+  for(int slot=0;slot<Interface::hotbarSlots;++slot){
+    const int ability=ui.HotbarSpell(slot,s.Class());
     if(!rpg::ValidSpell(ability) || !s.DisciplineReady(ability) || s.Level()<rpg::SpellLevel(ability) || seen[ability])continue;
     seen[ability]=true;
-    if(count<3){if(count)result+=" / ";result+=BindingLabel(slot);}++count;
+    if(count<3){if(count)result+=" / ";result+=Interface::BindingLabel(slot);}++count;
   }
   if(count>3)result+=" +"+std::to_string(count-3);
   return result;
 }
-std::vector<StatusEffect> TargetStatusEffects(const rpg::Enemy& enemy) {
+std::string Interface::OpportunityBindings(const rpg::Simulation& s)const{return OpportunityKeys(*this,s);}
+std::string Interface::OpportunityBindings(const HudSnapshot& s)const{return OpportunityKeys(*this,s);}
+template<class Actor> std::vector<StatusEffect> StatusEffects(const Actor& enemy) {
   std::vector<StatusEffect> result;
   if(enemy.health<=0) return result;
   if(enemy.stunned>0) result.push_back({"Stunned","Unable to act until the stun expires.",24,enemy.stunned,0});
@@ -23,6 +25,8 @@ std::vector<StatusEffect> TargetStatusEffects(const rpg::Enemy& enemy) {
   if(enemy.exposed>0) result.push_back({"Exposed","Incoming attack damage is increased by 25%.",24,enemy.exposed,3});
   return result;
 }
+std::vector<StatusEffect> TargetStatusEffects(const rpg::Enemy& a){return StatusEffects(a);}
+std::vector<StatusEffect> TargetStatusEffects(const HudActor& a){return StatusEffects(a);}
 std::string Interface::SaveHotbars() const {
   std::ostringstream out;out<<"HOTBARS 9\n"<<actionBarPercent_<<'\n';
   for(const auto& bar:hotbars_) {for(int spell:bar) out<<spell<<' ';out<<'\n';}
@@ -86,15 +90,15 @@ Layout::Layout(float width,float height) {
   scale=std::max(.01f,std::min(width/1280.f,height/720.f)); x=(width-1280*scale)*.5f; y=(height-720*scale)*.5f;
 }
 const ItemInfo& Describe(Item item) { return rpg::DescribeItem(item); }
-bool Owned(const rpg::Simulation& s,Item item) { return s.Items().Count(item)>0; }
-bool Equipped(const rpg::Simulation& s,Item item) {
+template<class State> bool OwnedValue(const State& s,Item item) { return s.Items().Count(item)>0; }
+template<class State> bool EquippedValue(const State& s,Item item) {
   return rpg::ValidItem(item) && Describe(item).slot!=rpg::GearSlot::None && s.Items().Worn(Describe(item).slot)==item;
 }
-bool CanUse(const rpg::Simulation& s,Item item) {
+template<class State> bool CanUseValue(const State& s,Item item) {
   if (!Owned(s,item) || s.Health()<=0) return false;
   return item==Item::Potion?s.PotionCooldown()==0 && s.Health()<s.MaxHealth():Describe(item).slot!=rpg::GearSlot::None;
 }
-ItemSummary SummarizeItem(const rpg::Simulation& s,Item item) {
+template<class State> ItemSummary SummarizeItemValue(const State& s,Item item) {
   if (!rpg::ValidItem(item)) return {};
   const auto& info=Describe(item);
   const auto signedValue=[](float value) { return (value>=0?std::string("+"):std::string())+std::to_string(int(value)); };
@@ -113,6 +117,14 @@ ItemSummary SummarizeItem(const rpg::Simulation& s,Item item) {
   result.comparison=worn==item?"Currently equipped":result.comparison+(worn==Item::None?" vs empty slot":" vs worn gear");
   return result;
 }
+bool Owned(const rpg::Simulation& s,Item item){return OwnedValue(s,item);}
+bool Equipped(const rpg::Simulation& s,Item item){return EquippedValue(s,item);}
+bool CanUse(const rpg::Simulation& s,Item item){return CanUseValue(s,item);}
+ItemSummary SummarizeItem(const rpg::Simulation& s,Item item){return SummarizeItemValue(s,item);}
+bool Owned(const HudSnapshot& s,Item item){return OwnedValue(s,item);}
+bool Equipped(const HudSnapshot& s,Item item){return EquippedValue(s,item);}
+bool CanUse(const HudSnapshot& s,Item item){return CanUseValue(s,item);}
+ItemSummary SummarizeItem(const HudSnapshot& s,Item item){return SummarizeItemValue(s,item);}
 void ApplyItem(rpg::Command& command,const rpg::Simulation& s,Item item,int bagSlot) {
   if (!CanUse(s,item)) return;
   if (bagSlot!=-1 && (bagSlot<0 || bagSlot>=rpg::Inventory::capacity || s.Items().Bag()[bagSlot].item!=item)) return;

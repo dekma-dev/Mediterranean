@@ -50,7 +50,7 @@ inline QuestTracking ReadQuestTracking(const rpg::Simulation& s) {
   }
   return result;
 }
-inline bool QuestDelivered(const rpg::Simulation& s,rpg::QuestId id) {
+template<class State> bool QuestDelivered(const State& s,rpg::QuestId id) {
   using namespace rpg;
   if(id==QuestId::Patrol)return s.QuestState()==Quest::Complete;
   if(id==QuestId::Anchor)return s.AnchorState()==AnchorQuest::Complete;
@@ -73,7 +73,7 @@ class QuestActivity {
 public:
   void Reset(){previous_={};notices_={};observed_=false;}
   const std::array<QuestNotice,3>& Notices() const{return notices_;}
-  void Update(float dt,const rpg::Simulation& s) {
+  template<class State> void Update(float dt,const State& s) {
     if(!std::isfinite(dt) || dt<=0 || dt>.25f)return;
     for(auto& n:notices_)n.remaining=std::max(0.f,n.remaining-dt);
     auto next=ReadQuestTracking(s);

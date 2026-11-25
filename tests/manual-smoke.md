@@ -1,3 +1,11 @@
+## Owned HUD publication (2026-11-26)
+
+- Run `HudPublicationTests` in Release and Debug. Compare the twelve published/retained/next triples in `hud-publication-review`: replacing authority without publication must preserve the entire world-plus-HUD image; the next accepted command must update it. The test also covers all eleven existing classes' spell/build/trade read values.
+- Take damage, hide the HUD for over a second, then show it. Health trails must already have settled. Walk toward a quest or custom pin with the HUD hidden: the route must reflect current movement when shown. Repeated screenshot/portrait draws must not age health, hover or quest feedback or trigger extra navigation searches.
+- Open inventory, merchant, talent draft/loadout, quest dialogue, journal and atlas while enemies act. Readiness, prices, previews, progress and actor warnings must agree with the latest accepted state. A stale click still goes through authoritative validation; it must not bypass range, cost, inventory or talent prerequisites.
+- Cast, change target, start/stop sparring, Alt-Tab, load and change character. No prior hero's nickname, target, readiness or pending dialogue may survive the lifecycle refresh. Check both languages and small/Full HD/ultrawide layouts with the existing InterfaceTests.
+- Inspect `HUD revision / sequence / actors / bytes / growths` in execution reports. The sequence follows the accepted simulation step; growths count actor-vector capacity only. See `docs/hud-publication-2026-11-26.md` for the remaining complete-presentation boundary.
+
 ## Owned audio publication (2026-11-25)
 
 - Run `AudioFrameTests`, `AudioTests`, `RecordedAudioTests`, `CommandExecutionTests`, `ScenePublicationTests`, `ExecutionTests`, `GraphicsLifecycleTests` and `InterfaceTests` in Release and Debug. Confirm that the native logs exercised the muted XAudio2 endpoint rather than reporting a skip.

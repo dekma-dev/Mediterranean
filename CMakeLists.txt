@@ -162,6 +162,7 @@ add_library(MediterraneanClient STATIC
   engine/FontAtlas.cpp
   platform/Win32Window.cpp
   game/SceneSnapshot.cpp
+  game/HudSnapshot.cpp
   game/Game.cpp
   game/CharacterSelection.cpp
   game/ProfileStorage.cpp
@@ -387,6 +388,10 @@ if (BUILD_TESTING)
   target_link_libraries(AudioFrameTests PRIVATE MediterraneanClient)
   add_test(NAME AudioFrameTests COMMAND AudioFrameTests)
   set_tests_properties(AudioFrameTests PROPERTIES TIMEOUT 90)
+  add_executable(HudPublicationTests tests/HudPublicationTests.cpp)
+  target_link_libraries(HudPublicationTests PRIVATE MediterraneanClient)
+  add_test(NAME HudPublicationTests COMMAND HudPublicationTests)
+  set_tests_properties(HudPublicationTests PROPERTIES TIMEOUT 120)
   add_executable(RecordedAudioTests tests/RecordedAudioTests.cpp)
   target_link_libraries(RecordedAudioTests PRIVATE MediterraneanClient)
   add_test(NAME RecordedAudioTests COMMAND RecordedAudioTests)

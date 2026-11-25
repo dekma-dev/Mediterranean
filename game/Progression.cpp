@@ -1,4 +1,5 @@
 #include "game/Simulation.h"
+#include "game/BuildRead.h"
 #include <algorithm>
 #include <cmath>
 
@@ -23,31 +24,8 @@ int Simulation::Level() const {
 
 int Simulation::TalentPoints() const { return EarnedPoints()-TalentCount(build_); }
 
-BuildStats Simulation::PreviewBuild(unsigned mask) const {
- // Preview locked level-three presets too, using current level and equipment.
- // Derive differences from the live accessors so equipment stays authoritative.
- if (!ValidBuild(mask,levelCap)) mask=build_;
- const auto delta=[&](float TalentInfo::*stat) { return BuildBonus(mask,stat)-BuildBonus(build_,stat); };
- return {MaxHealth()+delta(&TalentInfo::health),StrikeDamage()+delta(&TalentInfo::strike),
-  HeavyDamage()+delta(&TalentInfo::heavy),DamageReduction()+delta(&TalentInfo::armor),
-  MendHealing()+delta(&TalentInfo::mend),AbilityCooldown(2)-delta(&TalentInfo::dashCooldown),
-  AbilityCooldown(3)-delta(&TalentInfo::mendCooldown),AbilityCooldown(0)-delta(&TalentInfo::basicCooldown),
-  AbilityCooldown(1)-delta(&TalentInfo::heavyCooldown),ClassRecoveryCast(class_)/(1+BuildBonus(mask,&TalentInfo::castSpeed))};
-}
-
-const char* Simulation::LoadoutStatus(const BuildCommand& command) const {
- if (command.action!=BuildAction::Apply && command.action!=BuildAction::Store) return "Unknown build action";
- if (command.action==BuildAction::Store && (command.slot<0 || command.slot>=int(loadouts_.size()))) return "Choose a loadout slot";
- if (command.mask<0) return "Choose a build to preview";
- if (!ValidBuild(unsigned(command.mask),levelCap)) return "Invalid talents or prerequisites";
- if (!ValidBuild(unsigned(command.mask),Level())) return "Earn more levels to use this build";
- if (health_<=0) return "Recover before managing builds";
- if (command.action==BuildAction::Store)
-  return loadouts_[command.slot]==command.mask?"Already saved in this slot":"Ready to store";
- if (unsigned(command.mask)==build_) return "Already your active build";
- const auto blocked=BuildChangeStatus();
- return *blocked?blocked:"Ready to apply";
-}
+BuildStats Simulation::PreviewBuild(unsigned mask) const { return ReadBuildPreview(*this,mask); }
+const char* Simulation::LoadoutStatus(const BuildCommand& command) const { return ReadLoadoutStatus(*this,command); }
 
 void Simulation::ChangeBuild(const BuildCommand& command) {
  const auto status=LoadoutStatus(command);
