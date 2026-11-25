@@ -1,0 +1,36 @@
+#include "engine/SceneShader.h"
+#include "tools/ShaderContract.h"
+#include <set>
+#include <iostream>
+
+namespace {
+void Check(bool ok,const char* message){if(!ok)throw std::runtime_error(message);}
+std::vector<std::string> Compile(const std::string& source,const char* entry) {
+  Microsoft::WRL::ComPtr<ID3DBlob> code,errors;
+  const auto hr=D3DCompile(source.data(),source.size(),"ContractRegression",nullptr,nullptr,entry,
+    entry[0]=='V'?"vs_5_0":"ps_5_0",D3DCOMPILE_ENABLE_STRICTNESS,0,&code,&errors);
+  if(FAILED(hr))throw std::runtime_error(errors?static_cast<const char*>(errors->GetBufferPointer()):"D3DCompile failed");
+  return shader_contract::Validate(code->GetBufferPointer(),code->GetBufferSize(),entry);
+}
+void Reject(const char* entry,const char* before,const char* after,const char* detail) {
+  std::string source=sceneShader;const auto at=source.find(before);Check(at!=std::string::npos,"Missing shader mutation target");
+  source.replace(at,std::strlen(before),after);
+  bool rejected=false;
+  try{Compile(source,entry);}catch(const std::runtime_error& e){rejected=std::string(e.what()).find(detail)!=std::string::npos;}
+  Check(rejected,"Shader ABI regression was not rejected with the expected diagnostic");
+}
+}
+int main()try {
+  std::set<std::string> buffers;
+  for(const char* entry:{"VSMain","PSMain","VSWorld","VSShadow","VSBody","VSBodyShadow","VSHand","VSHandShadow","VSSky","PSSky","PSCloudLight","VSEffect","PSEffect","VSGlow","PSGlowSource","PSGlowHorizontal","PSGlowVertical","PSGlowComposite","PSPressure"})
+    for(auto& name:Compile(sceneShader,entry))buffers.insert(name);
+  Check(buffers.size()==shader_contract::Layouts().size(),"Some GPU upload layouts were never reflected");
+  Reject("VSMain","float4 color; float4 eyeAndHud;","float4 eyeAndHud; float4 color;","Scene.color");
+  Reject("VSMain","matrix wvp;","row_major matrix wvp;","Scene.wvp");
+  Reject("VSMain","shadowVP[2]","shadowVP[3]","CPU buffer size");
+  Reject("VSMain","Scene : register(b0)","Scene : register(b1)","register mismatch");
+  Reject("PSEffect","float4 rightRadius; float4 upRadius;","float4 upRadius; float4 rightRadius;","rightRadius");
+  Reject("PSEffect","spellVolumes[24]","spellVolumes[25]","CPU buffer size");
+  Reject("PSPressure","float4 radiiAge;float4 axisStyle;","float4 axisStyle;float4 radiiAge;","radiiAge");
+  std::cout<<"PASS: all 19 shader stages, all 8 constant buffers, offsets, nested structs, arrays, registers and matrix packing\n";
+}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}

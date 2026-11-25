@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <memory>
 #include "engine/Input.h"
+#include "engine/GraphicsRecovery.h"
 #include <string>
 
 class Win32Window;
@@ -24,7 +25,13 @@ public:
   const std::wstring& Error() const { return error_; }
 
 private:
+  friend struct GraphicsLifecycleTestAccess;
   void Tick(double deltaSeconds);
+  bool TryRecoverGraphics();
+  void HandleGraphicsFailure();
+  graphics::RecoveryBudget graphicsRecovery_;
+  bool resetFrameClock_=false;
+  unsigned graphicsRecoveries_=0;
 
   std::unique_ptr<Win32Window> window_;
   std::unique_ptr<Renderer> renderer_;

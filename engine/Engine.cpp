@@ -40,7 +40,7 @@ bool Engine::Initialize(HINSTANCE instance, int width, int height, bool visible,
   window_->SetLoading(false);
   const auto loading=[&](ui::LoadingStage stage) {
     if(!visible) return true;
-    renderer_->BeginFrame();ui::RenderLoading(*renderer_,stage);
+    if(!renderer_->BeginFrame()) {error_=renderer_->Error();return false;}ui::RenderLoading(*renderer_,stage);
     if(!renderer_->EndFrame(false)) {error_=renderer_->Error();return false;}
     return true;
   };
@@ -91,7 +91,7 @@ bool Engine::StartupTest(bool fullscreen,int width,int height,const std::string&
     return false;
   }
   if(game_->State().Save()!=expected.Save()) {error_=L"Startup saved state mismatch.";return false;}
-  renderer_->BeginFrame();game_->Render(*renderer_);
+  if(!renderer_->BeginFrame()) {error_=renderer_->Error();return false;}game_->Render(*renderer_);
   return renderer_->Capture(capturePath) && renderer_->EndFrame(false) && renderer_->ValidateDebugMessages();
 }
 
@@ -118,7 +118,7 @@ bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapsh
   for (const auto dimensions : {std::pair<int,int>{960,600},{1600,900},{1280,720}}) {
     if (!renderer_->Resize(dimensions.first,dimensions.second)) { error_=renderer_->Error(); return false; }
     game_->Update(1.0/60.0,input_,0);
-    renderer_->BeginFrame(); game_->Render(*renderer_);
+    if(!renderer_->BeginFrame()) {error_=renderer_->Error();return false;} game_->Render(*renderer_);
     const auto base=std::filesystem::path(capturePath);
     const auto output=dimensions.first==1280?base:base.parent_path() /
       (base.stem().wstring()+L"-"+std::to_wstring(dimensions.first)+L"x"+std::to_wstring(dimensions.second)+base.extension().wstring());
@@ -129,7 +129,7 @@ bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapsh
   // real orbit-camera views. These renders deliberately omit the HUD.
   for (int view=0;view<2;++view) {
     game_->SetCameraOrbit(view==0?2.6f:3.14159265f,view==0?.85f:.2f,view==0?18.f:4.f);
-    renderer_->BeginFrame(); game_->Render(*renderer_,false);
+    if(!renderer_->BeginFrame()) {error_=renderer_->Error();return false;} game_->Render(*renderer_,false);
     const auto base=std::filesystem::path(capturePath);
     const auto output=base.parent_path()/(base.stem().wstring()+(view==0?L"-overview":L"-character")+base.extension().wstring());
     if (!renderer_->Capture(output.wstring()) || !renderer_->EndFrame()) { error_=renderer_->Error(); return false; }
@@ -143,7 +143,7 @@ bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapsh
     for (const auto& panel : panels) {
       game_->OpenPanel(panel.first);
       if (std::wstring(panel.second)==L"equipment-bag") game_->ShowPanel(ui::Panel::Inventory);
-      renderer_->BeginFrame(); game_->Render(*renderer_);
+      if(!renderer_->BeginFrame()) {error_=renderer_->Error();return false;} game_->Render(*renderer_);
       const auto base=std::filesystem::path(capturePath);
       const auto suffix=dimensions.first==1280?L"":L"-"+std::to_wstring(dimensions.first)+L"x"+std::to_wstring(dimensions.second);
       const auto output=base.parent_path()/(base.stem().wstring()+L"-"+panel.second+suffix+base.extension().wstring());
@@ -156,7 +156,7 @@ bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapsh
     const auto capture=[&](const wchar_t* suffix,bool showInterface=true) {
       const auto base=std::filesystem::path(capturePath);
       const auto path=base.parent_path()/(base.stem().wstring()+suffix+base.extension().wstring());
-      renderer_->BeginFrame(); game_->Render(*renderer_,showInterface);
+      if(!renderer_->BeginFrame()) {error_=renderer_->Error();return false;} game_->Render(*renderer_,showInterface);
       return renderer_->Capture(path.wstring()) && renderer_->EndFrame();
     };
     rpg::Command friendly; friendly.selectActor=303; game_->ExecuteCommand(friendly);
@@ -216,7 +216,7 @@ bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapsh
         c={}; c.inventory={rpg::InventoryAction::Split,game_->State().Items().Find(rpg::Item::Potion),-1,rpg::Item::Potion,2}; game_->ExecuteCommand(c);
         if (game_->State().BuybackCount(rpg::Item::Shield)!=1 || game_->State().Potions()!=4) { error_=L"Buyback render scenario failed."; return false; }
         game_->OpenPanel(ui::Panel::Merchant); game_->ShowPanel(ui::Panel::Character);
-        renderer_->BeginFrame(); game_->Render(*renderer_); if (!renderer_->EndFrame(false)) return false;
+        if(!renderer_->BeginFrame()) {error_=renderer_->Error();return false;} game_->Render(*renderer_); if (!renderer_->EndFrame(false)) return false;
         const int cell=game_->State().Items().Find(rpg::Item::Potion);
         Input sample; Input::Frame frame; frame.focused=true; frame.client={1028+(cell%6)*40,274+(cell/6)*42};
         frame.screen=frame.client; sample.Update(frame);
@@ -253,7 +253,7 @@ bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapsh
       {L"village",{0,8,-25},{0,2.7f,-8}}, {L"stall",{-.6f,3.3f,-17},{3,1.4f,-12.8f}},
       {L"ruin",{5,4,8},{0,1.6f,15}}};
     for (const auto& view : views) {
-      renderer_->BeginFrame(); game_->Render(*renderer_,false);
+      if(!renderer_->BeginFrame()) {error_=renderer_->Error();return false;} game_->Render(*renderer_,false);
       renderer_->SetCamera(view.eye,view.target);
       const auto base=std::filesystem::path(capturePath);
       const auto path=base.parent_path()/(base.stem().wstring()+L"-environment-"+view.name+base.extension().wstring());
@@ -261,7 +261,7 @@ bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapsh
     }
     const wchar_t* poses[]={L"front",L"profile",L"back",L"walk-left",L"walk-right",L"strike-start",L"strike-mid",L"strike-end"};
     for (int pose=0;pose<8;++pose) {
-      renderer_->BeginFrame();
+      if(!renderer_->BeginFrame()) {error_=renderer_->Error();return false;}
       if (!renderer_->BeginPortrait(0,0,1,1)) { error_=renderer_->Error(); return false; }
       renderer_->SetCamera({0,1.3f,3.8f},{0,1.3f,0});
       CharacterOutfit outfit; outfit.armor=pose>=2; outfit.helm=pose>=2; outfit.shield=pose>=2; outfit.rewardWeapon=pose>=2;
@@ -282,7 +282,7 @@ bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapsh
       {L"landing","Landing / knee compression",{0,0,0,0,1}}, {L"recoil","Hit / upper-body recoil",{0,0,0,0,0,1}}};
     const auto base=std::filesystem::path(capturePath);
     for (const auto& view : views) {
-      renderer_->BeginFrame();
+      if(!renderer_->BeginFrame()) {error_=renderer_->Error();return false;}
       if (!renderer_->BeginPortrait(0,0,1,1)) { error_=renderer_->Error(); return false; }
       renderer_->SetCamera({0,1.2f,4},{0,1.2f,0});
       CharacterOutfit outfit; outfit.armor=outfit.helm=outfit.shield=outfit.rewardWeapon=true;
@@ -302,7 +302,7 @@ bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapsh
     for (int step=1;step<=14;++step) {
       rpg::Command command; command.jump=step==1; game_->ExecuteCommand(command,.05f);
       if (step!=captureSteps[stage]) continue;
-      renderer_->BeginFrame(); game_->Render(*renderer_,false);
+      if(!renderer_->BeginFrame()) {error_=renderer_->Error();return false;} game_->Render(*renderer_,false);
       const auto path=base.parent_path()/(base.stem().wstring()+L"-jump-"+stages[stage++]+base.extension().wstring());
       if (!renderer_->Capture(path.wstring()) || !renderer_->EndFrame()) { error_=renderer_->Error(); return false; }
     }
@@ -321,7 +321,7 @@ bool Engine::Benchmark(const std::wstring& reportPath) {
     QueryPerformanceCounter(&start);
     if(frame==90) firstMeasuredGpuFrame=renderer_->GpuFrame()+1;
     game_->Update(1.0/60.0,input_,0);
-    renderer_->BeginFrame(); game_->Render(*renderer_);
+    if(!renderer_->BeginFrame()) {error_=renderer_->Error();return false;} game_->Render(*renderer_);
     if (!renderer_->EndFrame(false)) { error_=renderer_->Error(); return false; }
     QueryPerformanceCounter(&finish);
     if (frame>=90) {
@@ -423,7 +423,7 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
       game_->ExecuteCommand(command,1.f/60);
       if (scene==1 || scene==2) game_->SetCameraOrbit(frame*.012f,.4f+.18f*std::sin(frame*.021f),7.5f+1.5f*std::sin(frame*.017f));
       QueryPerformanceCounter(&updated);
-      renderer_->BeginFrame(); game_->Render(*renderer_);
+      if(!renderer_->BeginFrame()) {error_=renderer_->Error();return false;} game_->Render(*renderer_);
       QueryPerformanceCounter(&rendered);
       if (!renderer_->EndFrame(false)) { error_=renderer_->Error(); return false; }
       QueryPerformanceCounter(&finish);
@@ -523,12 +523,43 @@ int Engine::Run() {
     last = now;
 
     Tick(std::min(deltaSeconds, 0.05));
+    // Resource reconstruction is outside simulation time. Do not convert a
+    // seconds-long rebuild into a catch-up movement/attack on the next frame.
+    if(resetFrameClock_) {QueryPerformanceCounter(&last);resetFrameClock_=false;}
   }
 
   window_->SetMouseLook(false);
   return exitCode_;
 }
 
+bool Engine::TryRecoverGraphics() {
+  error_=renderer_->Error();
+  window_->SetMouseLook(false);
+  game_->CancelUiGesture(); input_.CancelGestures();
+  window_->ConsumeWheel(); window_->ConsumeMouseMotion(); window_->ConsumeText();
+  if(audio_)audio_->Suspend(true);
+  if(!graphics::Recoverable(renderer_->FailureCode(),renderer_->DeviceRemovedReason()))return false;
+  if(!graphicsRecovery_.Request(GetTickCount64())) {
+    error_+=L" Graphics recovery limit reached (two attempts per minute).";return false;
+  }
+  OutputDebugStringW((L"Recreating graphics after: "+error_+L"\n").c_str());
+  RECT client{};GetClientRect(window_->GetHandle(),&client);
+  // Game, CPU scene caches, camera, quests and audio remain owned by Engine.
+  // Destroy the entire device resource graph, including lazily uploaded art.
+  renderer_.reset();
+  renderer_=std::make_unique<Renderer>();
+  if(!renderer_->Initialize(window_->GetHandle(),std::max(1L,client.right),std::max(1L,client.bottom))) {
+    error_+=L"\nGraphics reconstruction failed: "+renderer_->Error();return false;
+  }
+  ++graphicsRecoveries_;resetFrameClock_=true;error_.clear();
+  OutputDebugStringW(L"Graphics restored; existing game session retained.\n");
+  return true;
+}
+void Engine::HandleGraphicsFailure() {
+  if(TryRecoverGraphics())return;
+  exitCode_=1;running_=false;
+  localization::Message(window_->GetHandle(),error_.c_str(),L"Renderer error",MB_OK|MB_ICONERROR);
+}
 void Engine::Tick(double deltaSeconds) {
   if (!renderer_) return;
 
@@ -536,10 +567,7 @@ void Engine::Tick(double deltaSeconds) {
   GetClientRect(window_->GetHandle(), &client);
   if (renderer_->Width()!=client.right || renderer_->Height()!=client.bottom) game_->CancelUiGesture();
   if (!renderer_->Resize(client.right, client.bottom)) {
-    window_->SetMouseLook(false);
-    localization::Message(window_->GetHandle(), renderer_->Error().c_str(), L"Renderer error", MB_OK | MB_ICONERROR);
-    exitCode_ = 1;
-    running_ = false;
+    HandleGraphicsFailure();
     return;
   }
   const bool wasChoosing=game_->ChoosingCharacter();
@@ -555,23 +583,20 @@ void Engine::Tick(double deltaSeconds) {
       error_=L"Could not change the game window display mode."; exitCode_=1; running_=false; return;
     }
     GetClientRect(window_->GetHandle(),&client);
-    if (!renderer_->Resize(client.right,client.bottom)) { error_=renderer_->Error(); exitCode_=1; running_=false; return; }
+    if (!renderer_->Resize(client.right,client.bottom)) {HandleGraphicsFailure();return;}
   }
   game_->SetFullscreenState(window_->Fullscreen());
   if (game_->QuitRequested()) { window_->SetMouseLook(false); running_=false; return; }
   if (!window_->SetMouseLook(game_->MouseLookButtons())) game_->CancelUiGesture();
 
-  renderer_->BeginFrame();
+  if(!renderer_->BeginFrame()) {HandleGraphicsFailure();return;}
   if(wasChoosing && !game_->ChoosingCharacter()) {
     ui::RenderLoading(*renderer_,ui::LoadingStage::Entering);
-    if(!renderer_->EndFrame(false)) {error_=renderer_->Error();exitCode_=1;running_=false;}
+    if(!renderer_->EndFrame(false)) HandleGraphicsFailure();
     return;
   }
   game_->Render(*renderer_);
   if (!renderer_->EndFrame()) {
-    window_->SetMouseLook(false);
-    localization::Message(window_->GetHandle(), renderer_->Error().c_str(), L"Renderer error", MB_OK | MB_ICONERROR);
-    exitCode_ = 1;
-    running_ = false;
+    HandleGraphicsFailure();
   }
 }

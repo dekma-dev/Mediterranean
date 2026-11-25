@@ -639,6 +639,7 @@ void Game::UpdateCamera(float dt,bool immediate) {
 }
 
 void Game::Render(Renderer& renderer,bool showInterface) {
+  if(!renderer.FrameActive())return;
   if(choosingCharacter_) {ui::RenderCharacterSelection(renderer,selection_);return;}
   renderer.SetAtmosphereTime(atmosphereTime_);
   if (!renderer.HasTerrainSurface() && !renderer.SetTerrainSurface(BuildTerrainSurface(simulation_.Map()),terrainSurfaceSize)) return;

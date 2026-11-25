@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 using namespace DirectX;
-namespace {struct GlowConstants {XMFLOAT4 texel,screen,region;};}
+namespace {using GlowConstants=shader::Glow;}
 
 bool Renderer::CreateSpellGlow(){
  if(!glowVertex_){
@@ -30,7 +30,7 @@ bool Renderer::CreateSpellGlow(){
  const GlowConstants c{{1.f/glowWidth_,1.f/glowHeight_,float(glowWidth_),float(glowHeight_)},
   {float(width_)/glowWidth_,float(height_)/glowHeight_,0,0},
   {view.TopLeftX/width_,view.TopLeftY/height_,(view.TopLeftX+view.Width)/width_,(view.TopLeftY+view.Height)/height_}};
- context_->UpdateSubresource(glowConstants_.Get(),0,nullptr,&c,0,0);context_->PSSetConstantBuffers(6,1,glowConstants_.GetAddressOf());
+ context_->UpdateSubresource(glowConstants_.Get(),0,nullptr,&c,0,0);context_->PSSetConstantBuffers(shader::slot::glow,1,glowConstants_.GetAddressOf());
  return true;
 }
 void Renderer::EmitSpellGlow(UINT vertices){

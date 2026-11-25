@@ -35,20 +35,32 @@ std::string Renderer::AdapterDiagnostics() const {
 }
 namespace {
 using Vertex = visual::Vertex;
-struct Constants {
- XMFLOAT4X4 world,wvp,normalWorld,shadowVP[visual::shadowLayers]; XMFLOAT4 color,eyeAndHud;
- XMFLOAT4 sun=visual::daylightSun;
- XMFLOAT4 atmosphere{0,.90f,.0032f,.53f}; // cloud phase, exposure, haze density, cloud threshold
-};
-static_assert(sizeof(Constants)==384,"Keep the HLSL Scene layout and offscreen shader diagnostics in sync.");
-static_assert(visual::shadowLayers==2,"The scene shader uses a whole-island and a detail shadow layer.");
+using Constants=shader::Scene;
 }
 bool Renderer::Check(HRESULT result, const wchar_t* operation) {
  if (SUCCEEDED(result)) return true;
+ frameFailed_=true;
+ // Preserve the first failure; subsequent aborts must not hide its origin.
+ if(FAILED(failureCode_)) return false;
+ failureCode_=result;
+ removedReason_=device_?device_->GetDeviceRemovedReason():S_OK;
  std::wostringstream s; s << operation << L" failed (0x" << std::hex << static_cast<unsigned long>(result) << L").";
+ if(FAILED(removedReason_)) s << L" Device removal reason: 0x" << static_cast<unsigned long>(removedReason_) << L".";
  error_ = s.str(); OutputDebugStringW(error_.c_str()); return false;
 }
+Renderer::~Renderer() {
+ // Unbind context-held references and submit pending work before draining
+ // completion events. All old swap-chain references die before replacement.
+ if(context_) {
+  gpuTimer_.End(context_.Get());
+  context_->ClearState(); context_->Flush();
+ }
+ gpuQueue_.Reset();
+}
 bool Renderer::Initialize(HWND window, int width, int height,const visual::BodyGeometry* previewBody) {
+ if(device_ || FAILED(failureCode_)) return Check(E_UNEXPECTED,L"Initialize renderer twice");
+ if(!IsWindow(window) || width<=0 || height<=0 || width>D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION || height>D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION)
+  return Check(E_INVALIDARG,L"Initialize renderer dimensions/window");
  if(previewBody) {
   try {
    visual::ValidateBodyGeometry(*previewBody);
@@ -80,25 +92,34 @@ bool Renderer::Initialize(HWND window, int width, int height,const visual::BodyG
   factory->MakeWindowAssociation(window,DXGI_MWA_NO_ALT_ENTER);
  if (!CreateTargets(width,height) || !CreatePipeline(previewBody) || !CreateUiArtwork()) return false;
  SetCamera({0,3,-6},{0,1,0});
+ ready_=true;
  return true;
 }
 bool Renderer::CreateTargets(int width, int height) {
+ // Publish one complete size-dependent set, never partially replaced views.
+ ComPtr<ID3D11RenderTargetView> target;
+ ComPtr<ID3D11DepthStencilView> depth,effectDepth;
+ ComPtr<ID3D11ShaderResourceView> effectResource;
  ComPtr<ID3D11Texture2D> back;
  if (!Check(swapChain_->GetBuffer(0,IID_PPV_ARGS(back.GetAddressOf())),L"Get back buffer")) return false;
- if (!Check(device_->CreateRenderTargetView(back.Get(),nullptr,target_.GetAddressOf()),L"Create render target")) return false;
+ if (!Check(device_->CreateRenderTargetView(back.Get(),nullptr,target.GetAddressOf()),L"Create render target")) return false;
  D3D11_TEXTURE2D_DESC d{}; d.Width=width; d.Height=height; d.MipLevels=1; d.ArraySize=1;
  d.Format=DXGI_FORMAT_R24G8_TYPELESS; d.SampleDesc.Count=1; d.BindFlags=D3D11_BIND_DEPTH_STENCIL|D3D11_BIND_SHADER_RESOURCE;
  ComPtr<ID3D11Texture2D> texture;
  if (!Check(device_->CreateTexture2D(&d,nullptr,texture.GetAddressOf()),L"Create depth texture")) return false;
  D3D11_DEPTH_STENCIL_VIEW_DESC depthDesc{};depthDesc.Format=DXGI_FORMAT_D24_UNORM_S8_UINT;depthDesc.ViewDimension=D3D11_DSV_DIMENSION_TEXTURE2D;
- if (!Check(device_->CreateDepthStencilView(texture.Get(),&depthDesc,depth_.GetAddressOf()),L"Create depth view")) return false;
+ if (!Check(device_->CreateDepthStencilView(texture.Get(),&depthDesc,depth.GetAddressOf()),L"Create depth view")) return false;
  depthDesc.Flags=D3D11_DSV_READ_ONLY_DEPTH|D3D11_DSV_READ_ONLY_STENCIL;
- if (!Check(device_->CreateDepthStencilView(texture.Get(),&depthDesc,effectDepthView_.GetAddressOf()),L"Create depth view")) return false;
+ if (!Check(device_->CreateDepthStencilView(texture.Get(),&depthDesc,effectDepth.GetAddressOf()),L"Create depth view")) return false;
  D3D11_SHADER_RESOURCE_VIEW_DESC view{};view.Format=DXGI_FORMAT_R24_UNORM_X8_TYPELESS;view.ViewDimension=D3D11_SRV_DIMENSION_TEXTURE2D;view.Texture2D.MipLevels=1;
- if (!Check(device_->CreateShaderResourceView(texture.Get(),&view,effectDepthResource_.GetAddressOf()),L"Create depth view")) return false;
+ if (!Check(device_->CreateShaderResourceView(texture.Get(),&view,effectResource.GetAddressOf()),L"Create depth view")) return false;
+ target_=std::move(target); depth_=std::move(depth); effectDepthView_=std::move(effectDepth); effectDepthResource_=std::move(effectResource);
  width_=width; height_=height; return true;
 }
 bool Renderer::Resize(int width, int height) {
+ if(!ready_ || frameActive_ || frameFailed_) return Check(E_UNEXPECTED,L"Resize outside idle renderer");
+ if(width<0 || height<0 || width>D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION || height>D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION)
+  return Check(E_INVALIDARG,L"Resize renderer dimensions");
  if (width<=0 || height<=0 || (width==width_ && height==height_)) return true;
  ID3D11ShaderResourceView* empty=nullptr;context_->PSSetShaderResources(15,1,&empty);
  context_->OMSetRenderTargets(0,nullptr,nullptr); target_.Reset(); depth_.Reset();effectDepthView_.Reset();effectDepthResource_.Reset();
@@ -351,10 +372,13 @@ bool Renderer::CreateMaterials() {
  for (auto& channel : sampler.BorderColor) channel=1;
  return Check(device_->CreateSamplerState(&sampler,shadowSampler_.GetAddressOf()),L"Create shadow sampler");
 }
-void Renderer::BeginFrame() {
+bool Renderer::BeginFrame() {
+ if(!ready_ || frameActive_ || frameFailed_) return Check(E_UNEXPECTED,L"Begin frame outside idle renderer");
+ if(!Check(device_->GetDeviceRemovedReason(),L"Check graphics device before frame"))return false;
+ if(!Check(gpuQueue_.Begin(),L"Wait for queued GPU frame"))return false;
+ frameActive_=true;
  combatLights_.Reset();
- drawCalls_=0; frameFailed_=false; portrait_=false; skyPending_=true;
- if(!Check(gpuQueue_.Begin(),L"Wait for queued GPU frame")){frameFailed_=true;return;}
+ drawCalls_=0; portrait_=false; skyPending_=true;
  cloudLightUpdates_=0;
  context_->OMSetBlendState(nullptr,nullptr,0xffffffff);
  triangles_=0;
@@ -375,15 +399,17 @@ void Renderer::BeginFrame() {
  context_->ClearDepthStencilView(depth_.Get(),D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL,1,0);
  D3D11_VIEWPORT v{0,0,static_cast<float>(width_),static_cast<float>(height_),0,1};
  context_->RSSetViewports(1,&v); context_->RSSetState(rasterizer_.Get());
- context_->VSSetConstantBuffers(0,1,constants_.GetAddressOf()); context_->PSSetConstantBuffers(0,1,constants_.GetAddressOf());
- context_->PSSetConstantBuffers(4,1,combatLightConstants_.GetAddressOf());
+ context_->VSSetConstantBuffers(shader::slot::scene,1,constants_.GetAddressOf()); context_->PSSetConstantBuffers(shader::slot::scene,1,constants_.GetAddressOf());
+ context_->PSSetConstantBuffers(shader::slot::lights,1,combatLightConstants_.GetAddressOf());
  // A launcher/roster can render a portrait before any world. Bind valid
  // resources even though portrait shaders bypass atmospheric lighting.
- context_->VSSetConstantBuffers(3,1,cloudLightConstants_.GetAddressOf());
+ context_->VSSetConstantBuffers(shader::slot::cloud,1,cloudLightConstants_.GetAddressOf());
  context_->VSSetShaderResources(8,1,cloudLightView_.GetAddressOf());
  context_->VSSetSamplers(2,1,fontSampler_.GetAddressOf());
+ return true;
 }
 void Renderer::DrawSky() {
+ if(!FrameActive())return;
  // SetCamera can arrive after BeginFrame (including capture camera overrides).
  // Opaque geometry fills depth first, rejecting hidden sky pixels before the
  // expensive cloud shader. Finish before effects/HUD or a portrait changes it.
@@ -408,11 +434,12 @@ void Renderer::SetAtmosphereTime(double seconds) {
  atmospherePhase_=float(std::fmod(seconds,1800.0)*(6.283185307179586/1800.0));
 }
 void Renderer::PrepareCloudLight() {
+ if(!FrameActive())return;
  const float extent=float(cloudLightSize); // Two metres per texel.
  const XMFLOAT4 field{cloudLightFieldEnabled_?extent:0.f,extent-1,0,0};
  context_->UpdateSubresource(cloudLightConstants_.Get(),0,nullptr,&field,0,0);
- context_->VSSetConstantBuffers(3,1,cloudLightConstants_.GetAddressOf());
- context_->PSSetConstantBuffers(3,1,cloudLightConstants_.GetAddressOf());
+ context_->VSSetConstantBuffers(shader::slot::cloud,1,cloudLightConstants_.GetAddressOf());
+ context_->PSSetConstantBuffers(shader::slot::cloud,1,cloudLightConstants_.GetAddressOf());
  if (cloudLightFieldEnabled_ && cloudLightPhase_!=atmospherePhase_) {
   // Unbind before making this SRV an output. The field depends only on phase,
   // not camera, viewport, shadow focus or actor pose. No readback or lag.
@@ -458,6 +485,7 @@ bool Renderer::Project(const XMFLOAT3& world,XMFLOAT2& screen,float* depth) cons
  return true;
 }
 void Renderer::Draw(const XMMATRIX& world,const XMMATRIX& vp,const XMFLOAT4& color,bool hud,UINT count,UINT start) {
+ if(!FrameActive())return;
  ++drawCalls_;
  triangles_+=count/3;
  Constants data{}; data.atmosphere.x=atmospherePhase_; XMStoreFloat4x4(&data.world,XMMatrixTranspose(world)); XMStoreFloat4x4(&data.wvp,XMMatrixTranspose(world*vp));
@@ -674,6 +702,7 @@ void Renderer::DrawStaticScene(visual::StaticScene& scene,const std::function<vo
  }
 }
 bool Renderer::FlushWorld() {
+ if(!FrameActive())return false;
  if (std::all_of(world_.begin(),world_.end(),[](const auto& batch) { return batch.empty(); })) {
   DrawSky(); return true;
  }
@@ -777,7 +806,7 @@ bool Renderer::FlushWorld() {
  // Shadow-only/fully culled scenes do not consume surface cloud lighting.
  const auto combatLightBlock=portrait_ || !combatLightingEnabled_?visual::TransientLightBlock{}:combatLights_.Block();
  context_->UpdateSubresource(combatLightConstants_.Get(),0,nullptr,&combatLightBlock,0,0);
- context_->PSSetConstantBuffers(4,1,combatLightConstants_.GetAddressOf());
+ context_->PSSetConstantBuffers(shader::slot::lights,1,combatLightConstants_.GetAddressOf());
  if (!portrait_ && batchCounts[colorPass]) PrepareCloudLight();
  if (!instanceScratch_.empty()) {
   D3D11_MAPPED_SUBRESOURCE mapped{};
@@ -798,7 +827,7 @@ bool Renderer::FlushWorld() {
   std::memcpy(mapped.pData,handPalettes_.data(),handCount_*sizeof(visual::HandPalette));
   context_->Unmap(handConstants_.Get(),0);
  }
- context_->VSSetConstantBuffers(2,1,handConstants_.GetAddressOf());
+ context_->VSSetConstantBuffers(shader::slot::hands,1,handConstants_.GetAddressOf());
  ID3D11Buffer* buffers[]={vertices_.Get(),instances_.Get(),skinWeights_.Get()};
  const UINT strides[]={sizeof(Vertex),sizeof(Instance),sizeof(visual::SkinInfluence)},offsets[]={0,0,0};
  context_->IASetVertexBuffers(0,3,buffers,strides,offsets);
@@ -1013,6 +1042,7 @@ void Renderer::DrawSpellVolume(SpellMedium medium,XMFLOAT3 center,XMFLOAT3 direc
  ++spellVolumeCount_;spellVolumeCoverage_+=coverage;
 }
 bool Renderer::FlushEffects() {
+ if(!FrameActive())return false;
  if(!CompositePressure())return false;
  if(groundMarks_.empty() && effects_.empty() && cloudSprites_.empty())return true;
  const bool glow=spellGlowEnabled_ && (!effects_.empty() || !cloudSprites_.empty());
@@ -1023,9 +1053,9 @@ bool Renderer::FlushEffects() {
  context_->PSSetShaderResources(15,1,effectDepthResource_.GetAddressOf());
  context_->PSSetSamplers(2,1,fontSampler_.GetAddressOf());
  if(spellVolumeCount_)context_->UpdateSubresource(spellVolumeConstants_.Get(),0,nullptr,spellVolumes_.data(),0,0);
- context_->PSSetConstantBuffers(5,1,spellVolumeConstants_.GetAddressOf());
+ context_->PSSetConstantBuffers(shader::slot::volumes,1,spellVolumeConstants_.GetAddressOf());
  if(spellFieldCount_)context_->UpdateSubresource(spellFieldConstants_.Get(),0,nullptr,spellFields_.data(),0,0);
- context_->PSSetConstantBuffers(7,1,spellFieldConstants_.GetAddressOf());
+ context_->PSSetConstantBuffers(shader::slot::fields,1,spellFieldConstants_.GetAddressOf());
  std::sort(cloudSprites_.begin(),cloudSprites_.end(),[](const CloudSprite& a,const CloudSprite& b){return a.depth>b.depth;});
  cloudVertices_.clear();
  for(const auto& sprite:cloudSprites_)cloudVertices_.insert(cloudVertices_.end(),sprite.vertices.begin(),sprite.vertices.end());
@@ -1150,6 +1180,9 @@ bool Renderer::FlushHud() {
  hud_.clear(); return true;
 }
 bool Renderer::BeginPortrait(float x,float y,float width,float height,float closeup,bool effects) {
+ if(!FrameActive() || portrait_)return Check(E_UNEXPECTED,L"Begin portrait outside active frame");
+ if(!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(width) || !std::isfinite(height) || width<=0 || height<=0)
+  return Check(E_INVALIDARG,L"Invalid portrait viewport");
  if (!FlushHud()) { frameFailed_=true; return false; }
  savedCamera_=viewProjection_; savedEye_=eye_; portrait_=true;portraitEffects_=effects;
  portraitViewport_={x*width_,y*height_,width*width_,height*height_,0,1};
@@ -1162,24 +1195,29 @@ bool Renderer::BeginPortrait(float x,float y,float width,float height,float clos
  return true;
 }
 bool Renderer::EndPortrait() {
+ if(!FrameActive() || !portrait_)return Check(E_UNEXPECTED,L"End portrait without matching begin");
  const bool success=FlushWorld() && FlushEffects(); frameFailed_=frameFailed_ || !success;
  portrait_=portraitEffects_=false; viewProjection_=savedCamera_; eye_=savedEye_;
+ if(!success)return false;
  D3D11_VIEWPORT viewport{0,0,float(width_),float(height_),0,1}; context_->RSSetViewports(1,&viewport);
  return success;
 }
 bool Renderer::EndFrame(bool vsync) {
- if (frameFailed_) return false;
- if (!FlushHud()) return false;
+ if(frameFailed_)return false;
+ if(!FrameActive() || portrait_)return Check(E_UNEXPECTED,L"End frame outside active world frame");
+ if (!FlushHud() || frameFailed_) return false;
  lastDrawCalls_=drawCalls_;
  lastBodyLodCounts_=bodyLodCounts_;
  lastAttachmentLodCounts_=attachmentLodCounts_;
  gpuTimer_.End(context_.Get());
+ frameActive_=false;
  if(!Check(gpuQueue_.End(),L"Signal queued GPU frame"))return false;
  return Check(swapChain_->Present(vsync?1:0,0),L"Present frame");
 }
 
 bool Renderer::Capture(const std::wstring& path) {
- if (!FlushHud()) return false;
+ if(!ready_ || frameFailed_)return Check(E_UNEXPECTED,L"Capture unavailable renderer");
+ if (frameActive_ && !FlushHud()) return false;
  ComPtr<ID3D11Texture2D> back,staging;
  if (!Check(swapChain_->GetBuffer(0,IID_PPV_ARGS(back.GetAddressOf())),L"Get capture buffer")) return false;
  D3D11_TEXTURE2D_DESC desc{}; back->GetDesc(&desc);
@@ -1249,6 +1287,7 @@ float Renderer::TextWidth(const std::string& source,float size,bool literal) con
  return std::max(width,line);
 }
 bool Renderer::SetTerrainSurface(const std::vector<std::uint8_t>& pixels,unsigned size) {
+ if(!ready_ || frameFailed_)return Check(E_UNEXPECTED,L"Upload terrain to unavailable renderer");
  if (size!=256 || pixels.size()!=static_cast<std::size_t>(size)*size*4) {
   error_=L"Invalid terrain surface dimensions."; frameFailed_=true; return false;
  }
@@ -1264,6 +1303,7 @@ bool Renderer::SetTerrainSurface(const std::vector<std::uint8_t>& pixels,unsigne
  return true;
 }
 bool Renderer::SetMapArtwork(const std::vector<std::uint8_t>& pixels,unsigned size) {
+ if(!ready_ || frameFailed_)return Check(E_UNEXPECTED,L"Upload map to unavailable renderer");
  if (pixels.size()!=static_cast<std::size_t>(size)*size*4 || size!=512) {
   error_=L"Invalid map artwork dimensions."; frameFailed_=true; return false;
  }

@@ -60,7 +60,7 @@ bool Renderer::CompositePressure(){
  const D3D11_RECT rect{LONG(std::clamp(std::floor(left)-16,0.f,float(width_))),LONG(std::clamp(std::floor(top)-16,0.f,float(height_))),
    LONG(std::clamp(std::ceil(right)+16,0.f,float(width_))),LONG(std::clamp(std::ceil(bottom)+16,0.f,float(height_)))};
  if(rect.left>=rect.right || rect.top>=rect.bottom)return true;
- struct Data {XMFLOAT4X4 inverseVP,vp;XMFLOAT4 eye,screen,region;std::array<PressureWave,8> waves;};
+ using Data=shader::Pressure;
  if(!pressureVertex_){
   if(!Check(device_->CreateVertexShader(compiled_scene::VSGlow.data,compiled_scene::VSGlow.size,nullptr,pressureVertex_.GetAddressOf()),L"Create pressure vertex shader") ||
     !Check(device_->CreatePixelShader(compiled_scene::PSPressure.data,compiled_scene::PSPressure.size,nullptr,pressurePixel_.GetAddressOf()),L"Create pressure pixel shader"))return false;
@@ -85,7 +85,7 @@ bool Renderer::CompositePressure(){
  data.eye={eye_.x,eye_.y,eye_.z,float(count)};data.screen={1.f/width_,1.f/height_,std::min(8.f,6.f*height_/1080.f),0};
  data.region={(rect.left+.5f)/width_,(rect.top+.5f)/height_,(rect.right-.5f)/width_,(rect.bottom-.5f)/height_};data.waves=pressureWaves_;
  context_->UpdateSubresource(pressureConstants_.Get(),0,nullptr,&data,0,0);
- context_->PSSetConstantBuffers(8,1,pressureConstants_.GetAddressOf());
+ context_->PSSetConstantBuffers(shader::slot::pressure,1,pressureConstants_.GetAddressOf());
  context_->OMSetRenderTargets(1,target_.GetAddressOf(),nullptr);context_->OMSetDepthStencilState(depthOff_.Get(),0);context_->OMSetBlendState(nullptr,nullptr,0xffffffff);
  context_->PSSetShaderResources(15,1,effectDepthResource_.GetAddressOf());context_->PSSetShaderResources(18,1,pressureView_.GetAddressOf());
  context_->PSSetSamplers(2,1,fontSampler_.GetAddressOf());

@@ -12,12 +12,13 @@
 #include "engine/FontAtlas.h"
 #include "engine/StaticScene.h"
 #include "engine/TransientLights.h"
+#include "engine/ShaderData.h"
 #include <array>
 #include <algorithm>
 #include <functional>
 class Renderer {
 public:
-  ~Renderer(){gpuQueue_.Reset();}
+  ~Renderer();
   bool GpuQueueAvailable() const {return gpuQueue_.Available();}
   double GpuQueueWaitMilliseconds() const {return gpuQueue_.WaitMilliseconds();}
   // Expanded highlands share one bounded upload across color and shadow passes.
@@ -26,8 +27,11 @@ public:
   // renderer only. Read synchronously; no borrowed pointer survives this call.
   bool Initialize(HWND window, int width, int height,const visual::BodyGeometry* previewBody=nullptr);
   bool Resize(int width, int height);
-  void BeginFrame();
+  bool BeginFrame();
   bool EndFrame(bool vsync = true);
+  bool FrameActive() const { return ready_ && frameActive_ && !frameFailed_; }
+  HRESULT FailureCode() const { return failureCode_; }
+  HRESULT DeviceRemovedReason() const { return removedReason_; }
   double GpuMilliseconds() const { return gpuTimer_.Milliseconds(); }
   std::uint64_t GpuSamples() const { return gpuTimer_.Samples(); }
   std::uint64_t GpuFrame() const { return gpuTimer_.Frame(); }
@@ -195,7 +199,10 @@ public:
   void DrawText(float x, float y, const std::string& text, const DirectX::XMFLOAT4& color, float size = 2,bool literal=false);
   const std::wstring& Error() const { return error_; }
 private:
+  friend struct GraphicsLifecycleTestAccess;
   bool Check(HRESULT result, const wchar_t* operation);
+  bool ready_=false,frameActive_=false;
+  HRESULT failureCode_=S_OK,removedReason_=S_OK;
   bool CreateTargets(int width, int height);
   bool CreatePipeline(const visual::BodyGeometry* previewBody);
   visual::TransientLights combatLights_;
@@ -210,8 +217,8 @@ private:
   bool FlushWorld();
   bool FlushEffects();
   bool CompositePressure();
-  struct PressureWave {DirectX::XMFLOAT4 centerStrength,radiiAge,axisStyle;};
-  std::array<PressureWave,8> pressureWaves_{};
+  using PressureWave=shader::PressureWave;
+  shader::PressureWaves pressureWaves_{};
   unsigned pressureCount_=0,pressureSubmitted_=0,pressurePasses_=0;
   bool pressureEnabled_=true,pressureClosed_=false;
   Microsoft::WRL::ComPtr<ID3D11Texture2D> pressureCopy_;
@@ -268,16 +275,14 @@ private:
   std::vector<visual::Vertex> groundMarks_;
   struct CloudSprite {std::array<visual::Vertex,6> vertices;float depth;};
   std::vector<CloudSprite> cloudSprites_;
-  struct SpellVolume {
-    DirectX::XMFLOAT4 centerKind,rightRadius,upRadius,axisRadius,clock,tint;
-  };
+  using SpellVolume=shader::Volume;
   static constexpr unsigned maxSpellVolumes=24;
-  std::array<SpellVolume,maxSpellVolumes> spellVolumes_{};
+  shader::Volumes spellVolumes_{};
   unsigned spellVolumeCount_=0;
   float spellVolumeCoverage_=0;
   Microsoft::WRL::ComPtr<ID3D11Buffer> spellVolumeConstants_;
-  struct SpellFieldData {DirectX::XMFLOAT4 clock,tint,shape,details;};
-  std::array<SpellFieldData,12> spellFields_{};
+  using SpellFieldData=shader::Field;
+  shader::Fields spellFields_{};
   unsigned spellFieldCount_=0;
   Microsoft::WRL::ComPtr<ID3D11Buffer> spellFieldConstants_;
   std::vector<visual::Vertex> cloudVertices_;

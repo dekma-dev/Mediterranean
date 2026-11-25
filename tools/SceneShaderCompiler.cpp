@@ -1,4 +1,5 @@
 #include "engine/SceneShader.h"
+#include "tools/ShaderContract.h"
 #include <d3dcompiler.h>
 #include <wrl/client.h>
 #include <cstring>
@@ -25,6 +26,7 @@ int wmain(int argc,wchar_t** argv) {
         entry[0]=='V'?"vs_5_0":"ps_5_0",D3DCOMPILE_ENABLE_STRICTNESS,0,&code,&errors);
       if(errors && errors->GetBufferSize()>1) std::cerr<<entry<<": "<<static_cast<const char*>(errors->GetBufferPointer())<<'\n';
       if(FAILED(result) || (errors && errors->GetBufferSize()>1)) throw std::runtime_error(std::string("Shader compilation failed: ")+entry);
+      shader_contract::Validate(code->GetBufferPointer(),code->GetBufferSize(),entry);
       output<<"inline constexpr unsigned char bytes_"<<entry<<"[]={\n";
       const auto bytes=static_cast<const unsigned char*>(code->GetBufferPointer());
       for(std::size_t i=0;i<code->GetBufferSize();++i) {
