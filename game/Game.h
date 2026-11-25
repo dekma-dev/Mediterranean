@@ -12,6 +12,8 @@
 #include "game/WorldView.h"
 #include "game/CharacterSelection.h"
 #include "game/ActorPresentation.h"
+#include "game/SceneSnapshot.h"
+#include "game/CommandSchedule.h"
 class Renderer;
 
 class Game {
@@ -39,14 +41,29 @@ public:
   void SuspendInput() { execution_.InvalidateTrace(); soundDelivery_.Reset();soundEvents_.Reset();CancelUiGesture(); creatureSteps_.Reset(); simulation_.StopMovement(); effects_.CancelDash(); playerAnimation_.CancelDash();
     effects_.CancelTrail(0); playerAnimation_.pose.attackSeconds=-1; playerPose_.attack=playerPose_.attackVelocity=0;
     playerAnimation_.authoredWeapon={};playerAnimation_.pose.authoredStrikeWeight=0;
-    simulation_.CloseQuestDialogue(); if (interface_.panel==ui::Panel::Quest) interface_.Close(ui::Panel::Quest); }
-  void ExecuteCommand(const rpg::Command& command,float seconds=.01f);
+    simulation_.CloseQuestDialogue(); if (interface_.panel==ui::Panel::Quest) interface_.Close(ui::Panel::Quest);
+    scene_.Capture(simulation_,scene_.Sequence()); }
+  rpg::StepReceipt ExecuteCommand(const rpg::Command& command,float seconds=.01f);
+  struct FrameResult {
+    bool tradeRequested=false,boundary=false;
+    unsigned steps=0,events=0,droppedEvents=0;
+    std::uint64_t eventKinds=0;
+    std::array<float,64> firstEventOffsets{};
+    std::string notice;
+    bool Has(rpg::CombatVisualKind kind) const {
+      const auto index=static_cast<unsigned>(kind);return index<64 && (eventKinds&(std::uint64_t(1)<<index))!=0;
+    }
+    float FirstOffset(rpg::CombatVisualKind kind) const {return Has(kind)?firstEventOffsets[static_cast<unsigned>(kind)]:-1.f;}
+  };
+  FrameResult ExecuteFrame(const rpg::Command& command,float seconds);
+  const rpg::CommandSchedule::Statistics& ScheduleStats() const {return schedule_.Stats();}
   sound::Events TakeSoundEvents(){return soundDelivery_.Take();}
   const sound::DeliveryQueue::Statistics& SoundDeliveryStats()const{return soundDelivery_.Stats();}
   const rpg::ExecutionStats& StepStats()const{return execution_.Stats();}
   void BeginCommandTrace(std::size_t capacity=90){execution_.BeginTrace(simulation_,capacity);}
   rpg::ReplayResult VerifyCommandTrace()const{return execution_.VerifyTrace();}
   std::string StepDiagnostics()const;
+  const presentation::SceneSnapshot& Scene() const {return scene_;}
   const rpg::Simulation& State() const { return simulation_; }
   const motion::Actor& PlayerPose() const { return playerPose_; }
   const motion::Actor& EnemyPose(std::size_t index) const { return enemyActors_.at(index).motion; }
@@ -75,6 +92,8 @@ private:
   bool choosingCharacter_=false,inputBarrier_=false;
   rpg::Simulation simulation_;
   rpg::CommandExecution execution_;
+  rpg::CommandSchedule schedule_;
+  presentation::SceneSnapshot scene_;
   sound::Events soundEvents_;
   sound::DeliveryQueue soundDelivery_;
   void PresentStep(const rpg::StepReceipt& step);

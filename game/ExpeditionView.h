@@ -1,6 +1,5 @@
 #pragma once
-#include "game/Simulation.h"
-#include "game/WorldInteraction.h"
+#include "game/SceneSnapshot.h"
 #include "engine/Renderer.h"
 
 namespace expeditionview {
@@ -34,15 +33,15 @@ inline void CampDetails(Renderer& r) {
     }
   }
 }
-inline void Draw(Renderer& r,const rpg::Simulation& s,float time) {
+inline void Draw(Renderer& r,const presentation::SceneSnapshot& s,float time) {
   for(int i=0;i<3;++i) {
     const auto p=rpg::WorldMap::expeditionSites[6+i];
-    if(std::hypot(p.x-s.Player().x,p.z-s.Player().z)>65)continue;
+    if(std::hypot(p.x-s.Player().position.x,p.z-s.Player().position.z)>65)continue;
     const float ground=rpg::WorldMap::Height(p);
-    if(!ui::SupplyRecovered(s,i))
+    if(!s.World().suppliesRecovered[i])
       r.DrawAuthoredAsset(authored::Asset::SackStack,{p.x+.42f,ground,p.z+.16f},{.65f,.65f,.65f});
-    if(s.SupplyChannelSite()!=i)continue;
-    const float progress=std::clamp(s.SupplyChannelProgress(),0.f,1.f);
+    if(s.World().supplySite!=i)continue;
+    const float progress=std::clamp(s.World().supplyProgress,0.f,1.f);
     const auto at=[&](float angle,float radius)->DirectX::XMFLOAT3 {
       const rpg::Vec2 q{p.x+std::sin(angle)*radius,p.z+std::cos(angle)*radius};
       return {q.x,rpg::WorldMap::Height(q)+.065f,q.z};
@@ -56,7 +55,7 @@ inline void Draw(Renderer& r,const rpg::Simulation& s,float time) {
     }
   }
   for(const auto p:camps) {
-    if(std::hypot(p.x-s.Player().x,p.z-s.Player().z)>38) continue;
+    if(std::hypot(p.x-s.Player().position.x,p.z-s.Player().position.z)>38) continue;
     const float x=p.x+1.65f,z=p.z-2.26f,y=rpg::WorldMap::Height(p)+2.60f;
     for(int spark=0;spark<5;++spark) {
       const float phase=std::fmod(time*.6f+spark*.193f,1.f),a=spark*2.4f;

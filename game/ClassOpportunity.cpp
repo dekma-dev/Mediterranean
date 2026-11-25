@@ -74,22 +74,23 @@ void Confluence(Renderer& r,const Attachments& a,unsigned mask,float time,float 
  }
 }
 }
-void Discipline(Renderer& r,const rpg::Simulation& s,const Attachments& a,float clock){
- if(!Valid(a) || !std::isfinite(clock) || clock<0 || s.Health()<=0 || !rpg::HasDiscipline(s.Class()))return;
+void Discipline(Renderer& r,const rpg::Simulation& s,const Attachments& a,float clock){Discipline(r,presentation::CapturePlayer(s),a,clock);}
+void Discipline(Renderer& r,const presentation::PlayerFrame& s,const Attachments& a,float clock){
+ if(!Valid(a) || !std::isfinite(clock) || clock<0 || s.health<=0 || !rpg::HasDiscipline(s.classId))return;
  // Stateless evaluation: a repeated render, teleport or load cannot advance
  // an emitter or leave an orphaned aura at the previous world position.
- const float remaining=s.DisciplineSeconds(),duration=s.Class()==C::Mage?8.f:s.Class()==C::Priest?6.f:5.f;
+ const float remaining=s.disciplineSeconds,duration=s.classId==C::Mage?8.f:s.classId==C::Priest?6.f:5.f;
  const float fade=combat::Smooth((duration-remaining)/.12f)*combat::Smooth(remaining/.18f);
  clock=std::fmod(clock,600.f);
- if(s.Class()==C::Warrior){
-  if(s.GuardWindow()>0)Guard(r,a,clock,combat::Smooth(s.GuardWindow()/.12f)*.65f);
+ if(s.classId==C::Warrior){
+  if(s.guardWindow>0)Guard(r,a,clock,combat::Smooth(s.guardWindow/.12f)*.65f);
   if(remaining>0)Blade(r,a,clock,fade*.8f);
- }else if(s.Class()==C::Scout){if(remaining>0)Pursuit(r,a,clock,fade*.76f);}
- else if(s.Class()==C::Priest){if(remaining>0)Benediction(r,a,clock,fade*.70f);}
+ }else if(s.classId==C::Scout){if(remaining>0)Pursuit(r,a,clock,fade*.76f);}
+ else if(s.classId==C::Priest){if(remaining>0)Benediction(r,a,clock,fade*.70f);}
  else {
-  const bool casting=s.ConfluenceCast() && s.AttackSeconds()<combat::StrokeStart(s.HeavyAttack());
-  const unsigned mask=remaining>0 || casting?7:s.ElementMask();
-  const float gather=casting?combat::Smooth(s.AttackSeconds()/combat::StrokeStart(s.HeavyAttack())):0;
+  const bool casting=s.confluenceCast && s.attackSeconds<combat::StrokeStart(s.heavy);
+  const unsigned mask=remaining>0 || casting?7:s.elementMask;
+  const float gather=casting?combat::Smooth(s.attackSeconds/combat::StrokeStart(s.heavy)):0;
   if(mask)Confluence(r,a,mask,clock,casting?.8f:remaining>0?fade*.72f:.42f,gather);
  }
 }

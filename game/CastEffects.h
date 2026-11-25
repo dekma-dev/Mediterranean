@@ -1,5 +1,6 @@
 #pragma once
 #include "game/Simulation.h"
+#include "game/SceneSnapshot.h"
 #include "game/CharacterPose.h"
 #include <DirectXMath.h>
 class Renderer;
@@ -17,14 +18,16 @@ struct Attachments {
 };
 Attachments FromPose(const CharacterPose&,DirectX::XMFLOAT3 root,float facing,rpg::WeaponForm,bool shield,bool weapon=true,bool alive=true);
 Attachments Preview(DirectX::XMFLOAT3 root,DirectX::XMFLOAT3 focus,float facing);
-Attachments FromEnemy(const rpg::Enemy&,const presentation::Actor&);
-void PrepareEnemy(Renderer&,const rpg::Enemy&,const Attachments&);
+Attachments FromEnemy(const presentation::ActorFrame&,const presentation::Actor&);
+void PrepareEnemy(Renderer&,const presentation::ActorFrame&,const Attachments&);
 void Prepare(Renderer&,const rpg::Simulation&,const Attachments&);
+void Prepare(Renderer&,const presentation::PlayerFrame&,const Attachments&);
 // Shared preparation artwork for gameplay and the isolated character audition.
 void PrepareAction(Renderer&,rpg::ClassId,int ability,bool heavy,float seconds,float rate,
                    bool recovery,float recoveryProgress,const Attachments&);
 void Complete(Renderer&,const rpg::CombatVisualEvent&,float age,const Attachments&);
 void Discipline(Renderer&,const rpg::Simulation&,const Attachments&,float clock);
+void Discipline(Renderer&,const presentation::PlayerFrame&,const Attachments&,float clock);
 void DisciplinePulse(Renderer&,const rpg::CombatVisualEvent&,float age,const Attachments*);
 // Class-specific preparation/recovery shapes, sharing the accepted cast clock.
 bool ClassCharge(Renderer&,rpg::ClassId,int ability,float progress,float age,const Attachments&);

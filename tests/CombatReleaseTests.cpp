@@ -170,6 +170,30 @@ void Native(Renderer& r,const std::filesystem::path& out){
   const auto p=Capture(r,out/(reverse?"crowd-reversed.png":"crowd.png"));if(!reverse)crowd=p;else Check(crowd==p,"Release order changed compositing");
  }
 }
+void ScheduledWorld(Renderer& r,const std::filesystem::path& out){
+ Check(r.Resize(1280,720),"Scheduled world size");
+ for(auto school:{ClassId::Warrior,ClassId::Mage,ClassId::Scout,ClassId::Priest}){
+  auto game=std::make_unique<Game>();game->Initialize();Check(game->RestoreSnapshot(Hero(school).Save()),"Scheduled world hero");
+  auto& target=const_cast<Enemy&>(game->State().Enemies()[0]);
+  target.position={-4,school==ClassId::Warrior?7.f:10.5f};target.home=target.position;target.health=500;target.attackCooldown=100;
+  game->SetCameraOrbit(0,.95f,12);unsigned releases=0,contacts=0;
+  for(unsigned frame=0;frame<40;++frame){
+   Command command;if(frame==0){command.selectActor=100;command.ability=1;command.queueAttack=true;}
+   const auto receipt=game->ExecuteFrame(command,.05f);game->TakeSoundEvents();
+   Check(receipt.steps==6 && !receipt.boundary && !receipt.droppedEvents,"World frame escaped its six-step contract");
+   const bool release=receipt.Has(K::SpellCast)||receipt.Has(K::HeavyStrike);
+   const bool hit=receipt.Has(K::HeavyHit)||receipt.Has(K::Hit);releases+=release;contacts+=hit;
+   if(!release && !hit)continue;
+   const auto name="scheduled-"+std::to_string(int(school))+(hit?"-contact":"-release");
+   const auto state=game->State().Save();const auto sequence=game->Scene().Sequence();
+   Check(r.BeginFrame(),"Scheduled begin");game->Render(r);const auto first=Capture(r,out/(name+".png"));
+   Check(r.BeginFrame(),"Scheduled repeat begin");game->Render(r);const auto second=Capture(r,out/(name+"-repeat.png"));
+   Check(first==second && game->State().Save()==state && game->Scene().Sequence()==sequence,
+     "Rendering advanced a multi-step frame or changed its receipts");
+  }
+  Check(releases==1 && contacts==1,"World frame lost an early release/contact or repeated a one-shot cast");
+ }
+}
 void World(Renderer& r,const std::filesystem::path& out){
  Check(r.Resize(1600,900),"World size");
  for(unsigned mode:{0u,1u,2u}){
@@ -188,7 +212,9 @@ void World(Renderer& r,const std::filesystem::path& out){
   if(id==ClassId::Priest && ability>=8)continue;
   Game game;game.Initialize();Check(game.RestoreSnapshot(Hero(id).Save()),"Player release fixture");
   auto& enemy=const_cast<Enemy&>(game.State().Enemies()[0]);enemy.position={-4,10.5f};enemy.home=enemy.position;enemy.attackCooldown=100;enemy.health=500;
-  game.SetCameraOrbit(1.1f,.45f,8);Command cast;cast.selectActor=100;cast.ability=ability;game.ExecuteCommand(cast,.001f);
+  // The camera intentionally no longer collapses through roofs. The old low
+  // eastern view hides this encounter behind one, so it cannot test receivers.
+  game.SetCameraOrbit(0,.95f,12);Command cast;cast.selectActor=100;cast.ability=ability;game.ExecuteFrame(cast,.001f);
   bool released=false;for(int n=0;n<600 && !released;++n){game.ExecuteCommand({},1.f/120);for(std::size_t i=0;i<game.State().VisualEventCount();++i)released|=game.State().VisualEvents()[i].kind==K::SpellCast;}
   Check(released,"Actual player release missing");game.ExecuteCommand({},.025f);
   r.BeginFrame();game.Render(r);Capture(r,out/("world-player-release-"+std::to_string(int(id))+"-"+std::to_string(ability)+".png"));
@@ -209,6 +235,6 @@ int main(int argc,char** argv){try{
  Check(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"COM");TargetHeights();
  const auto out=argc>1?std::filesystem::path(argv[1]):std::filesystem::path("combat-release-review");std::filesystem::create_directories(out);
  Win32Window window;Check(window.Create(GetModuleHandleW(nullptr),960,600,L"Combat release checks",false),"Window");
- Renderer r;Check(r.Initialize(window.GetHandle(),960,600),"Renderer");EnemyPreparation(r,out);Lighting(r,out);Native(r,out);World(r,out);
+ Renderer r;Check(r.Initialize(window.GetHandle(),960,600),"Renderer");EnemyPreparation(r,out);Lighting(r,out);Native(r,out);World(r,out);ScheduledWorld(r,out);
  Check(r.ValidateDebugMessages(),"DirectX release warnings");std::cout<<"PASS: native release sequence, equal-time geometry, bounded lifetime, actual boss contacts and render/load isolation.\n";
  }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

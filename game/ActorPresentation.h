@@ -18,10 +18,10 @@ struct Actor {
  animation::FootPlacement feet;
  BeastLocomotion beast;
  double clock=0;
- bool Matches(const rpg::Enemy& enemy) const {
+ template<class Enemy> bool Matches(const Enemy& enemy) const {
    return id==enemy.id && kind==enemy.kind && rank==enemy.rank && home.x==enemy.home.x && home.z==enemy.home.z;
  }
- void Reset(const rpg::Enemy& enemy) {
+ template<class Enemy> void Reset(const Enemy& enemy) {
    *this={};id=enemy.id;kind=enemy.kind;rank=enemy.rank;home=enemy.home;alive=enemy.health>0;
    motion.Reset(enemy.facing);animation.Reset(float(id)*.37f);defeat.Reset(alive);
    face.Reset(id+16);feet.Reset(enemy.position,enemy.facing);movement.Reset(enemy.position.x,enemy.position.z);
@@ -40,9 +40,9 @@ struct Actor {
 
 // Keep the hot update allocation-free. Only roster changes rebuild the small
 // vector, matching identities so insertion/reordering cannot swap animation.
-template<class Enemies> void Bind(std::vector<Actor>& actors,const Enemies& enemies,const rpg::Enemy& trainer) {
+template<class Enemies,class Enemy> void Bind(std::vector<Actor>& actors,const Enemies& enemies,const Enemy& trainer) {
  const auto count=enemies.size()+1;
- const auto at=[&](std::size_t i)->const rpg::Enemy& {return i<enemies.size()?enemies[i]:trainer;};
+ const auto at=[&](std::size_t i)->const Enemy& {return i<enemies.size()?enemies[i]:trainer;};
  bool same=actors.size()==count;
  if(same)for(std::size_t i=0;i<count;++i)if(!actors[i].Matches(at(i))){same=false;break;}
  if(!same) {

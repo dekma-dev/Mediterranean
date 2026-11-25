@@ -206,18 +206,18 @@ const spellvfx::FlightPath* CombatEffects::ProjectilePath(rpg::EntityId target) 
   return newest?Path(*newest):nullptr;
 }
 void CombatEffects::TrackProjectiles(const rpg::Simulation& state) {
+  presentation::SceneSnapshot scene;scene.Capture(state,0);TrackProjectiles(scene);
+}
+void CombatEffects::TrackProjectiles(const presentation::SceneSnapshot& state) {
   for(auto& b:bursts_) {
     auto* path=Path(b);
     if(b.event.kind!=K::SpellCast || !path || path->Age()>=b.event.flight || b.age>=BurstLife(b.event))continue;
-    const rpg::Enemy* target=nullptr;
-    for(const auto& e:state.Combatants())if(e.id==b.event.target)target=&e;
-    for(const auto& e:state.Dummies())if(e.id==b.event.target)target=&e;
-    if(state.Sparring() && state.SparringOpponent().id==b.event.target)target=&state.SparringOpponent();
+    const auto* target=state.FindActor(b.event.target);
     // Never acquire the newly selected target, resurrect a vanished actor or
     // manufacture an impact. Missing/dead targets retain the last trajectory.
     auto destination=path->Target();
     if(target && target->health>0 && target->state!=rpg::EnemyState::Returning)
-      destination={target->position.x,rpg::WorldMap::Height(target->position)+target->ContactHeight(),target->position.z};
+      destination={target->position.x,rpg::WorldMap::Height(target->position)+target->contactHeight,target->position.z};
     // If this update crosses arrival without a hit, interpolate to its clock
     // instead of tracking the target into the unused tail of this update.
     if(b.age>b.event.flight && b.age>path->Age()) {
@@ -385,9 +385,10 @@ bool CombatEffects::NeedsPose() const {
   return HasRecovery() || std::any_of(bursts_.begin(),bursts_.end(),[](const Burst& b){return b.event.actor==0 &&
     (b.event.kind==K::DisciplineReady || b.event.kind==K::DisciplineSpent) && b.age<BurstLife(b.event);});
 }
-void CombatEffects::Illuminate(Renderer& renderer,const rpg::Simulation& state,const castfx::Attachments& caster) const {
+void CombatEffects::Illuminate(Renderer& r,const rpg::Simulation& s,const castfx::Attachments& a) const {Illuminate(r,presentation::CapturePlayer(s),a);}
+void CombatEffects::Illuminate(Renderer& renderer,const presentation::PlayerFrame& state,const castfx::Attachments& caster) const {
  using C=rpg::ClassId;
- if(!caster.alive || state.Health()<=0)return;
+ if(!caster.alive || state.health<=0)return;
  const auto tint=[](C school,int ability)->XMFLOAT3 {
   if(school==C::Priest)return {1,.78f,.32f};
   if(ability==5 || ability==6 || ability==8 || ability==12)return {.24f,.60f,1};
@@ -395,11 +396,11 @@ void CombatEffects::Illuminate(Renderer& renderer,const rpg::Simulation& state,c
   return {1,.25f,.055f};
  };
  const auto pulse=[](float age,float lifetime){return combat::Smooth(age/.018f)*std::pow(Unit(1-age/lifetime),2.f);};
- if(state.Class()==C::Mage || state.Class()==C::Priest){
-  const bool recovery=state.CastingRecovery();
-  const float progress=recovery?state.RecoveryProgress():state.Attacking()?state.AttackSeconds()/combat::StrokeStart(state.HeavyAttack()):-1;
+ if(state.classId==C::Mage || state.classId==C::Priest){
+  const bool recovery=state.recovery;
+  const float progress=recovery?state.recoveryProgress:state.attacking?state.attackSeconds/combat::StrokeStart(state.heavy):-1;
   if(progress>=0 && progress<1){const float power=combat::Smooth(progress);
-   renderer.AddCombatLight(caster.focus,2.0f,tint(state.Class(),state.AttackAbility()),power*1.8f);}
+   renderer.AddCombatLight(caster.focus,2.0f,tint(state.classId,state.attackAbility),power*1.8f);}
  }
  for(const auto& b:bursts_){
   const auto& e=b.event;if(b.age>=BurstLife(e) || (e.school!=C::Mage && e.school!=C::Priest))continue;

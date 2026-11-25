@@ -1,5 +1,6 @@
 #pragma once
 #include "game/Simulation.h"
+#include "game/SceneSnapshot.h"
 #include "game/CreatureContacts.h"
 #include "game/SpellVfx.h"
 #include "game/SpellTrajectory.h"
@@ -19,6 +20,7 @@ public:
   void Reset();
   void Advance(float dt);
   void TrackProjectiles(const rpg::Simulation& state);
+  void TrackProjectiles(const presentation::SceneSnapshot& scene);
   const spellvfx::FlightPath* ProjectilePath(rpg::EntityId target) const;
   void Emit(const rpg::CombatVisualEvent& event,const DirectX::XMFLOAT3* spellOrigin=nullptr);
   void EmitFootstep(const presentation::CreatureContact& contact,const rpg::WorldMap& map);
@@ -42,6 +44,7 @@ public:
   static DirectX::XMFLOAT3 SpellTracePoint(DirectX::XMFLOAT3 origin,rpg::Vec2 destination,float progress,float arc=.16f,float targetHeight=1.25f);
   void Render(Renderer& renderer,const castfx::Attachments* caster=nullptr) const;
   void Illuminate(Renderer& renderer,const rpg::Simulation& state,const castfx::Attachments& caster) const;
+  void Illuminate(Renderer& renderer,const presentation::PlayerFrame& player,const castfx::Attachments& caster) const;
 private:
   struct Burst { rpg::CombatVisualEvent event; float age=1; unsigned seed=0; DirectX::XMFLOAT3 spellOrigin{}; };
   // Simulation permits one committed player action. Keep its flight and the

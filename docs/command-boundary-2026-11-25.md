@@ -108,6 +108,42 @@ The reproduction is retained under
 `build-ninja-release/command-baseline/` (`old-size.txt`, `current-size.txt`,
 build logs and the HEAD header archive).
 
+Debug validation also reached `STATUS_STACK_OVERFLOW` (`0xC00000FD`) in the
+large effects test function, which placed six independent `Game` fixtures on
+one stack frame. The larger owned event buffers exposed that fixture's stack
+limit. Those test games now use `unique_ptr`, matching the engine's actual
+ownership. No executable stack-reserve setting or regression assertion is
+relaxed. Release and Debug rerun the same fixture behavior.
+
+## Final validation evidence
+
+- All eight selected suites passed in Release: **38.61 s**, recorded in
+  `build-ninja-release/command-final-tests.log`. After the final diagnostic
+  drain and fixture ownership edits, `ExecutionTests` and `CombatEffectsTests`
+  passed again (2/2, **11.67 s**) in `command-post-review-tests.log`.
+- All eight passed in Visual Studio Debug: **66.29 s**, recorded in
+  `build-local/command-acceptance-tests.log`. Earlier `command-native-tests.log`
+  and `command-final-tests.log` contain the budget/stack failures described above
+  and are retained as evidence, not reported as passing acceptance runs.
+- Tests replayed **200 steps for each of warrior, mage, scout and priest** with
+  release/contact, target change and jump checks. Live state and counters stayed
+  unchanged during verification. The crowded fixture emitted **39 warnings**
+  without truncation; invalid/zero-time and deliberate mutation tests also pass.
+- Both rebuilt public executables completed `--verify-command-replay` with
+  exit code 0: **90 steps, sealed, PASS, mismatch 0**. Reports are
+  `build-ninja-release/command-replay.txt` and `build-local/command-replay.txt`.
+- The ordinary Release smoke executable exits 0. All **26 PNG captures** are
+  SHA-256 identical to the preceding texture-preparation build, recorded in
+  `build-ninja-release/command-capture-comparison.json` with images in
+  `texture-after/` and `command-after/`. Gameplay presentation tests cover live
+  impacts/moving targets in addition to those static smoke views.
+- `git diff --check` passes. Driver debug-layer availability remains unchanged;
+  Debug test success is not a claim that a missing driver debug layer ran.
+
+No live-player save is written by these command/capture fixtures. Audible
+subjective acceptance and long sessions remain manual; this work does not
+claim better sound assets, fixed-step physics, portable replay or an FPS gain.
+
 ## Remaining work
 
 Before admitting multiple fixed simulation ticks per render frame, move the

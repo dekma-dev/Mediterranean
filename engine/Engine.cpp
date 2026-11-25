@@ -400,9 +400,9 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
     <<"\nConfiguration: Debug-like\n"
 #endif
     <<renderer_->AdapterDiagnostics()
-    <<"Hidden "<<renderer_->Width()<<'x'<<renderer_->Height()<<" workload suite; present interval 0; benchmark simulation step 1/60 s\n"
+    <<"Hidden "<<renderer_->Width()<<'x'<<renderer_->Height()<<" workload suite; present interval 0; benchmark frame interval 1/60 s\n"
     <<"Resolution describes render buffers, not desktop/window dimensions.\n"
-    <<"Interactive gameplay uses variable dt capped at 50 ms, not a fixed 60 Hz clock.\n"
+    <<"Frames use bounded simulation steps <= 1/120 s; interactive admission is capped at 50 ms, with no accumulator debt.\n"
     <<"Each workload: 90 warmup + 600 measured frames. Setup/save loads excluded.\n"
     <<"1080p mode captures each final workload frame after measurement; PNG readback/encoding excluded.\n"
     <<"Combat replays a 3-second window; GPU observations retain every ready sample from measured frames.\n"
@@ -445,7 +445,7 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
       if (scene==2) { command.nextTarget=frame%180==0; if (frame%180==80) command.ability=0; }
       QueryPerformanceCounter(&start);
       if(frame==90) {firstMeasuredGpuFrame=renderer_->GpuFrame()+1;firstProcessCpu=processCpu();firstQueueWait=renderer_->GpuQueueWaitMilliseconds();}
-      game_->ExecuteCommand(command,1.f/60);
+      game_->ExecuteFrame(command,1.f/60);
       (void)game_->TakeSoundEvents();
       if (scene==1 || scene==2) game_->SetCameraOrbit(frame*.012f,.4f+.18f*std::sin(frame*.021f),7.5f+1.5f*std::sin(frame*.017f));
       QueryPerformanceCounter(&updated);
@@ -490,6 +490,7 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
       <<"\nPeak simplified / omitted attachments: "<<attachmentPeak[0]<<" / "<<attachmentPeak[1]
       <<"\nCombat effect frames / peak vertices: "<<effectFrames<<" / "<<effectPeak
       <<"\nWalked distance / windup frames / received hits: "<<distance<<" / "<<windups<<" / "<<hits<<'\n';
+    report<<"Warmup + measured execution (setup commands included):\n"<<game_->StepDiagnostics();
     PROCESS_MEMORY_COUNTERS_EX sceneMemory{};sceneMemory.cb=sizeof(sceneMemory);
     if(GetProcessMemoryInfo(GetCurrentProcess(),reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&sceneMemory),sizeof(sceneMemory)))
       report<<"Working set / private MiB: "<<sceneMemory.WorkingSetSize/1048576.0<<" / "<<sceneMemory.PrivateUsage/1048576.0<<'\n';
@@ -561,7 +562,7 @@ int Engine::Run() {
 
 std::string Engine::ExecutionDiagnostics()const {
   const auto& s=frameClock_.Stats();std::ostringstream out;out<<std::fixed<<std::setprecision(6);
-  out<<"Engine execution: variable step, maximum "<<execution::FrameClock::maximumStep<<" s\n"
+  out<<"Engine execution: frame admission capped at "<<execution::FrameClock::maximumStep<<" s; simulation steps <= 1/120 s\n"
      <<"Admitted frames / clock resets / capped frames / invalid samples: "<<s.frames<<" / "<<s.resynchronizations<<" / "<<s.clampedFrames<<" / "<<s.invalidSamples<<'\n'
      <<"Wall / admitted / excluded / capped seconds: "<<s.wallSeconds<<" / "<<s.gameSeconds<<" / "<<s.excludedSeconds<<" / "<<s.clampedSeconds<<'\n'
      <<"Dispatched messages / pump budget yields / pump seconds: "<<pumpedMessages_<<" / "<<pumpBudgetYields_<<" / "<<pumpSeconds_<<'\n';

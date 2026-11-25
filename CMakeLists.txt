@@ -160,6 +160,7 @@ add_library(MediterraneanClient STATIC
   engine/HandSkinning.cpp
   engine/FontAtlas.cpp
   platform/Win32Window.cpp
+  game/SceneSnapshot.cpp
   game/Game.cpp
   game/CharacterSelection.cpp
   game/ProfileStorage.cpp
@@ -280,6 +281,10 @@ if (BUILD_TESTING)
   target_link_libraries(CommandExecutionTests PRIVATE MediterraneanClient)
   add_test(NAME CommandExecutionTests COMMAND CommandExecutionTests)
   set_tests_properties(CommandExecutionTests PROPERTIES TIMEOUT 90)
+  add_executable(ScenePublicationTests tests/ScenePublicationTests.cpp)
+  target_link_libraries(ScenePublicationTests PRIVATE MediterraneanClient)
+  add_test(NAME ScenePublicationTests COMMAND ScenePublicationTests)
+  set_tests_properties(ScenePublicationTests PROPERTIES TIMEOUT 120)
   target_link_libraries(TexturePreparationTests PRIVATE MediterraneanClient)
   add_test(NAME TexturePreparationTests COMMAND TexturePreparationTests)
   set_tests_properties(TexturePreparationTests PROPERTIES TIMEOUT 90)

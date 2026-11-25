@@ -25,11 +25,11 @@ struct BeastLocomotion {
    result.supportLift=std::clamp((fl+fr+bl+br)*.25f-height(p),-.18f,.18f);
    return result;
  }
- void Place(const rpg::Enemy& enemy) {
+ template<class Enemy> void Place(const Enemy& enemy) {
    const auto ground=Support(enemy.position,enemy.facing,enemy.kind==rpg::EnemyKind::Wolf,rpg::WorldMap::Height);
    gesture.supportPitch=ground.supportPitch;gesture.supportRoll=ground.supportRoll;gesture.supportLift=ground.supportLift;
  }
- void Update(float dt,const rpg::Enemy& enemy,const motion::MovementSample& movement,
+ template<class Enemy> void Update(float dt,const Enemy& enemy,const motion::MovementSample& movement,
              const animation::Sample& animation,float releaseAge,bool active,bool detailed=true) {
    feet.count=0;
    if(!std::isfinite(dt)||dt<=0||enemy.health<=0)return;

@@ -80,7 +80,7 @@ void RecoveryCharge(Renderer& r,C id,const Attachments& a,float progress){
 Attachments Preview(XMFLOAT3 root,XMFLOAT3 focus,float facing){
  Attachments a;a.root=root;a.focus=focus;a.facing=facing;a.left=Local(a,root,-.32f,1.15f,.15f);a.right=Local(a,root,.32f,1.15f,.15f);return a;
 }
-Attachments FromEnemy(const rpg::Enemy& enemy,const presentation::Actor& actor){
+Attachments FromEnemy(const presentation::ActorFrame& enemy,const presentation::Actor& actor){
  Attachments a;a.root={enemy.position.x,rpg::WorldMap::Height(enemy.position),enemy.position.z};
  a.facing=actor.motion.facing;a.alive=enemy.health>0 && actor.id==enemy.id && actor.kind==enemy.kind && !enemy.Beast();
  const auto asset=enemy.kind==rpg::EnemyKind::Wraith?authored::Asset::Revenant:
@@ -97,7 +97,7 @@ Attachments FromEnemy(const rpg::Enemy& enemy,const presentation::Actor& actor){
  };
  a.left=hand(-1);a.right=hand(1);a.focus=a.right;return a;
 }
-void PrepareEnemy(Renderer& r,const rpg::Enemy& enemy,const Attachments& a){
+void PrepareEnemy(Renderer& r,const presentation::ActorFrame& enemy,const Attachments& a){
  if(!Valid(a) || enemy.health<=0 || !std::isfinite(enemy.windup) || enemy.windup<=0 ||
     enemy.windup>enemy.WindupDuration() || !std::isfinite(enemy.facing) ||
     (!enemy.Boss() && enemy.kind!=rpg::EnemyKind::Wraith) || r.EffectVertices()+360>3600)return;
@@ -154,11 +154,12 @@ Attachments FromPose(const CharacterPose& pose,XMFLOAT3 root,float facing,rpg::W
  if(a.blade){a.edgeBase=world(pose.WeaponPoint(rpg::weaponTraceRoot));a.edgeTip=world(pose.WeaponPoint(rpg::WeaponTraceTip(form)));}
  return a;
 }
-void Prepare(Renderer& r,const rpg::Simulation& state,const Attachments& a){
- if(!Valid(a) || state.Health()<=0)return;
- const bool recovery=state.CastingRecovery();
- if(!recovery && (!state.Attacking() || (state.ClassInfo().range<=3 && state.Class()!=C::Warrior)))return;
- PrepareAction(r,state.Class(),state.AttackAbility(),state.HeavyAttack(),state.AttackSeconds(),state.AttackRate(),recovery,state.RecoveryProgress(),a);
+void Prepare(Renderer& r,const rpg::Simulation& state,const Attachments& a){Prepare(r,presentation::CapturePlayer(state),a);}
+void Prepare(Renderer& r,const presentation::PlayerFrame& state,const Attachments& a){
+ if(!Valid(a) || state.health<=0)return;
+ const bool recovery=state.recovery;
+ if(!recovery && (!state.attacking || (rpg::DescribeClass(state.classId).range<=3 && state.classId!=C::Warrior)))return;
+ PrepareAction(r,state.classId,state.attackAbility,state.heavy,state.attackSeconds,state.attackRate,recovery,state.recoveryProgress,a);
 }
 void PrepareAction(Renderer& r,C id,int ability,bool heavy,float seconds,float rate,bool recovery,float recoveryProgress,const Attachments& a){
  if(!Valid(a) || !std::isfinite(rate) || rate<=0)return;

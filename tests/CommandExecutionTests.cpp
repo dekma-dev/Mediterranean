@@ -1,5 +1,7 @@
 #include "game/CommandExecution.h"
 #include "game/Game.h"
+#include "game/AttackWarning.h"
+#include "game/CastEffects.h"
 #include "engine/Audio.h"
 #include <iostream>
 #include <limits>
@@ -89,6 +91,170 @@ void GameBoundary() {
   const auto& stats=game->StepStats();Check(stats.steps>10 && stats.events>=8 && stats.simulationSeconds>0 && stats.presentationSeconds>0,"Phase diagnostics missing");
   std::cout<<game->StepDiagnostics();
 }
+void SceneOwnership() {
+  presentation::SceneSnapshot scene;auto state=Hero(rpg::ClassId::Mage);
+  rpg::Command cast;cast.selectActor=210;cast.ability=1;state.Update(.01f,cast);scene.Capture(state,7);
+  Check(scene.Target() && scene.Target()->id==210 && scene.Player().attacking && scene.Player().classId==rpg::ClassId::Mage,
+    "Snapshot missed committed cast/target identity");
+  const auto frozen=scene;const auto* storage=scene.Combatants().data();
+  const auto bytes=scene.Bytes(),growths=scene.StorageGrowths();
+  // Destroy the source's roster/target storage while retaining an owned frame.
+  state=rpg::Simulation{};
+  for(int i=0;i<300;++i){state.Update(.01f,{});scene.Capture(state,8+i);}
+  Check(frozen.Sequence()==7 && frozen.Player().attacking && frozen.Target()->id==210 && frozen.Player().attackSeconds<.02f,
+    "Publication retained borrowed live combat state");
+  Check(!scene.Target() && !scene.Player().attacking && scene.Sequence()==307 && scene.Combatants().data()==storage &&
+    scene.Bytes()==bytes && scene.StorageGrowths()==growths,"Ordinary publications grew storage or retained an old target/action");
+  std::vector<presentation::Actor> actors;auto roster=frozen.Combatants();
+  // The practice save contains cleared campaign corpses; make this isolated
+  // lifecycle fixture alive before checking a real alive -> dead -> alive cycle.
+  for(auto& e:roster)e.health=80;
+  presentation::Bind(actors,roster,frozen.Trainer());
+  actors[0].motion.phase=2.25f;const auto id=actors[0].id;
+  std::swap(roster[0],roster[1]);presentation::Bind(actors,roster,frozen.Trainer());
+  Check(actors[1].id==id && actors[1].motion.phase==2.25f,"Snapshot reorder swapped actor animation");
+  const auto alive=roster[1];roster[1].health=0;presentation::Bind(actors,roster,frozen.Trainer());
+  Check(actors[1].motion.phase==2.25f,"Snapshot death erased the outgoing pose");
+  roster[1]=alive;presentation::Bind(actors,roster,frozen.Trainer());Check(actors[1].motion.phase==0,"Snapshot revival inherited previous life");
+  actors[1].motion.phase=1;roster[1].home.x+=10;presentation::Bind(actors,roster,frozen.Trainer());
+  Check(actors[1].motion.phase==0,"Reused snapshot ID kept a different spawn's pose");
+  rpg::Enemy enemy;enemy.id=17;enemy.kind=rpg::EnemyKind::Wraith;enemy.position={3,-10};
+  presentation::ActorFrame captured(enemy);presentation::Actor actor;actor.Reset(captured);
+  const auto before=castfx::FromEnemy(captured,actor);enemy.position={100,100};enemy.kind=rpg::EnemyKind::Boar;enemy.health=0;
+  const auto after=castfx::FromEnemy(captured,actor);
+  Check(before.focus.x==after.focus.x && before.focus.y==after.focus.y && before.focus.z==after.focus.z && after.alive,
+    "Spell socket followed a mutated authoritative actor");
+  std::cout<<"Owned scene: "<<scene.Combatants().size()<<" actors, "<<scene.Bytes()<<" bytes, "<<scene.StorageGrowths()<<" growth, 300 stable publications\n";
+}
+void SceneWarnings() {
+  rpg::Simulation state;
+  Check(state.Load("MEDITERRANEAN 1\n-4 5.2 100 3.14159 0 0\n0 0 0 0\n-4 7 80 0\n4 9 80 0\n0 12 80 0\n"),"Warning scene fixture");
+  unsigned n=0;for(const auto& view:state.Combatants()) {
+    auto& e=const_cast<rpg::Enemy&>(view);e.position={-4.f+float(n%3)*.1f,7};
+    e.kind=n%3==0?rpg::EnemyKind::Captain:rpg::EnemyKind::Wraith;e.rank=1;e.state=rpg::EnemyState::Pursuing;
+    e.health=e.MaxHealth();e.facing=3.14159265f;e.windup=.15f+.01f*float(n++);e.bossAttack=n%3;
+  }
+  const auto selected=rpg::ReadAttackWarnings<presentation::WarningBatch::capacity>(state);
+  presentation::SceneSnapshot scene;scene.Capture(state,19);
+  Check(selected.count==8 && scene.Warnings().count==8,"Crowded snapshot warning budget/visibility differs");
+  for(unsigned i=0;i<selected.count;++i) {
+    const auto& original=*selected.rows[i].enemy;const auto& captured=scene.Warnings().rows[i];
+    Check(captured.actor.id==original.id && captured.threatens==selected.rows[i].threatens && captured.reach==original.WarningReach() &&
+      captured.halfAngle==original.HalfAngle() && captured.interruptible==original.Interruptible(),
+      "Published warning changed real damage footprint/order");
+  }
+  const auto warnings=scene.Warnings();state=rpg::Simulation{};scene.Capture(state,20);
+  Check(!scene.Warnings().count && warnings.count==8 && warnings.rows[0].actor.windup>0,"Warning batch borrowed a reset world or leaked after reset");
+}
+void SceneLifecycle() {
+  auto game=std::make_unique<Game>();game->Initialize();
+  Check(game->Scene().Revision()>0 && game->Scene().Combatants().size()==game->State().Combatants().size(),"First render has no actor publication");
+  for(auto school:{rpg::ClassId::Warrior,rpg::ClassId::Mage,rpg::ClassId::Scout,rpg::ClassId::Priest}) {
+    Check(game->RestoreSnapshot(Hero(school).Save()),"Scene class load");
+    rpg::Command cast;cast.selectActor=210;cast.ability=1;game->ExecuteCommand(cast,.01f);
+    Check(game->Scene().Player().attacking && game->Scene().Target() && game->Scene().Target()->id==210 &&
+      game->Scene().Player().classId==school && game->Scene().Player().outfit.classId==school,"Game scene missed committed class/target/action");
+    const auto sequence=game->Scene().Sequence(),revision=game->Scene().Revision();game->SuspendInput();
+    Check(game->Scene().Revision()>revision && game->Scene().Sequence()==sequence && !game->Scene().Player().attacking &&
+      game->Scene().Player().attackSeconds<0,"Focus loss leaves an unpublished cancelled cast");
+    const auto validRevision=game->Scene().Revision();
+    Check(!game->RestoreSnapshot("broken") && game->Scene().Revision()==validRevision,"Rejected save replaced the published scene");
+    rpg::Command jump;jump.jump=true;game->ExecuteCommand(jump,.02f);
+    Check(!game->Scene().Player().grounded && game->Scene().Player().height>0,"Accepted jump was not published with its motion state");
+    Check(game->RestoreSnapshot(Hero(school).Save()) && game->Scene().Player().grounded && game->Scene().Player().height==0 &&
+      !game->Scene().Target(),"Load retained airborne/target state");
+  }
+  rpg::Command restart;restart.restart=true;game->ExecuteCommand(restart,.01f);
+  Check(game->Scene().Player().health==game->State().Health() && !game->Scene().Player().attacking,"Restart reset animation against an old publication");
+}
+void FrameScheduling() {
+  rpg::CommandSchedule schedule;rpg::Command command;
+  command.movement={.4f,.8f};command.sprint=command.steerFacing=command.queueAttack=true;command.facingYaw=.7f;
+  command.jump=command.nextTarget=command.interact=command.usePotion=command.equipWeapon=command.uiClick=true;
+  command.selectActor=210;command.selectThreat=100;command.ability=1;command.purchase=0;command.collectLoot=true;
+  command.inventory={rpg::InventoryAction::Sort};command.trade={rpg::TradeAction::Sell,rpg::Item::Potion,0};
+  command.questAction=rpg::QuestAction::AcceptPatrol;command.learnTalent=0;command.resetTalents=true;
+  const auto plan=schedule.Begin(.05f,command);
+  Check(plan.count==6 && plan.seconds<=rpg::CommandSchedule::maximumStep && std::abs(plan.seconds*plan.count-.05f)<1e-7f,
+    "Long frame was not fully admitted into bounded short steps");
+  for(unsigned i=1;i<plan.count;++i){const auto& c=plan.At(i);
+    Check(c.movement.x==.4f && c.movement.z==.8f && c.sprint && c.steerFacing && c.facingYaw==.7f,
+      "Held movement/steering disappeared in a subdivided frame");
+    Check(!c.jump && !c.nextTarget && !c.interact && !c.usePotion && !c.equipWeapon && !c.uiClick && !c.collectLoot &&
+      !c.selectActor && !c.selectThreat && c.ability==-1 && c.purchase==-1 && c.inventory.action==rpg::InventoryAction::None &&
+      c.trade.action==rpg::TradeAction::None && c.questAction==rpg::QuestAction::None && c.learnTalent==-1 && !c.resetTalents,
+      "A one-shot action leaked into a continuation step");
+  }
+  for(float bad:{0.f,-1.f,NAN,INFINITY})Check(schedule.Begin(bad,command).count==0,"Invalid frame admitted gameplay");
+  Check(schedule.Begin(.001f,command).count==1 && schedule.Begin(8,command).count==6,"Fast/overlong frame escaped bounds");
+  auto game=std::make_unique<Game>();game->Initialize();Check(game->RestoreSnapshot(Hero(rpg::ClassId::Warrior).Save()),"Frame hero");
+  const auto weapon=game->State().Items().Worn(rpg::GearSlot::Weapon);
+  command={};command.equipWeapon=true;command.uiClick=true;const auto receipt=game->ExecuteFrame(command,.05f);
+  const auto sounds=game->TakeSoundEvents();unsigned clicks=0;for(unsigned i=0;i<sounds.count;++i)clicks+=sounds.cues[i]==sound::Cue::UiClick;
+  Check(clicks==1 && game->State().Items().Worn(rpg::GearSlot::Weapon)!=weapon && game->ScheduleStats().steps==6,
+    "Long frame repeated an equipment toggle/click or skipped continuation");
+  Check(receipt.Has(rpg::CombatVisualKind::UiClick) && receipt.events>0 && receipt.steps==6 && !receipt.droppedEvents &&
+    !game->State().VisualEventCount(),"Frame summary lost an early substep event or confused it with the last tick");
+  Check(game->RestoreSnapshot("MEDITERRANEAN 3\n3 -10 140 0 3 90\n5 1 1 0\n4\n0 0 0 0\n"
+    "100 -4 7 0 0 1 3 0 0\n101 4 9 0 0 1 3 0 0\n102 0 12 0 0 1 3 0 0\n"),"Frame shop");
+  command={};command.interact=true;const auto opened=game->ExecuteFrame(command,.05f);
+  Check(opened.tradeRequested && !game->State().TradeRequested(),"Early-step merchant request was lost before UI dispatch");
+  const auto gold=game->State().Gold(),potions=game->State().Potions();command={};command.purchase=0;
+  const auto bought=game->ExecuteFrame(command,.05f);
+  Check(game->State().Gold()==gold-6 && game->State().Potions()==potions+1 && !bought.notice.empty(),
+    "Long frame repeated a purchase or lost its receipt");
+  command={};command.restart=true;command.movement={1,1};const auto cancelled=game->ScheduleStats().cancelledSteps;
+  const auto reset=game->ExecuteFrame(command,.05f);
+  Check(game->State().Player().x==rpg::WorldMap::spawn.x && game->State().Player().z==rpg::WorldMap::spawn.z &&
+    game->ScheduleStats().cancelledSteps==cancelled+5 && reset.boundary && reset.steps==1,
+    "Outgoing held controls moved the replacement world");
+  const auto save=game->State().Save();game->ExecuteFrame(command,0);Check(game->State().Save()==save,"Empty frame executed a one-shot");
+}
+void ScheduledCadence() {
+  // Observe authoritative contact offsets, not floating combat-text ages (which
+  // intentionally start at the end of their emission tick).
+  for(auto school:{rpg::ClassId::Warrior,rpg::ClassId::Mage,rpg::ClassId::Scout,rpg::ClassId::Priest}) {
+    double referenceTime=-1;int referenceDamage=-1;
+    for(int cadence:{120,60,30,20,144,240,1000,-20}) {
+      const bool scheduled=cadence>0;const int hz=std::abs(cadence);
+      auto game=std::make_unique<Game>();game->Initialize();Check(game->RestoreSnapshot(Hero(school).Save()),"Cadence hero");
+      std::uint64_t last=0;int damage=0;double first=-1;
+      for(int n=0;n<hz*2;++n) {
+        rpg::Command c;if(n==0){c.selectActor=210;c.ability=1;c.queueAttack=true;}
+        if(scheduled) {
+          const auto receipt=game->ExecuteFrame(c,1.f/hz);
+          for(auto kind:{rpg::CombatVisualKind::Hit,rpg::CombatVisualKind::HeavyHit})
+            if(first<0 && receipt.Has(kind))first=double(n)/hz+receipt.FirstOffset(kind);
+        } else {
+          const auto receipt=game->ExecuteCommand(c,1.f/hz);
+          for(std::size_t i=0;i<receipt.events.count;++i){const auto& e=receipt.events.values[i];
+            if(first<0 && (e.kind==rpg::CombatVisualKind::Hit || e.kind==rpg::CombatVisualKind::HeavyHit))
+              first=double(n)/hz+receipt.seconds-e.elapsed;}
+        }
+        game->TakeSoundEvents();
+        for(const auto& f:game->State().Feedback())if(f.sequence>last){
+          last=f.sequence;if(f.kind==rpg::FeedbackKind::Damage)damage+=f.amount;}
+      }
+      Check(damage>0 && first>=0,"Cadence check did not exercise a real contact");
+      if(hz==120){referenceTime=first;referenceDamage=damage;}
+      std::cout<<(scheduled?"Scheduled":"Legacy single-step")<<" class "<<int(school)<<" at "<<hz<<" Hz: contact "<<first<<", damage "<<damage<<'\n';
+      if(scheduled) {
+        Check(damage==referenceDamage && std::abs(first-referenceTime)<(hz<=120?.0001:rpg::CommandSchedule::maximumStep+.0001),
+          "Display cadence changes damage or escapes bounded input quantization");
+        Check(game->ScheduleStats().steps==unsigned(std::max(120,hz)*2),"Admitted duration produced incorrect bounded steps");
+      }
+    }
+  }
+  rpg::Vec2 reference{};float height=0,vertical=0;
+  for(int hz:{120,60,30,20}) {
+    auto game=std::make_unique<Game>();game->Initialize();
+    for(int n=0;n<hz;++n){rpg::Command c;c.movement={.3f,1};c.sprint=true;c.jump=n==hz/2;game->ExecuteFrame(c,1.f/hz);game->TakeSoundEvents();}
+    const auto p=game->State().Player();
+    if(hz==120){reference=p;height=game->State().Height();vertical=game->State().VerticalSpeed();}
+    Check(std::hypot(p.x-reference.x,p.z-reference.z)<.0001f && std::abs(game->State().Height()-height)<.0001f &&
+      std::abs(game->State().VerticalSpeed()-vertical)<.0001f,"Display cadence changes real sprint/jump trajectory");
+  }
+}
 void EventCapacity() {
   // Pure emission can be exercised through real UI-click commands. Actual
   // accepted receipts remain bounded even with repeated consumers.
@@ -115,6 +281,6 @@ void EventCapacity() {
 }
 }
 int main()try {
-  ReceiptsAndReplay();Delivery();GameBoundary();EventCapacity();
+  ReceiptsAndReplay();Delivery();GameBoundary();EventCapacity();SceneOwnership();SceneWarnings();SceneLifecycle();FrameScheduling();ScheduledCadence();
   std::cout<<"PASS: owned step receipts, bounded replay, one-shot sound delivery, overload, expiry and lifecycle resets\n";
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}

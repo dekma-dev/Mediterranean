@@ -19,13 +19,13 @@ void Seal(Renderer& r,rpg::Vec2 p,float radius,float angle,XMFLOAT4 c){
   const auto at=[&](float x,float z){return Ground({p.x+(std::cos(angle)*x-std::sin(angle)*z)*radius,p.z+(std::sin(angle)*x+std::cos(angle)*z)*radius},.055f);};
   r.DrawEffectSurface(Art::Seal,at(-1,-1),at(-1,1),at(1,1),at(1,-1),c);
 }
-void Barrier(Renderer& r,const rpg::Simulation& s,float weight,float age,float facing){
+void Barrier(Renderer& r,const presentation::PlayerFrame& s,float weight,float age,float facing){
   if(weight<=0)return;
-  const auto p=s.Player();const XMFLOAT3 root{p.x,s.WorldHeight(),p.z};
-  const bool physical=s.Class()==C::Warrior || s.Class()==C::Engineer;
-  const bool frost=s.Class()==C::Mage;
-  const float pulse=.85f+.15f*std::sin(age*2.3f),strength=Unit(s.Barrier()/12.f);
-  auto color=frost?XMFLOAT4{.45f,.78f,1,weight*.66f*pulse}:classfx::Color(s.Class(),weight*.44f*pulse);
+  const auto p=s.position;const XMFLOAT3 root{p.x,s.worldHeight,p.z};
+  const bool physical=s.classId==C::Warrior || s.classId==C::Engineer;
+  const bool frost=s.classId==C::Mage;
+  const float pulse=.85f+.15f*std::sin(age*2.3f),strength=Unit(s.barrier/12.f);
+  auto color=frost?XMFLOAT4{.45f,.78f,1,weight*.66f*pulse}:classfx::Color(s.classId,weight*.44f*pulse);
   const int panels=physical?3:5;
   for(int n=0;n<panels;++n){
     const float a=facing+(physical?(n-1)*.37f:n*tau/panels+age*.16f),radius=physical?.55f:.66f;
@@ -46,9 +46,9 @@ void Barrier(Renderer& r,const rpg::Simulation& s,float weight,float age,float f
       {.43f,.63f,.78f,weight*.18f},true);
   }
 }
-void Evasion(Renderer& r,const rpg::Simulation& s,float weight,float age,float facing){
+void Evasion(Renderer& r,const presentation::PlayerFrame& s,float weight,float age,float facing){
   if(weight<=0)return;
-  const auto p=s.Player();const float y=s.WorldHeight();
+  const auto p=s.position;const float y=s.worldHeight;
   for(int band=0;band<3;++band)for(int n=0;n<10;++n){
     const auto at=[&](float u){const float a=facing+pi+u*1.5f+band*.6f;
       const float radius=.46f+.06f*std::sin(age*3+band);
@@ -56,9 +56,9 @@ void Evasion(Renderer& r,const rpg::Simulation& s,float weight,float age,float f
     r.DrawEffectStreak(at(n/10.f),at((n+1)/10.f),.018f,{.58f,.77f,.68f,weight*.27f*std::sin((n+.5f)*pi/10)});
   }
 }
-void Field(Renderer& r,const rpg::Simulation& s){
-  if(s.FrostFieldSeconds()<=0 || s.Health()<=0)return;
-  spellvfx::FrostField(r,s.FrostFieldPosition(),5-s.FrostFieldSeconds(),s.FrostFieldSeconds());
+void Field(Renderer& r,const presentation::PlayerFrame& s){
+  if(s.frostSeconds<=0 || s.health<=0)return;
+  spellvfx::FrostField(r,s.frostPosition,5-s.frostSeconds,s.frostSeconds);
 }
 }
 
@@ -69,7 +69,7 @@ void SustainedEffects::Channel::Step(float remaining,float dt){
   const float target=now?Unit(remaining/.16f):0.f,step=dt/(now?.12f:.18f);
   weight+=std::clamp(target-weight,-step,step);
 }
-bool SustainedEffects::Actor::Matches(const rpg::Enemy& e) const {
+bool SustainedEffects::Actor::Matches(const presentation::ActorFrame& e) const {
   return id==e.id && kind==e.kind && rank==e.rank && home.x==e.home.x && home.z==e.home.z;
 }
 void SustainedEffects::Reset(){actors_={};player_={};school_=C::Count;}
@@ -79,26 +79,27 @@ float SustainedEffects::Weight(rpg::EntityId id,int channel) const {
   if(id==0)return channel<2?player_[channel].weight:0;
   for(const auto& a:actors_)if(a.id==id)return a.channels[channel].weight;return 0;
 }
-void SustainedEffects::Update(const rpg::Simulation& s,float dt){
+void SustainedEffects::Update(const rpg::Simulation& s,float dt){presentation::SceneSnapshot scene;scene.Capture(s,0);Update(scene,dt);}
+void SustainedEffects::Update(const presentation::SceneSnapshot& s,float dt){
   if(!std::isfinite(dt) || dt<=0)return;dt=std::min(dt,.05f);
-  if(s.Class()!=school_){Reset();school_=s.Class();}
-  if(s.Health()<=0){Reset();return;}
-  player_[0].Step(s.Barrier()>0?1.f:0.f,dt);player_[1].Step(s.EvasionSeconds(),dt);
-  struct Candidate{const rpg::Enemy* enemy=nullptr;float distance=0;bool target=false;};
+  if(s.Player().classId!=school_){Reset();school_=s.Player().classId;}
+  if(s.Player().health<=0){Reset();return;}
+  player_[0].Step(s.Player().barrier>0?1.f:0.f,dt);player_[1].Step(s.Player().evasionSeconds,dt);
+  struct Candidate{const presentation::ActorFrame* enemy=nullptr;float distance=0;bool target=false;};
   std::array<Candidate,maxActors> selected{};std::size_t count=0;
   const auto before=[](const Candidate& a,const Candidate& b){return a.target!=b.target?a.target:a.distance!=b.distance?a.distance<b.distance:a.enemy->id<b.enemy->id;};
-  const auto add=[&](const rpg::Enemy& e){
+  const auto add=[&](const presentation::ActorFrame& e){
     if(e.health<=0 || e.state==rpg::EnemyState::Returning)return;
-    const float distance=std::hypot(e.position.x-s.Player().x,e.position.z-s.Player().z);if(distance>30)return;
+    const float distance=std::hypot(e.position.x-s.Player().position.x,e.position.z-s.Player().position.z);if(distance>30)return;
     bool old=false;for(const auto& a:actors_)if(a.Matches(e))for(const auto& c:a.channels)old|=c.weight>0;
     if(!old && e.snared<=0 && e.rooted<=0 && e.stunned<=0 && e.exposed<=0)return;
-    Candidate c{&e,distance,s.TargetActor() && s.TargetActor()->id==e.id};std::size_t slot=0;
+    Candidate c{&e,distance,s.Target() && s.Target()->id==e.id};std::size_t slot=0;
     while(slot<count && before(selected[slot],c))++slot;if(slot>=maxActors)return;
     for(auto i=std::min(count,maxActors-1);i>slot;--i)selected[i]=selected[i-1];selected[slot]=c;count=std::min(count+1,maxActors);
   };
   for(const auto& e:s.Combatants())add(e);
-  for(const auto& e:s.Dummies())add(e);
-  if(s.Sparring())add(s.SparringOpponent());
+  for(const auto& e:s.Dummies())if(s.ShowsDummy(e))add(e);
+  if(s.Sparring())add(s.Trainer());
   std::array<Actor,maxActors> next{};
   for(std::size_t i=0;i<count;++i){const auto& e=*selected[i].enemy;auto& a=next[i];
     for(const auto& old:actors_)if(old.Matches(e) && std::hypot(e.position.x-old.position.x,e.position.z-old.position.z)<1.f){a=old;break;}
@@ -109,8 +110,9 @@ void SustainedEffects::Update(const rpg::Simulation& s,float dt){
   }
   actors_=next;
 }
-void SustainedEffects::Render(Renderer& r,const rpg::Simulation& s,float /*time*/,float facing) const {
-  if(s.Health()<=0 || s.Class()!=school_)return;
+void SustainedEffects::Render(Renderer& r,const rpg::Simulation& s,float time,float facing) const {Render(r,presentation::CapturePlayer(s),time,facing);}
+void SustainedEffects::Render(Renderer& r,const presentation::PlayerFrame& s,float /*time*/,float facing) const {
+  if(s.health<=0 || s.classId!=school_)return;
   const auto start=r.EffectVertices();
   Barrier(r,s,player_[0].weight,player_[0].age,facing);Evasion(r,s,player_[1].weight,player_[1].age,facing);Field(r,s);
   for(const auto& a:actors_){
@@ -120,7 +122,7 @@ void SustainedEffects::Render(Renderer& r,const rpg::Simulation& s,float /*time*
     const float root=a.channels[0].weight,snare=a.channels[1].weight,stun=a.channels[2].weight,exposed=a.channels[3].weight;
     if(root>0 || snare>0){
       const float weight=std::max(root,snare*.55f),age=root>0?a.channels[0].age:a.channels[1].age;
-      if(s.Class()==C::Mage){
+      if(s.classId==C::Mage){
         for(int n=0;n<6;++n){const float angle=n*tau/6+a.id*.17f;
           const auto at=Add(p,{std::sin(angle)*.38f,.19f+root*.12f,std::cos(angle)*.38f});
           r.DrawEffectSprite(Art::Ice,at,.065f+root*.018f,.18f+root*.17f,std::sin(angle)*.25f,{.46f,.75f,1,weight*.63f});
@@ -128,10 +130,10 @@ void SustainedEffects::Render(Renderer& r,const rpg::Simulation& s,float /*time*
         const float cycle=std::fmod(age*.45f,1.f);r.DrawEffectSprite(Art::Smoke,Add(p,{0,.16f+cycle*.12f,0}),.52f,.20f,age*.12f,
           {.48f,.69f,.83f,weight*.18f*std::sin(cycle*pi)},true);
       }else{
-        const auto color=s.Class()==C::Scout?XMFLOAT4{.64f,.57f,.32f,weight*.55f}:classfx::Color(s.Class(),weight*.43f);
+        const auto color=s.classId==C::Scout?XMFLOAT4{.64f,.57f,.32f,weight*.55f}:classfx::Color(s.classId,weight*.43f);
         // Scout snares cross around the ankles; nature roots climb in a spiral.
         for(int strand=0;strand<3;++strand)for(int n=0;n<8;++n){
-          const auto at=[&](float u){const float angle=strand*tau/3+u*(s.Class()==C::Scout?4.f:2.4f);
+          const auto at=[&](float u){const float angle=strand*tau/3+u*(s.classId==C::Scout?4.f:2.4f);
             const float radius=.43f-u*.12f;return Add(p,{std::sin(angle)*radius,u*(root>0?.67f:.23f),std::cos(angle)*radius});};
           r.DrawEffectStreak(at(n/8.f),at((n+1)/8.f),.018f,color);
         }
@@ -148,17 +150,18 @@ void SustainedEffects::Render(Renderer& r,const rpg::Simulation& s,float /*time*
   }
 }
 void SustainedEffects::Warnings(Renderer& r,const rpg::Simulation& s,const std::vector<presentation::Actor>* actors){
-  const auto chosen=rpg::ReadAttackWarnings<maxWarnings>(s);
+  Warnings(r,presentation::CaptureWarnings(s),actors);
+}
+void SustainedEffects::Warnings(Renderer& r,const presentation::WarningBatch& chosen,const std::vector<presentation::Actor>* actors){
+  static_assert(maxWarnings==presentation::WarningBatch::capacity);
   // One material describes the complete cone/annulus union and its safe holes.
   // Terrain grid cells and their diagonals exactly match the rendered floor.
-  for(unsigned i=0;i<chosen.count;++i){const auto& row=chosen.rows[i];const auto& e=*row.enemy;
-    const bool quake=e.Boss() && e.bossAttack==0;
-    const Renderer::AttackField field{e.WarningReach(),e.HalfAngle(),e.facing,
-      quake?rpg::Enemy::shockInner:0,quake?rpg::Enemy::shockOuter:0,
-      Unit(1-e.windup/e.WindupDuration()),e.Interruptible(),row.threatens};
+  for(unsigned i=0;i<chosen.count;++i){const auto& row=chosen.rows[i];const auto& e=row.actor;
+    const Renderer::AttackField field{row.reach,row.halfAngle,e.facing,row.inner,row.outer,
+      Unit(1-e.windup/e.WindupDuration()),row.interruptible,row.threatens};
     r.DrawAttackField({e.position.x,e.position.z},field,presentation::AttackSurface(e.position,field.Extent()));
   }
-  for(unsigned i=0;i<chosen.count;++i){const auto& e=*chosen.rows[i].enemy;
+  for(unsigned i=0;i<chosen.count;++i){const auto& e=chosen.rows[i].actor;
     if(actors && (e.kind==rpg::EnemyKind::Wraith || e.Boss())){
       const auto actor=std::find_if(actors->begin(),actors->end(),[&](const presentation::Actor& a){return a.id==e.id;});
       if(actor!=actors->end())castfx::PrepareEnemy(r,e,castfx::FromEnemy(e,*actor));

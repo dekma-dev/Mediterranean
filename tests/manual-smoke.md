@@ -1,3 +1,24 @@
+## Owned combat/world publication (2026-11-25)
+
+- Root/snare the first practice mannequin, then start sparring with E. The prop and its control aura must both disappear; an existing projectile keeps its last destination instead of switching to the trainer. Stop sparring: the prop returns, and any unexpired status fades in without an old envelope flashing.
+- Run `ScenePublicationTests` in Debug and Release. Inspect `scene-publication-review`: twenty published/retained/next triples cover four-class cast phases, defenses, frost field and southern objectives. Replacement of authority without publication must preserve the 3D image; the next accepted publication must change it.
+- In visible play, cast at a moving enemy and a dummy, switch selection during flight, apply/remove controls, use defense/healing, interrupt, load and change character. Effects must remain on their accepted actor and clear across lifecycle boundaries. Check court seal links, recovered supply props and ritual/anchor progress against the actual quest state.
+- Run the existing casting, discipline, sustained-effect, combat-release, HUD, southern-campaign and graphics-lifecycle suites. Compare hashes to `world-publication-baseline.json`; unchanged appearance is intentional for this engine migration. HUD/audio and full concurrent rendering are separate remaining work.
+
+## Bounded frame scheduling (2026-11-25)
+
+- Run `CommandExecutionTests`, `CombatReleaseTests`, `ExecutionTests`, `GraphicsLifecycleTests`, `CombatEffectsTests`, `MovingCombatTests`, `MotionTests`, `CameraControlsTests` and `InterfaceTests` in Debug and Release. The four-class cadence audit covers 20 through 1000 Hz and actual six-step world rendering.
+- During slow display frames, tap jump, select a target, cast, toggle equipment, buy one potion and open the quartermaster. Each one-shot must execute once; movement must persist through continuation steps and the merchant panel must still open. Restart/respawn/focus/load must not carry outgoing actions into the replacement state.
+- Inspect native execution reports: maximum six steps, at most 1/120 s per step, admitted/cancelled/capped time accounted separately, and no catch-up after native focus interruptions. Use `--verify-command-replay <absolute-report-path>` to verify the accepted substep commands.
+- Inspect `scheduled-<class>-release/contact.png` in the CombatReleaseTests review output. Repeated renders must match. The lighting fixture now uses an unobstructed higher southern camera; keep its original material, face, HUD and light-on/off assertions. Low display FPS still has fewer rendered frames; this change does not interpolate between them.
+
+## Owned actor scene publication (2026-11-25)
+
+- Run `CommandExecutionTests`, `ActorPresentationTests`, `SustainedEffectsTests`, `MotionTests` and `CameraControlsTests` in Release and Debug. Frozen scenes must survive source replacement, roster reorder and respawn; actual Game focus/load boundaries must publish cancelled/grounded state immediately.
+- In each of the four focused classes, cast at a dummy and a moving enemy, switch targets, jump, lose focus, load and return through character selection. Check the first rendered pose, equipment, gaze, target outline and hostile warning; no prior character or cancelled cast should flash for one frame.
+- Compare normal, close and overview cameras with the pre-change captures. Confirm unchanged facial presentation, actor movement, spell sockets and warning footprints. Inspect benchmark scene revision/sequence/actors/bytes/storage-growth diagnostics; ordinary ticks should reuse roster storage.
+- The earlier `CombatReleaseTests` lighting failure is resolved by the frame-scheduling follow-up above: its old camera view was hidden by a roof. Original thresholds are preserved; see `docs/frame-scheduling-2026-11-25.md`.
+
 ## Simulation command and sound boundary (2026-11-25)
 
 - Run `CommandExecutionTests`, `ExecutionTests`, `GraphicsLifecycleTests`, `AudioTests`, `CombatEffectsTests`, `MovingCombatTests`, `MotionTests` and `CombatTests` in Release and Debug. Actual four-class release/contact, retarget and jump replay must match without advancing the live session.
