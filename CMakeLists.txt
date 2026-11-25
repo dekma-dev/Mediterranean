@@ -28,7 +28,7 @@ endif()
 include(cmake/QuestText.cmake)
 generate_quest_text("${CMAKE_CURRENT_BINARY_DIR}/generated/QuestText.generated.h")
 
-add_library(MediterraneanSimulation STATIC game/Simulation.cpp game/Population.cpp game/Progression.cpp game/WorldMap.cpp game/Location.cpp game/Inventory.cpp game/Trade.cpp game/Quests.cpp)
+add_library(MediterraneanSimulation STATIC game/Simulation.cpp game/CommandExecution.cpp game/Population.cpp game/Progression.cpp game/WorldMap.cpp game/Location.cpp game/Inventory.cpp game/Trade.cpp game/Quests.cpp)
 target_include_directories(MediterraneanSimulation PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_include_directories(MediterraneanSimulation PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -130,6 +130,7 @@ add_library(MediterraneanClient STATIC
   "${scene_shader_header}"
   engine/Engine.cpp
   engine/Audio.cpp
+  engine/AudioDelivery.cpp
   engine/AcousticDesign.cpp
   engine/WorldAcoustics.cpp
   engine/RoomReverb.cpp
@@ -275,6 +276,10 @@ if (BUILD_TESTING)
   set_tests_properties(GpuFrameQueueTests PROPERTIES TIMEOUT 30)
   add_executable(GraphicsLifecycleTests tests/GraphicsLifecycleTests.cpp)
   add_executable(TexturePreparationTests tests/TexturePreparationTests.cpp)
+  add_executable(CommandExecutionTests tests/CommandExecutionTests.cpp)
+  target_link_libraries(CommandExecutionTests PRIVATE MediterraneanClient)
+  add_test(NAME CommandExecutionTests COMMAND CommandExecutionTests)
+  set_tests_properties(CommandExecutionTests PROPERTIES TIMEOUT 90)
   target_link_libraries(TexturePreparationTests PRIVATE MediterraneanClient)
   add_test(NAME TexturePreparationTests COMMAND TexturePreparationTests)
   set_tests_properties(TexturePreparationTests PROPERTIES TIMEOUT 90)

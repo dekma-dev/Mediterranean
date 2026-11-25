@@ -288,6 +288,8 @@ public:
   float AttackFlash() const { return attackFlash_; }
   const auto& VisualEvents() const { return visualEvents_; }
   std::size_t VisualEventCount() const { return visualEventCount_; }
+  unsigned VisualEventsDropped() const { return visualEventsDropped_; }
+  static constexpr unsigned visualEventCapacity=64;
   int Target() const { return target_; }
   const Enemy* TargetActor() const;
   const std::array<Enemy,3>& Dummies() const { return dummies_; }
@@ -501,8 +503,9 @@ private:
   float channelRemaining_ = 0, hurtFlash_ = 0;
   std::vector<CombatFeedback> feedback_;
   std::uint64_t feedbackSequence_=0;
-  std::array<CombatVisualEvent,16> visualEvents_{};
+  std::array<CombatVisualEvent,visualEventCapacity> visualEvents_{};
   std::size_t visualEventCount_ = 0;
+  unsigned visualEventsDropped_=0;
   std::string message_ = "Approach the gold beacon and press E to accept the patrol.";
 };
 }

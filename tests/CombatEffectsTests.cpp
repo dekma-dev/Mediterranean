@@ -1,3 +1,4 @@
+#include <memory>
 #include "game/Game.h"
 #include "tests/DashFixture.h"
 #include "engine/Renderer.h"
@@ -53,7 +54,7 @@ int main() {
   // Safe outpost fixture keeps enemy damage out of recovery acceptance checks.
   rpg::Simulation fresh;
   {
-    Game burst; burst.Initialize(); rpg::Simulation plain; rpg::Command dash; dash.ability=2; dash.nextTarget=true;
+    auto burstStorage=std::make_unique<Game>();auto& burst=*burstStorage; burst.Initialize(); rpg::Simulation plain; rpg::Command dash; dash.ability=2; dash.nextTarget=true;
     Require(burst.RestoreSnapshot(test::dashFixture) && plain.Load(test::dashFixture),"Target dash effect fixtures");
     const auto origin=burst.State().Player();
     burst.ExecuteCommand(dash,.03f); plain.Update(.03f,dash);
@@ -120,7 +121,7 @@ int main() {
   Require(healthPosition!=std::string::npos,"Recovery fixture health field missing");
   injured.replace(healthPosition,5," 20 ");
   for (bool potion : {false,true}) {
-    Game recovery; rpg::Simulation recoveryReference;
+    auto recoveryStorage=std::make_unique<Game>();auto& recovery=*recoveryStorage; rpg::Simulation recoveryReference;
     Require(recovery.RestoreSnapshot(injured) && recoveryReference.Load(injured),"Injured recovery fixture rejected");
     rpg::Command command; command.usePotion=potion; command.ability=potion?-1:3;
     recovery.ExecuteCommand(command,.01f); recoveryReference.Update(.01f,command);
@@ -135,7 +136,7 @@ int main() {
     recovery.Initialize(); recovery.ExecuteCommand(command,.01f);
     Require(recovery.State().VisualEventCount()==(potion?0:1) && recovery.Effects().BurstCount()==(potion?0:1),"Only healing potions reject at full health; guard still activates");
   }
-  Game game; rpg::Simulation reference; rpg::Command strike; strike.nextTarget=true; strike.ability=0;
+  auto gameStorage=std::make_unique<Game>();auto& game=*gameStorage; rpg::Simulation reference; rpg::Command strike; strike.nextTarget=true; strike.ability=0;
   Require(game.RestoreSnapshot(duel) && reference.Load(duel),"Duel fixture rejected");
   game.ExecuteCommand(strike,.01f); reference.Update(.01f,strike);
   Require(game.State().VisualEventCount()==0,"Acceptance must not emit premature swing or impact effects");
@@ -208,14 +209,14 @@ int main() {
   for (float dt : {0.f,-1.f,std::numeric_limits<float>::quiet_NaN()}) pool.Advance(dt);
   Require(pool.BurstCount()==CombatEffects::maxBursts,"Invalid time must not advance effects");
   pool.Reset(); Require(pool.BurstCount()==0 && pool.TrailCount()==0,"Reset must clear every pool slot");
-  Require(sizeof(CombatEffects)<=32768,"Fixed effects including 96 physical particles must fit the 32 KiB CPU budget");
+  Require(sizeof(CombatEffects)<=CombatEffects::stateBudget,"Fixed effects including 96 physical particles must fit the 32 KiB CPU budget");
 
   Require(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"COM failed");
   Win32Window window; Require(window.Create(GetModuleHandle(nullptr),960,720,L"combat effects checks",false),"Hidden effect window failed");
   Renderer renderer;
   if (!renderer.Initialize(window.GetHandle(),960,720)) { std::wcerr<<renderer.Error()<<L'\n'; Require(false,"Effect renderer initialization failed"); }
   for(auto kind:{rpg::EnemyKind::Captain,rpg::EnemyKind::Wraith,rpg::EnemyKind::Reaver}) {
-    Game encounter;Require(encounter.RestoreSnapshot(duel),"Enemy warning capture fixture");
+    auto encounterStorage=std::make_unique<Game>();auto& encounter=*encounterStorage;Require(encounter.RestoreSnapshot(duel),"Enemy warning capture fixture");
     auto& foe=const_cast<std::vector<rpg::Enemy>&>(encounter.State().Enemies())[0];
     foe.kind=kind;foe.rank=kind==rpg::EnemyKind::Captain?1:0;
     foe.health=foe.MaxHealth();foe.windup=foe.WindupDuration();
@@ -235,7 +236,7 @@ int main() {
     }
   }
   {
-    Game retreat;Require(retreat.RestoreSnapshot(duel),"Caster retreat capture fixture");
+    auto retreatStorage=std::make_unique<Game>();auto& retreat=*retreatStorage;Require(retreat.RestoreSnapshot(duel),"Caster retreat capture fixture");
     auto& foes=const_cast<std::vector<rpg::Enemy>&>(retreat.State().Enemies());
     auto& caster=foes[0];caster.kind=rpg::EnemyKind::Wraith;caster.windup=0;caster.attackCooldown=2;
     for(std::size_t i=1;i<foes.size();++i) {foes[i].health=0;foes[i].state=rpg::EnemyState::Dead;}
@@ -399,7 +400,7 @@ int main() {
 
   // Real dash phases, including air motion and a swept collision.
   for (int pose=0;pose<7;++pose) {
-    Game burst; burst.Initialize(); rpg::Command dash; dash.ability=2; dash.nextTarget=true;
+    auto burstStorage=std::make_unique<Game>();auto& burst=*burstStorage; burst.Initialize(); rpg::Command dash; dash.ability=2; dash.nextTarget=true;
     Require(burst.RestoreSnapshot(pose==4?test::dashWallFixture:test::dashFixture),"Target dash capture fixture");
     if (pose==5) { rpg::Command jump; jump.jump=true; burst.ExecuteCommand(jump,.05f); }
     const float times[]={.03f,.11f,.27f,.36f,.2f,.11f,.42f};

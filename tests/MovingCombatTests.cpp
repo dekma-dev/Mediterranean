@@ -77,5 +77,5 @@ void LostTarget(){
  Check(inspected && !game.Effects().ProjectilePath(100),"Lost flight did not drain");
 }
 }
-int main(){try{Check(sizeof(CombatEffects)<=16384,"Exceeded existing 16 KiB effects state budget");History();ActualContacts();LostTarget();std::cout<<"PASS: moving arrivals, immutable wakes, refresh-rate agreement, target selection/death/load isolation. Effect state bytes: "<<sizeof(CombatEffects)<<'\n';}
+int main(){try{Check(sizeof(CombatEffects)<=CombatEffects::stateBudget,"Exceeded shared effects state budget including physical particles");History();ActualContacts();LostTarget();std::cout<<"PASS: moving arrivals, immutable wakes, refresh-rate agreement, target selection/death/load isolation. Effect state bytes: "<<sizeof(CombatEffects)<<'\n';}
 catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

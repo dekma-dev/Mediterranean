@@ -112,6 +112,7 @@ void Simulation::Emit(FeedbackKind kind,Vec2 position,int amount) {
 }
 
 void Simulation::EmitVisual(CombatVisualKind kind,Vec2 position,float height,float facing,EntityId actor,float elapsed) {
+  if(visualEventCount_==visualEvents_.size()){++visualEventsDropped_;return;}
   if (visualEventCount_<visualEvents_.size()) {
     auto& event=visualEvents_[visualEventCount_++];event={kind,position,map_.Height(position)+height,facing,actor,elapsed};event.school=class_;
     event.source=player_;event.sourceHeight=WorldHeight();

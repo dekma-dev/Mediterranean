@@ -896,6 +896,7 @@ void Simulation::ConfirmQuest(QuestAction action) {
 
 void Simulation::Update(float seconds,const Command& command) {
   visualEventCount_=0;
+  visualEventsDropped_=0;
   tradeRequested_=false;
   movementDistance_=0;
   groundMovementDistance_=0;

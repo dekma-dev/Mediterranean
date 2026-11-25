@@ -13,6 +13,8 @@ namespace castfx {struct Attachments;}
 // Bounded cosmetic state, advanced by Game updates rather than render calls.
 class CombatEffects {
 public:
+  // Includes the fixed 96-particle contact pool added after flight histories.
+  static constexpr std::size_t stateBudget=32768;
   static constexpr std::size_t maxBursts=32,maxTrails=8,trailSamples=32;
   void Reset();
   void Advance(float dt);

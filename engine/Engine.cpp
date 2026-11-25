@@ -130,6 +130,7 @@ bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapsh
   for (const auto dimensions : {std::pair<int,int>{960,600},{1600,900},{1280,720}}) {
     if (!renderer_->Resize(dimensions.first,dimensions.second)) { error_=renderer_->Error(); return false; }
     game_->Update(1.0/60.0,input_,0);
+    (void)game_->TakeSoundEvents(); // Same one-shot drain as Tick, without a device.
     if(!renderer_->BeginFrame()) {error_=renderer_->Error();return false;} game_->Render(*renderer_);
     const auto base=std::filesystem::path(capturePath);
     const auto output=dimensions.first==1280?base:base.parent_path() /
@@ -324,7 +325,8 @@ bool Engine::SmokeTest(const std::wstring& capturePath,const std::string& snapsh
   return true;
 }
 
-bool Engine::Benchmark(const std::wstring& reportPath) {
+bool Engine::Benchmark(const std::wstring& reportPath,bool verifyCommands) {
+  if(verifyCommands)game_->BeginCommandTrace(90);
   LARGE_INTEGER frequency{},start{},finish{}; QueryPerformanceFrequency(&frequency);
   std::vector<double> cpu,gpu;
   std::uint64_t firstMeasuredGpuFrame=0;
@@ -333,6 +335,7 @@ bool Engine::Benchmark(const std::wstring& reportPath) {
     QueryPerformanceCounter(&start);
     if(frame==90) firstMeasuredGpuFrame=renderer_->GpuFrame()+1;
     game_->Update(1.0/60.0,input_,0);
+    (void)game_->TakeSoundEvents();
     if(!renderer_->BeginFrame()) {error_=renderer_->Error();return false;} game_->Render(*renderer_);
     if (!renderer_->EndFrame(false)) { error_=renderer_->Error(); return false; }
     QueryPerformanceCounter(&finish);
@@ -342,12 +345,17 @@ bool Engine::Benchmark(const std::wstring& reportPath) {
     }
   }
   PROCESS_MEMORY_COUNTERS_EX memory{}; memory.cb=sizeof(memory);
+  const auto replay=verifyCommands?game_->VerifyCommandTrace():rpg::ReplayResult{};
   const bool memoryAvailable=GetProcessMemoryInfo(GetCurrentProcess(),reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&memory),sizeof(memory))!=FALSE;
   std::ofstream report{std::filesystem::path(reportPath)};
   report << std::fixed << std::setprecision(3)
     <<renderer_->AdapterDiagnostics()
+    <<game_->StepDiagnostics()
     << "Scene: stationary spawn, "<<renderer_->Width()<<'x'<<renderer_->Height()<<", hidden window, present interval 0\n"
     << "Warmup frames: 90; CPU includes submission/present. GPU observations are asynchronous.\n";
+  if(verifyCommands)report<<"Warmup command replay: "<<(replay.available && replay.valid && replay.matched?"PASS":"FAIL")
+    <<"; steps "<<replay.steps<<"; sealed "<<replay.sealed<<"; first mismatch "<<replay.mismatch
+    <<"\nReplay verification enabled; process memory includes its diagnostic allocations.\n";
   diagnostics::WriteDistribution(report,"CPU frame",cpu);
   diagnostics::WriteDistribution(report,"GPU observation",gpu);
   report << "\nDraw submissions including HUD: " << renderer_->DrawCalls()
@@ -362,6 +370,7 @@ bool Engine::Benchmark(const std::wstring& reportPath) {
     << "\nProcess private bytes MiB: " << memory.PrivateUsage/1048576.0;
   report << "\nNot an interactive FPS guarantee. Driver, visibility and workload affect results.\n";
   if (!report) { error_=L"Could not write benchmark report."; return false; }
+  if(verifyCommands && (!replay.available || !replay.valid || !replay.matched || !replay.sealed)) {error_=L"Command replay verification failed; inspect the diagnostic report.";return false;}
   return true;
 }
 
@@ -437,6 +446,7 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
       QueryPerformanceCounter(&start);
       if(frame==90) {firstMeasuredGpuFrame=renderer_->GpuFrame()+1;firstProcessCpu=processCpu();firstQueueWait=renderer_->GpuQueueWaitMilliseconds();}
       game_->ExecuteCommand(command,1.f/60);
+      (void)game_->TakeSoundEvents();
       if (scene==1 || scene==2) game_->SetCameraOrbit(frame*.012f,.4f+.18f*std::sin(frame*.021f),7.5f+1.5f*std::sin(frame*.017f));
       QueryPerformanceCounter(&updated);
       if(!renderer_->BeginFrame()) {error_=renderer_->Error();return false;} game_->Render(*renderer_);
@@ -555,6 +565,7 @@ std::string Engine::ExecutionDiagnostics()const {
      <<"Admitted frames / clock resets / capped frames / invalid samples: "<<s.frames<<" / "<<s.resynchronizations<<" / "<<s.clampedFrames<<" / "<<s.invalidSamples<<'\n'
      <<"Wall / admitted / excluded / capped seconds: "<<s.wallSeconds<<" / "<<s.gameSeconds<<" / "<<s.excludedSeconds<<" / "<<s.clampedSeconds<<'\n'
      <<"Dispatched messages / pump budget yields / pump seconds: "<<pumpedMessages_<<" / "<<pumpBudgetYields_<<" / "<<pumpSeconds_<<'\n';
+  if(game_)out<<game_->StepDiagnostics();
   return out.str();
 }
 
@@ -600,9 +611,10 @@ void Engine::Tick(double deltaSeconds) {
   }
   const bool wasChoosing=game_->ChoosingCharacter();
   game_->Update(deltaSeconds, input_, window_->ConsumeWheel());
+  const auto acceptedSounds=game_->TakeSoundEvents();
   if(audio_) {
     audio_->Suspend(false);
-    audio_->Update(game_->State(),game_->AudioGeneration(),game_->MusicVolume(),game_->EffectsVolume(),float(deltaSeconds),game_->CameraYaw(),&game_->CreatureSteps(),game_->ChoosingCharacter(),game_->ChoosingCharacter()?&game_->Selection().PreviewAudio():nullptr);
+    audio_->Update(game_->State(),game_->AudioGeneration(),game_->MusicVolume(),game_->EffectsVolume(),float(deltaSeconds),game_->CameraYaw(),&game_->CreatureSteps(),game_->ChoosingCharacter(),game_->ChoosingCharacter()?&game_->Selection().PreviewAudio():nullptr,&acceptedSounds);
   }
   const bool fullscreenRequest=game_->TakeFullscreenRequest();
   if (input_.Pressed(VK_F11) || fullscreenRequest) {

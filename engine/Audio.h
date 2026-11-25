@@ -1,5 +1,6 @@
 #pragma once
 #include "game/Simulation.h"
+#include "game/CommandExecution.h"
 #include "game/CreatureContacts.h"
 #include "engine/EffectEnvelope.h"
 #include "engine/WorldAcoustics.h"
@@ -76,9 +77,29 @@ struct Events {
   float stepDistance=0;
   unsigned warriorSwings=0;
   unsigned auditionRevision=~0u,auditionSequence=~0u;
+  unsigned dropped=0;
   void Reset() { *this={}; }
-  void Update(const rpg::Simulation& state,const presentation::CreatureContacts* contacts=nullptr);
+  void Update(const rpg::Simulation& state,const presentation::CreatureContacts* contacts=nullptr,const rpg::StepEvents* accepted=nullptr);
   bool Preview(const Audition& audition);
+};
+// Bounded bridge from simulation/presentation steps to the device update.
+// Entries retain accepted positions; subsequent target selection cannot move them.
+class DeliveryQueue {
+public:
+  static constexpr unsigned capacity=96;
+  static constexpr float maximumAge=.25f;
+  struct Statistics {std::uint64_t accepted=0,delivered=0,expired=0,dropped=0,resets=0;unsigned peak=0;};
+  void Advance(float seconds);
+  void Append(const Events& events);
+  Events Take();
+  void Reset(){count_=0;++stats_.resets;}
+  unsigned Pending()const{return count_;}
+  const Statistics& Stats()const{return stats_;}
+private:
+  struct Entry {Cue cue{};rpg::Vec2 origin{};float height=0,age=0;bool spatial=false,environmental=false;rpg::EntityId actor=0;};
+  std::array<Entry,capacity> pending_{};
+  unsigned count_=0;
+  Statistics stats_;
 };
 }
 class Audio {
@@ -89,7 +110,7 @@ public:
   unsigned SpatialUpdateErrors() const {return spatialUpdateErrors_;}
   unsigned ActiveSpatialVoices() const {return activeSpatialVoices_;}
   void Suspend(bool value);
-  void Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds=1.f/60,float cameraYaw=0,const presentation::CreatureContacts* contacts=nullptr,bool menu=false,const sound::Audition* audition=nullptr);
+  void Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds=1.f/60,float cameraYaw=0,const presentation::CreatureContacts* contacts=nullptr,bool menu=false,const sound::Audition* audition=nullptr,const sound::Events* accepted=nullptr);
 private:
   IXAudio2* engine_=nullptr;
   IXAudio2MasteringVoice* master_=nullptr;

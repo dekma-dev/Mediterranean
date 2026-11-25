@@ -1,3 +1,10 @@
+## Simulation command and sound boundary (2026-11-25)
+
+- Run `CommandExecutionTests`, `ExecutionTests`, `GraphicsLifecycleTests`, `AudioTests`, `CombatEffectsTests`, `MovingCombatTests`, `MotionTests` and `CombatTests` in Release and Debug. Actual four-class release/contact, retarget and jump replay must match without advancing the live session.
+- Run the public executable with `--verify-command-replay <absolute-report-path>`. Check `Warmup command replay: PASS`, 90 steps, a sealed trace and no mismatch. The mode uses a hidden window, and its memory report includes diagnostic allocations. Ordinary `--benchmark` does not record a trace.
+- During visible play, alternate walking, jumps, short/charged attacks, UI clicks, focus loss, roster changes and loading. Accepted actions should sound once; no previous-session cue should resume after a boundary. Compare the unchanged sound content independently from delivery timing.
+- Inspect execution/benchmark diagnostics for simulation versus presentation CPU time and sound accepted/delivered/expired/dropped/peak counts. During controlled overload, warnings and impacts should retain priority over footsteps; queues must remain bounded. These counters are not a claim of fixed-timestep physics or increased FPS.
+
 ## Bounded texture loading (2026-11-25)
 
 - Build and run `TexturePreparationTests` and `GraphicsLifecycleTests` in Release and Debug. All 19 embedded images must match synchronous WIC pixels; retained staging bytes must return to zero after successful initialization, cancellation and reconstruction.

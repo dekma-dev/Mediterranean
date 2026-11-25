@@ -485,18 +485,28 @@ bool Events::Preview(const Audition& audition) {
   auditionRevision=audition.revision;auditionSequence=audition.sequence;
   return reset;
 }
-void Events::Update(const rpg::Simulation& state,const presentation::CreatureContacts* contacts) {
-  count=0;
+void Events::Update(const rpg::Simulation& state,const presentation::CreatureContacts* contacts,const rpg::StepEvents* accepted) {
+  count=dropped=0;
   rpg::Vec2 origin=state.Player();bool placed=false;float height=state.WorldHeight()+1.25f;
   rpg::EntityId attached=0;
-  const auto add=[&](Cue cue) { if(count<cues.size()) {
+  const auto add=[&](Cue cue) {
+    if(count==cues.size()) {
+      ++dropped;unsigned lowest=0;
+      for(unsigned i=1;i<count;++i)if(CuePriority(cues[i])<CuePriority(cues[lowest]))lowest=i;
+      if(CuePriority(cue)<=CuePriority(cues[lowest]))return;
+      for(unsigned i=lowest;i+1<count;++i) {
+        cues[i]=cues[i+1];origins[i]=origins[i+1];spatial[i]=spatial[i+1];heights[i]=heights[i+1];
+        attachedActors[i]=attachedActors[i+1];environmental[i]=environmental[i+1];
+      }
+      --count;
+    }
     origins[count]=origin;spatial[count]=placed;heights[count]=height;attachedActors[count]=attached;
     environmental[count]=cue!=Cue::UiClick&&cue!=Cue::ReserveReady&&cue!=Cue::CastCancelled;
     cues[count++]=cue;
-  } };
+  };
   using K=rpg::CombatVisualKind;
-  for(size_t i=0;i<state.VisualEventCount();++i) {
-    const auto& event=state.VisualEvents()[i];
+  for(size_t i=0;i<(accepted?std::min(accepted->count,accepted->values.size()):state.VisualEventCount());++i) {
+    const auto& event=accepted?accepted->values[i]:state.VisualEvents()[i];
     const auto p=state.Player();
     if(std::hypot(event.position.x-p.x,event.position.z-p.z)>18) continue;
     origin=event.position;
@@ -668,7 +678,7 @@ void Audio::Suspend(bool value) {
   if(value) { engine_->StopEngine(); ClearEffects(); events_.Reset(); intensity_.Reset();musicGain_=0;music_->SetVolume(0);menuMusic_->SetVolume(0);combatMusic_->SetVolume(0);generation_=~0u; }
   else engine_->StartEngine();
 }
-void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds,float cameraYaw,const presentation::CreatureContacts* contacts,bool menu,const sound::Audition* audition) {
+void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds,float cameraYaw,const presentation::CreatureContacts* contacts,bool menu,const sound::Audition* audition,const sound::Events* accepted) {
   activeSpatialVoices_=0;
   if(!music_ || suspended_) return;
   musicGain_=sound::MusicGain(musicGain_,musicVolume,seconds);
@@ -691,7 +701,8 @@ void Audio::Update(const rpg::Simulation& state,unsigned generation,float musicV
   if(menu) {
     if(!audition){ClearEffects();return;}
     if(events_.Preview(*audition))ClearEffects();
-  } else events_.Update(state,contacts);
+  } else if(accepted)events_=*accepted;
+  else events_.Update(state,contacts);
   if(effectsVolume<=0) { ClearEffects(); return; }
   if(room_.Voice())room_.Voice()->SetVolume(std::clamp(effectsVolume,0.f,1.f));
   // Apply the voice changes as one XAudio2 operation set so a new effect never

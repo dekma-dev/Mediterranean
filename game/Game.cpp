@@ -21,6 +21,7 @@
 #include <sstream>
 #include <filesystem>
 #include <fstream>
+#include <chrono>
 
 namespace {
 float EnemyStrike(const rpg::Enemy& enemy,bool active,float releaseAge=1) {
@@ -49,6 +50,7 @@ void Game::Initialize() {
   savedSnapshot_.reset();
   choosingCharacter_=inputBarrier_=false; quitRequested_=fullscreenRequest_=false;
   simulation_=rpg::Simulation{}; time_=0; atmosphereTime_=0;
+  execution_={};soundEvents_.Reset();soundDelivery_={};
   // Construct the immutable particle collision grid during loading, not on
   // the first accepted hit. No scenery allocations occur during combat.
   (void)impactfx::Environment();
@@ -59,12 +61,14 @@ void Game::Initialize() {
 }
 
 void Game::ChooseCharacter(const std::filesystem::path& save) {
+  execution_.InvalidateTrace();soundEvents_.Reset();soundDelivery_.Reset();
   rosterFile_=save;LoadHotbarSettings();
   CancelUiGesture(); selection_.Open(save); choosingCharacter_=true; inputBarrier_=false;
 }
 
 bool Game::RestoreSnapshot(const std::string& snapshot) {
   if (!simulation_.Load(snapshot)) return false;
+  execution_.InvalidateTrace();
   worldView_.ResetWildlife();
   CancelUiGesture();
   interface_.SetOnly(ui::Panel::None);
@@ -149,9 +153,11 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   case ui::Action::Map: interface_.Toggle(ui::Panel::Map); break;
   case ui::Action::Journal: interface_.Toggle(ui::Panel::Journal); break;
   case ui::Action::TrackHunt:
+    execution_.InvalidateTrace();
     simulation_.TrackHunt(event.value);interface_.hasWaypoint=false;interface_.InvalidateHitRegions();break;
   case ui::Action::CollectLoot: command.collectLoot=true; break;
   case ui::Action::SelectJournal:
+    execution_.InvalidateTrace();
     if (event.value>=-1 && event.value<rpg::frontierQuestCount+8) {
       interface_.journalSelection=event.value; if(event.value==-1)simulation_.TrackHunt(-1); interface_.InvalidateHitRegions();
     }
@@ -187,7 +193,7 @@ void Game::Update(double seconds,const Input& input,float wheel) {
     if(event.value==-1) {interface_.previewBuild=0;interface_.InvalidateHitRegions();break;}
     unsigned draft=unsigned(interface_.previewBuild);
     if(rpg::TogglePlannedTalent(draft,rpg::Talent(event.value))) interface_.previewBuild=int(draft);
-    else simulation_.Notify("Draft needs its prerequisite and must fit the five-point budget.");
+    else Notify("Draft needs its prerequisite and must fit the five-point budget.");
     interface_.InvalidateHitRegions();break;
   }
   case ui::Action::SelectLoadout:
@@ -244,7 +250,7 @@ void Game::Update(double seconds,const Input& input,float wheel) {
   case ui::Action::ClearWaypoint: interface_.hasWaypoint=false; break;
   case ui::Action::PlaceWaypoint:
     if (simulation_.CanStand(interface_.pendingWaypoint)) { interface_.waypoint=interface_.pendingWaypoint; interface_.hasWaypoint=true; }
-    else simulation_.Notify("Place your waypoint on traversable ground.");
+    else Notify("Place your waypoint on traversable ground.");
     break;
   default: break;
   }
@@ -328,13 +334,34 @@ void Game::Update(double seconds,const Input& input,float wheel) {
 }
 void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   creatureSteps_.Reset();
-  const float dt=std::isfinite(seconds)?std::clamp(seconds,0.f,.05f):0.f;
-  const bool wasDead=simulation_.Health()<=0,wasSparring=simulation_.Sparring(),wasReplay=simulation_.ReplayActive();
-  const auto previousVelocity=simulation_.MovementVelocity();
-  const auto previousPosition=simulation_.Player(); const float previousFacing=playerPose_.facing;
-  const auto priorDialogue=simulation_.QuestDialogue(); const auto priorStage=simulation_.DialogueStage();
-  simulation_.Update(dt,command);
-  if (dt<=0) return;
+  const auto step=execution_.Advance(simulation_,seconds,command);
+  if(step.seconds<=0)return;
+  const auto start=std::chrono::steady_clock::now();
+  const auto generation=audioGeneration_;
+  soundDelivery_.Advance(step.seconds);
+  PresentStep(step);
+  // Resets cancel old transients instead of replaying pre-reset receipts.
+  if(generation==audioGeneration_) {
+    soundEvents_.Update(simulation_,&creatureSteps_,&step.events);
+    soundDelivery_.Append(soundEvents_);
+  }
+  execution_.RecordPresentation(std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count());
+}
+std::string Game::StepDiagnostics()const {
+  const auto& step=execution_.Stats();const auto& sound=soundDelivery_.Stats();std::ostringstream out;
+  out<<"Simulation steps / empty steps: "<<step.steps<<" / "<<step.emptySteps
+    <<"\nAdmitted simulation seconds: "<<step.admittedSeconds
+    <<"\nSimulation / presentation CPU seconds: "<<step.simulationSeconds<<" / "<<step.presentationSeconds
+    <<"\nAccepted / dropped visual events: "<<step.events<<" / "<<step.droppedEvents
+    <<"\nSound accepted / delivered / expired / dropped / peak: "<<sound.accepted<<" / "<<sound.delivered<<" / "<<sound.expired<<" / "<<sound.dropped<<" / "<<sound.peak<<'\n';
+  return out.str();
+}
+void Game::PresentStep(const rpg::StepReceipt& step) {
+  const float dt=step.seconds;const auto& command=step.command;
+  const bool wasDead=step.wasDead,wasSparring=step.wasSparring,wasReplay=step.wasReplay;
+  const auto previousVelocity=step.previousVelocity,previousPosition=step.previousPosition;
+  const float previousFacing=playerPose_.facing;
+  const auto priorDialogue=step.priorDialogue;const auto priorStage=step.priorStage;
   if (simulation_.QuestDialogue()!=rpg::QuestId::None) {
     if (interface_.panel!=ui::Panel::Quest) { CancelUiGesture(); interface_.SetOnly(ui::Panel::Quest); }
     if (priorDialogue!=simulation_.QuestDialogue() || priorStage!=simulation_.DialogueStage()) {
@@ -348,8 +375,8 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   interface_.UpdateCombatFeedback(dt,simulation_);
   effects_.Advance(dt);
   sustained_.Update(simulation_,dt);
-  for (std::size_t i=0;i<simulation_.VisualEventCount();++i) {
-    const auto& event=simulation_.VisualEvents()[i];
+  for (std::size_t i=0;i<step.events.count;++i) {
+    const auto& event=step.events.values[i];
     // Attach hostile beams after their shared actor pose has advanced below.
     if(event.kind==rpg::CombatVisualKind::EnemyLance || event.kind==rpg::CombatVisualKind::EnemyExecution)continue;
     if(event.kind==rpg::CombatVisualKind::SpellCast) {
@@ -382,8 +409,8 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   const auto velocity=simulation_.MovementVelocity();
   const auto applyImpacts=[&](animation::State& state,rpg::EntityId actor,bool alive,float facing) {
     if (!alive) return;
-    for (std::size_t i=0;i<simulation_.VisualEventCount();++i) {
-      const auto& event=simulation_.VisualEvents()[i];
+    for (std::size_t i=0;i<step.events.count;++i) {
+      const auto& event=step.events.values[i];
       if (event.actor==actor && (event.kind==rpg::CombatVisualKind::Hurt ||
           event.kind==rpg::CombatVisualKind::Hit || event.kind==rpg::CombatVisualKind::HeavyHit)) {
         const auto profile=event.kind==rpg::CombatVisualKind::Hurt?animation::ImpactProfile{}:
@@ -396,9 +423,9 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
   };
   bool castStarted=false,dashImpact=false,dashFinished=false;
   float dashEndElapsed=0;
-  for(std::size_t i=0;i<simulation_.VisualEventCount();++i) {
-    castStarted|=simulation_.VisualEvents()[i].kind==rpg::CombatVisualKind::Mend;
-    const auto& event=simulation_.VisualEvents()[i];
+  for(std::size_t i=0;i<step.events.count;++i) {
+    castStarted|=step.events.values[i].kind==rpg::CombatVisualKind::Mend;
+    const auto& event=step.events.values[i];
     if (event.kind==rpg::CombatVisualKind::DashImpact || event.kind==rpg::CombatVisualKind::DashStop) {
       dashImpact=event.kind==rpg::CombatVisualKind::DashImpact; dashFinished=true; dashEndElapsed=event.elapsed;
     }
@@ -480,8 +507,8 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
     if(enemy.health>0)actor.clock+=dt;
     auto& releaseAge=enemyActors_[i].animation.enemyReleaseAge;
     releaseAge=std::min(1.f,releaseAge+dt);
-    for(std::size_t eventIndex=0;eventIndex<simulation_.VisualEventCount();++eventIndex) {
-      const auto& event=simulation_.VisualEvents()[eventIndex];
+    for(std::size_t eventIndex=0;eventIndex<step.events.count;++eventIndex) {
+      const auto& event=step.events.values[eventIndex];
       if(event.actor==enemy.id && (event.kind==rpg::CombatVisualKind::EnemySwing || event.kind==rpg::CombatVisualKind::BeastBite || event.kind==rpg::CombatVisualKind::BeastCharge || event.kind==rpg::CombatVisualKind::EnemyLance))
         releaseAge=std::clamp(event.elapsed,0.f,dt);
     }
@@ -501,7 +528,7 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
       const auto p=simulation_.Player();
       const bool detailed=std::hypot(enemy.position.x-p.x,enemy.position.z-p.z)<40;
       actor.beast.Update(dt,enemy,movement,actor.animation.pose,releaseAge,active,detailed);
-      for(unsigned step=0;step<actor.beast.feet.count;++step)creatureSteps_.Add(actor.beast.feet.events[step],p);
+      for(unsigned contact=0;contact<actor.beast.feet.count;++contact)creatureSteps_.Add(actor.beast.feet.events[contact],p);
       actor.motion.phase=actor.beast.phase;
       actor.animation.pose.travel=actor.beast.travel;
       continue;
@@ -524,8 +551,8 @@ void Game::ExecuteCommand(const rpg::Command& command,float seconds) {
     enemyActors_[i].animation.pose.motion=enemyActors_[i].animation.locomotion.pose;
   }
   UpdateFaces(dt);
-  for(std::size_t i=0;i<simulation_.VisualEventCount();++i) {
-    const auto& event=simulation_.VisualEvents()[i];
+  for(std::size_t i=0;i<step.events.count;++i) {
+    const auto& event=step.events.values[i];
     if(event.kind!=rpg::CombatVisualKind::EnemyLance && event.kind!=rpg::CombatVisualKind::EnemyExecution)continue;
     const auto enemy=std::find_if(enemies.begin(),enemies.end(),[&](const rpg::Enemy& e){return e.id==event.actor;});
     const auto actor=std::find_if(enemyActors_.begin(),enemyActors_.end(),[&](const presentation::Actor& a){return a.id==event.actor;});
@@ -601,6 +628,7 @@ void Game::SetCameraOrbit(float yaw,float pitch,float distance) {
   UpdateCamera(0,true);
 }
 void Game::ResetMotion() {
+  soundEvents_.Reset();soundDelivery_.Reset();
   freeLook_=false;movementYaw_=yaw_;
   creatureSteps_.Reset();
   interface_.ResetCombatFeedback();
@@ -808,23 +836,23 @@ bool Game::SaveProgress() {
   const auto content=simulation_.Save();
   const auto result=profile::Write(saveFile_,content,savedSnapshot_?&*savedSnapshot_:nullptr);
   switch(result) {
-  case profile::WriteResult::Saved:savedSnapshot_=content;simulation_.Notify("Progress saved.");break;
-  case profile::WriteResult::Conflict:simulation_.Notify("Save changed outside this game. F9 loads it; current progress was not written.");break;
-  case profile::WriteResult::Busy:simulation_.Notify("Another game is saving this character. Try again.");break;
-  case profile::WriteResult::Error:simulation_.Notify("Save failed. Previous save retained. Check project folder access.");break;
+  case profile::WriteResult::Saved:savedSnapshot_=content;Notify("Progress saved.");break;
+  case profile::WriteResult::Conflict:Notify("Save changed outside this game. F9 loads it; current progress was not written.");break;
+  case profile::WriteResult::Busy:Notify("Another game is saving this character. Try again.");break;
+  case profile::WriteResult::Error:Notify("Save failed. Previous save retained. Check project folder access.");break;
   }
   if(result==profile::WriteResult::Saved) {
-    if(!SaveHotbarSettings()) simulation_.Notify("Progress saved; action-bar settings could not be saved (external change or file access).");
+    if(!SaveHotbarSettings()) Notify("Progress saved; action-bar settings could not be saved (external change or file access).");
   }
   return result==profile::WriteResult::Saved;
 }
 
 void Game::LoadProgress() {
   std::string content;
-  if(profile::Read(saveFile_,content)!=profile::ReadResult::Ready) {simulation_.Notify("No valid save found.");return;}
+  if(profile::Read(saveFile_,content)!=profile::ReadResult::Ready) {Notify("No valid save found.");return;}
   rpg::Simulation candidate;
   if(!candidate.Load(content) || candidate.Class()!=simulation_.Class() || !RestoreSnapshot(content)) {
-    simulation_.Notify("Save rejected. Current progress retained.");return;
+    Notify("Save rejected. Current progress retained.");return;
   }
   savedSnapshot_=std::move(content);
   LoadHotbarSettings();
