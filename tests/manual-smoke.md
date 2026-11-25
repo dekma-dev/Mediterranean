@@ -1,3 +1,10 @@
+## GPU work budget and presentation pacing (2026-11-26)
+
+- Launch the normal game executable: character selection/creation should stay within 30 FPS, gameplay within 60 FPS. VSync may limit delivery further. Inventory/map/Escape windows retain the gameplay rate because the world remains live. Check movement, cast durations and short key taps across transitions.
+- Hold mouse orbit, resize or toggle fullscreen, then Alt-Tab/minimize and return. Input must wake promptly, there must be no accumulated movement/camera jump, and the inactive game must submit no GPU frames. Existing F3 diagnostics show GPU frame time; it is not a temperature or power meter.
+- Walk/orbit through trees and buildings, observe moving enemies and open a character portrait. Static scenery must keep its exact shadows through LOD changes; moving casters must not freeze, and removed objects must leave no ghost shadows.
+- Use the paired uncached/cached Full-HD benchmark modes documented in `docs/gpu-work-budget-2026-11-26.md` to compare per-frame work. These modes deliberately run without the interactive FPS ceiling. Thermal comparisons require the same normal-play scene, resolution, ambient conditions and warmup; hidden benchmark results alone do not establish temperatures.
+
 ## Owned HUD publication (2026-11-26)
 
 - Run `HudPublicationTests` in Release and Debug. Compare the twelve published/retained/next triples in `hud-publication-review`: replacing authority without publication must preserve the entire world-plus-HUD image; the next accepted command must update it. The test also covers all eleven existing classes' spell/build/trade read values.

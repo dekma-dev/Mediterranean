@@ -55,6 +55,10 @@ public:
   // Compare the shared field with the original per-vertex integration.
   void SetCloudLightFieldEnabled(bool enabled) { cloudLightFieldEnabled_=enabled; }
   unsigned CloudLightUpdates() const { return cloudLightUpdates_; }
+  struct ShadowCacheStatistics {unsigned hits=0,rebuilds=0,keyUpdates=0;std::uint64_t avoidedTriangles=0;};
+  const ShadowCacheStatistics& ShadowCacheStats()const{return shadowCacheStats_;}
+  std::size_t ShadowCacheKeyBytes()const{return staticShadowKeys_.capacity()*sizeof(ShadowKey);}
+  void SetStaticShadowCacheEnabled(bool enabled){staticShadowCacheEnabled_=enabled;}
   bool Project(const DirectX::XMFLOAT3& world, DirectX::XMFLOAT2& screen,float* depth=nullptr) const;
   void DrawMarkerBox(const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& scale,
     const DirectX::XMFLOAT4& color, float yaw = 0);
@@ -205,6 +209,7 @@ public:
   const std::wstring& Error() const { return error_; }
 private:
   friend struct GraphicsLifecycleTestAccess;
+  friend struct MemoryLifetimeTestAccess;
   bool Check(HRESULT result, const wchar_t* operation);
   void BindResources(RenderBindings::Stage stage,UINT first,UINT count,ID3D11ShaderResourceView* const* views) {
     if(frameFailed_)return;
@@ -272,6 +277,18 @@ private:
   std::array<MeshRange,meshCount> meshes_{};
   std::array<std::vector<Item>,meshCount> world_;
   std::vector<Instance> instanceScratch_;
+  std::vector<std::uint8_t> staticShadowFlags_;
+  struct ShadowBatch {unsigned mesh;UINT first,count;};
+  // VSShadow for immutable (surface.w == 0), unskinned geometry depends only
+  // on mesh, world transform and light projection. No tint/normal/material copy.
+  struct ShadowKey {unsigned mesh;DirectX::XMFLOAT4X4 world;};
+  std::vector<ShadowBatch> staticShadowBatches_,dynamicShadowBatches_;
+  std::vector<ShadowKey> staticShadowKeys_;
+  DirectX::XMFLOAT4X4 staticShadowProjection_{};
+  bool staticShadowValid_=false,staticShadowCacheEnabled_=true;
+  ShadowCacheStatistics shadowCacheStats_;
+  Microsoft::WRL::ComPtr<ID3D11Texture2D> shadowTexture_,staticShadowTexture_;
+  Microsoft::WRL::ComPtr<ID3D11DepthStencilView> staticShadowDepth_;
   // Bounded staging storage lives on the heap. Keeping both palettes inline
   // consumed over 100 KiB of each caller's stack before nested UI/pose work.
   std::vector<visual::BodyPalette> bodyPalettes_=std::vector<visual::BodyPalette>(visual::maxBodies);

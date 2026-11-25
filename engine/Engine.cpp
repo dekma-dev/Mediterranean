@@ -1,5 +1,7 @@
 #include "platform/LocalizedText.h"
 #include "engine/Engine.h"
+#include "engine/FramePacing.h"
+#include "platform/FrameWait.h"
 #include "engine/BenchmarkStats.h"
 
 #include <Windows.h>
@@ -374,7 +376,8 @@ bool Engine::Benchmark(const std::wstring& reportPath,bool verifyCommands) {
   return true;
 }
 
-bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
+bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd,bool shadowCache) {
+  renderer_->SetStaticShadowCacheEnabled(shadowCache);
   // Explicit render-buffer size: a hidden window may be fitted to a smaller
   // desktop work area. Diagnostic resolution must not depend on that fitting.
   if(fullHd && !renderer_->Resize(1920,1080)) { error_=renderer_->Error(); return false; }
@@ -402,6 +405,7 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
     <<renderer_->AdapterDiagnostics()
     <<"Hidden "<<renderer_->Width()<<'x'<<renderer_->Height()<<" workload suite; present interval 0; benchmark frame interval 1/60 s\n"
     <<"Resolution describes render buffers, not desktop/window dimensions.\n"
+    <<"Static far shadow cache: "<<(shadowCache?"enabled":"disabled reference")<<'\n'
     <<"Frames use bounded simulation steps <= 1/120 s; interactive admission is capped at 50 ms, with no accumulator debt.\n"
     <<"Each workload: 90 warmup + 600 measured frames. Setup/save loads excluded.\n"
     <<"1080p mode captures each final workload frame after measurement; PNG readback/encoding excluded.\n"
@@ -434,6 +438,7 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
     std::uint64_t firstMeasuredGpuFrame=0;
     double firstProcessCpu=0,firstQueueWait=0;
     std::uint64_t bindingRequests=0,bindingCalls=0,bindingSkipped=0,bindingHazards=0;
+    std::uint64_t shadowHits=0,shadowRebuilds=0,shadowAvoided=0,submittedTriangles=0;
     for (int frame=0;frame<690;++frame) {
       if (scene==2 && frame%180==0 && !game_->RestoreSnapshot(combat)) return false;
       rpg::Command command;
@@ -456,6 +461,8 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
       if (frame<90) continue;
       const auto& bindings=renderer_->BindingStats();
       bindingRequests+=bindings.requests;bindingCalls+=bindings.calls;bindingSkipped+=bindings.skipped;bindingHazards+=bindings.hazardUnbinds;
+      const auto& shadow=renderer_->ShadowCacheStats();shadowHits+=shadow.hits;shadowRebuilds+=shadow.rebuilds;
+      shadowAvoided+=shadow.avoidedTriangles;submittedTriangles+=renderer_->Triangles();
       cpu.push_back(1000.0*double(finish.QuadPart-start.QuadPart)/double(frequency.QuadPart));
       updateCpu.push_back(1000.0*double(updated.QuadPart-start.QuadPart)/double(frequency.QuadPart));
       renderCpu.push_back(1000.0*double(rendered.QuadPart-updated.QuadPart)/double(frequency.QuadPart));
@@ -486,6 +493,8 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
     diagnostics::WriteDistribution(report,"CPU submit/present",submitCpu);
     diagnostics::WriteDistribution(report,"GPU observation",gpu);
     report<<"\nPeak submissions / triangles: "<<drawPeak<<" / "<<trianglePeak
+      <<"\nFar shadow cache hits / rebuilds: "<<shadowHits<<" / "<<shadowRebuilds
+      <<"\nMean submitted / avoided static shadow triangles: "<<submittedTriangles/600.0<<" / "<<shadowAvoided/600.0
       <<"\nPeak queued bodies near / mid / far: "<<bodyPeak[0]<<" / "<<bodyPeak[1]<<" / "<<bodyPeak[2]
       <<"\nPeak simplified / omitted attachments: "<<attachmentPeak[0]<<" / "<<attachmentPeak[1]
       <<"\nCombat effect frames / peak vertices: "<<effectFrames<<" / "<<effectPeak
@@ -502,6 +511,7 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
   }
   report<<"\nImmutable mesh bytes: "<<renderer_->MeshBytes()<<"\nMaterial/shadow bytes: "<<renderer_->MaterialBytes()
     <<"\nInterface bytes: "<<renderer_->InterfaceBytes()
+    <<"\nFar shadow CPU key capacity bytes: "<<renderer_->ShadowCacheKeyBytes()
     <<"\nCached static instances / CPU bytes: "<<game_->StaticSceneInstances()<<" / "<<game_->StaticSceneBytes()<<'\n';
   PROCESS_MEMORY_COUNTERS_EX memory{}; memory.cb=sizeof(memory);
   if (GetProcessMemoryInfo(GetCurrentProcess(),reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&memory),sizeof(memory)))
@@ -516,8 +526,12 @@ int Engine::Run() {
   LARGE_INTEGER frequency = {};
   if(!QueryPerformanceFrequency(&frequency) || frequency.QuadPart<=0){error_=L"High-resolution frame clock is unavailable.";return 1;}
   frameClock_=execution::FrameClock(frequency.QuadPart);
+  execution::FramePacing pacing(frequency.QuadPart);
+  platform::FrameWait frameWait;
   LARGE_INTEGER started{};QueryPerformanceCounter(&started);frameClock_.Sample(started.QuadPart,false);
   pumpedMessages_=pumpBudgetYields_=0;pumpSeconds_=0;
+  pacingWaits_=pacedFrames_=0;pacingWaitSeconds_=0;
+  bool suspended=false;
   while (running_) {
     const auto pump=platform::PumpMessages();
     pumpedMessages_+=pump.messages;pumpBudgetYields_+=pump.budgetReached;pumpSeconds_+=pump.seconds;
@@ -532,26 +546,46 @@ int Engine::Run() {
     const bool interrupted=window_->ConsumeClockInterruption() || resetFrameClock_;
     resetFrameClock_=false;
     LARGE_INTEGER now{};QueryPerformanceCounter(&now);
-    const auto step=frameClock_.Sample(now.QuadPart,active,interrupted);
     if (!active) {
-      if(audio_) audio_->Suspend(true);
-      game_->SuspendInput();
-      input_.CancelGestures();
-      window_->SetMouseLook(false);
+      frameClock_.Sample(now.QuadPart,false);pacing.Reset();
+      if(!suspended){
+        if(audio_) audio_->Suspend(true);
+        game_->SuspendInput();input_.CancelGestures();window_->SetMouseLook(false);
+        suspended=true;
+      }
       window_->ConsumeWheel();window_->ConsumeKeys();window_->ConsumeText();window_->ConsumeMouseMotion();
       if(platform::WaitForMessages()==WAIT_FAILED){error_=L"Waiting for window messages failed.";exitCode_=1;running_=false;}
       continue;
     }
+    const bool resumed=suspended;suspended=false;
+    const auto hz=game_->ChoosingCharacter()?execution::FramePacing::selectionHz:execution::FramePacing::gameplayHz;
+    if(interrupted || resumed){
+      frameClock_.Sample(now.QuadPart,true,true);pacing.Reset();
+      game_->CancelUiGesture();input_.CancelGestures();window_->SetMouseLook(false);
+      window_->ConsumeWheel();window_->ConsumeKeys();window_->ConsumeText();window_->ConsumeMouseMotion();
+      input_.Update(window_->GetHandle());
+      pacing.Remaining(now.QuadPart,hz);pacing.Admit(now.QuadPart);continue;
+    }
+    const double remaining=pacing.Remaining(now.QuadPart,hz);
+    if(remaining>0){
+      const auto result=frameWait.Wait(remaining);LARGE_INTEGER woke{};QueryPerformanceCounter(&woke);
+      ++pacingWaits_;pacingWaitSeconds_+=double(woke.QuadPart-now.QuadPart)/double(frequency.QuadPart);
+      if(result==WAIT_FAILED){error_=L"Waiting for frame deadline failed.";exitCode_=1;running_=false;}
+      continue;
+    }
+    const auto step=frameClock_.Sample(now.QuadPart,true);
     if(step.resynchronized){
       game_->CancelUiGesture();input_.CancelGestures();window_->SetMouseLook(false);
       window_->ConsumeWheel();window_->ConsumeKeys();window_->ConsumeText();window_->ConsumeMouseMotion();
       input_.Update(window_->GetHandle()); // Baseline held state; no synthetic presses.
+      pacing.Admit(now.QuadPart);
       continue;
     }
     if(step.seconds<=0)continue; // Do not consume an edge on a zero-time update.
     const auto mouse=window_->ConsumeMouseMotion();
     input_.Update(window_->GetHandle(),window_->MouseLook(),mouse.x,mouse.y,window_->ConsumeText(),window_->ConsumeKeys());
     Tick(step.seconds);
+    pacing.Admit(now.QuadPart);++pacedFrames_;
   }
 
   LARGE_INTEGER stopped{};QueryPerformanceCounter(&stopped);frameClock_.Sample(stopped.QuadPart,false);
@@ -566,6 +600,8 @@ std::string Engine::ExecutionDiagnostics()const {
      <<"Admitted frames / clock resets / capped frames / invalid samples: "<<s.frames<<" / "<<s.resynchronizations<<" / "<<s.clampedFrames<<" / "<<s.invalidSamples<<'\n'
      <<"Wall / admitted / excluded / capped seconds: "<<s.wallSeconds<<" / "<<s.gameSeconds<<" / "<<s.excludedSeconds<<" / "<<s.clampedSeconds<<'\n'
      <<"Dispatched messages / pump budget yields / pump seconds: "<<pumpedMessages_<<" / "<<pumpBudgetYields_<<" / "<<pumpSeconds_<<'\n';
+  out<<"Presentation limits gameplay / character selection Hz: "<<execution::FramePacing::gameplayHz<<" / "<<execution::FramePacing::selectionHz
+     <<"\nPaced frames / waits / waited seconds: "<<pacedFrames_<<" / "<<pacingWaits_<<" / "<<pacingWaitSeconds_<<'\n';
   if(game_)out<<game_->StepDiagnostics();
   if(audio_){const auto& a=audio_->Stats();
     out<<"Audio device frames / rejected / submitted cues: "<<a.frames<<" / "<<a.rejected<<" / "<<a.submitted<<'\n';}

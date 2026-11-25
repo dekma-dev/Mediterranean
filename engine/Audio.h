@@ -163,6 +163,7 @@ public:
   void Update(const rpg::Simulation& state,unsigned generation,float musicVolume,float effectsVolume,float seconds=1.f/60,float cameraYaw=0,const presentation::CreatureContacts* contacts=nullptr,bool menu=false,const sound::Audition* audition=nullptr,const sound::Events* accepted=nullptr);
   void Update(const sound::Frame& frame);
 private:
+  bool initializationAttempted_=false;
   IXAudio2* engine_=nullptr;
   IXAudio2MasteringVoice* master_=nullptr;
   sound::RoomReverb room_;

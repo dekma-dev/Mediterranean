@@ -21,7 +21,7 @@ public:
   bool StartupTest(bool fullscreen,int width,int height,const std::string& snapshot,const std::wstring& capturePath);
   bool SmokeTest(const std::wstring& capturePath,const std::string& snapshot = {});
   bool Benchmark(const std::wstring& reportPath,bool verifyCommands=false);
-  bool BenchmarkSuite(const std::wstring& reportPath,bool fullHd=false);
+  bool BenchmarkSuite(const std::wstring& reportPath,bool fullHd=false,bool shadowCache=true);
   int Run();
   const std::wstring& Error() const { return error_; }
   bool LoadingCancelled()const{return loadingCancelled_;}
@@ -42,6 +42,8 @@ private:
   execution::FrameClock frameClock_{0};
   std::uint64_t pumpedMessages_=0,pumpBudgetYields_=0;
   double pumpSeconds_=0;
+  std::uint64_t pacingWaits_=0,pacedFrames_=0;
+  double pacingWaitSeconds_=0;
 
   std::unique_ptr<Win32Window> window_;
   std::unique_ptr<Renderer> renderer_;

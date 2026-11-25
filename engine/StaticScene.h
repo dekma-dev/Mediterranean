@@ -14,6 +14,7 @@ struct SceneItem {
   float radius;
   // Reuse the visibility word: character ownership is CPU-only and must not
   // enlarge cached scenery or the GPU instance layout. 255 means independent.
+  // reserved bits: 1 = authored fixed LOD, 2 = immutable unskinned shadow caster.
   std::uint8_t visibility=0,body=255,maxDetail=2,reserved=0;
 };
 static_assert(sizeof(SceneItem)==180,"Keep the immutable scenery record budget unchanged.");

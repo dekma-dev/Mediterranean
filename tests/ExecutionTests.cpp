@@ -1,6 +1,7 @@
 #include "engine/FrameClock.h"
 #include "engine/Input.h"
 #include "engine/Engine.h"
+#include "engine/Renderer.h"
 #include "platform/MessagePump.h"
 #include "platform/Win32Window.h"
 #include "game/Game.h"
@@ -12,6 +13,8 @@
 
 struct ExecutionTestAccess {
   static HWND Window(Engine& engine){return engine.window_->GetHandle();}
+  static std::uint64_t HudRevision(Engine& engine){return engine.game_->Hud().Revision();}
+  static std::uint64_t GpuFrames(Engine& engine){return engine.renderer_->GpuFrame();}
 };
 namespace {
 void Check(bool value,const char* why){if(!value)throw std::runtime_error(why);}
@@ -114,11 +117,14 @@ void InactiveEngineLoop(){
   // input, foreground changes, player saves or audio endpoint are involved.
   platform::PumpMessages(1024,1); // Drain the preceding fixture's WM_QUIT.
   Engine engine;Check(engine.Initialize(GetModuleHandleW(nullptr),960,540,false,false),"Hidden execution engine");
+  const auto revision=ExecutionTestAccess::HudRevision(engine),frames=ExecutionTestAccess::GpuFrames(engine);
   const DWORD threadId=GetCurrentThreadId();
   for(int n=0;n<600;++n)Check(PostThreadMessageW(threadId,WM_APP+3,0,0)!=FALSE,"Queue engine work");
   std::thread wake([threadId]{Sleep(60);PostThreadMessageW(threadId,WM_QUIT,19,0);});
   const int result=engine.Run();wake.join();
   Check(result==19,"Native inactive engine failed to wake and preserve quit code");
+  Check(ExecutionTestAccess::GpuFrames(engine)==frames,"Background messages caused GPU rendering");
+  Check(ExecutionTestAccess::HudRevision(engine)==revision+1,"Background messages repeatedly rebuilt cancelled HUD state");
   const auto report=engine.ExecutionDiagnostics();
   Check(report.find("Admitted frames / clock resets / capped frames / invalid samples: 0 /")!=std::string::npos,"Inactive engine advanced game time");
   const std::string label="Wall / admitted / excluded / capped seconds: ";const auto at=report.find(label);

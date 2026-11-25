@@ -620,6 +620,10 @@ Audio::~Audio() {
   if(ownsCom_) CoUninitialize();
 }
 bool Audio::Initialize(bool muteOutput) {
+  // One owner, one initialization attempt. Re-entry used to overwrite raw
+  // XAudio2/voice pointers and the COM ownership flag, losing their releases.
+  if(initializationAttempted_)return false;
+  initializationAttempted_=true;
   const HRESULT com=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
   ownsCom_=SUCCEEDED(com);
   if(FAILED(com) && com!=RPC_E_CHANGED_MODE) return false;

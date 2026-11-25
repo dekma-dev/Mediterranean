@@ -353,19 +353,26 @@ bool Renderer::CreateMaterials(resources::TexturePreparation& preparation,const 
  texture={}; texture.Width=texture.Height=visual::shadowSize; texture.MipLevels=1;
  texture.ArraySize=visual::shadowLayers; texture.SampleDesc.Count=1;
  texture.Format=DXGI_FORMAT_R32_TYPELESS; texture.BindFlags=D3D11_BIND_DEPTH_STENCIL|D3D11_BIND_SHADER_RESOURCE;
- ComPtr<ID3D11Texture2D> shadow;
- if (!Check(device_->CreateTexture2D(&texture,nullptr,shadow.GetAddressOf()),L"Create two-layer shadow map")) return false;
+ if (!Check(device_->CreateTexture2D(&texture,nullptr,shadowTexture_.GetAddressOf()),L"Create two-layer shadow map")) return false;
  D3D11_DEPTH_STENCIL_VIEW_DESC depth{}; depth.Format=DXGI_FORMAT_D32_FLOAT; depth.ViewDimension=D3D11_DSV_DIMENSION_TEXTURE2DARRAY;
  depth.Texture2DArray.ArraySize=1;
  for (unsigned layer=0;layer<visual::shadowLayers;++layer) {
   depth.Texture2DArray.FirstArraySlice=layer;
-  if (!Check(device_->CreateDepthStencilView(shadow.Get(),&depth,shadowDepth_[layer].GetAddressOf()),L"Create shadow layer depth view")) return false;
+  if (!Check(device_->CreateDepthStencilView(shadowTexture_.Get(),&depth,shadowDepth_[layer].GetAddressOf()),L"Create shadow layer depth view")) return false;
  }
  D3D11_SHADER_RESOURCE_VIEW_DESC resource{}; resource.Format=DXGI_FORMAT_R32_FLOAT;
  resource.ViewDimension=D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
  resource.Texture2DArray.MipLevels=1; resource.Texture2DArray.ArraySize=visual::shadowLayers;
- if (!Check(device_->CreateShaderResourceView(shadow.Get(),&resource,shadowView_.GetAddressOf()),L"Create shadow resource view")) return false;
+ if (!Check(device_->CreateShaderResourceView(shadowTexture_.Get(),&resource,shadowView_.GetAddressOf()),L"Create shadow resource view")) return false;
  materialBytes_+=visual::shadowSize*visual::shadowSize*4*visual::shadowLayers;
+ // Preserve the exact static far-layer depth. Dynamic casters are rendered
+ // over a copy every frame; the detail layer retains its original live pass.
+ texture.ArraySize=1;texture.BindFlags=D3D11_BIND_DEPTH_STENCIL;
+ depth.Texture2DArray.FirstArraySlice=0;
+ if(!Check(device_->CreateTexture2D(&texture,nullptr,staticShadowTexture_.GetAddressOf()),L"Create static shadow cache") ||
+    !Check(device_->CreateDepthStencilView(staticShadowTexture_.Get(),&depth,staticShadowDepth_.GetAddressOf()),L"Create static shadow cache depth"))return false;
+ materialBytes_+=visual::shadowSize*visual::shadowSize*4;
+ staticShadowValid_=false;
  // A two-metre grid preserves the broad cloud footprint without repeating
  // twelve volume samples for every vertex of the island and its characters.
  texture={}; texture.Width=texture.Height=cloudLightSize; texture.MipLevels=1;
@@ -397,6 +404,7 @@ bool Renderer::BeginFrame() {
  combatLights_.Reset();
  drawCalls_=0; portrait_=false; skyPending_=true;
  cloudLightUpdates_=0;
+ shadowCacheStats_={};
  context_->OMSetBlendState(nullptr,nullptr,0xffffffff);
  triangles_=0;
  gpuTimer_.Begin(context_.Get());
@@ -706,8 +714,13 @@ void Renderer::DrawStaticScene(visual::StaticScene& scene,const std::function<vo
   std::array<std::size_t,meshCount> starts{};
   for (unsigned mesh=0;mesh<meshCount;++mesh) starts[mesh]=world_[mesh].size();
   emit();
-  for (unsigned mesh=0;mesh<meshCount;++mesh)
+  for (unsigned mesh=0;mesh<meshCount;++mesh){
+   const bool fixed=!visual::IsBodyMesh(visual::Mesh(mesh)) && !visual::IsGarmentMesh(visual::Mesh(mesh)) &&
+     !visual::IsHandMesh(visual::Mesh(mesh)) && !authored::Animated(mesh);
+   for(std::size_t i=starts[mesh];i<world_[mesh].size();++i)
+    if(fixed && world_[mesh][i].instance.surface.w==0)world_[mesh][i].reserved|=2;
    scene.batches_[mesh].assign(world_[mesh].begin()+starts[mesh],world_[mesh].end());
+  }
   scene.ready_=true;
   return; // The initial draws are already queued, exactly once.
  }
@@ -773,7 +786,7 @@ bool Renderer::FlushWorld() {
    // Dense crowns need not promote 90k-triangle leaf geometry merely because
    // their bounding sphere is tall. Keep authored LODs; change only selection.
    const bool tree=a>=unsigned(authored::Asset::Oak) && a<=unsigned(authored::Asset::DeadTree);
-   const unsigned level=item.reserved || portrait_?0:authored::SelectLod(pixels*(tree?.55f:1.f));
+   const unsigned level=(item.reserved&1) || portrait_?0:authored::SelectLod(pixels*(tree?.55f:1.f));
    if(level) world_[slot+level].push_back(item);else batch[retained++]=item;
   }
   batch.resize(retained);
@@ -788,7 +801,12 @@ bool Renderer::FlushWorld() {
  std::array<unsigned,passCount> batchCounts{};
  const std::array<visual::Frustum,passCount> frusta={visual::Frustum(shadowProjection_[0]),
    visual::Frustum(shadowProjection_[1]),visual::Frustum(viewProjection_)};
+ bool cacheFar=!portrait_ && staticShadowCacheEnabled_;
+ std::size_t shadowKeyCount=0;
+ if(cacheFar && std::memcmp(&staticShadowProjection_,&shadowProjection_[0],sizeof(staticShadowProjection_))!=0)
+   staticShadowValid_=false;
  instanceScratch_.clear();
+ staticShadowFlags_.clear();
  for (unsigned mesh=0;mesh<meshCount;++mesh) {
   std::array<UINT,8> counts{},offsets{};
   for (auto& item : world_[mesh]) {
@@ -814,9 +832,52 @@ bool Renderer::FlushWorld() {
    }
   }
   instanceScratch_.resize(end);
+  if(cacheFar)staticShadowFlags_.resize(end);
   // Stable counting scatter preserves the old mask/mesh draw order in one scan.
-  for (const auto& item : world_[mesh]) if (item.visibility)
-    instanceScratch_[offsets[item.visibility]++]=item.instance;
+  for (const auto& item : world_[mesh]) if (item.visibility){
+    const auto index=offsets[item.visibility]++;instanceScratch_[index]=item.instance;
+    // Only immutable unskinned scenery enters this cache. Character palettes
+    // and deforming attachments remain dynamic even inside a StaticScene.
+    if(!cacheFar)continue;
+    const bool fixed=(item.reserved&2)!=0;staticShadowFlags_[index]=fixed;
+    // Canonical mesh/source order, independent of color-frustum mask sorting.
+    // Turning the camera must not invalidate unchanged far-light geometry.
+    if((item.visibility&1) && fixed){
+     if(shadowKeyCount==staticShadowKeys_.size()){
+      staticShadowValid_=false;staticShadowKeys_.push_back({mesh,item.instance.world});++shadowCacheStats_.keyUpdates;
+     }else{
+      auto& key=staticShadowKeys_[shadowKeyCount];
+      if(key.mesh!=mesh || std::memcmp(&key.world,&item.instance.world,sizeof(key.world))!=0){
+       // Invalidate before changing the key, including frames discarded later.
+       staticShadowValid_=false;key={mesh,item.instance.world};++shadowCacheStats_.keyUpdates;
+      }
+     }
+     ++shadowKeyCount;
+    }
+  }
+ }
+ if(cacheFar && shadowKeyCount!=staticShadowKeys_.size()){
+  staticShadowValid_=false;staticShadowKeys_.resize(shadowKeyCount);
+ }
+ // A dynamic-only scene has nothing to reuse; retain the cheap original clear.
+ cacheFar=cacheFar && shadowKeyCount!=0;
+ const bool reuseFar=cacheFar && staticShadowValid_;std::uint64_t staticTriangles=0;
+ if(cacheFar){
+  staticShadowBatches_.clear();dynamicShadowBatches_.clear();
+  for(unsigned b=0;b<batchCounts[0];++b){
+   const auto& batch=passes[0][b];
+   for(UINT first=batch.first;first<batch.first+batch.count;){
+    const bool fixed=staticShadowFlags_[first]!=0;UINT end=first+1;
+    while(end<batch.first+batch.count && (staticShadowFlags_[end]!=0)==fixed)++end;
+    (fixed?staticShadowBatches_:dynamicShadowBatches_).push_back({batch.mesh,first,end-first});
+    if(fixed){
+     staticTriangles+=std::uint64_t(meshes_[batch.mesh].count/3)*(end-first);
+    }
+    first=end;
+   }
+  }
+  // The exact canonical key was compared in place during scatter. Stable
+  // frames neither allocate nor rewrite it; LOD/transform/removal still miss.
  }
  // Shadow-only/fully culled scenes do not consume surface cloud lighting.
  const auto combatLightBlock=portrait_ || !combatLightingEnabled_?visual::TransientLightBlock{}:combatLights_.Block();
@@ -855,7 +916,7 @@ bool Renderer::FlushWorld() {
   const bool shadowPass=pass<colorPass;
   if (shadowPass) {
    if(!BindTargets(0,nullptr,shadowDepth_[pass].Get()))return false;
-   context_->ClearDepthStencilView(shadowDepth_[pass].Get(),D3D11_CLEAR_DEPTH,1,0);
+   if(pass!=0 || !cacheFar)context_->ClearDepthStencilView(shadowDepth_[pass].Get(),D3D11_CLEAR_DEPTH,1,0);
   }
   Constants data{}; data.atmosphere.x=atmospherePhase_; XMStoreFloat4x4(&data.wvp,XMMatrixTranspose(XMLoadFloat4x4(shadowPass?&shadowProjection_[pass]:&viewProjection_)));
   for (unsigned layer=0;layer<visual::shadowLayers;++layer)
@@ -882,9 +943,10 @@ bool Renderer::FlushWorld() {
    BindSamplers(RenderBindings::Stage::Pixel,shader::sampler::font,1,fontSampler_.GetAddressOf());
   }
   if(!FrameActive())return false;
+  const auto draw=[&](const auto& batches,unsigned count){
   unsigned skinActive=0;
-  for (unsigned b=0;b<batchCounts[pass];++b) {
-   const auto& batch=passes[pass][b];
+  for (unsigned b=0;b<count;++b) {
+   const auto& batch=batches[b];
    const auto& mesh=meshes_[batch.mesh];
    const unsigned skin=(visual::IsBodyMesh(static_cast<visual::Mesh>(batch.mesh))||visual::IsGarmentMesh(static_cast<visual::Mesh>(batch.mesh))||authored::Animated(batch.mesh))?1:visual::IsHandMesh(static_cast<visual::Mesh>(batch.mesh))?2:0;
    if(skin!=skinActive) {
@@ -896,6 +958,23 @@ bool Renderer::FlushWorld() {
    context_->DrawIndexedInstanced(mesh.count,batch.count,mesh.start,0,batch.first);
    ++drawCalls_; triangles_+=mesh.count/3*batch.count;
   }
+  };
+  if(pass==0 && cacheFar){
+   if(!reuseFar){
+    if(!BindTargets(0,nullptr,staticShadowDepth_.Get()))return false;
+    context_->ClearDepthStencilView(staticShadowDepth_.Get(),D3D11_CLEAR_DEPTH,1,0);
+    draw(staticShadowBatches_,unsigned(staticShadowBatches_.size()));
+    if(!FrameActive())return false;
+    staticShadowProjection_=shadowProjection_[0];staticShadowValid_=true;
+    ++shadowCacheStats_.rebuilds;
+   } else {++shadowCacheStats_.hits;shadowCacheStats_.avoidedTriangles+=staticTriangles;}
+   // The live destination was bound above to remove all SRV aliases; unbind
+   // both depth views before copying the complete D32 subresource.
+   if(!BindTargets(0,nullptr,nullptr))return false;
+   context_->CopySubresourceRegion(shadowTexture_.Get(),0,0,0,0,staticShadowTexture_.Get(),0,nullptr);
+   if(!BindTargets(0,nullptr,shadowDepth_[0].Get()))return false;
+   draw(dynamicShadowBatches_,unsigned(dynamicShadowBatches_.size()));
+  }else draw(passes[pass],batchCounts[pass]);
  }
  // Consume even a fully culled queue before changing camera/portrait state.
  for (auto& batch : world_) batch.clear();

@@ -1,6 +1,7 @@
 #include "engine/FontAtlas.h"
 #include <vector>
 bool FontAtlas::Initialize(ID3D11Device* device) {
+  if(!device)return false;
   // Rasterize the installed Windows font into a 256 KiB atlas. No font file is
   // copied, modified or downloaded. Grayscale AA avoids colored subpixel fringes.
   HDC dc=CreateCompatibleDC(nullptr); if (!dc) return false;
@@ -27,6 +28,8 @@ bool FontAtlas::Initialize(ID3D11Device* device) {
   D3D11_TEXTURE2D_DESC desc{}; desc.Width=512; desc.Height=512; desc.MipLevels=desc.ArraySize=1;
   desc.Format=DXGI_FORMAT_R8_UNORM; desc.SampleDesc.Count=1; desc.Usage=D3D11_USAGE_IMMUTABLE; desc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
   D3D11_SUBRESOURCE_DATA data{pixels.data(),512,0}; Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
-  return SUCCEEDED(device->CreateTexture2D(&desc,&data,texture.GetAddressOf())) &&
-    SUCCEEDED(device->CreateShaderResourceView(texture.Get(),nullptr,view_.GetAddressOf()));
+  Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> view;
+  if(FAILED(device->CreateTexture2D(&desc,&data,texture.GetAddressOf())) ||
+    FAILED(device->CreateShaderResourceView(texture.Get(),nullptr,view.GetAddressOf())))return false;
+  view_=std::move(view);return true;
 }
