@@ -575,7 +575,7 @@ CharacterSelection::Action CharacterSelection::Update(float seconds,const Input&
   if(input.Pressed(VK_TAB)) {
     nameRepeatKey_=0;
     keyboardHints_=true;hintAge_=0;
-    const int direction=input.Held(VK_SHIFT)?-1:1;
+    const int direction=(input.Modifiers(VK_TAB)&KeyTransitions::Shift)?-1:1;
     do {focus_=Control((int(focus_)+direction+int(Control::None))%int(Control::None));} while(!Enabled(focus_));
   }
   if(page_==Page::Roster && (input.Pressed(VK_DOWN) || input.Pressed(VK_UP)) && ProfileCount()>0) {
@@ -617,16 +617,17 @@ CharacterSelection::Action CharacterSelection::Update(float seconds,const Input&
   if(heldRotation==Control::None){rotateControl_=Control::None;rotateHold_=0;rotateRepeated_=false;}
   if(focus_==Control::Name && page_==Page::Customize) {
     const auto previousName=draftName_;
-    const bool control=input.Held(VK_CONTROL),alt=input.Held(VK_MENU),shift=input.Held(VK_SHIFT);
-    if(control && !alt && input.Pressed('A'))nameEditor_.All(draftName_);
-    if(control && !alt && input.Pressed('V'))nameEditor_.Insert(draftName_,input.PasteText());
+    const bool control=input.Held(VK_CONTROL),alt=input.Held(VK_MENU);
+    const auto shortcut=[&](int key){return input.Pressed(key) && (input.Modifiers(key)&(KeyTransitions::Control|KeyTransitions::Alt))==KeyTransitions::Control;};
+    if(shortcut('A'))nameEditor_.All(draftName_);
+    if(shortcut('V'))nameEditor_.Insert(draftName_,input.PasteText());
     if(!control && !alt) {
       const auto editKey=[&](int key){
-        if(key==VK_LEFT || key==VK_RIGHT)nameEditor_.Move(draftName_,key==VK_LEFT?-1:1,shift);
+        if(key==VK_LEFT || key==VK_RIGHT)nameEditor_.Move(draftName_,key==VK_LEFT?-1:1,(input.Modifiers(key)&KeyTransitions::Shift)!=0);
         else nameEditor_.Erase(draftName_,key==VK_BACK);
       };
       bool began=false;
-      for(int key:{VK_LEFT,VK_RIGHT,VK_BACK,VK_DELETE})if(input.Pressed(key)) {
+      for(int key:{VK_LEFT,VK_RIGHT,VK_BACK,VK_DELETE})if(input.Pressed(key) && !(input.Modifiers(key)&(KeyTransitions::Control|KeyTransitions::Alt))) {
         editKey(key);nameRepeatKey_=key;nameRepeatDelay_=.40f;began=true;
       }
       if(nameRepeatKey_ && !input.Held(nameRepeatKey_))nameRepeatKey_=0;
@@ -634,13 +635,13 @@ CharacterSelection::Action CharacterSelection::Update(float seconds,const Input&
         nameRepeatDelay_-=dt;
         while(nameRepeatDelay_<=0){editKey(nameRepeatKey_);nameRepeatDelay_+=.05f;}
       }
-      if(input.Pressed(VK_HOME))nameEditor_.Place(draftName_,0,shift);
-      if(input.Pressed(VK_END))nameEditor_.Place(draftName_,rpg::NameLength(draftName_),shift);
+      if(input.Pressed(VK_HOME))nameEditor_.Place(draftName_,0,(input.Modifiers(VK_HOME)&KeyTransitions::Shift)!=0);
+      if(input.Pressed(VK_END))nameEditor_.Place(draftName_,rpg::NameLength(draftName_),(input.Modifiers(VK_END)&KeyTransitions::Shift)!=0);
       if(input.NativeText()) {
         nameEditor_.Insert(draftName_,input.Characters());
       } else {
         // Deterministic synthetic input used by tools/tests without a message loop.
-        for(int key='A';key<='Z';++key)if(input.Pressed(key))nameEditor_.Insert(draftName_,std::string(1,char((shift!=input.CapsLock())?key:key+32)));
+        for(int key='A';key<='Z';++key)if(input.Pressed(key) && !(input.Modifiers(key)&(KeyTransitions::Control|KeyTransitions::Alt)))nameEditor_.Insert(draftName_,std::string(1,char((((input.Modifiers(key)&KeyTransitions::Shift)!=0)!=input.CapsLock())?key:key+32)));
         if(input.Pressed(VK_SPACE))nameEditor_.Insert(draftName_," ");
         for(auto key:{VK_OEM_MINUS,VK_OEM_7})if(input.Pressed(key))nameEditor_.Insert(draftName_,key==VK_OEM_MINUS?"-":"'");
       }

@@ -135,6 +135,7 @@ add_library(MediterraneanClient STATIC
   engine/RoomReverb.cpp
   engine/RecordedAudio.cpp
   engine/Renderer.cpp
+  engine/TexturePreparation.cpp
   engine/RenderBindings.cpp
   engine/RendererGlow.cpp
   engine/RendererPressure.cpp
@@ -273,6 +274,14 @@ if (BUILD_TESTING)
   add_test(NAME GpuFrameQueueTests COMMAND GpuFrameQueueTests)
   set_tests_properties(GpuFrameQueueTests PROPERTIES TIMEOUT 30)
   add_executable(GraphicsLifecycleTests tests/GraphicsLifecycleTests.cpp)
+  add_executable(TexturePreparationTests tests/TexturePreparationTests.cpp)
+  target_link_libraries(TexturePreparationTests PRIVATE MediterraneanClient)
+  add_test(NAME TexturePreparationTests COMMAND TexturePreparationTests)
+  set_tests_properties(TexturePreparationTests PROPERTIES TIMEOUT 90)
+  add_executable(ExecutionTests tests/ExecutionTests.cpp)
+  target_link_libraries(ExecutionTests PRIVATE MediterraneanClient)
+  add_test(NAME ExecutionTests COMMAND ExecutionTests)
+  set_tests_properties(ExecutionTests PROPERTIES TIMEOUT 60)
   add_executable(RenderBindingsTests tests/RenderBindingsTests.cpp engine/RenderBindings.cpp)
   target_include_directories(RenderBindingsTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
   target_compile_definitions(RenderBindingsTests PRIVATE NOMINMAX UNICODE _UNICODE)

@@ -296,7 +296,7 @@ void Game::Update(double seconds,const Input& input,float wheel) {
     command.restart=input.Pressed('R');
     command.usePotion=command.usePotion || input.Pressed('Q'); command.equipWeapon=command.equipWeapon || input.Pressed('G');
     for (int i=0;i<10;++i) if (input.Pressed(i==9?'0':'1'+i)) {
-      const bool control=input.Held(VK_CONTROL) || input.Held(VK_LCONTROL) || input.Held(VK_RCONTROL);
+      const bool control=(input.Modifiers(i==9?'0':'1'+i)&KeyTransitions::Control)!=0;
       const int spell=interface_.HotbarSpell(i+(control?10:0),simulation_.Class());
       if(spell==4) command.usePotion=true; else if(spell>=0) command.ability=spell;
       break;

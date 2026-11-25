@@ -9,6 +9,11 @@
 // references before resize/reconstruction; no frame-time Get* state queries.
 class RenderBindings {
 public:
+  RenderBindings()=default;
+  RenderBindings(const RenderBindings&)=delete;
+  RenderBindings& operator=(const RenderBindings&)=delete;
+  RenderBindings(RenderBindings&&)=delete;
+  RenderBindings& operator=(RenderBindings&&)=delete;
   enum class Stage { Vertex, Pixel };
   struct Statistics {std::uint64_t requests=0,calls=0,skipped=0,hazardUnbinds=0,rejected=0;};
   HRESULT Attach(ID3D11DeviceContext* context);

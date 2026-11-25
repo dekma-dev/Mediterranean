@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include "platform/KeyTransitions.h"
 class Input {
 public:
   // Sample the platform once; transitions are also testable without desktop input.
@@ -19,10 +20,13 @@ public:
     std::string text;
     bool nativeClipboard=false;
     std::string clipboard;
+    bool nativeKeys=false;
+    KeyTransitions::Edges keys;
   };
-  void Update(HWND window,bool relativeMouse=false,float mouseX=0,float mouseY=0,const std::string& characters={}) {
+  void Update(HWND window,bool relativeMouse=false,float mouseX=0,float mouseY=0,const std::string& characters={},const KeyTransitions::Edges& keys={}) {
     Frame frame; frame.focused=GetForegroundWindow()==window;
     frame.nativeText=true;frame.text=characters;
+    frame.nativeKeys=true;frame.keys=keys;
     frame.nativeClipboard=true;
     frame.capsLock=(GetKeyState(VK_CAPITAL)&1)!=0;
     frame.relativeMouse=relativeMouse; frame.mouseX=mouseX; frame.mouseY=mouseY;
@@ -35,10 +39,16 @@ public:
     const bool focused=frame.focused;capsLock_=frame.capsLock;
     nativeText_=frame.nativeText;characters_=focused && wasFocused_?frame.text:std::string{};
     nativeClipboard_=frame.nativeClipboard;clipboard_=frame.clipboard;
+    const auto modifiers=static_cast<unsigned char>(
+      ((frame.down[VK_CONTROL] || frame.down[VK_LCONTROL] || frame.down[VK_RCONTROL])?KeyTransitions::Control:0)|
+      ((frame.down[VK_SHIFT] || frame.down[VK_LSHIFT] || frame.down[VK_RSHIFT])?KeyTransitions::Shift:0)|
+      ((frame.down[VK_MENU] || frame.down[VK_LMENU] || frame.down[VK_RMENU])?KeyTransitions::Alt:0));
     for (int key = 0; key < 256; ++key) {
       const bool down = focused && frame.down[key];
-      pressed_[key] = wasFocused_ && down && !held_[key];
-      released_[key] = focused && wasFocused_ && !down && held_[key];
+      const bool mouse=key==VK_LBUTTON || key==VK_RBUTTON || key==VK_MBUTTON || key==VK_XBUTTON1 || key==VK_XBUTTON2;
+      pressed_[key] = focused && wasFocused_ && (frame.nativeKeys && !mouse?frame.keys.pressed[key]:down && !held_[key]);
+      released_[key] = focused && wasFocused_ && (frame.nativeKeys && !mouse?frame.keys.released[key]:!down && held_[key]);
+      modifiers_[key]=frame.nativeKeys && frame.keys.pressed[key]?frame.keys.modifiers[key]:modifiers;
       held_[key] = down;
     }
     const POINT mouse=frame.screen;
@@ -62,6 +72,7 @@ public:
     held_.fill(false); pressed_.fill(false); released_.fill(false);
     dx_=dy_=0;
     characters_.clear();
+    modifiers_.fill(0);
   }
   bool Held(int key) const { return held_[key]; }
   bool Focused() const { return wasFocused_; }
@@ -89,6 +100,7 @@ public:
   }
   bool Pressed(int key) const { return pressed_[key]; }
   bool Released(int key) const { return released_[key]; }
+  unsigned Modifiers(int key)const{return modifiers_[key];}
   float MouseX() const { return dx_; }
   float MouseY() const { return dy_; }
   float ClientX() const { return clientX_; }
@@ -97,6 +109,7 @@ public:
   float Height() const { return height_; }
 private:
   std::array<bool,256> held_{}, pressed_{}, released_{};
+  std::array<unsigned char,256> modifiers_{};
   POINT previous_{};
   float dx_ = 0, dy_ = 0;
   float clientX_ = -1, clientY_ = -1,width_ = 1280,height_ = 720;

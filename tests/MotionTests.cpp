@@ -280,6 +280,11 @@ void TransitionRegressions() {
   const char* tree="MEDITERRANEAN 3\n-14.76 10 100 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
     "100 -13.19 10 80 0 0 1 0 -1.5707963\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
   rpg::Simulation blocked; Require(blocked.Load(tree),"Close, occluded pursuit fixture must load");
+  // This tests navigation toward an already observed target. Loading an
+  // occluded pursuit no longer invents knowledge of the hidden player;
+  // acquisition and memory-free loading are covered by CombatTests.
+  auto& observer=const_cast<rpg::Enemy&>(blocked.Enemies()[0]);
+  observer.hasSeenPlayer=true;observer.lastSeenPlayer=blocked.Player();
   bool attacked=false; float travelled=0;
   for (int i=0;i<360 && !attacked;++i) {
     blocked.Update(1.f/60,{});

@@ -1,4 +1,5 @@
 #pragma once
+#include "engine/TexturePreparation.h"
 #include <d3d11.h>
 #include <DirectXMath.h>
 #include <wrl/client.h>
@@ -26,7 +27,9 @@ public:
   static constexpr unsigned maxWorldInstances=8192;
   // Optional immutable preview mesh replaces all three body LODs for this
   // renderer only. Read synchronously; no borrowed pointer survives this call.
-  bool Initialize(HWND window, int width, int height,const visual::BodyGeometry* previewBody=nullptr);
+  bool Initialize(HWND window, int width, int height,const visual::BodyGeometry* previewBody=nullptr,
+    const std::function<bool()>& keepLoading={});
+  const resources::TexturePreparationStats& TextureLoadingStats()const{return textureLoadingStats_;}
   bool Resize(int width, int height);
   bool BeginFrame();
   bool EndFrame(bool vsync = true);
@@ -218,14 +221,19 @@ private:
   bool ready_=false,frameActive_=false;
   HRESULT failureCode_=S_OK,removedReason_=S_OK;
   bool CreateTargets(int width, int height);
-  bool CreatePipeline(const visual::BodyGeometry* previewBody);
+  resources::TexturePreparationStats textureLoadingStats_;
+  DWORD loadingThread_=0;
+  bool ContinueLoading(const std::function<bool()>& keepLoading);
+  bool TakeTexture(resources::TexturePreparation& preparation,const resources::TextureRequest& expected,
+    resources::PreparedTexture& texture,const std::function<bool()>& keepLoading);
+  bool CreatePipeline(const visual::BodyGeometry* previewBody,resources::TexturePreparation& preparation,const std::function<bool()>& keepLoading);
   visual::TransientLights combatLights_;
   bool combatLightingEnabled_=true;
   Microsoft::WRL::ComPtr<ID3D11Buffer> combatLightConstants_;
   bool FlushHud();
-  bool CreateMaterials();
-  bool CreateSurfaceMaterials();
-  bool CreateUiArtwork();
+  bool CreateMaterials(resources::TexturePreparation& preparation,const std::function<bool()>& keepLoading);
+  bool CreateSurfaceMaterials(resources::TexturePreparation& preparation,const std::function<bool()>& keepLoading);
+  bool CreateUiArtwork(resources::TexturePreparation& preparation,const std::function<bool()>& keepLoading);
   void DrawSky();
   void PrepareCloudLight();
   bool FlushWorld();

@@ -31,7 +31,11 @@ std::string Renderer::AdapterDiagnostics() const {
   report<<"\nDriver version: "<<HIWORD(version.HighPart)<<'.'<<LOWORD(version.HighPart)<<'.'
         <<HIWORD(version.LowPart)<<'.'<<LOWORD(version.LowPart);
  else report<<"\nDriver version: unavailable";
- report<<"\nD3D feature level: "<<unsigned(device_->GetFeatureLevel())<<'\n';
+ report<<"\nD3D feature level: "<<unsigned(device_->GetFeatureLevel())
+       <<"\nTexture preparation: "<<textureLoadingStats_.prepared<<" prepared / "<<textureLoadingStats_.delivered<<" delivered"
+       <<"\nTexture staging peak bytes / packets: "<<textureLoadingStats_.peakBytes<<" / "<<textureLoadingStats_.peakPackets
+       <<"\nTexture decode / producer wait / consumer wait seconds: "<<textureLoadingStats_.decodeSeconds<<" / "
+       <<textureLoadingStats_.producerWaitSeconds<<" / "<<textureLoadingStats_.consumerWaitSeconds<<'\n';
  return report.str();
 }
 namespace {
@@ -59,7 +63,7 @@ Renderer::~Renderer() {
  }
  gpuQueue_.Reset();
 }
-bool Renderer::Initialize(HWND window, int width, int height,const visual::BodyGeometry* previewBody) {
+bool Renderer::Initialize(HWND window, int width, int height,const visual::BodyGeometry* previewBody,const std::function<bool()>& keepLoading) {
  if(device_ || FAILED(failureCode_)) return Check(E_UNEXPECTED,L"Initialize renderer twice");
  if(!IsWindow(window) || width<=0 || height<=0 || width>D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION || height>D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION)
   return Check(E_INVALIDARG,L"Initialize renderer dimensions/window");
@@ -70,6 +74,15 @@ bool Renderer::Initialize(HWND window, int width, int height,const visual::BodyG
   }
   catch(const std::exception&) {error_=L"Invalid imported body preview geometry.";return false;}
  }
+ loadingThread_=GetCurrentThreadId();
+ if(!ContinueLoading(keepLoading))return false;
+ // Local ownership joins/cancels the CPU worker on EVERY exit. A replacement
+ // renderer cannot receive a packet from an earlier device generation.
+ resources::TexturePreparation preparation;
+ struct LoadingStats {
+  Renderer& renderer;resources::TexturePreparation& preparation;
+  ~LoadingStats(){preparation.Stop();renderer.textureLoadingStats_=preparation.Stats();}
+ } loadingStats{*this,preparation};
  DXGI_SWAP_CHAIN_DESC d{};
  d.BufferCount=2; d.BufferDesc.Width=width; d.BufferDesc.Height=height;
  d.BufferDesc.Format=DXGI_FORMAT_R8G8B8A8_UNORM; d.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -93,7 +106,8 @@ bool Renderer::Initialize(HWND window, int width, int height,const visual::BodyG
  ComPtr<IDXGIFactory> factory;
  if (SUCCEEDED(swapChain_->GetParent(IID_PPV_ARGS(factory.GetAddressOf()))))
   factory->MakeWindowAssociation(window,DXGI_MWA_NO_ALT_ENTER);
- if (!CreateTargets(width,height) || !CreatePipeline(previewBody) || !CreateUiArtwork()) return false;
+ if (!CreateTargets(width,height) || !CreatePipeline(previewBody,preparation,keepLoading) || !CreateUiArtwork(preparation,keepLoading)) return false;
+ if(!ContinueLoading(keepLoading))return false;
  SetCamera({0,3,-6},{0,1,0});
  ready_=true;
  return true;
@@ -131,7 +145,29 @@ bool Renderer::Resize(int width, int height) {
  if (!Check(swapChain_->ResizeBuffers(0,width,height,DXGI_FORMAT_UNKNOWN,0),L"Resize swap chain")) return false;
  return CreateTargets(width,height);
 }
-bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
+bool Renderer::ContinueLoading(const std::function<bool()>& keepLoading) {
+ if(GetCurrentThreadId()!=loadingThread_)return Check(E_UNEXPECTED,L"Texture upload on a foreign thread");
+ return !keepLoading || keepLoading() || Check(HRESULT_FROM_WIN32(ERROR_CANCELLED),L"Cancel graphics loading");
+}
+bool Renderer::TakeTexture(resources::TexturePreparation& preparation,const resources::TextureRequest& expected,
+ resources::PreparedTexture& texture,const std::function<bool()>& keepLoading) {
+ for(;;) {
+  if(!ContinueLoading(keepLoading)){preparation.Cancel();return false;}
+  const auto result=preparation.Take(texture);
+  if(result==resources::TexturePreparation::Result::Pending)continue;
+  if(result==resources::TexturePreparation::Result::Ready) {
+   if(!(texture.Request()==expected) || !texture.Pixels() || texture.Bytes()!=expected.Bytes())
+    return Check(E_INVALIDARG,L"Prepared texture does not match upload manifest");
+   return true;
+  }
+  if(result==resources::TexturePreparation::Result::Failed) {
+   const auto error=preparation.Error();
+   return Check(FAILED(preparation.FailureCode())?preparation.FailureCode():E_UNEXPECTED,error.c_str());
+  }
+  return Check(result==resources::TexturePreparation::Result::Cancelled?HRESULT_FROM_WIN32(ERROR_CANCELLED):E_UNEXPECTED,L"Texture preparation ended before upload");
+ }
+}
+bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody,resources::TexturePreparation& preparation,const std::function<bool()>& keepLoading) {
  const auto *vs=&compiled_scene::VSMain,*ps=&compiled_scene::PSMain,*world=&compiled_scene::VSWorld,*shadow=&compiled_scene::VSShadow;
  const auto *body=&compiled_scene::VSBody,*bodyShadow=&compiled_scene::VSBodyShadow;
  const auto *hand=&compiled_scene::VSHand,*handShadow=&compiled_scene::VSHandShadow;
@@ -171,6 +207,7 @@ bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
  // This preserves draw indexing without a zero-filled weight for every rock,
  // leaf and terrain vertex, or additional vertex-buffer binds per draw.
  for(unsigned group=0;group<2;++group) for (unsigned i=0;i<meshCount;++i) {
+  if(!ContinueLoading(keepLoading))return false;
   const auto kind=static_cast<visual::Mesh>(i);
   const bool skinned=visual::IsBodyMesh(kind)||visual::IsGarmentMesh(kind)||visual::IsHandMesh(kind)||authored::Animated(i);
   if(skinned!=(group==0))continue;
@@ -270,15 +307,10 @@ bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody) {
  if (!Check(device_->CreateBlendState(&blend,hudBlend_.GetAddressOf()),L"Create interface blending")) return false;
  channel.DestBlend=D3D11_BLEND_ONE; channel.SrcBlendAlpha=D3D11_BLEND_ZERO; channel.DestBlendAlpha=D3D11_BLEND_ONE;
  if (!Check(device_->CreateBlendState(&blend,effectBlend_.GetAddressOf()),L"Create effect blending")) return false;
- return CreateMaterials();
+ return CreateMaterials(preparation,keepLoading);
 }
 
-bool Renderer::CreateSurfaceMaterials() {
- const HRESULT apartment=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
- if(FAILED(apartment)&&apartment!=RPC_E_CHANGED_MODE)return Check(apartment,L"Initialize surface decoder");
- struct Apartment {bool owned;~Apartment(){if(owned)CoUninitialize();}} scope{SUCCEEDED(apartment)};
- ComPtr<IWICImagingFactory> factory;
- if(!Check(CoCreateInstance(CLSID_WICImagingFactory,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(factory.GetAddressOf())),L"Create surface decoder"))return false;
+bool Renderer::CreateSurfaceMaterials(resources::TexturePreparation& preparation,const std::function<bool()>& keepLoading) {
  for(unsigned group=0;group<2;++group)for(unsigned map=0;map<2;++map) {
   const UINT size=visual::SurfaceSize(group),layers=visual::SurfaceLayers(group);
   const unsigned viewIndex=group*2+map;
@@ -289,26 +321,11 @@ bool Renderer::CreateSurfaceMaterials() {
   if(!Check(device_->CreateTexture2D(&desc,nullptr,texture.GetAddressOf()),L"Create detailed surface array"))return false;
   texture->GetDesc(&desc);
   for(unsigned layer=0;layer<layers;++layer) {
-   const auto module=GetModuleHandleW(nullptr);
-   const auto resource=FindResourceW(module,MAKEINTRESOURCEW(320+visual::SurfaceSource(group,layer)*2+map),RT_RCDATA);
-   const auto loaded=resource?LoadResource(module,resource):nullptr;
-   auto* bytes=loaded?static_cast<BYTE*>(LockResource(loaded)):nullptr;
-   if(!bytes){error_=L"Embedded surface material missing; rebuild the complete executable.";return false;}
-   const auto count=SizeofResource(module,resource);
-   if(count>16*1024*1024){error_=L"Surface image exceeds resource budget.";return false;}
-   ComPtr<IWICStream> stream;ComPtr<IWICBitmapDecoder> decoder;ComPtr<IWICBitmapFrameDecode> frame;ComPtr<IWICFormatConverter> converter;
-   if(!Check(factory->CreateStream(stream.GetAddressOf()),L"Create surface stream") ||
-      !Check(stream->InitializeFromMemory(bytes,count),L"Read surface image") ||
-      !Check(factory->CreateDecoderFromStream(stream.Get(),nullptr,WICDecodeMetadataCacheOnLoad,decoder.GetAddressOf()),L"Decode surface image") ||
-      !Check(decoder->GetFrame(0,frame.GetAddressOf()),L"Read surface frame"))return false;
-   UINT width=0,height=0;
-   if(!Check(frame->GetSize(&width,&height),L"Read surface dimensions"))return false;
-   if(width!=size||height!=size){error_=L"Surface dimensions do not match the material manifest.";return false;}
-   if(!Check(factory->CreateFormatConverter(converter.GetAddressOf()),L"Create surface converter") ||
-      !Check(converter->Initialize(frame.Get(),GUID_WICPixelFormat32bppRGBA,WICBitmapDitherTypeNone,nullptr,0,WICBitmapPaletteTypeCustom),L"Convert surface map"))return false;
-   std::vector<BYTE> pixels(std::size_t(size)*size*4);
-   if(!Check(converter->CopyPixels(nullptr,size*4,UINT(pixels.size()),pixels.data()),L"Read surface pixels"))return false;
-   context_->UpdateSubresource(texture.Get(),D3D11CalcSubresource(0,layer,desc.MipLevels),nullptr,pixels.data(),size*4,0);
+   resources::PreparedTexture pixels;
+   const resources::TextureRequest expected{resources::TextureKind::Surface,viewIndex,layer,
+     320+visual::SurfaceSource(group,layer)*2+map,size,size,false};
+   if(!TakeTexture(preparation,expected,pixels,keepLoading))return false;
+   context_->UpdateSubresource(texture.Get(),D3D11CalcSubresource(0,layer,desc.MipLevels),nullptr,pixels.Pixels(),size*4,0);
   }
   if(!Check(device_->CreateShaderResourceView(texture.Get(),nullptr,surfaceViews_[viewIndex].ReleaseAndGetAddressOf()),L"Create detailed surface view"))return false;
   context_->GenerateMips(surfaceViews_[viewIndex].Get());
@@ -316,8 +333,8 @@ bool Renderer::CreateSurfaceMaterials() {
  }
  return true;
 }
-bool Renderer::CreateMaterials() {
- if(!CreateSurfaceMaterials()) return false;
+bool Renderer::CreateMaterials(resources::TexturePreparation& preparation,const std::function<bool()>& keepLoading) {
+ if(!CreateSurfaceMaterials(preparation,keepLoading)) return false;
  constexpr UINT size=visual::materialSize,layers=static_cast<UINT>(visual::Material::Count);
  D3D11_TEXTURE2D_DESC texture{}; texture.Width=texture.Height=size; texture.MipLevels=0; texture.ArraySize=layers;
  texture.Format=DXGI_FORMAT_R8G8B8A8_UNORM; texture.SampleDesc.Count=1; texture.Usage=D3D11_USAGE_DEFAULT;
@@ -326,6 +343,7 @@ bool Renderer::CreateMaterials() {
  if (!Check(device_->CreateTexture2D(&texture,nullptr,materials.GetAddressOf()),L"Create procedural material array")) return false;
  materials->GetDesc(&texture);
  for (UINT layer=0;layer<layers;++layer) {
+  if(!ContinueLoading(keepLoading))return false;
   const auto pixels=visual::BuildMaterialLayer(static_cast<visual::Material>(layer),size);
   context_->UpdateSubresource(materials.Get(),D3D11CalcSubresource(0,layer,texture.MipLevels),nullptr,pixels.data(),size*4,0);
  }
@@ -1108,42 +1126,22 @@ void Renderer::DrawUiArt(UiArt art,float x,float y,float width,float height,XMFL
  const Vertex d{{x*2-1,1-(y+height)*2,.5f},{uv.x,uv.w,texture},tint};
  hud_.insert(hud_.end(),{a,b,c,a,c,d});
 }
-bool Renderer::CreateUiArtwork() {
- // Resource-backed PNGs travel with the executable. Decode once, bounded to
- // under 29 MiB including mipmaps; WIC objects/pixels are released immediately.
- const HRESULT apartment=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
- if (FAILED(apartment) && apartment!=RPC_E_CHANGED_MODE) return Check(apartment,L"Initialize UI decoder apartment");
- struct Apartment {bool owned;~Apartment(){if(owned) CoUninitialize();}} scope{SUCCEEDED(apartment)};
- ComPtr<IWICImagingFactory> factory;
- if (!Check(CoCreateInstance(CLSID_WICImagingFactory,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(factory.GetAddressOf())),L"Create UI image decoder")) return false;
+bool Renderer::CreateUiArtwork(resources::TexturePreparation& preparation,const std::function<bool()>& keepLoading) {
  uiBytes_=effectTextureBytes_=0;
  for (unsigned i=0;i<=uiViews_.size();++i) {
   const bool effect=i==uiViews_.size();auto& textureView=effect?effectAtlas_:uiViews_[i];
-  const auto module=GetModuleHandleW(nullptr);
-  const auto resource=FindResourceW(module,MAKEINTRESOURCEW(effect?206:i==5?207:201+i),RT_RCDATA);
-  const auto loaded=resource?LoadResource(module,resource):nullptr;
-  auto* bytes=loaded?static_cast<BYTE*>(LockResource(loaded)):nullptr;
-  if (!bytes) {error_=L"Embedded interface artwork is missing. Rebuild the complete executable.";return false;}
-  ComPtr<IWICStream> stream;ComPtr<IWICBitmapDecoder> decoder;ComPtr<IWICBitmapFrameDecode> frame;
-  ComPtr<IWICBitmapScaler> scaler;ComPtr<IWICFormatConverter> converter;
   const UINT width=!effect && i==5?512:i==1?1536:1024,height=effect?512:i==5?256:i==1?864:i==3?768:1024;
-  if (!Check(factory->CreateStream(stream.GetAddressOf()),L"Create UI stream") ||
-      !Check(stream->InitializeFromMemory(bytes,SizeofResource(module,resource)),L"Read UI resource") ||
-      !Check(factory->CreateDecoderFromStream(stream.Get(),nullptr,WICDecodeMetadataCacheOnLoad,decoder.GetAddressOf()),L"Decode UI artwork") ||
-      !Check(decoder->GetFrame(0,frame.GetAddressOf()),L"Read UI artwork frame") ||
-      !Check(factory->CreateBitmapScaler(scaler.GetAddressOf()),L"Create UI scaler") ||
-      !Check(scaler->Initialize(frame.Get(),width,height,WICBitmapInterpolationModeFant),L"Scale UI artwork") ||
-      !Check(factory->CreateFormatConverter(converter.GetAddressOf()),L"Create UI converter") ||
-      !Check(converter->Initialize(scaler.Get(),GUID_WICPixelFormat32bppRGBA,WICBitmapDitherTypeNone,nullptr,0,WICBitmapPaletteTypeCustom),L"Convert UI artwork")) return false;
-  std::vector<BYTE> pixels(std::size_t(width)*height*4);
-  if (!Check(converter->CopyPixels(nullptr,width*4,UINT(pixels.size()),pixels.data()),L"Read UI pixels")) return false;
+  resources::PreparedTexture pixels;
+  const resources::TextureRequest expected{effect?resources::TextureKind::Effect:resources::TextureKind::Interface,
+    effect?0:i,0,effect?206:i==5?207:201+i,width,height,true};
+  if(!TakeTexture(preparation,expected,pixels,keepLoading))return false;
   D3D11_TEXTURE2D_DESC desc{};desc.Width=width;desc.Height=height;desc.ArraySize=1;
   desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;desc.SampleDesc.Count=1;
   desc.BindFlags=D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_RENDER_TARGET;desc.MiscFlags=D3D11_RESOURCE_MISC_GENERATE_MIPS;
   ComPtr<ID3D11Texture2D> texture;
   if (!Check(device_->CreateTexture2D(&desc,nullptr,texture.GetAddressOf()),L"Create UI texture") ||
       !Check(device_->CreateShaderResourceView(texture.Get(),nullptr,textureView.ReleaseAndGetAddressOf()),L"Create UI texture view")) return false;
-  context_->UpdateSubresource(texture.Get(),0,nullptr,pixels.data(),width*4,0);
+  context_->UpdateSubresource(texture.Get(),0,nullptr,pixels.Pixels(),width*4,0);
   context_->GenerateMips(textureView.Get());
   for(UINT w=width,h=height;;w=std::max(1u,w/2),h=std::max(1u,h/2)) {
    (effect?effectTextureBytes_:uiBytes_)+=std::size_t(w)*h*4;if(w==1 && h==1) break;

@@ -101,6 +101,10 @@ void NativeRecovery() {
     Check(game.CameraYaw()==yaw && game.CameraPitch()==pitch && game.CameraRange()==distance,"Recovery changed camera");
     Check(GraphicsLifecycleTestAccess::ClockReset(engine) && !GraphicsLifecycleTestAccess::Controls(engine).Held('1'),"Clock/input not resynchronized");
     auto& restored=GraphicsLifecycleTestAccess::Render(engine);
+    const auto prepared=restored.TextureLoadingStats();
+    Check(prepared.prepared==19 && prepared.delivered==19 && prepared.liveBytes==0 && prepared.livePackets==0 &&
+      prepared.peakBytes<=resources::TexturePreparation::defaultBudget && prepared.workerThread!=GetCurrentThreadId(),
+      "Reconstruction bypassed CPU preparation or retained staging packets");
     Check(!restored.HasTerrainSurface() && !restored.HasMapArtwork(),"Old-device views survived replacement");
     frame(generation?L"restored-2.png":L"restored-1.png");
     Check(Bytes(directory/"before.png")==Bytes(directory/(generation?"restored-2.png":"restored-1.png")),"Restored frame differs from original session");

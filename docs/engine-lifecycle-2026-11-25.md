@@ -117,8 +117,9 @@ test or every interactive gameplay scenario has been validated.
 
 1. Exercise real driver-loss/display-change scenarios in a controlled manual
    session; verify audio/camera/input continuity in visible play.
-2. Extend build-time contracts to vertex inputs, texture/sampler slots and the
-   structured skin-palette layout.
+2. Completed in the follow-up: vertex inputs, texture/sampler slots, structured
+   skin-palette layout and native binding ownership. See
+   `render-bindings-2026-11-25.md` for the implementation and validation.
 3. Give simulation/presentation scheduling explicit time ownership and bounded
    command/event queues; measure stalls before changing update semantics.
 4. Add asynchronous resource preparation with explicit render-thread upload

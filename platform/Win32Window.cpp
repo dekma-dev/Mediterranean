@@ -34,7 +34,7 @@ void Win32Window::EndMouseLook(bool cancelGesture) {
   // UI gestures also need cancellation when no camera capture is active.
   // Keep the notification latched if focus leaves and returns in one pump.
   inputCancelled_|=cancelGesture;
-  if (cancelGesture) wheel_=0;
+  if (cancelGesture) {wheel_=0;keys_.Clear();text_.clear();}
   if (!mouseLook_) return;
   mouseLook_=false; // ReleaseCapture sends WM_CAPTURECHANGED synchronously.
   ClipCursor(nullptr);
@@ -60,6 +60,18 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
     SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(window));
   }
   switch (msg) {
+  case WM_KEYDOWN:
+  case WM_SYSKEYDOWN:
+  case WM_KEYUP:
+  case WM_SYSKEYUP:
+    if(window && GetForegroundWindow()==hwnd) {
+      const bool down=msg==WM_KEYDOWN || msg==WM_SYSKEYDOWN;
+      const unsigned modifiers=((GetKeyState(VK_CONTROL)&0x8000)?KeyTransitions::Control:0)|
+        ((GetKeyState(VK_SHIFT)&0x8000)?KeyTransitions::Shift:0)|((GetKeyState(VK_MENU)&0x8000)?KeyTransitions::Alt:0);
+      window->keys_.Add(unsigned(wparam),down,(lparam&(LPARAM(1)<<30))!=0,modifiers);
+    }
+    // Keep native Alt+F4 and system-menu processing intact.
+    break;
   case WM_PAINT:
     if(window && window->loading_) {
       PAINTSTRUCT paint{};const HDC dc=BeginPaint(hwnd,&paint);RECT bounds{};GetClientRect(hwnd,&bounds);
@@ -119,7 +131,12 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
     return DefWindowProc(hwnd,msg,wparam,lparam);
   }
   case WM_ACTIVATEAPP:
-    if (window && !wparam) window->EndMouseLook(true);
+    if (window && !wparam) {window->clockInterrupted_=true;window->EndMouseLook(true);}
+    break;
+  case WM_POWERBROADCAST:
+    if(window && (wparam==PBT_APMSUSPEND || wparam==PBT_APMRESUMEAUTOMATIC || wparam==PBT_APMRESUMESUSPEND)) {
+      window->clockInterrupted_=true;window->EndMouseLook(true);
+    }
     break;
   case WM_CAPTURECHANGED:
     // Our normal ReleaseCapture must not synthesize an interruption after
@@ -131,9 +148,11 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
   case WM_CANCELMODE:
   case WM_ENTERSIZEMOVE:
   case WM_ENTERMENULOOP:
+  case WM_EXITSIZEMOVE:
+  case WM_EXITMENULOOP:
   case WM_SIZE:
   case WM_MOVE:
-    if (window) window->EndMouseLook(true);
+    if (window) {window->clockInterrupted_=true;window->EndMouseLook(true);}
     break;
   case WM_SETCURSOR:
     if (window && window->mouseLook_) { SetCursor(nullptr); return TRUE; }
@@ -143,7 +162,7 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
     }
     return DefWindowProc(hwnd,msg,wparam,lparam);
   case WM_DPICHANGED: {
-    if (window) window->EndMouseLook(true);
+    if (window) {window->clockInterrupted_=true;window->EndMouseLook(true);}
     if (window) window->RefreshCursor(HIWORD(wparam));
     const auto* suggested=reinterpret_cast<const RECT*>(lparam);
     RECT rect=*suggested;

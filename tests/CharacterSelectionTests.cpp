@@ -846,6 +846,17 @@ void NameEditing(const std::filesystem::path& root) {
   d.frame.text="ри";d.Step(game);d.frame.text.clear();Check(game.Selection().DraftName()=="Ариёна","Native selected insertion failed");
   d.frame.down[VK_CONTROL]=true;d.Key(game,'A');d.frame.clipboard="Мирослав-Ёж123";d.Key(game,'V');d.frame.down[VK_CONTROL]=false;
   Check(game.Selection().DraftName()=="Мирослав-Ёж","Clipboard filtering or UTF-8 paste failed");
+  // The entire shortcut can be released while the render thread is busy.
+  d.frame.nativeKeys=true;
+  const auto tap=[&](int key,unsigned modifiers){
+    KeyTransitions edges;edges.Add(unsigned(key),true,false,modifiers);edges.Add(unsigned(key),false,false);
+    d.frame.keys=edges.Consume();d.Step(game);d.frame.keys={};d.Step(game);
+  };
+  tap('A',KeyTransitions::Control);d.frame.clipboard="Светозар";tap('V',KeyTransitions::Control);
+  Check(game.Selection().DraftName()=="Светозар","Released Ctrl shortcut was lost or inserted its letter");
+  tap(VK_HOME,0);tap(VK_RIGHT,KeyTransitions::Shift);
+  Check(game.Selection().NameSelection().Begin()==0 && game.Selection().NameSelection().End()==1,"Released Shift changed text selection");
+  d.frame.nativeKeys=false;
   // Measured proportional glyph boundaries are used in local layout space.
   for(const auto size:{std::pair<int,int>{960,600},{1920,1080},{2560,1080}}) {
     d.frame.width=size.first;d.frame.height=size.second;d.Step(game);

@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 #include "platform/MouseMotion.h"
+#include "platform/KeyTransitions.h"
 #include <string>
 
 class Win32Window {
@@ -24,6 +25,8 @@ public:
   void SetLoading(bool enabled) { loading_=enabled;if(enabled && hwnd_) {InvalidateRect(hwnd_,nullptr,FALSE);UpdateWindow(hwnd_);} }
   float ConsumeWheel() { const float result = wheel_; wheel_ = 0; return result; }
   std::string ConsumeText() { auto result=std::move(text_);text_.clear();return result; }
+  KeyTransitions::Edges ConsumeKeys(){return keys_.Consume();}
+  bool ConsumeClockInterruption(){const bool result=clockInterrupted_;clockInterrupted_=false;return result;}
   // Accepted world gestures only; UI button presses never own native capture.
   bool SetMouseLook(unsigned buttons);
   bool MouseLook() const { return mouseLook_; }
@@ -39,6 +42,8 @@ private:
   HCURSOR cursor_ = nullptr;
   float wheel_ = 0;
   std::string text_;
+  KeyTransitions keys_;
+  bool clockInterrupted_=false;
   bool fullscreen_ = false;
   bool visible_ = false;
   bool loading_=false;

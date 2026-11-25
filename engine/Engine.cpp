@@ -10,16 +10,27 @@
 #include <iomanip>
 #include <psapi.h>
 #include <vector>
+#include <sstream>
+#include <utility>
 
 #include "engine/Renderer.h"
 #include "engine/Audio.h"
 #include "game/Game.h"
 #include "game/CharacterView.h"
 #include "platform/Win32Window.h"
+#include "platform/MessagePump.h"
 
 Engine::Engine() = default;
 
 Engine::~Engine() = default;
+
+bool Engine::PumpLoadingMessages() {
+  const auto result=platform::PumpMessages();
+  if(result.quit || !IsWindow(window_->GetHandle())) {
+    loadingCancelled_=true;running_=false;exitCode_=result.quit?result.exitCode:0;return false;
+  }
+  return true;
+}
 
 bool Engine::Initialize(HINSTANCE instance, int width, int height, bool visible, bool fullscreen,const std::string& snapshot) {
   window_ = std::make_unique<Win32Window>();
@@ -32,7 +43,8 @@ bool Engine::Initialize(HINSTANCE instance, int width, int height, bool visible,
   if(visible) window_->SetLoading(true);
   RECT client{}; GetClientRect(window_->GetHandle(),&client);
   width=client.right; height=client.bottom;
-  if (!renderer_->Initialize(window_->GetHandle(), width, height)) {
+  const std::function<bool()> loadingPump=visible?std::function<bool()>([this]{return PumpLoadingMessages();}):std::function<bool()>{};
+  if (!renderer_->Initialize(window_->GetHandle(), width, height,nullptr,loadingPump)) {
     error_ = renderer_->Error();
     return false;
   }
@@ -491,60 +503,66 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
 
 int Engine::Run() {
   LARGE_INTEGER frequency = {};
-  LARGE_INTEGER last = {};
-  QueryPerformanceFrequency(&frequency);
-  QueryPerformanceCounter(&last);
-
-  MSG msg = {};
+  if(!QueryPerformanceFrequency(&frequency) || frequency.QuadPart<=0){error_=L"High-resolution frame clock is unavailable.";return 1;}
+  frameClock_=execution::FrameClock(frequency.QuadPart);
+  LARGE_INTEGER started{};QueryPerformanceCounter(&started);frameClock_.Sample(started.QuadPart,false);
+  pumpedMessages_=pumpBudgetYields_=0;pumpSeconds_=0;
   while (running_) {
-    while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
-      if (msg.message == WM_QUIT) {
-        running_ = false;
-        break;
-      }
-      TranslateMessage(&msg);
-      DispatchMessage(&msg);
-    }
-
-    if (!running_) break;
+    const auto pump=platform::PumpMessages();
+    pumpedMessages_+=pump.messages;pumpBudgetYields_+=pump.budgetReached;pumpSeconds_+=pump.seconds;
+    if(pump.quit){running_=false;exitCode_=pump.exitCode;break;}
+    if(!IsWindow(window_->GetHandle())){running_=false;break;}
 
     if (window_->ConsumeInputCancellation()) {
       game_->CancelUiGesture();
       input_.CancelGestures();
     }
-    const auto mouse=window_->ConsumeMouseMotion();
-    input_.Update(window_->GetHandle(),window_->MouseLook(),mouse.x,mouse.y,window_->ConsumeText());
-    if (IsIconic(window_->GetHandle()) || GetForegroundWindow() != window_->GetHandle()) {
+    const bool active=!IsIconic(window_->GetHandle()) && GetForegroundWindow()==window_->GetHandle();
+    const bool interrupted=window_->ConsumeClockInterruption() || resetFrameClock_;
+    resetFrameClock_=false;
+    LARGE_INTEGER now{};QueryPerformanceCounter(&now);
+    const auto step=frameClock_.Sample(now.QuadPart,active,interrupted);
+    if (!active) {
       if(audio_) audio_->Suspend(true);
       game_->SuspendInput();
+      input_.CancelGestures();
       window_->SetMouseLook(false);
-      window_->ConsumeWheel();
-      WaitMessage();
-      QueryPerformanceCounter(&last);
+      window_->ConsumeWheel();window_->ConsumeKeys();window_->ConsumeText();window_->ConsumeMouseMotion();
+      if(platform::WaitForMessages()==WAIT_FAILED){error_=L"Waiting for window messages failed.";exitCode_=1;running_=false;}
       continue;
     }
-
-    LARGE_INTEGER now = {};
-    QueryPerformanceCounter(&now);
-    const double deltaSeconds = static_cast<double>(now.QuadPart - last.QuadPart)
-      / static_cast<double>(frequency.QuadPart);
-    last = now;
-
-    Tick(std::min(deltaSeconds, 0.05));
-    // Resource reconstruction is outside simulation time. Do not convert a
-    // seconds-long rebuild into a catch-up movement/attack on the next frame.
-    if(resetFrameClock_) {QueryPerformanceCounter(&last);resetFrameClock_=false;}
+    if(step.resynchronized){
+      game_->CancelUiGesture();input_.CancelGestures();window_->SetMouseLook(false);
+      window_->ConsumeWheel();window_->ConsumeKeys();window_->ConsumeText();window_->ConsumeMouseMotion();
+      input_.Update(window_->GetHandle()); // Baseline held state; no synthetic presses.
+      continue;
+    }
+    if(step.seconds<=0)continue; // Do not consume an edge on a zero-time update.
+    const auto mouse=window_->ConsumeMouseMotion();
+    input_.Update(window_->GetHandle(),window_->MouseLook(),mouse.x,mouse.y,window_->ConsumeText(),window_->ConsumeKeys());
+    Tick(step.seconds);
   }
 
+  LARGE_INTEGER stopped{};QueryPerformanceCounter(&stopped);frameClock_.Sample(stopped.QuadPart,false);
   window_->SetMouseLook(false);
+  OutputDebugStringA(ExecutionDiagnostics().c_str());
   return exitCode_;
+}
+
+std::string Engine::ExecutionDiagnostics()const {
+  const auto& s=frameClock_.Stats();std::ostringstream out;out<<std::fixed<<std::setprecision(6);
+  out<<"Engine execution: variable step, maximum "<<execution::FrameClock::maximumStep<<" s\n"
+     <<"Admitted frames / clock resets / capped frames / invalid samples: "<<s.frames<<" / "<<s.resynchronizations<<" / "<<s.clampedFrames<<" / "<<s.invalidSamples<<'\n'
+     <<"Wall / admitted / excluded / capped seconds: "<<s.wallSeconds<<" / "<<s.gameSeconds<<" / "<<s.excludedSeconds<<" / "<<s.clampedSeconds<<'\n'
+     <<"Dispatched messages / pump budget yields / pump seconds: "<<pumpedMessages_<<" / "<<pumpBudgetYields_<<" / "<<pumpSeconds_<<'\n';
+  return out.str();
 }
 
 bool Engine::TryRecoverGraphics() {
   error_=renderer_->Error();
   window_->SetMouseLook(false);
   game_->CancelUiGesture(); input_.CancelGestures();
-  window_->ConsumeWheel(); window_->ConsumeMouseMotion(); window_->ConsumeText();
+  window_->ConsumeWheel(); window_->ConsumeMouseMotion(); window_->ConsumeText();window_->ConsumeKeys();
   if(audio_)audio_->Suspend(true);
   if(!graphics::Recoverable(renderer_->FailureCode(),renderer_->DeviceRemovedReason()))return false;
   if(!graphicsRecovery_.Request(GetTickCount64())) {
@@ -556,7 +574,8 @@ bool Engine::TryRecoverGraphics() {
   // Destroy the entire device resource graph, including lazily uploaded art.
   renderer_.reset();
   renderer_=std::make_unique<Renderer>();
-  if(!renderer_->Initialize(window_->GetHandle(),std::max(1L,client.right),std::max(1L,client.bottom))) {
+  const std::function<bool()> loadingPump=IsWindowVisible(window_->GetHandle())?std::function<bool()>([this]{return PumpLoadingMessages();}):std::function<bool()>{};
+  if(!renderer_->Initialize(window_->GetHandle(),std::max(1L,client.right),std::max(1L,client.bottom),nullptr,loadingPump)) {
     error_+=L"\nGraphics reconstruction failed: "+renderer_->Error();return false;
   }
   ++graphicsRecoveries_;resetFrameClock_=true;error_.clear();
@@ -565,6 +584,7 @@ bool Engine::TryRecoverGraphics() {
 }
 void Engine::HandleGraphicsFailure() {
   if(TryRecoverGraphics())return;
+  if(loadingCancelled_)return;
   exitCode_=1;running_=false;
   localization::Message(window_->GetHandle(),error_.c_str(),L"Renderer error",MB_OK|MB_ICONERROR);
 }

@@ -1,3 +1,25 @@
+## Bounded texture loading (2026-11-25)
+
+- Build and run `TexturePreparationTests` and `GraphicsLifecycleTests` in Release and Debug. All 19 embedded images must match synchronous WIC pixels; retained staging bytes must return to zero after successful initialization, cancellation and reconstruction.
+- Start the visible game and close it during graphics loading. It should finish cancelling its current decode and exit without a renderer-error dialog or a surviving RPGNative process. Repeat normal startup afterward. Native modal handlers and an individual decode/driver call are not forcibly interruptible.
+- During ordinary startup, move/resize the loading window and verify repaint and close handling. Once the world/roster appears, check the selected size, input, surface materials and UI atlases. Later world/audio preparation is still synchronous.
+- Check adapter/benchmark diagnostics for 19 prepared/delivered images, at most two packets and at most 33,554,432 staging bytes. This is a pixel-buffer budget, not total application memory or an FPS claim.
+
+## Frame timing and native input (2026-11-25)
+
+- In normal play, rapidly tap Space, an action key, Escape and F11, then release before the next visible frame. Each accepted keyboard edge should act once, with no replay from auto-repeat. Hold a movement key to verify continuous movement still follows held state. Check LMB/RMB camera capture and ordinary UI dragging separately.
+- Press and release Ctrl plus a bound second-row action between frames. Verify the intended row. In character-name editing, repeat quick Ctrl+A/Ctrl+V, Shift+Right, Shift+Home and Shift+Tab after releasing the modifier; do not publish a test character over an existing profile.
+- Alt-Tab, minimize/restore, drag/resize the native window, open/close its system menu, toggle fullscreen and resume from normal sleep. The first resumed frame must not contain accumulated movement or camera motion, and a held mouse button must not reacquire cancelled capture. No forced driver resets or system changes are needed.
+- Inspect Visual Studio debugger output after exit for `Engine execution`: admitted frames, clock resets, clipped stalls, excluded pause time, messages and pump budget yields. Wall time should account for admitted + excluded + capped time. The clock still caps an ordinary stalled step at 50 ms and does not claim to solve low-FPS time dilation.
+- Run ExecutionTests, GraphicsLifecycleTests, CameraControlsTests, CharacterSelectionTests, InterfaceTests, MotionTests and CombatTests in Release and Debug. The native tests use owned hidden windows and test profiles; they do not steal desktop focus or inject physical input.
+
+## Render resource ownership (2026-11-25)
+
+- Rebuild and run `RenderBindingsTests` and `ShaderContractTests` in Release and Debug. Inspect the reported debug-layer availability; a successful Debug build alone does not prove driver validation. The native tests must reject foreign-device resources, preserve state after invalid batches, handle depth/stencil read permissions and release all back-buffer references before resize.
+- In visible play, alternate world rendering, a character portrait, combat and roster views; resize and toggle fullscreen between them. Check shadows, depth occlusion and restored textures without stale or black resources. This is an image-preservation check, not a new effect/UI design acceptance.
+- Run `RPGNative.exe --benchmark <report-path>` in the build directory. The report must include binding requests, driver calls, skipped requests and alias unbinds. Compare equivalent workloads only; these counters do not establish an FPS improvement.
+- Run `scripts/check-scene-shader.ps1 -GeneratedHeader <build-dir>/generated/<configuration>/SceneBytecode.generated.h` in PowerShell 7. All 19 shader entries must match. Use only test-owned mutation fixtures to exercise broken vertex semantics, registers, texture types or structured stride.
+
 ## Graphics lifecycle and shader contracts (2026-11-25)
 
 - Rebuild and run `GraphicsLifecycleTests` and `ShaderContractTests` in Release and Visual Studio Debug. The first uses synthetic failure codes on real DX11 renderers; it does not reset the OS driver. Check `graphics-lifecycle-review/before.png` and both restored captures in the build directory. Save/camera state and the capture bytes must match.

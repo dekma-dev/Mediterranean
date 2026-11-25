@@ -52,6 +52,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
   Engine engine;
   const auto resolution=diagnostic?launch::resolutions[0]:launch::resolutions[options.resolution];
   if (!engine.Initialize(instance, resolution.width, resolution.height, !diagnostic,!diagnostic && options.fullscreen)) {
+    if(engine.LoadingCancelled())return engine.ExitCode();
     if (smoke) { std::wofstream log(std::filesystem::path(capture+L".log")); log << engine.Error(); }
     else if (benchmark || suite) { std::wofstream log(std::filesystem::path(report+L".log")); log << engine.Error(); }
     else if (!benchmark) localization::Message(nullptr, engine.Error().c_str(), L"RPG Native", MB_OK | MB_ICONERROR);
