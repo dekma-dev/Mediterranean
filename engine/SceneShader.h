@@ -1,7 +1,18 @@
 #pragma once
+#include "engine/SkinPaletteLayout.h"
+#define RPG_SHADER_TEXT_INNER(value) #value
+#define RPG_SHADER_TEXT(value) RPG_SHADER_TEXT_INNER(value)
 // Keep each raw literal below MSVC's 16 KiB token limit. Adjacent literals
 // concatenate into the same shader source, without runtime loading or copies.
-inline constexpr char sceneShader[] = R"(
+inline constexpr char sceneShader[] =
+"#define RPG_SKIN_ROWS " RPG_SHADER_TEXT(RPG_SKIN_ROWS) "\n"
+"#define RPG_SKIN_JOINT_ROWS " RPG_SHADER_TEXT(RPG_SKIN_JOINT_ROWS) "\n"
+"#define RPG_SKIN_NORMAL_ROW " RPG_SHADER_TEXT(RPG_SKIN_NORMAL_ROW) "\n"
+"#define RPG_SKIN_COLOR_ROW " RPG_SHADER_TEXT(RPG_SKIN_COLOR_ROW) "\n"
+"#define RPG_SKIN_VOLUME_ROW " RPG_SHADER_TEXT(RPG_SKIN_VOLUME_ROW) "\n"
+"#define RPG_SKIN_VOLUME_ROWS " RPG_SHADER_TEXT(RPG_SKIN_VOLUME_ROWS) "\n"
+"#define RPG_SKIN_DEFORMATION_ROW " RPG_SHADER_TEXT(RPG_SKIN_DEFORMATION_ROW) "\n"
+R"(
 cbuffer Scene : register(b0) {
  matrix world; matrix wvp; matrix normalWorld; matrix shadowVP[2];
  float4 color; float4 eyeAndHud;
@@ -203,7 +214,7 @@ VOut VSWorld(InstanceIn i) {
 // Float4 elements avoid the SM5 2048-byte structured-element limit.
 StructuredBuffer<float4> bodyRows : register(t9);
 matrix BodyMatrix(uint actor,uint joint,bool normal) {
- uint base=actor*292+(normal?128:0)+joint*4;
+ uint base=actor*RPG_SKIN_ROWS+(normal?RPG_SKIN_NORMAL_ROW:0)+joint*RPG_SKIN_JOINT_ROWS;
  return transpose(matrix(bodyRows[base],bodyRows[base+1],bodyRows[base+2],bodyRows[base+3]));
 }
 struct SkinIn { InstanceIn object; uint4 bones : BLENDINDICES; float4 weights : BLENDWEIGHT; };
@@ -236,7 +247,7 @@ void SkinBody(inout InstanceIn i,uint4 joints,float4 weights) {
  if(i.surface.w==-9)return;
  GarmentLag(i);
  uint actor=(uint)i.surface.z;
- if(i.surface.x==14 && bodyRows[actor*292+256].w==15) {
+ if(i.surface.x==14 && bodyRows[actor*RPG_SKIN_ROWS+RPG_SKIN_COLOR_ROW].w==15) {
   float3 p=CoveredBodyPoint(i.p);float e=.0005;
   float3 dx=(CoveredBodyPoint(i.p+float3(e,0,0))-CoveredBodyPoint(i.p-float3(e,0,0)))/(2*e);
   float3 dy=(CoveredBodyPoint(i.p+float3(0,e,0))-CoveredBodyPoint(i.p-float3(0,e,0)))/(2*e);
@@ -248,12 +259,12 @@ void SkinBody(inout InstanceIn i,uint4 joints,float4 weights) {
   p+=mul(float4(i.p,1),BodyMatrix(actor,joints[k],false)).xyz*weights[k];
   n+=mul(float4(i.n,0),BodyMatrix(actor,joints[k],true)).xyz*weights[k];
  }
- [branch] if(bodyRows[actor*292+291].x>0) {
+ [branch] if(bodyRows[actor*RPG_SKIN_ROWS+RPG_SKIN_DEFORMATION_ROW].x>0) {
   uint reference=0;
   [unroll] for(uint r=1;r<4;++r)if(weights[r]>weights[reference])reference=r;
-  float4 anchor=bodyRows[actor*292+263+joints[reference]*2],real=0,dual=0;
+  float4 anchor=bodyRows[actor*RPG_SKIN_ROWS+RPG_SKIN_VOLUME_ROW+joints[reference]*RPG_SKIN_VOLUME_ROWS],real=0,dual=0;
   [unroll] for(uint k=0;k<4;++k){
-   uint base=actor*292+263+joints[k]*2;
+   uint base=actor*RPG_SKIN_ROWS+RPG_SKIN_VOLUME_ROW+joints[k]*RPG_SKIN_VOLUME_ROWS;
    float4 q=bodyRows[base],d=bodyRows[base+1];
    float sign=dot(q,anchor)<0?-1:1;
    real+=q*(weights[k]*sign);dual+=d*(weights[k]*sign);
@@ -267,7 +278,7 @@ void SkinBody(inout InstanceIn i,uint4 joints,float4 weights) {
  }
  i.p=p; i.n=normalize(n);
  if(i.surface.x!=22) {
-  float4 style=bodyRows[actor*292+256+(uint)i.tint.w];
+  float4 style=bodyRows[actor*RPG_SKIN_ROWS+RPG_SKIN_COLOR_ROW+(uint)i.tint.w];
   i.tint=float4(style.rgb,1); i.surface.x=style.w;
  }
 }
@@ -531,7 +542,7 @@ float4 PSMain(VOut i) : SV_TARGET {
   return result;
  }
  [branch] if(i.bodyStyle && i.bodyStyle<0xfffffffe) {
-  float4 style=bodyRows[(i.bodyStyle-1)*292+256+BodyRegion(i.tp)];
+  float4 style=bodyRows[(i.bodyStyle-1)*RPG_SKIN_ROWS+RPG_SKIN_COLOR_ROW+BodyRegion(i.tp)];
   i.tint=float4(style.rgb,1);i.material=style.w;
  }
  float3 geometric=normalize(i.n),n=geometric;
@@ -920,3 +931,5 @@ float4 PSSky(SkyOut i) : SV_TARGET {
 #include "engine/SpellGlowShader.inc"
 #include "engine/PressureShader.inc"
 ;
+#undef RPG_SHADER_TEXT
+#undef RPG_SHADER_TEXT_INNER

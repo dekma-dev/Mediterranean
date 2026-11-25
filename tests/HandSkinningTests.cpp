@@ -1,6 +1,7 @@
 #include "game/HandPose.h"
 #include "game/CharacterView.h"
 #include "engine/Renderer.h"
+#include "engine/Shadow.h"
 #include "platform/Win32Window.h"
 #include <algorithm>
 #include <cmath>
@@ -157,12 +158,18 @@ int main() {
     Check(renderer.Capture(L"hand-skin-"+std::to_wstring(sample)+L".png") && renderer.EndFrame(false) && renderer.ValidateDebugMessages(),"Skinned hand color/shadow capture");
   }
   const auto hand=BuildHandPose(pose,0,false,false,1); const auto palette=BuildHandRig(hand);
+  const XMFLOAT3 receiver{0,-.02f,-.065f};
+  // Keep the occluder on the actual directional-light ray. The historical
+  // hard-coded box missed this probe after the shared sun direction changed.
+  const float rise=.51f;
+  const XMFLOAT3 blocker{receiver.x+visual::daylightSun.x*rise/visual::daylightSun.y,
+    receiver.y+rise,receiver.z+visual::daylightSun.z*rise/visual::daylightSun.y};
   float light[2]{};
   for(unsigned blocked=0;blocked<2;++blocked) {
     renderer.BeginFrame(); renderer.SetCamera({-.15f,.08f,-.35f},{0,-.02f,-.04f});
     renderer.DrawHand(XMMatrixIdentity(),palette,false,{.72f,.51f,.35f,1},visual::Material::Skin);
-    if(blocked) renderer.DrawMesh(visual::Mesh::Box,{-.3f,.49f,-.28f},{.3f,.12f,.3f},{.3f,.3f,.3f,1},visual::Material::Stone);
-    XMFLOAT2 probe; Check(renderer.Project({0,-.02f,-.065f},probe),"Hand shadow probe");
+    if(blocked) renderer.DrawMesh(visual::Mesh::Box,blocker,{.3f,.12f,.3f},{.3f,.3f,.3f,1},visual::Material::Stone);
+    XMFLOAT2 probe; Check(renderer.Project(receiver,probe),"Hand shadow probe");
     const auto path=blocked?L"hand-skin-occluded.png":L"hand-skin-lit.png";
     Check(renderer.Capture(path) && renderer.EndFrame(false),"Hand occlusion capture");
     const auto pixels=Pixels(path); const int cx=int(probe.x*960),cy=int(probe.y*720);

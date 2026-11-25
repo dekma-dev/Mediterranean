@@ -1,3 +1,10 @@
+## Graphics lifecycle and shader contracts (2026-11-25)
+
+- Rebuild and run `GraphicsLifecycleTests` and `ShaderContractTests` in Release and Visual Studio Debug. The first uses synthetic failure codes on real DX11 renderers; it does not reset the OS driver. Check `graphics-lifecycle-review/before.png` and both restored captures in the build directory. Save/camera state and the capture bytes must match.
+- In visible play, repeatedly resize, toggle F11, minimize/restore, Alt-Tab and switch between roster, world and a character portrait. Confirm valid depth/textures/shadows, working input and audio, and absence of D3D debug warnings. Verify that held mouse gestures are cancelled on display/focus transitions.
+- If a real driver-reset incident occurs, inspect debugger output for the original operation/HRESULT, device-removal reason and recovery outcome. Verify the same hero, position, quest progress, inventory and camera after recovery. Rebuilding time must not advance the simulation. Do not induce resets by modifying Windows/TDR settings.
+- Intentional shader layout mutations belong only in `ShaderContractTests`. A changed CPU/HLSL field order, matrix layout, array length or constant-buffer register must fail before new embedded bytecode is published.
+
 ## Simultaneous quest tracking (2026-11-21)
 
 - Accept several provincial commissions. Keep the campaign selected, then collect a record cache or defeat a required creature: the unselected row must update and a brief central notice must show the actual progress. Repeated increments of one task must replace its notice. A leader hunt must remain unfinished until the required leader is defeated.

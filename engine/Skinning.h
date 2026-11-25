@@ -1,6 +1,9 @@
 #pragma once
 #include "engine/Geometry.h"
 #include "engine/BodyLod.h"
+#include "engine/SkinPaletteLayout.h"
+#include <cstddef>
+#include <type_traits>
 
 namespace visual {
 inline constexpr unsigned sourceBodyBones=10,bodyBones=14,bodyRegions=7,maxBodies=32;
@@ -18,8 +21,15 @@ struct BodyPalette {
   std::array<DualQuaternion,bodyBones> volume{};
   DirectX::XMFLOAT4 deformation{}; // X: preserve volume; other components reserved.
 };
-inline constexpr unsigned bodyPaletteRows=292;
+inline constexpr unsigned bodyPaletteRows=RPG_SKIN_ROWS;
 static_assert(sizeof(BodyPalette)==bodyPaletteRows*sizeof(DirectX::XMFLOAT4));
+static_assert(std::is_standard_layout_v<BodyPalette> && offsetof(BodyPalette,joints)==0);
+static_assert(sizeof(DirectX::XMFLOAT4X4)==RPG_SKIN_JOINT_ROWS*sizeof(DirectX::XMFLOAT4));
+static_assert(offsetof(BodyPalette,normals)==RPG_SKIN_NORMAL_ROW*sizeof(DirectX::XMFLOAT4));
+static_assert(offsetof(BodyPalette,colors)==RPG_SKIN_COLOR_ROW*sizeof(DirectX::XMFLOAT4));
+static_assert(offsetof(BodyPalette,volume)==RPG_SKIN_VOLUME_ROW*sizeof(DirectX::XMFLOAT4));
+static_assert(sizeof(DualQuaternion)==RPG_SKIN_VOLUME_ROWS*sizeof(DirectX::XMFLOAT4));
+static_assert(offsetof(BodyPalette,deformation)==RPG_SKIN_DEFORMATION_ROW*sizeof(DirectX::XMFLOAT4));
 // Optional human-body deformation. Matrix residuals retain the small bind-length
 // corrections; imported/scaled creatures keep their existing matrix skinning.
 void PreserveBodyVolume(BodyPalette& palette);

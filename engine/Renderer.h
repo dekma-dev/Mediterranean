@@ -13,6 +13,7 @@
 #include "engine/StaticScene.h"
 #include "engine/TransientLights.h"
 #include "engine/ShaderData.h"
+#include "engine/RenderBindings.h"
 #include <array>
 #include <algorithm>
 #include <functional>
@@ -32,6 +33,7 @@ public:
   bool FrameActive() const { return ready_ && frameActive_ && !frameFailed_; }
   HRESULT FailureCode() const { return failureCode_; }
   HRESULT DeviceRemovedReason() const { return removedReason_; }
+  const RenderBindings::Statistics& BindingStats() const {return bindings_.Stats();}
   double GpuMilliseconds() const { return gpuTimer_.Milliseconds(); }
   std::uint64_t GpuSamples() const { return gpuTimer_.Samples(); }
   std::uint64_t GpuFrame() const { return gpuTimer_.Frame(); }
@@ -201,6 +203,18 @@ public:
 private:
   friend struct GraphicsLifecycleTestAccess;
   bool Check(HRESULT result, const wchar_t* operation);
+  void BindResources(RenderBindings::Stage stage,UINT first,UINT count,ID3D11ShaderResourceView* const* views) {
+    if(frameFailed_)return;
+    Check(bindings_.Resources(stage,first,count,views),L"Bind shader resources");
+  }
+  void BindSamplers(RenderBindings::Stage stage,UINT first,UINT count,ID3D11SamplerState* const* states) {
+    if(frameFailed_)return;
+    Check(bindings_.Samplers(stage,first,count,states),L"Bind shader samplers");
+  }
+  bool BindTargets(UINT count,ID3D11RenderTargetView* const* targets,ID3D11DepthStencilView* depth) {
+    return !frameFailed_ && Check(bindings_.Targets(count,targets,depth),L"Bind render targets");
+  }
+  RenderBindings bindings_;
   bool ready_=false,frameActive_=false;
   HRESULT failureCode_=S_OK,removedReason_=S_OK;
   bool CreateTargets(int width, int height);

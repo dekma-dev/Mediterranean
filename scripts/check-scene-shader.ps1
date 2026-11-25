@@ -3,6 +3,11 @@ param([switch]$Preview,[string]$GeneratedHeader)
 $ErrorActionPreference='Stop'
 $projectRoot=Split-Path -Parent $PSScriptRoot
 $header=[IO.File]::ReadAllText((Join-Path $projectRoot 'engine\SceneShader.h'))
+# Expand the same raw-literal fragments at their original positions.
+$header=[regex]::Replace($header,'#include "(engine/[^"\r\n]+\.inc)"',{
+ param($match)
+ [IO.File]::ReadAllText((Join-Path $projectRoot $match.Groups[1].Value))
+})
 # C++ concatenates the raw literals used to stay below MSVC's token limit.
 # Reconstruct that same source for standalone D3D diagnostics.
 $parts=[regex]::Matches($header,'(?s)R"\((.*?)\)"')
@@ -13,10 +18,13 @@ foreach($part in $parts) {
  }
 }
 $source=($parts | ForEach-Object { $_.Groups[1].Value }) -join ''
+$skinLayout=[IO.File]::ReadAllText((Join-Path $projectRoot 'engine/SkinPaletteLayout.h'))
+$skinDefines=[regex]::Matches($skinLayout,'(?m)^#define RPG_SKIN_\w+ \d+')
+$source=(($skinDefines | ForEach-Object { $_.Value }) -join "`n")+"`n"+$source
 Add-Type -Path (Join-Path $PSScriptRoot 'SceneShaderCheck.cs')
 $bytecode=@{}
 $generated=if($GeneratedHeader) { [IO.File]::ReadAllText($GeneratedHeader) } else { $null }
-foreach($entry in @('VSMain','PSMain','VSWorld','VSShadow','VSBody','VSBodyShadow','VSHand','VSHandShadow','VSSky','PSSky','PSCloudLight','VSEffect','PSEffect')) {
+foreach($entry in @('VSMain','PSMain','VSWorld','VSShadow','VSBody','VSBodyShadow','VSHand','VSHandShadow','VSSky','PSSky','PSCloudLight','VSEffect','PSEffect','VSGlow','PSGlowSource','PSGlowHorizontal','PSGlowVertical','PSGlowComposite','PSPressure')) {
  $profile=if($entry.StartsWith('VS')) {'vs_5_0'} else {'ps_5_0'}
  $bytecode[$entry]=[SceneShaderCheck]::Compile($source,$entry,$profile)
  if($GeneratedHeader) {

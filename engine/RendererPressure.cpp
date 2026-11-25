@@ -1,4 +1,5 @@
 #include "engine/Renderer.h"
+#include "engine/ShaderInterface.h"
 #include "SceneBytecode.generated.h"
 #include <algorithm>
 #include <cmath>
@@ -76,8 +77,8 @@ bool Renderer::CompositePressure(){
   if(!Check(device_->CreateTexture2D(&desc,nullptr,pressureCopy_.GetAddressOf()),L"Create pressure scene copy") ||
     !Check(device_->CreateShaderResourceView(pressureCopy_.Get(),nullptr,pressureView_.GetAddressOf()),L"Create pressure scene view"))return false;
  }
- ID3D11ShaderResourceView* empty=nullptr;context_->PSSetShaderResources(18,1,&empty);
- context_->OMSetRenderTargets(0,nullptr,nullptr);
+ ID3D11ShaderResourceView* empty=nullptr;BindResources(RenderBindings::Stage::Pixel,shader::texture::pressure,1,&empty);
+ if(!BindTargets(0,nullptr,nullptr))return false;
  const D3D11_BOX box{UINT(rect.left),UINT(rect.top),0,UINT(rect.right),UINT(rect.bottom),1};
  context_->CopySubresourceRegion(pressureCopy_.Get(),0,rect.left,rect.top,0,scene.Get(),0,&box);
  Data data{};XMStoreFloat4x4(&data.inverseVP,XMMatrixTranspose(XMMatrixInverse(nullptr,XMLoadFloat4x4(&viewProjection_))));
@@ -86,15 +87,15 @@ bool Renderer::CompositePressure(){
  data.region={(rect.left+.5f)/width_,(rect.top+.5f)/height_,(rect.right-.5f)/width_,(rect.bottom-.5f)/height_};data.waves=pressureWaves_;
  context_->UpdateSubresource(pressureConstants_.Get(),0,nullptr,&data,0,0);
  context_->PSSetConstantBuffers(shader::slot::pressure,1,pressureConstants_.GetAddressOf());
- context_->OMSetRenderTargets(1,target_.GetAddressOf(),nullptr);context_->OMSetDepthStencilState(depthOff_.Get(),0);context_->OMSetBlendState(nullptr,nullptr,0xffffffff);
- context_->PSSetShaderResources(15,1,effectDepthResource_.GetAddressOf());context_->PSSetShaderResources(18,1,pressureView_.GetAddressOf());
- context_->PSSetSamplers(2,1,fontSampler_.GetAddressOf());
+ if(!BindTargets(1,target_.GetAddressOf(),nullptr))return false;context_->OMSetDepthStencilState(depthOff_.Get(),0);context_->OMSetBlendState(nullptr,nullptr,0xffffffff);
+ BindResources(RenderBindings::Stage::Pixel,shader::texture::depth,1,effectDepthResource_.GetAddressOf());BindResources(RenderBindings::Stage::Pixel,shader::texture::pressure,1,pressureView_.GetAddressOf());
+ BindSamplers(RenderBindings::Stage::Pixel,shader::sampler::font,1,fontSampler_.GetAddressOf());
  const D3D11_VIEWPORT view{0,0,float(width_),float(height_),0,1};context_->RSSetViewports(1,&view);
  context_->RSSetScissorRects(1,&rect);context_->RSSetState(pressureRasterizer_.Get());
  context_->IASetInputLayout(nullptr);context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
- context_->VSSetShader(pressureVertex_.Get(),nullptr,0);context_->PSSetShader(pressurePixel_.Get(),nullptr,0);context_->Draw(3,0);
+ context_->VSSetShader(pressureVertex_.Get(),nullptr,0);context_->PSSetShader(pressurePixel_.Get(),nullptr,0);if(!FrameActive())return false;context_->Draw(3,0);
  ++drawCalls_;++triangles_;++pressurePasses_;
- context_->PSSetShaderResources(18,1,&empty);context_->PSSetShaderResources(15,1,&empty);
- context_->RSSetState(rasterizer_.Get());context_->OMSetRenderTargets(1,target_.GetAddressOf(),depth_.Get());
+ BindResources(RenderBindings::Stage::Pixel,shader::texture::pressure,1,&empty);BindResources(RenderBindings::Stage::Pixel,shader::texture::depth,1,&empty);
+ context_->RSSetState(rasterizer_.Get());if(!BindTargets(1,target_.GetAddressOf(),depth_.Get()))return false;
  return true;
 }

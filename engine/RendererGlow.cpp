@@ -1,4 +1,5 @@
 #include "engine/Renderer.h"
+#include "engine/ShaderInterface.h"
 #include "SceneBytecode.generated.h"
 #include <algorithm>
 #include <cmath>
@@ -37,27 +38,27 @@ void Renderer::EmitSpellGlow(UINT vertices){
  D3D11_VIEWPORT view=portrait_?portraitViewport_:D3D11_VIEWPORT{0,0,float(width_),float(height_),0,1};
  auto reduced=view;reduced.TopLeftX*=float(glowWidth_)/width_;reduced.Width*=float(glowWidth_)/width_;
  reduced.TopLeftY*=float(glowHeight_)/height_;reduced.Height*=float(glowHeight_)/height_;
- context_->RSSetViewports(1,&reduced);context_->OMSetRenderTargets(1,glowTargets_[0].GetAddressOf(),nullptr);
+ context_->RSSetViewports(1,&reduced);if(!BindTargets(1,glowTargets_[0].GetAddressOf(),nullptr))return;
  context_->OMSetDepthStencilState(depthOff_.Get(),0);context_->OMSetBlendState(effectBlend_.Get(),nullptr,0xffffffff);
  context_->PSSetShader(glowSource_.Get(),nullptr,0);context_->Draw(vertices,0);++drawCalls_;++spellGlowPasses_;triangles_+=vertices/3;
- context_->RSSetViewports(1,&view);context_->OMSetRenderTargets(1,target_.GetAddressOf(),effectDepthView_.Get());
+ context_->RSSetViewports(1,&view);if(!BindTargets(1,target_.GetAddressOf(),effectDepthView_.Get()))return;
 }
 void Renderer::CompositeSpellGlow(){
  const D3D11_VIEWPORT reduced{0,0,float(glowWidth_),float(glowHeight_),0,1},full{0,0,float(width_),float(height_),0,1};
- ID3D11ShaderResourceView* empty=nullptr;
+
  context_->IASetInputLayout(nullptr);context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
  context_->VSSetShader(glowVertex_.Get(),nullptr,0);context_->RSSetState(effectRasterizer_.Get());
  context_->OMSetDepthStencilState(depthOff_.Get(),0);context_->OMSetBlendState(nullptr,nullptr,0xffffffff);
  context_->RSSetViewports(1,&reduced);
  for(unsigned pass=0;pass<2;++pass){
-  context_->PSSetShaderResources(16,1,&empty);context_->OMSetRenderTargets(1,glowTargets_[pass+1].GetAddressOf(),nullptr);
-  context_->PSSetShaderResources(16,1,glowViews_[pass].GetAddressOf());
-  context_->PSSetShader(pass?glowVertical_.Get():glowHorizontal_.Get(),nullptr,0);context_->Draw(3,0);++drawCalls_;++spellGlowPasses_;++triangles_;
+  if(!BindTargets(1,glowTargets_[pass+1].GetAddressOf(),nullptr))return;
+  BindResources(RenderBindings::Stage::Pixel,shader::texture::glow,1,glowViews_[pass].GetAddressOf());
+  context_->PSSetShader(pass?glowVertical_.Get():glowHorizontal_.Get(),nullptr,0);if(!FrameActive())return;context_->Draw(3,0);++drawCalls_;++spellGlowPasses_;++triangles_;
  }
- context_->PSSetShaderResources(16,1,&empty);context_->OMSetRenderTargets(1,target_.GetAddressOf(),nullptr);
- context_->PSSetShaderResources(16,1,glowViews_[2].GetAddressOf());context_->RSSetViewports(1,&full);
+ if(!BindTargets(1,target_.GetAddressOf(),nullptr))return;
+ BindResources(RenderBindings::Stage::Pixel,shader::texture::glow,1,glowViews_[2].GetAddressOf());context_->RSSetViewports(1,&full);
  context_->OMSetBlendState(effectBlend_.Get(),nullptr,0xffffffff);context_->PSSetShader(glowComposite_.Get(),nullptr,0);
- context_->Draw(3,0);++drawCalls_;++spellGlowPasses_;++triangles_;
- context_->PSSetShaderResources(16,1,&empty);context_->OMSetBlendState(nullptr,nullptr,0xffffffff);context_->RSSetState(rasterizer_.Get());
+ if(!FrameActive())return;context_->Draw(3,0);++drawCalls_;++spellGlowPasses_;++triangles_;
+ context_->OMSetBlendState(nullptr,nullptr,0xffffffff);context_->RSSetState(rasterizer_.Get());
  if(portrait_)context_->RSSetViewports(1,&portraitViewport_);
 }

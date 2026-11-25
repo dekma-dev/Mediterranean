@@ -57,6 +57,14 @@ void Protocol() {
     Check(!r.EndFrame() && !r.BeginFrame() && error==r.Error() && draws==r.LastDrawCalls(),"Failed renderer resumed or overwrote its first error");
     Check(r.ValidateDebugMessages(),"Protocol guard submitted invalid D3D commands");
   }
+  Renderer r;Check(r.Initialize(w.GetHandle(),640,360),"Initialize discarded portrait renderer");
+  Check(r.BeginFrame() && r.BeginPortrait(.1f,.1f,.4f,.7f),"Begin discarded portrait");
+  Check(!r.SetTerrainSurface({},256),"Malformed upload must reject the frame");
+  const auto cause=r.Error();
+  Check(!r.EndPortrait() && !r.EndFrame(false) && r.FailureCode()==S_OK && r.Error()==cause,
+    "Unwinding a discarded portrait poisoned the device or replaced its cause");
+  Check(r.BeginFrame(),"Retry after discarded portrait");r.DrawHudRect(.2f,.2f,.4f,.4f,{.2f,.4f,.6f,1});
+  Check(r.EndFrame(false) && r.ValidateDebugMessages(),"Discarded portrait leaked GPU state");
 }
 void NativeRecovery() {
   Engine engine;Check(engine.Initialize(GetModuleHandleW(nullptr),960,540,false,false),"Initialize hidden engine");
@@ -71,6 +79,9 @@ void NativeRecovery() {
     Check(r.BeginFrame(),"Begin recovery frame");game.Render(r);
     Check(r.Capture((directory/name).wstring()),"Capture recovery frame");
     Check(r.EndFrame(false) && r.ValidateDebugMessages(),"Submit recovery frame / D3D validation");
+    Check(r.BindingStats().requests>0 && r.BindingStats().skipped>0 && r.BindingStats().rejected==0,"Native resource bindings were bypassed or rejected");
+    std::cout<<"Native frame bindings: requests "<<r.BindingStats().requests<<", calls "<<r.BindingStats().calls
+      <<", skipped "<<r.BindingStats().skipped<<", alias unbinds "<<r.BindingStats().hazardUnbinds<<'\n';
     Check(r.HasTerrainSurface() && r.HasMapArtwork(),"Lazy scene resources missing");
     Check(game.State().Save()==save,"Rendering/recovery changed simulation state");
   };

@@ -343,6 +343,9 @@ bool Engine::Benchmark(const std::wstring& reportPath) {
     << "\nImmutable mesh bytes: " << renderer_->MeshBytes()
     << "\nMaterial and shadow texture bytes: " << renderer_->MaterialBytes();
   report << "\nInterface font, map and artwork texture bytes: " << renderer_->InterfaceBytes();
+  const auto& bindings=renderer_->BindingStats();
+  report<<"\nLast-frame resource binding requests / driver calls / skipped / alias unbinds: "
+    <<bindings.requests<<" / "<<bindings.calls<<" / "<<bindings.skipped<<" / "<<bindings.hazardUnbinds;
   if (memoryAvailable) report << "\nProcess working set MiB: " << memory.WorkingSetSize/1048576.0
     << "\nProcess private bytes MiB: " << memory.PrivateUsage/1048576.0;
   report << "\nNot an interactive FPS guarantee. Driver, visibility and workload affect results.\n";
@@ -409,6 +412,7 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
     const rpg::Vec2 route[]={{3,-10},{3,-6},{0,-6},{0,-10}}; unsigned waypoint=0;
     std::uint64_t firstMeasuredGpuFrame=0;
     double firstProcessCpu=0,firstQueueWait=0;
+    std::uint64_t bindingRequests=0,bindingCalls=0,bindingSkipped=0,bindingHazards=0;
     for (int frame=0;frame<690;++frame) {
       if (scene==2 && frame%180==0 && !game_->RestoreSnapshot(combat)) return false;
       rpg::Command command;
@@ -428,6 +432,8 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
       if (!renderer_->EndFrame(false)) { error_=renderer_->Error(); return false; }
       QueryPerformanceCounter(&finish);
       if (frame<90) continue;
+      const auto& bindings=renderer_->BindingStats();
+      bindingRequests+=bindings.requests;bindingCalls+=bindings.calls;bindingSkipped+=bindings.skipped;bindingHazards+=bindings.hazardUnbinds;
       cpu.push_back(1000.0*double(finish.QuadPart-start.QuadPart)/double(frequency.QuadPart));
       updateCpu.push_back(1000.0*double(updated.QuadPart-start.QuadPart)/double(frequency.QuadPart));
       renderCpu.push_back(1000.0*double(rendered.QuadPart-updated.QuadPart)/double(frequency.QuadPart));
@@ -450,6 +456,8 @@ bool Engine::BenchmarkSuite(const std::wstring& reportPath,bool fullHd) {
     report<<"\n"<<names[scene];
     report<<"\nProcess CPU time per measured frame ms: "<<(processCpu()-firstProcessCpu)*1000/600;
     report<<"\nGPU queue event wait per measured frame ms: "<<(renderer_->GpuQueueWaitMilliseconds()-firstQueueWait)/600;
+    report<<"\nResource bindings per frame, requested / driver calls / skipped / alias unbinds: "
+      <<bindingRequests/600.0<<" / "<<bindingCalls/600.0<<" / "<<bindingSkipped/600.0<<" / "<<bindingHazards/600.0;
     diagnostics::WriteDistribution(report,"CPU frame",cpu);
     diagnostics::WriteDistribution(report,"CPU update",updateCpu);
     diagnostics::WriteDistribution(report,"CPU prepare",renderCpu);

@@ -135,6 +135,7 @@ add_library(MediterraneanClient STATIC
   engine/RoomReverb.cpp
   engine/RecordedAudio.cpp
   engine/Renderer.cpp
+  engine/RenderBindings.cpp
   engine/RendererGlow.cpp
   engine/RendererPressure.cpp
   engine/RendererField.cpp
@@ -272,6 +273,12 @@ if (BUILD_TESTING)
   add_test(NAME GpuFrameQueueTests COMMAND GpuFrameQueueTests)
   set_tests_properties(GpuFrameQueueTests PROPERTIES TIMEOUT 30)
   add_executable(GraphicsLifecycleTests tests/GraphicsLifecycleTests.cpp)
+  add_executable(RenderBindingsTests tests/RenderBindingsTests.cpp engine/RenderBindings.cpp)
+  target_include_directories(RenderBindingsTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+  target_compile_definitions(RenderBindingsTests PRIVATE NOMINMAX UNICODE _UNICODE)
+  target_link_libraries(RenderBindingsTests PRIVATE d3d11 dxgi user32)
+  add_test(NAME RenderBindingsTests COMMAND RenderBindingsTests)
+  set_tests_properties(RenderBindingsTests PROPERTIES TIMEOUT 45)
   target_link_libraries(GraphicsLifecycleTests PRIVATE MediterraneanClient)
   add_test(NAME GraphicsLifecycleTests COMMAND GraphicsLifecycleTests)
   set_tests_properties(GraphicsLifecycleTests PROPERTIES TIMEOUT 180)

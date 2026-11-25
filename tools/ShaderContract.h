@@ -2,12 +2,14 @@
 #include "engine/ShaderData.h"
 #include "engine/HandSkinning.h"
 #include "engine/TransientLights.h"
+#include "engine/ShaderInterface.h"
 #include <d3dcompiler.h>
 #include <d3d11shader.h>
 #include <wrl/client.h>
 #include <string>
 #include <vector>
 #include <stdexcept>
+#include <algorithm>
 
 namespace shader_contract {
 struct Member {
@@ -63,12 +65,79 @@ inline void Type(ID3D11ShaderReflectionType* actual,const Member& expected,const
     Require(d.Type==D3D_SVT_FLOAT && d.Rows==expected.rows && d.Columns==4,path,"scalar/vector dimensions mismatch");
   }
 }
+struct Resource {const char* name;unsigned slot;D3D_SHADER_INPUT_TYPE type;D3D_SRV_DIMENSION dimension;bool comparison=false;};
+inline std::vector<Resource> Resources() {
+  using namespace shader;
+  return {
+    {"materials",texture::materials,D3D_SIT_TEXTURE,D3D_SRV_DIMENSION_TEXTURE2DARRAY},
+    {"shadowMap",texture::shadows,D3D_SIT_TEXTURE,D3D_SRV_DIMENSION_TEXTURE2DARRAY},
+    {"fontAtlas",texture::font,D3D_SIT_TEXTURE,D3D_SRV_DIMENSION_TEXTURE2D},
+    {"mapArtwork",texture::map,D3D_SIT_TEXTURE,D3D_SRV_DIMENSION_TEXTURE2D},
+    {"terrainSurface",texture::terrain,D3D_SIT_TEXTURE,D3D_SRV_DIMENSION_TEXTURE2D},
+    {"uiFrame",texture::frame,D3D_SIT_TEXTURE,D3D_SRV_DIMENSION_TEXTURE2D},
+    {"uiHall",texture::hall,D3D_SIT_TEXTURE,D3D_SRV_DIMENSION_TEXTURE2D},
+    {"uiIcons",texture::icons,D3D_SIT_TEXTURE,D3D_SRV_DIMENSION_TEXTURE2D},
+    {"cloudLightField",texture::cloud,D3D_SIT_TEXTURE,D3D_SRV_DIMENSION_TEXTURE2D},
+    {"bodyRows",texture::body,D3D_SIT_STRUCTURED,D3D_SRV_DIMENSION_BUFFER},
+    {"surfaceColor",texture::surfaceColor,D3D_SIT_TEXTURE,D3D_SRV_DIMENSION_TEXTURE2DARRAY},
+    {"surfaceNormal",texture::surfaceNormal,D3D_SIT_TEXTURE,D3D_SRV_DIMENSION_TEXTURE2DARRAY},
+    {"classSpells",texture::classSpells,D3D_SIT_TEXTURE,D3D_SRV_DIMENSION_TEXTURE2D},
+    {"combatSpells",texture::combatSpells,D3D_SIT_TEXTURE,D3D_SRV_DIMENSION_TEXTURE2D},
+    {"effectArtwork",texture::effects,D3D_SIT_TEXTURE,D3D_SRV_DIMENSION_TEXTURE2D},
+    {"effectSceneDepth",texture::depth,D3D_SIT_TEXTURE,D3D_SRV_DIMENSION_TEXTURE2D},
+    {"spellGlowSource",texture::glow,D3D_SIT_TEXTURE,D3D_SRV_DIMENSION_TEXTURE2D},
+    {"priestSpells",texture::priestSpells,D3D_SIT_TEXTURE,D3D_SRV_DIMENSION_TEXTURE2D},
+    {"pressureSceneColor",texture::pressure,D3D_SIT_TEXTURE,D3D_SRV_DIMENSION_TEXTURE2D},
+    {"surfaceColorSmall",texture::surfaceColorSmall,D3D_SIT_TEXTURE,D3D_SRV_DIMENSION_TEXTURE2DARRAY},
+    {"surfaceNormalSmall",texture::surfaceNormalSmall,D3D_SIT_TEXTURE,D3D_SRV_DIMENSION_TEXTURE2DARRAY},
+    {"surfaceSampler",sampler::surface,D3D_SIT_SAMPLER,D3D_SRV_DIMENSION_UNKNOWN},
+    {"shadowSampler",sampler::shadow,D3D_SIT_SAMPLER,D3D_SRV_DIMENSION_UNKNOWN,true},
+    {"fontSampler",sampler::font,D3D_SIT_SAMPLER,D3D_SRV_DIMENSION_UNKNOWN}
+  };
+}
+inline void ValidateInputs(ID3D11ShaderReflection* reflection,const D3D11_SHADER_DESC& desc,const std::string& entry) {
+  if(D3D11_SHVER_GET_TYPE(desc.Version)!=D3D11_SHVER_VERTEX_SHADER)return;
+  const auto stream=entry=="VSMain" || entry=="VSEffect"?shader::VertexStream::Basic:
+    entry=="VSWorld" || entry=="VSShadow"?shader::VertexStream::Instance:
+    entry=="VSBody" || entry=="VSBodyShadow" || entry=="VSHand" || entry=="VSHandShadow"?shader::VertexStream::Skinned:shader::VertexStream::Generated;
+  const auto elements=shader::InputElements(stream);
+  for(unsigned i=0;i<desc.InputParameters;++i) {
+    D3D11_SIGNATURE_PARAMETER_DESC p{};Require(SUCCEEDED(reflection->GetInputParameterDesc(i,&p)),entry,"input reflection failed");
+    const auto path=entry+"/input/"+p.SemanticName+std::to_string(p.SemanticIndex);
+    if(p.SystemValueType!=D3D_NAME_UNDEFINED) {
+      Require(stream==shader::VertexStream::Generated && p.SystemValueType==D3D_NAME_VERTEX_ID && p.ComponentType==D3D_REGISTER_COMPONENT_UINT32 && p.Mask==1,path,"unsupported generated vertex input");continue;
+    }
+    const auto found=std::find_if(elements.begin(),elements.end(),[&](const auto& e){return _stricmp(e.SemanticName,p.SemanticName)==0 && e.SemanticIndex==p.SemanticIndex;});
+    Require(found!=elements.end(),path,"missing CPU vertex semantic");
+    const bool integer=found->Format==DXGI_FORMAT_R32G32B32A32_UINT;
+    Require(p.ComponentType==(integer?D3D_REGISTER_COMPONENT_UINT32:D3D_REGISTER_COMPONENT_FLOAT32),path,"vertex component type mismatch");
+    const auto mask=found->Format==DXGI_FORMAT_R32G32B32_FLOAT?7:15;
+    Require(p.Mask==mask,path,"vertex component count mismatch");
+  }
+}
+inline void ValidateResources(ID3D11ShaderReflection* reflection,const D3D11_SHADER_DESC& desc,const std::string& entry) {
+  const auto expected=Resources();
+  for(unsigned i=0;i<desc.BoundResources;++i) {
+    D3D11_SHADER_INPUT_BIND_DESC r{};Require(SUCCEEDED(reflection->GetResourceBindingDesc(i,&r)),entry,"resource reflection failed");
+    if(r.Type==D3D_SIT_CBUFFER)continue;
+    const auto path=entry+"/resource/"+r.Name;
+    const auto found=std::find_if(expected.begin(),expected.end(),[&](const auto& e){return std::string(e.name)==r.Name;});
+    Require(found!=expected.end(),path,"unregistered resource");
+    Require(r.Type==found->type && r.Dimension==found->dimension,path,"resource kind/dimension mismatch");
+    Require(r.BindPoint==found->slot && r.BindCount==1,path,"resource register/count mismatch");
+    if(r.Type==D3D_SIT_TEXTURE)Require(r.ReturnType==D3D_RETURN_TYPE_FLOAT,path,"texture return type mismatch");
+    if(r.Type==D3D_SIT_SAMPLER)Require(bool(r.uFlags&D3D_SIF_COMPARISON_SAMPLER)==found->comparison,path,"sampler comparison mode mismatch");
+    if(r.Type==D3D_SIT_STRUCTURED)Require(r.NumSamples==sizeof(DirectX::XMFLOAT4),path,"structured element stride mismatch");
+  }
+}
 // Optimized stages can omit unused buffers. Every surviving variable (even
 // unused members within a live buffer) must match the actual CPU upload type.
 inline std::vector<std::string> Validate(const void* bytes,std::size_t size,const std::string& entry) {
   Microsoft::WRL::ComPtr<ID3D11ShaderReflection> reflection;
   Require(SUCCEEDED(D3DReflect(bytes,size,IID_PPV_ARGS(&reflection))),entry,"reflection failed");
   D3D11_SHADER_DESC desc{};Require(SUCCEEDED(reflection->GetDesc(&desc)),entry,"shader description failed");
+  ValidateInputs(reflection.Get(),desc,entry);
+  ValidateResources(reflection.Get(),desc,entry);
   const auto layouts=Layouts();std::vector<std::string> seen;
   for(unsigned i=0;i<desc.ConstantBuffers;++i) {
     auto* buffer=reflection->GetConstantBufferByIndex(i);D3D11_SHADER_BUFFER_DESC d{};
