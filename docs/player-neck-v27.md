@@ -47,8 +47,25 @@ remain in the ignored local task directory. They are not Git-tracked.
 
 ## Verification
 
-Final native inspection and integration checks are in progress. The regression
-checks cover actual jaw-to-shoulder height, lower-neck movement during head
-turns, upper-neck skinning continuity and stationary garment collars. Facial
-pixel tests keep their existing limits and reframe the camera to the corrected
-head attachment.
+All 16 Release and nine focused Debug suites pass. Regression checks cover
+actual jaw-to-shoulder height, lower-neck movement during head turns,
+upper-neck skinning continuity and stationary garment collars. Facial pixel
+tests retain their limits and reframe the camera and lit-cheek probe to the
+corrected attachment. The obsolete test expectation that equipped warriors
+must shrink the neck is replaced by the new no-shrink contract.
+
+Native review contains 18 neck views, 50 full-model views and 528 movement
+frames. The eight review videos reopen at 800 × 900, 30 fps, 66 frames each.
+Both Blender sources reopen successfully: the dense anatomy has 53,687
+vertices and 15 joints; the assembled inspection copy has 30 posed pieces.
+The 60 protected files, 27 unrelated equipment records and six lower-garment
+weight records remain identical to the task baseline.
+
+Resource verification caught a stale Visual Studio body resource: preserving
+an earlier export timestamp during atomic publication hid the changed bytes
+from the incremental build. The local publisher now advances the timestamp
+when publishing changed content. All six EXEs now contain the exact published
+motion, body, equipment and weight archives. Ninja Release/Debug, Visual Studio
+Release/Debug and the frontier native/debug builds all pass the real game
+startup/rendering check on an isolated test save. Machine-readable results and
+the final EXE hashes are in the local `validation.json` report.
