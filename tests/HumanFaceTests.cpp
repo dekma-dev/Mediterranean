@@ -1,4 +1,5 @@
 #include "game/CharacterView.h"
+#include "game/CharacterPose.h"
 #include "engine/Renderer.h"
 #include "platform/Win32Window.h"
 #include <filesystem>
@@ -62,6 +63,21 @@ int main() {
           if(std::abs(x)<.018f && y>1.580f && y<1.620f)neck=std::max(neck,z);
         }
         Check(chin>neck+.020f,"Mandible/chin must remain in front of the neck socket");
+        if(id==unsigned(HumanFace::Player)) {
+          CharacterPose neutral;
+          const auto attachment=neutral.HeadAttachmentTransform(true);
+          float jawHeight=10;
+          for(const auto& v:g.vertices) {
+            const XMFLOAT3 p{v.position.x*.265f,v.position.y*.42f+1.71f,v.position.z*.26f+.012f};
+            if(std::abs(p.x)<.018f && p.y>1.640f && p.y<1.677f && p.z>neck+.020f) {
+              XMFLOAT3 q;XMStoreFloat3(&q,XMVector3TransformCoord(XMLoadFloat3(&p),attachment));
+              jawHeight=std::min(jawHeight,q.y);
+            }
+          }
+          // A raised head over lowered shoulders produced the long straight
+          // neck in the rejected native model. Test actual retained jaw mesh.
+          Check(jawHeight-1.43f>.085f && jawHeight-1.43f<.145f,"Jaw sits too far above the shoulder joint plane");
+        }
       }
     }
     for(unsigned lod=0;lod<2;++lod) {
@@ -84,7 +100,8 @@ int main() {
     auto outfit=CharacterOutfit::From(rpg::Inventory{},view==4?rpg::ClassId::Mage:rpg::ClassId::Warrior);
     outfit.face=HumanFace(id);outfit.appearance={1,id==2 || id==5?4:0,0};outfit.weapon=false;outfit.helm=view==3;
     animation::Sample pose;if(view==2)pose.face.blink=1;
-    renderer.BeginFrame();renderer.SetCamera(view==1?XMFLOAT3{-.66f,1.77f,-.02f}:XMFLOAT3{-.18f,1.77f,-.66f},{0,1.70f,0});
+    const float reframe=CharacterPose::headDrop-.055f;
+    renderer.BeginFrame();renderer.SetCamera(view==1?XMFLOAT3{-.66f,1.77f-reframe,-.02f}:XMFLOAT3{-.18f,1.77f-reframe,-.66f},{0,1.70f-reframe,0});
     if(view==5)Check(renderer.BeginPortrait(0,0,1,1,.80f),"Lit face portrait");
     DrawCharacter(renderer,{0,0},0,view==5?.25f:XM_PI,{.38f,.36f,.31f,1},0,0,outfit,pose,1);
     if(view==5)Check(renderer.EndPortrait(),"Finish lit portrait");

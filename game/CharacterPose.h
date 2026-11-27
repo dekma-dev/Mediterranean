@@ -37,6 +37,12 @@ struct CharacterPose {
   // Narrow the presentation hip span to 25 cm. The former 34 cm placement
   // kept the upper legs spread even after narrowing the foot tracks.
   static constexpr float hipHalfWidth=.125f,standingHalfWidth=.125f;
+  // Anatomical glenohumeral span, matched by the body and garment bind meshes.
+  // The former 61 cm joint span inflated the chest and trapezius silhouette.
+  static constexpr float shoulderHalfWidth=.225f;
+  // Position the retained head above the anatomical clavicles, rather than
+  // above the old raised shoulder yoke. All facial parts share this attachment.
+  static constexpr float headDrop=.100f,headPivotHeight=1.490f;
   DirectX::XMFLOAT3 UpperPoint(DirectX::XMFLOAT3 point) const;
   DirectX::XMMATRIX UpperTransform() const;
   DirectX::XMMATRIX SpineTransform(unsigned segment) const;
@@ -44,6 +50,7 @@ struct CharacterPose {
   DirectX::XMFLOAT3 PelvisPoint(DirectX::XMFLOAT3 point) const;
   DirectX::XMFLOAT3 UpperDirection(DirectX::XMFLOAT3 direction) const;
   DirectX::XMMATRIX HeadTransform() const;
+  DirectX::XMMATRIX HeadAttachmentTransform(bool warrior) const;
   DirectX::XMFLOAT3 HeadPoint(DirectX::XMFLOAT3 point) const;
   DirectX::XMFLOAT3 WeaponPoint(float distance) const;
   DirectX::XMFLOAT3 FootPoint(unsigned side,DirectX::XMFLOAT3 local) const;

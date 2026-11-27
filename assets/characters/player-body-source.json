@@ -2,7 +2,7 @@
   "source": "assets/authored/player-anatomy.blend",
   "source_sha256": "bbb0590a5dd6a06c0ea20004ac5c6cdda0f3f1754dc18407dde3ed6b53625e79",
   "upstream": "Blender Studio Human Base Meshes v1.4.1, realistic male (CC0-1.0)",
-  "rig": "Existing ten-bone presentation rig; offline retargeted weights",
+  "rig": "v27 restored source neck topology above the clavicles; 45 cm shoulder span and retained limb rig",
   "source_bind": [
     [
       [
@@ -200,70 +200,74 @@
     ],
     [
       [
-        -0.305,
+        -0.225,
         1.43,
         0
       ],
       [
-        -0.45,
-        1.19,
+        -0.348,
+        1.1795,
         -0.025
       ]
     ],
     [
       [
-        -0.45,
-        1.19,
+        -0.348,
+        1.1795,
         -0.025
       ],
       [
-        -0.52,
-        0.93,
+        -0.42,
+        0.9232,
         0.02
       ]
     ],
     [
       [
-        0.305,
+        0.225,
         1.43,
         0
       ],
       [
-        0.45,
-        1.19,
+        0.348,
+        1.1795,
         -0.025
       ]
     ],
     [
       [
-        0.45,
-        1.19,
+        0.348,
+        1.1795,
         -0.025
       ],
       [
-        0.52,
-        0.93,
+        0.42,
+        0.9232,
         0.02
       ]
     ]
   ],
   "lods": [
     {
-      "vertices": 13016,
-      "triangles": 26028,
+      "vertices": 16002,
+      "triangles": 32000,
       "normal_constraints": 0
     },
     {
-      "vertices": 2502,
-      "triangles": 5000,
+      "vertices": 3502,
+      "triangles": 7000,
       "normal_constraints": 1
     },
     {
-      "vertices": 702,
-      "triangles": 1400,
+      "vertices": 902,
+      "triangles": 1800,
       "normal_constraints": 0
     }
   ],
-  "bytes": 1362616,
-  "sha256": "cdb11366443aaab16ea1d86dcdb7a11400a214ac28431b19db25d45fcb4bd408"
+  "bytes": 1714240,
+  "sha256": "5c887b2e7465ebf6fd71595eb57677284d3360650b4151122d5b8f46d880af92",
+  "editable_source": "assets/authored/player-anatomy-v27.blend",
+  "editable_sha256": "5d357f21c2d06d90074a9e01cf8896925e2ee340584e41f80bc463cd450a6feb",
+  "native_articulation_joints": 15,
+  "editable_rig": "pelvis, two spine joints, chest, clavicles, limbs and continuous neck; upright Blender object transforms"
 }

@@ -33,24 +33,27 @@ const std::array<BoneSegment,bodyBones>& BodyBindPose() {
     {{0,.80f,0},{0,1.02f,0},.22f,.23f}, {{0,1.04f,0},{0,1.43f,0},.23f,.28f},
     {{-.17f,.93f,0},{-.17f,.53f,0},.13f,.095f}, {{-.17f,.53f,0},{-.18f,.17f,0},.095f,.065f},
     {{.17f,.93f,0},{.17f,.53f,0},.13f,.095f}, {{.17f,.53f,0},{.18f,.17f,0},.095f,.065f},
-    {{-.305f,1.43f,0},{-.45f,1.19f,-.025f},.115f,.083f}, {{-.45f,1.19f,-.025f},{-.52f,.93f,.02f},.083f,.058f},
-    {{.305f,1.43f,0},{.45f,1.19f,-.025f},.115f,.083f}, {{.45f,1.19f,-.025f},{.52f,.93f,.02f},.083f,.058f},
+    {{-.225f,1.43f,0},{-.348f,1.1795f,-.025f},.078f,.061f}, {{-.348f,1.1795f,-.025f},{-.420f,.9232f,.02f},.061f,.046f},
+    {{.225f,1.43f,0},{.348f,1.1795f,-.025f},.078f,.061f}, {{.348f,1.1795f,-.025f},{.420f,.9232f,.02f},.061f,.046f},
     {{0,.95f,0},{0,1.10f,0},.22f,.23f},{{0,1.10f,0},{0,1.27f,0},.23f,.25f},
-    {{-.12f,1.43f,0},{-.305f,1.43f,0},.10f,.10f},{{.12f,1.43f,0},{.305f,1.43f,0},.10f,.10f}
+    {{-.10f,1.45f,0},{-.225f,1.43f,0},.07f,.07f},{{.10f,1.45f,0},{.225f,1.43f,0},.07f,.07f},
+    {{0,1.49f,0},{0,1.55f,0},.068f,.05f}
   }};
   return bones;
 }
-SkinInfluence ArticulateTorso(XMFLOAT3 p,const SkinInfluence& source,bool rigidChest) {
+SkinInfluence ArticulateTorso(XMFLOAT3 p,const SkinInfluence& source,bool rigidChest,bool articulateNeck) {
   const auto smooth=[](float x){x=std::clamp(x,0.f,1.f);return x*x*(3-2*x);};
   std::array<float,bodyBones> weight{};
   const float values[]={source.weights.x,source.weights.y,source.weights.z,source.weights.w};
   const float lower=smooth((p.y-1.04f)/.16f),upper=smooth((p.y-1.20f)/.18f);
-  const float shoulder=smooth((std::abs(p.x)-.15f)/.16f)*smooth((p.y-1.28f)/.13f)*(1-smooth((p.y-1.49f)/.10f));
+  const float shoulder=smooth((std::abs(p.x)-.12f)/.105f)*smooth((p.y-1.28f)/.13f)*(1-smooth((p.y-1.49f)/.10f));
+  const float neck=articulateNeck?smooth((p.y-1.445f)/.060f)*(1-smooth((std::abs(p.x)-.070f)/.045f)):0.f;
   for(unsigned i=0;i<4;++i){
     const unsigned bone=source.bones[i];const float w=values[i];
     if(bone==1&&!rigidChest){
-      weight[p.x<0?12:13]+=w*shoulder;
-      const float trunk=w*(1-shoulder);
+      weight[neckBone]+=w*neck;
+      weight[p.x<0?12:13]+=w*(1-neck)*shoulder;
+      const float trunk=w*(1-neck)*(1-shoulder);
       weight[10]+=trunk*(1-lower);weight[11]+=trunk*lower*(1-upper);weight[1]+=trunk*lower*upper;
     } else weight[bone]+=w;
   }

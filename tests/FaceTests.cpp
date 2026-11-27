@@ -67,9 +67,14 @@ void Attachments() {
   for(float yaw : {-.62f,0.f,.62f}) for(float pitch : {-.245f,0.f,.245f}) {
     sample.face.yaw=yaw; sample.face.pitch=pitch;
     const auto pose=BuildCharacterPose(0,.7f,true,sample);
-    Check(Distance(pose.HeadPoint({0,1.61f,0}),pose.UpperPoint({0,1.61f,0}))<.000001f,"Head rotation must pin the neck attachment");
+    Check(Distance(pose.HeadPoint({0,CharacterPose::headPivotHeight,0}),pose.UpperPoint({0,CharacterPose::headPivotHeight,0}))<.000001f,"Head rotation must pin the neck attachment");
     Check(std::abs(Distance(pose.HeadPoint({0,1.76f,.012f}),pose.HeadPoint({0,1.86f,.012f}))-.1f)<.000001f,
       "Head/helmet attachments must retain their relative dimensions");
+    DirectX::XMFLOAT3 root,restRoot;
+    const auto sourceRoot=DirectX::XMVectorSet(0,1.55f,0,1);
+    DirectX::XMStoreFloat3(&root,DirectX::XMVector3TransformCoord(sourceRoot,pose.HeadAttachmentTransform(true)));
+    DirectX::XMStoreFloat3(&restRoot,DirectX::XMVector3TransformCoord(sourceRoot,neutral.HeadAttachmentTransform(true)));
+    Check(Distance(root,restRoot)<.014f,"Looking around swings the lower neck through the garment");
     Check(Distance(pose.WeaponPoint(.96f),neutral.WeaponPoint(.96f))<.000001f &&
       Distance(pose.arms[0].end,neutral.arms[0].end)<.000001f,"Looking at a target must never move the weapon or solved hands");
     if(yaw==0 && pitch==0) Check(Distance(pose.HeadPoint({.1f,1.9f,.05f}),pose.UpperPoint({.1f,1.9f,.05f}))<.000001f,"Neutral head must match the established upper-body transform");
@@ -103,7 +108,8 @@ int main() {
     sample.face.yaw=i==5?-.55f:i==7?.45f:0; sample.face.eyeYaw=i==5?-.18f:0;
     sample.face.pitch=i==6?-.20f:0; sample.face.eyePitch=i==6?-.08f:0;
     CharacterOutfit outfit; outfit.helm=i==7;
-    renderer.BeginFrame(); renderer.SetCamera(i==8?XMFLOAT3{.85f,1.79f,.16f}:XMFLOAT3{0,1.79f,.85f},{0,1.76f,0});
+    const float reframe=CharacterPose::headDrop-.055f;
+    renderer.BeginFrame(); renderer.SetCamera(i==8?XMFLOAT3{.85f,1.79f-reframe,.16f}:XMFLOAT3{0,1.79f-reframe,.85f},{0,1.76f-reframe,0});
     DrawCharacter(renderer,{0,0},0,0,{.22f,.37f,.54f,1},0,0,outfit,sample);
     Check(renderer.Capture(L"face-"+std::wstring(names[i])+L".png") && renderer.EndFrame(false) && renderer.ValidateDebugMessages(),"Face color/shadow capture");
   }
@@ -124,10 +130,17 @@ int main() {
   Check(changed>500 && changed<12000 && leftEye>200 && rightEye>200 && outside==0,"Blink must visibly close both eyes within the fitted upper face without changing other geometry or shadows");
   float cheek[2]{};
   for(int occluded=0;occluded<2;++occluded) {
-    renderer.BeginFrame(); renderer.SetCamera({0,1.79f,-.85f},{0,1.76f,0});
+    const float reframe=CharacterPose::headDrop-.055f;
+    renderer.BeginFrame(); renderer.SetCamera({0,1.79f-reframe,-.85f},{0,1.76f-reframe,0});
     DrawCharacter(renderer,{0,0},0,motion::tau*.5f,{.22f,.37f,.54f,1},0,0);
-    if(occluded) renderer.DrawMesh(visual::Mesh::Box,{-.5f,2.61f,-.4f},{1,.08f,1},{.4f,.4f,.4f,1},visual::Material::Stone);
-    XMFLOAT2 probe; Check(renderer.Project({-.065f,1.74f,-.105f},probe),"Lit cheek projection");
+    // Keep the blocker well inside the light ray instead of testing its moving
+    // penumbra after a head-attachment change. Probe the retained cheek in its
+    // actual attachment space, rather than an obsolete world-space height.
+    if(occluded) renderer.DrawMesh(visual::Mesh::Box,{0,2.35f,-.15f},{2,.08f,2},{.4f,.4f,.4f,1},visual::Material::Stone);
+    animation::Sample neutral;neutral.authoredGait=true;neutral.authoredBlend=1;neutral.authoredEquipment=playerclips::Equipment::Sword;
+    const auto cheekTransform=BuildCharacterPose(0,0,false,neutral).HeadAttachmentTransform(true)*XMMatrixRotationY(motion::tau*.5f);
+    XMFLOAT3 cheekPoint;XMStoreFloat3(&cheekPoint,XMVector3TransformCoord(XMVectorSet(.065f,1.745f,.102f,1),cheekTransform));
+    XMFLOAT2 probe; Check(renderer.Project(cheekPoint,probe),"Lit cheek projection");
     const auto path=occluded?L"face-shadowed.png":L"face-sunlit.png";
     Check(renderer.Capture(path) && renderer.EndFrame(false) && renderer.ValidateDebugMessages(),"Facial shadow receiver capture");
     const auto pixels=Pixels(path); const int cx=int(probe.x*960),cy=int(probe.y*720);

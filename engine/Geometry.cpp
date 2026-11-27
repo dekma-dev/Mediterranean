@@ -785,7 +785,7 @@ std::vector<std::uint8_t> BuildMaterialLayer(Material material,unsigned size) {
       height=.00022f*hammer+.00004f*fineHammer-.000035f*abrasion;
       // Polished working steel and oxidized recesses should reflect differently;
       // uniformly rough grey metal made the forged equipment read as plastic.
-      roughness=.27f+.13f*hammer+.28f*oxidation-.055f*abrasion;
+      roughness=.38f+.16f*hammer+.24f*oxidation-.045f*abrasion;
       if(material==Material::RivetedMail){value*=.9f;roughness+=.09f;}
       break;
     }

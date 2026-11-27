@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <memory>
 
 namespace {
 void Require(bool value,const char* message) {
@@ -85,7 +86,7 @@ float Distance(DirectX::XMFLOAT3 a,DirectX::XMFLOAT3 b) {
 void RepeatTakeoffRegressions() {
   float worstHip=0,worstHand=0,worstClipTiming=0;
   for(int hz : {22,30,60,144,1000}) for(float delay : {0.f,.03f,.06f,.09f,.15f,.25f,.4f}) {
-    Game game; game.Initialize(); rpg::Command jump; jump.jump=true;
+    auto gameFixture=std::make_unique<Game>();auto& game=*gameFixture; game.Initialize(); rpg::Command jump; jump.jump=true;
     game.ExecuteCommand(jump,.001f);
     for(int frame=0;!game.State().Grounded() && frame<hz*2;++frame) game.ExecuteCommand({},1.f/hz);
     Require(game.State().Grounded(),"Repeat-jump fixture must land");
@@ -100,7 +101,7 @@ void RepeatTakeoffRegressions() {
     Require(game.PlayerAnimation().landing==0,"Previous landing crouch must release during the new ascent");
   }
   for(int hz : {22,30,60,144,1000}) {
-    Game game; game.Initialize(); rpg::Command jump; jump.jump=true;
+    auto gameFixture=std::make_unique<Game>();auto& game=*gameFixture; game.Initialize(); rpg::Command jump; jump.jump=true;
     game.ExecuteCommand(jump,.001f);
     for(float t=.001f;t<.8f-1e-7f;) { const float dt=std::min(1.f/hz,.8f-t); game.ExecuteCommand({},dt); t+=dt; }
     const auto expected=animation::SampleClip(animation::MotionClip::Land,.2f);
@@ -230,7 +231,7 @@ void ClassContactRegressions() {
   const char* fixture="MEDITERRANEAN 3\n12 -3.8 140 0 3 90\n5 1 1 0\n4\n0 0 0 0\n"
     "100 -4 7 0 0 1 3 0 0\n101 4 9 0 0 1 3 0 0\n102 0 12 0 0 1 3 0 0\n";
   for(C school:{C::Warrior,C::Scout,C::Mage,C::Priest})for(int ability:{0,1})for(int hz:{30,60,144}) {
-    Game game;Require(game.RestoreSnapshot(fixture),"Dummy reaction fixture");
+    auto gameFixture=std::make_unique<Game>();auto& game=*gameFixture;Require(game.RestoreSnapshot(fixture),"Dummy reaction fixture");
     auto save=game.State().Save();const auto at=save.find("PROFILE ");
     save.replace(at,save.find('\n',at)-at,"PROFILE "+std::to_string(int(school))+" \"Tester\" 7 1 3");
     Require(game.RestoreSnapshot(save),"Dummy reaction class fixture");
@@ -267,7 +268,7 @@ void ContactAndWeaponRegressions() {
     "100 -4 7 80 0 0 1 0.017 3.14159\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
   float worstRecoil=0,worstTint=0,worstWeapon=0;
   for (int hz : {22,30,60,144,1000}) {
-    Game game; Require(game.RestoreSnapshot(imminent),"Recoil contact fixture must load");
+    auto gameFixture=std::make_unique<Game>();auto& game=*gameFixture; Require(game.RestoreSnapshot(imminent),"Recoil contact fixture must load");
     for(float t=0;t<.12f-1e-7f;) {
       const float dt=std::min(1.f/hz,.12f-t); game.ExecuteCommand({},dt); t+=dt;
     }
@@ -288,7 +289,7 @@ void ContactAndWeaponRegressions() {
   const char* crowd="MEDITERRANEAN 3\n-4 5.2 100 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
     "100 -4 7 80 0 0 1 0.04 3.14159\n101 4 9 80 0 0 0 0 0\n102 -4 7 120 0 0 1 0.01 3.14159\n";
   for(float step : {.001f,.01f,.05f}) {
-    Game game; Require(game.RestoreSnapshot(crowd),"Multiple recoil fixture must load");
+    auto gameFixture=std::make_unique<Game>();auto& game=*gameFixture; Require(game.RestoreSnapshot(crowd),"Multiple recoil fixture must load");
     for(float t=0;t<.05f-1e-7f;) {
       const float dt=std::min(step,.05f-t); game.ExecuteCommand({},dt); t+=dt;
     }
@@ -321,16 +322,17 @@ void LocomotionContinuityRegressions() {
   // Exercise many points in the real contact cycle, including sprinting and
   // camera-facing side/back steps. A single favourable stride misses the pop.
   for (int hz : {30,60,144}) for (bool sprint : {false,true}) for (int direction=0;direction<4;++direction) {
-    Game walking; walking.Initialize();
     rpg::Command command; command.sprint=sprint; command.steerFacing=true;
     const rpg::Vec2 directions[]={{0,1},{1,0},{0,-1},{0,0}};
     command.movement=directions[direction];
     for (int frames=1;frames<=hz*3/2;++frames) {
-      command.jump=false;command.facingYaw=direction==3?(frames-1)*1.5f/hz:0;
-      walking.ExecuteCommand(command,1.f/hz);
-      // Retain every original probe, but reuse its identical walking prefix.
-      // A copy isolates the jump from the next probe's uninterrupted gait.
-      Game game=walking;
+      // Game owns a noncopyable command executor. Reproduce the same prefix
+      // in an independent fixture instead of copying its execution state.
+      auto gameFixture=std::make_unique<Game>();auto& game=*gameFixture;game.Initialize();command.jump=false;
+      for(int prefix=0;prefix<frames;++prefix) {
+        command.facingYaw=direction==3?prefix*1.5f/hz:0;
+        game.ExecuteCommand(command,1.f/hz);
+      }
       Require(game.PlayerAnimation().feetActive,"Takeoff fixture must begin with ground contacts");
       const auto before=BuildCharacterPose(0,game.PlayerPose().gait,false,game.PlayerAnimation());
       command.jump=true; game.ExecuteCommand(command,.001f);
@@ -372,7 +374,7 @@ void TransitionRegressions() {
   };
   const char* duel="MEDITERRANEAN 3\n-4 5.8 100 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
     "100 -4 7 80 0 0 1 0 3.14159265\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
-  Game game; Require(game.RestoreSnapshot(duel),"Variable-step recoil fixture must load.");
+  auto gameFixture=std::make_unique<Game>();auto& game=*gameFixture; Require(game.RestoreSnapshot(duel),"Variable-step recoil fixture must load.");
   rpg::Command strike; strike.nextTarget=true; strike.ability=0;
   game.ExecuteCommand(strike,.01f);
   for(int i=0;i<18;++i) game.ExecuteCommand({},.01f);
@@ -383,7 +385,12 @@ void TransitionRegressions() {
   strike.nextTarget=false; strike.ability=1; game.ExecuteCommand(strike,.01f);
   for(int i=0;i<5;++i) game.ExecuteCommand({},.05f);
   const float beforeHit=game.EnemyAnimation(0).hit,health=game.State().Enemies()[0].health;
-  Game split=game;
+  auto splitFixture=std::make_unique<Game>();auto& split=*splitFixture;Require(split.RestoreSnapshot(duel),"Split recoil fixture must load.");
+  rpg::Command splitStrike;splitStrike.nextTarget=true;splitStrike.ability=0;
+  split.ExecuteCommand(splitStrike,.01f);
+  for(int i=0;i<55;++i)split.ExecuteCommand({},.01f);
+  splitStrike.nextTarget=false;splitStrike.ability=1;split.ExecuteCommand(splitStrike,.01f);
+  for(int i=0;i<5;++i)split.ExecuteCommand({},.05f);
   for(int i=0;i<50;++i) split.ExecuteCommand({},.001f);
   game.ExecuteCommand({},.05f);
   Require(beforeHit>0 && game.State().Enemies()[0].health<health,"Second-hit fixture must damage a living enemy.");
@@ -548,7 +555,7 @@ int main() {
   // Enrage cooldowns and interruption lockouts must never masquerade as an
   // animation clock. Only accepted release events start follow-through.
   for(int hz:{30,60,144,1000}) {
-    Game boss;boss.Initialize();
+    auto bossFixture=std::make_unique<Game>();auto& boss=*bossFixture;boss.Initialize();
     auto& foes=const_cast<std::vector<rpg::Enemy>&>(boss.State().Enemies());
     for(auto& foe:foes) {foe.health=0;foe.state=rpg::EnemyState::Dead;}
     auto& foe=foes[0];foe.kind=rpg::EnemyKind::Captain;foe.rank=1;
@@ -566,7 +573,7 @@ int main() {
     boss.ExecuteCommand({},.001f);
     Require(std::abs(boss.EnemyAnimation(0).attackSeconds-(combat::Contact(true)+.121f))<.0001f,
       "Health/cooldown changes must not jump an existing recovery pose");
-    Game interrupted;interrupted.Initialize();
+    auto interruptedFixture=std::make_unique<Game>();auto& interrupted=*interruptedFixture;interrupted.Initialize();
     auto& stopped=const_cast<std::vector<rpg::Enemy>&>(interrupted.State().Enemies())[0];
     stopped.attackCooldown=.8f;stopped.windup=0;
     interrupted.ExecuteCommand({},.01f);
@@ -589,7 +596,7 @@ int main() {
   TransitionRegressions();
   LocomotionContinuityRegressions();
   {
-    Game jumper; jumper.Initialize(); rpg::Command walk; walk.movement={0,1};
+    auto jumperFixture=std::make_unique<Game>();auto& jumper=*jumperFixture; jumper.Initialize(); rpg::Command walk; walk.movement={0,1};
     for(int i=0;i<19;++i) jumper.ExecuteCommand(walk,1.f/60);
     const auto grounded=BuildCharacterPose(0,jumper.PlayerPose().gait,false,jumper.PlayerAnimation());
     walk.jump=true; jumper.ExecuteCommand(walk,.001f);
@@ -631,14 +638,14 @@ int main() {
     for(int side=0;side<2;++side) {
       Require(Distance(pose.legs[side].end,{side==0?-.18f:.18f,.17f,0})<.0001f,
         "Banking and weight transfer must preserve both planted contacts");
-      Require(Distance(pose.arms[side].root,pose.UpperPoint({side==0?-.305f:.305f,1.43f,0}))<.0001f,
+      Require(Distance(pose.arms[side].root,pose.UpperPoint({side==0?-CharacterPose::shoulderHalfWidth:CharacterPose::shoulderHalfWidth,1.43f,0}))<.0001f,
         "Torso roll must keep the shoulders attached");
     }
     const auto x=pose.UpperDirection({1,0,0}),y=pose.UpperDirection({0,1,0});
     Require(std::abs(x.x*y.x+x.y*y.y+x.z*y.z)<.0001f,"Torso rotation must remain orthogonal");
   }
   for(int hz : {30,60,144}) {
-    Game caster;
+    auto casterFixture=std::make_unique<Game>();auto& caster=*casterFixture;
     Require(caster.RestoreSnapshot("MEDITERRANEAN 3\n3 -10 50 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
       "100 -4 7 80 0 0 0 0 0\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n"),"Cast fixture must load");
     rpg::Command mend; mend.ability=3; caster.ExecuteCommand(mend,.01f);
@@ -687,7 +694,7 @@ int main() {
     }
     Require(std::abs(Distance(pose.weaponDirection,{0,0,0})-1)<.0001f,"Weapon orientation lost normalization.");
     Require(pose.arms[1].end.y+pose.weaponDirection.y*.96f>.08f,"Animation drove the sword tip through the floor.");
-    const auto shoulder=pose.UpperPoint({.305f,1.43f,0});
+    const auto shoulder=pose.UpperPoint({CharacterPose::shoulderHalfWidth,1.43f,0});
     Require(Distance(shoulder,pose.arms[1].root)<.0001f,"Torso transform detached the arm root.");
   }
   for (float invalid : {std::numeric_limits<float>::quiet_NaN(),std::numeric_limits<float>::infinity(),-100.f,100.f}) {
@@ -748,7 +755,7 @@ int main() {
     if (hz!=30) Require(std::abs(state.pose.breath-idleReference.breath)<.0001f &&
       std::abs(state.pose.sway-idleReference.sway)<.0001f,"Idle rate depends on frame rate.");
     idleReference=state.pose;
-    Game game; game.Initialize(); rpg::Command jump; jump.jump=true;
+    auto gameFixture=std::make_unique<Game>();auto& game=*gameFixture; game.Initialize(); rpg::Command jump; jump.jump=true;
     bool rising=false,falling=false,landed=false; float peakLanding=0;
     for (int i=0;i<hz*2;++i) {
       game.ExecuteCommand(i==0?jump:rpg::Command{},1.f/hz);
@@ -771,7 +778,7 @@ int main() {
   }
   animation::State hit;
   for(int hz : {30,60,144}) {
-    Game weighted; weighted.Initialize(); rpg::Command run; run.movement={0,1};
+    auto weightedFixture=std::make_unique<Game>();auto& weighted=*weightedFixture; weighted.Initialize(); rpg::Command run; run.movement={0,1};
     weighted.ExecuteCommand(run,1.f/hz);
     Require(weighted.PlayerAnimation().lean>0,"Acceleration must lean into forward travel");
     for(int i=0;i<hz;++i) weighted.ExecuteCommand(run,1.f/hz);
@@ -821,7 +828,7 @@ int main() {
   Require(repeatJump.pose.landing==0,"Buffered contact/takeoff with no visible crouch must not add an airborne impact pose");
   const char* encounter="MEDITERRANEAN 3\n-4 5.8 100 0 0 0\n2 0 0 0\n0\n0 0 0 0\n"
     "100 -4 7 80 0 0 1 0 3.14159265\n101 4 9 80 0 0 0 0 0\n102 0 12 120 0 0 0 0 0\n";
-  Game game; rpg::Simulation reference;
+  auto gameFixture=std::make_unique<Game>();auto& game=*gameFixture; rpg::Simulation reference;
   Require(game.RestoreSnapshot(encounter) && reference.Load(encounter),"Animation encounter fixture must load.");
   bool enemyRecoil=false,playerRecoil=false;
   for (int i=0;i<180;++i) {

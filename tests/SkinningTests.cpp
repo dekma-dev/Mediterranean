@@ -80,10 +80,10 @@ void Topology(unsigned level) {
   }
   const auto bytes=mesh.vertices.size()*(sizeof(visual::Vertex)+sizeof(visual::SkinInfluence))+mesh.indices.size()*4;
   std::cout<<"Body level "<<level<<": "<<mesh.vertices.size()<<" vertices, "<<mesh.indices.size()/3<<" triangles, "<<bytes<<" immutable bytes\n";
-  // Adopted anatomical export: 26,028 / 5,000 / 1,400 triangles. Keep explicit
+  // Anatomical shoulder refit: 31,998 / 7,000 / 1,800 triangles. Keep explicit
   // per-LOD bounds; the archive decoder separately enforces the 2 MiB total.
-  constexpr std::size_t byteBudget[]={1280*1024,256*1024,80*1024};
-  constexpr std::size_t triangleBudget[]={28000,6000,2000};
+  constexpr std::size_t byteBudget[]={1536*1024,384*1024,96*1024};
+  constexpr std::size_t triangleBudget[]={32768,7500,2000};
   Check(bytes<byteBudget[level] && mesh.indices.size()/3<triangleBudget[level],"Shared body exceeds its explicit geometry budget");
   if(level) Check(mesh.indices.size()<visual::CharacterBody(level-1).mesh.indices.size()*.65,
     "Each reduced body must remove substantial geometry");
@@ -125,6 +125,34 @@ void Poses(unsigned level) {
     }
   }
 }
+void NeckAttachmentChecks() {
+  const auto& body=visual::CharacterBody(0);
+  const auto rest=BuildCharacterRig(BuildCharacterPose(0,0,false),{}, {.3f,.4f,.5f,1});
+  auto warrior=CharacterOutfit::From(rpg::Inventory{},rpg::ClassId::Warrior);warrior.tunic=true;
+  Check(BuildCharacterRig(BuildCharacterPose(0,0,false),warrior,{.3f,.4f,.5f,1}).deformation.y==0,
+    "Obsolete collar shrink must not detach the connected body neck");
+  unsigned attached=0,anchored=0;
+  for(float yaw:{-.62f,.62f})for(float pitch:{-.245f,.245f}) {
+    animation::Sample sample;sample.face.yaw=yaw;sample.face.pitch=pitch;
+    const auto pose=BuildCharacterPose(0,0,false,sample);
+    const auto rig=BuildCharacterRig(pose,{}, {.3f,.4f,.5f,1});
+    for(std::size_t i=0;i<body.mesh.vertices.size();++i) {
+      const auto& v=body.mesh.vertices[i];const auto p=v.position;
+      if(p.y>1.515f && std::abs(p.x)<.065f) {
+        const auto q=visual::SkinVertex(v,body.influences[i],rig).position;
+        Check(Distance(q,pose.HeadPoint(p))<.00002f,"Upper body neck detached from the frozen head attachment");++attached;
+      }
+      if(p.y>1.38f && p.y<1.43f && std::abs(p.x)<.10f) {
+        const auto a=visual::SkinVertex(v,body.influences[i],rig).position,b=visual::SkinVertex(v,body.influences[i],rest).position;
+        Check(Distance(a,b)<.00002f,"Head turn dragged the clavicles/chest");++anchored;
+      }
+    }
+  }
+  Check(attached>100 && anchored>100,"Missing connected neck/chest deformation probes");
+  const visual::SkinInfluence chest{{1,0,0,0},{1,0,0,0}};
+  const auto collar=visual::ArticulateTorso({.05f,1.53f,.04f},chest);
+  for(auto bone:collar.bones)Check(bone!=visual::neckBone,"Garment collar must remain attached to the torso");
+}
 void ArticulatedTorsoChecks() {
   animation::Sample sample;sample.authoredGait=true;sample.authoredBlend=1;sample.gaitWeights={1,0,0,0};sample.runBlend=1;
   float shoulderTravel=0,spineDifference=0;
@@ -135,7 +163,7 @@ void ArticulatedTorsoChecks() {
     const auto chest=XMLoadFloat4x4(&rig.joints[1]),lower=XMLoadFloat4x4(&rig.joints[10]);
     spineDifference=std::max(spineDifference,XMVectorGetX(XMVector3Length(XMVector3TransformNormal(XMVectorSet(0,1,0,0),chest)-XMVector3TransformNormal(XMVectorSet(0,1,0,0),lower))));
     for(unsigned side=0;side<2;++side){
-      const XMFLOAT3 bind{side?.305f:-.305f,1.43f,0};XMFLOAT3 shoulder;
+      const XMFLOAT3 bind{side?CharacterPose::shoulderHalfWidth:-CharacterPose::shoulderHalfWidth,1.43f,0};XMFLOAT3 shoulder;
       XMStoreFloat3(&shoulder,XMVector3TransformCoord(XMLoadFloat3(&bind),XMLoadFloat4x4(&rig.joints[12+side])));
       Check(Distance(shoulder,pose.arms[side].root)<.00001f,"Clavicle skin joint detached from the upper arm");
       shoulderTravel=std::max(shoulderTravel,Distance(pose.shoulderOffset[side],{}));
@@ -249,7 +277,7 @@ void RigContinuity() {
 }
 }
 int main() {
-  VolumePreservation(); RigContinuity(); LodSelection(); ArticulatedTorsoChecks();
+  VolumePreservation(); RigContinuity(); LodSelection(); ArticulatedTorsoChecks(); NeckAttachmentChecks();
   for(unsigned level=0;level<visual::bodyLodCount;++level) { Topology(level); Poses(level); }
   Check(SUCCEEDED(CoInitializeEx(nullptr,COINIT_MULTITHREADED)),"COM initialization");
   Win32Window window; Check(window.Create(GetModuleHandle(nullptr),960,720,L"Skinned body checks",false),"Hidden skin test window");

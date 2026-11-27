@@ -124,8 +124,17 @@ DirectX::XMFLOAT3 CharacterPose::FootPoint(unsigned side,DirectX::XMFLOAT3 local
 }
 DirectX::XMMATRIX CharacterPose::HeadTransform() const {
   using namespace DirectX;
-  return XMMatrixTranslation(0,-1.61f,0)*XMMatrixRotationX(headPitch)*XMMatrixRotationY(headYaw)*
-    XMMatrixTranslation(0,1.61f,0)*UpperTransform();
+  // The frozen mesh contains the neck as well as the cranium. Rotate that
+  // assembly at its base; a jaw-height pivot swings its lower end out of cloth.
+  return XMMatrixTranslation(0,-headPivotHeight,0)*XMMatrixRotationX(headPitch)*XMMatrixRotationY(headYaw)*
+    XMMatrixTranslation(0,headPivotHeight,0)*UpperTransform();
+}
+DirectX::XMMATRIX CharacterPose::HeadAttachmentTransform(bool warrior) const {
+  using namespace DirectX;
+  // Preserve the existing facial dimensions and move the complete assembly.
+  const auto fit=warrior?XMMatrixTranslation(0,-1.61f,0)*XMMatrixScaling(.92f,.97f,.92f)*
+    XMMatrixTranslation(0,1.61f,0):XMMatrixIdentity();
+  return fit*XMMatrixTranslation(0,-headDrop,0)*HeadTransform();
 }
 DirectX::XMFLOAT3 CharacterPose::HeadPoint(DirectX::XMFLOAT3 point) const {
   DirectX::XMFLOAT3 result;
@@ -538,8 +547,16 @@ CharacterPose BuildCharacterPose(float swing,float gait,bool shield,animation::S
       if(form==rpg::WeaponForm::Handbow) hand.x-=.12f*animation::Unit(action.aim);
     }
     const auto offsetShoulder=pose.shoulderOffset[i];
+    // Translate each authored hand path with its shoulder. Keeping the old
+    // absolute targets would abduct both arms after correcting the bind span.
+    // Grip orientation and weapon-relative supporting-hand constraints below
+    // remain unchanged, including cross-body cuts and bow/string contact.
+    // During a bow draw the hands share one weapon frame about the torso.
+    // Fade out the independent shoulder translation as string contact takes
+    // over; applying it throughout the draw overextends the supporting elbow.
+    hand.x-=side*(.305f-CharacterPose::shoulderHalfWidth)*(bow?1-pose.bowStringGrip:1);
     hand.x+=offsetShoulder.x;hand.y+=offsetShoulder.y;hand.z+=offsetShoulder.z;
-    const auto shoulder=pose.UpperPoint({side*.305f+offsetShoulder.x,1.43f+offsetShoulder.y,offsetShoulder.z}),wrist=pose.UpperPoint(hand);
+    const auto shoulder=pose.UpperPoint({side*CharacterPose::shoulderHalfWidth+offsetShoulder.x,1.43f+offsetShoulder.y,offsetShoulder.z}),wrist=pose.UpperPoint(hand);
     // Legacy procedural gestures have no authored elbow channel. Retain their
     // established bend plane; the transported solver belongs to authored clips.
     const bool sourceGrip=i==1&&(form==rpg::WeaponForm::Blade||rpg::StaffWeapon(form)||bow)&&

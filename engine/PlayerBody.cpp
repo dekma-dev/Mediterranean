@@ -59,7 +59,7 @@ std::string_view EmbeddedBytes() {
 const Library& Collection() {
  static const auto bodies=[] {auto result=Decode(EmbeddedBytes());
   for(auto& lod:result)for(std::size_t i=0;i<lod.influences.size();++i)
-    lod.influences[i]=visual::ArticulateTorso(lod.mesh.vertices[i].position,lod.influences[i]);
+    lod.influences[i]=visual::ArticulateTorso(lod.mesh.vertices[i].position,lod.influences[i],false,true);
   return result;}();return bodies;
 }
 }

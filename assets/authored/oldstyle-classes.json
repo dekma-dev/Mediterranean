@@ -6,12 +6,12 @@
       "name": "WarriorChest",
       "lods": [
         {
-          "vertices": 37720,
-          "triangles": 74078
+          "vertices": 46473,
+          "triangles": 90125
         },
         {
-          "vertices": 19007,
-          "triangles": 20232
+          "vertices": 11356,
+          "triangles": 20682
         }
       ]
     },
@@ -19,12 +19,12 @@
       "name": "WarriorVeteranChest",
       "lods": [
         {
-          "vertices": 42002,
-          "triangles": 82818
+          "vertices": 40881,
+          "triangles": 79336
         },
         {
-          "vertices": 20120,
-          "triangles": 22315
+          "vertices": 10202,
+          "triangles": 18197
         }
       ]
     },
@@ -32,12 +32,12 @@
       "name": "WarriorShoulder",
       "lods": [
         {
-          "vertices": 8838,
-          "triangles": 17352
+          "vertices": 18214,
+          "triangles": 36104
         },
         {
-          "vertices": 2282,
-          "triangles": 4159
+          "vertices": 4329,
+          "triangles": 8296
         }
       ]
     },
@@ -97,12 +97,12 @@
       "name": "ScoutChest",
       "lods": [
         {
-          "vertices": 25240,
-          "triangles": 45957
+          "vertices": 25990,
+          "triangles": 45966
         },
         {
-          "vertices": 9597,
-          "triangles": 14584
+          "vertices": 8776,
+          "triangles": 12498
         }
       ]
     },
@@ -110,12 +110,12 @@
       "name": "ScoutVeteranChest",
       "lods": [
         {
-          "vertices": 25240,
-          "triangles": 45957
+          "vertices": 25990,
+          "triangles": 45966
         },
         {
-          "vertices": 9597,
-          "triangles": 14584
+          "vertices": 8776,
+          "triangles": 12498
         }
       ]
     },
@@ -127,8 +127,8 @@
           "triangles": 7192
         },
         {
-          "vertices": 1095,
-          "triangles": 2012
+          "vertices": 913,
+          "triangles": 1652
         }
       ]
     },
@@ -188,12 +188,12 @@
       "name": "MageChest",
       "lods": [
         {
-          "vertices": 17862,
-          "triangles": 32502
+          "vertices": 18393,
+          "triangles": 32499
         },
         {
-          "vertices": 6779,
-          "triangles": 10330
+          "vertices": 6143,
+          "triangles": 8816
         }
       ]
     },
@@ -201,12 +201,12 @@
       "name": "MageVeteranChest",
       "lods": [
         {
-          "vertices": 19941,
-          "triangles": 34318
+          "vertices": 20425,
+          "triangles": 34315
         },
         {
-          "vertices": 7823,
-          "triangles": 10838
+          "vertices": 7028,
+          "triangles": 9232
         }
       ]
     },
@@ -218,8 +218,8 @@
           "triangles": 7192
         },
         {
-          "vertices": 1089,
-          "triangles": 2012
+          "vertices": 936,
+          "triangles": 1652
         }
       ]
     },
@@ -279,12 +279,12 @@
       "name": "WarriorSkirt",
       "lods": [
         {
-          "vertices": 22127,
-          "triangles": 33809
+          "vertices": 45642,
+          "triangles": 80903
         },
         {
-          "vertices": 9357,
-          "triangles": 9045
+          "vertices": 14393,
+          "triangles": 19669
         }
       ]
     },
@@ -318,12 +318,12 @@
       "name": "WarriorBelt",
       "lods": [
         {
-          "vertices": 5696,
-          "triangles": 10463
+          "vertices": 17825,
+          "triangles": 34204
         },
         {
-          "vertices": 1586,
-          "triangles": 2586
+          "vertices": 4443,
+          "triangles": 8071
         }
       ]
     },
@@ -432,38 +432,41 @@
       ]
     }
   ],
-  "bytes": 28467932,
-  "sha256": "e7e9f73116ac3a50fb58b53ad1eaa8933107010c12e34e96c5ede7b053e4f7de",
-  "blend_sha256": "1add13d7b2071ff255fad86286bf9da1b969efbdc3e2886f173c2eeaf169fe4c",
+  "bytes": 36420708,
+  "sha256": "8d64d86401d4f41c918278a44ad4e10f57b636e942da929875cdca1a952a3d51",
+  "blend_sha256": "a8d29351d85d5a0522ac397ee47b4c39da5f8cb02caff4d345575def798467b7",
   "cloth_revision": "Reference 3: tailored starter/veteran clothing and waist-bound weighted hems",
-  "garment_weights_sha256": "14407a84b9c63f6f5901deb17dd1a3d9a31eb24712545909ae85658869b4fc15",
+  "garment_weights_sha256": "19878280bd65ac16ad62aea21d3aa51b3caa3996a03a8afa4c2e0f6fa424394f",
   "preserved_parts": [
+    "WarriorShoulder",
     "WarriorHelm",
     "WarriorShield",
     "WarriorSword",
     "WarriorVeteranSword",
-    "ScoutChest",
-    "ScoutVeteranChest",
     "ScoutShoulder",
     "ScoutHood",
     "ScoutShield",
     "ScoutBow",
     "ScoutVeteranBow",
-    "MageChest",
-    "MageVeteranChest",
     "MageShoulder",
     "MageHood",
     "MageShield",
     "MageStaff",
     "MageVeteranStaff",
+    "WarriorSkirt",
     "ScoutSkirt",
     "MageSkirt",
+    "WarriorBelt",
     "ScoutBelt",
     "MageBelt",
+    "WarriorBracer",
+    "WarriorGreave",
+    "WarriorKnee",
+    "WarriorThigh",
     "ScoutBracer",
     "MageCuff"
   ],
-  "revision": "2026-11-05 one warrior: fitted gambeson, leather brigandine, formed breastplate, real mail, articulated lames and repaired wool",
+  "revision": "2026-11-28 v27: continuous neck and trapezius junction, curved collar front and corrected head attachment",
   "garment_weights": {
     "format": "GWT2",
     "parts": [
@@ -480,8 +483,8 @@
       25,
       26
     ],
-    "bytes": 10478304,
-    "sha256": "14407a84b9c63f6f5901deb17dd1a3d9a31eb24712545909ae85658869b4fc15"
+    "bytes": 11535648,
+    "sha256": "19878280bd65ac16ad62aea21d3aa51b3caa3996a03a8afa4c2e0f6fa424394f"
   },
   "weapon_revision": "v24: laminated bow limbs, attached nocks/string, fitted grips, carved ash shafts and constructed crown settings; other 29 records and garment weights preserved"
 }

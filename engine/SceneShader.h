@@ -226,14 +226,20 @@ void GarmentLag(inout InstanceIn i) {
   i.n.y+=2*t/length*(drag.x*i.n.x-drag.y*i.n.z);
  }
 }
-float3 CoveredBodyPoint(float3 p) {
+float3 CoveredBodyPoint(float3 p,float fittedWarrior) {
  // A continuous under-layer fit avoids seams between material-region IDs.
  // It is enabled only beneath the three layered class outfits. Neck, exposed
  // arms and lower legs retain the authored anatomy, as does the unequipped body.
- float torso=smoothstep(1.00,1.08,p.y)*(1-smoothstep(1.42,1.50,p.y))*(1-smoothstep(.24,.32,abs(p.x)));
+ float torso=smoothstep(1.00,1.08,p.y)*(1-smoothstep(1.42,1.50,p.y))*(1-smoothstep(.18,.25,abs(p.x)));
  float hips=smoothstep(.64,.73,p.y)*(1-smoothstep(.97,1.06,p.y))*(1-smoothstep(.26,.32,abs(p.x)));
- float fit=max(torso,hips);
- p.x*=1-.17*fit;p.z*=1-.24*fit;return p;
+ // The upper anatomy is refitted; the retained waist/skirt meshes still use
+ // their original under-layer clearance. Do not widen hips beneath them.
+ p.x*=1-max(.08*torso,.17*hips);p.z*=1-max(.12*torso,.24*hips);
+ // The anatomical neck cap has arm influences; beneath the fitted collar it
+ // needs clearance during shoulder motion. This affects only the hidden body
+ // under-layer, never the separately drawn head, hair, eyes or facial shader.
+ float collar=fittedWarrior*smoothstep(1.43,1.51,p.y)*(1-smoothstep(.12,.21,abs(p.x)));
+ p.x*=1-.28*collar;p.z*=1-.28*collar;p.y-=.02*collar;return p;
 }
 float3 VolumeRotate(float4 q,float3 p) {
  return p+2*cross(q.xyz,cross(q.xyz,p)+q.w*p);
@@ -248,10 +254,11 @@ void SkinBody(inout InstanceIn i,uint4 joints,float4 weights) {
  GarmentLag(i);
  uint actor=(uint)i.surface.z;
  if(i.surface.x==14 && bodyRows[actor*RPG_SKIN_ROWS+RPG_SKIN_COLOR_ROW].w==15) {
-  float3 p=CoveredBodyPoint(i.p);float e=.0005;
-  float3 dx=(CoveredBodyPoint(i.p+float3(e,0,0))-CoveredBodyPoint(i.p-float3(e,0,0)))/(2*e);
-  float3 dy=(CoveredBodyPoint(i.p+float3(0,e,0))-CoveredBodyPoint(i.p-float3(0,e,0)))/(2*e);
-  float3 dz=(CoveredBodyPoint(i.p+float3(0,0,e))-CoveredBodyPoint(i.p-float3(0,0,e)))/(2*e);
+  float fitted=bodyRows[actor*RPG_SKIN_ROWS+RPG_SKIN_DEFORMATION_ROW].y;
+  float3 p=CoveredBodyPoint(i.p,fitted);float e=.0005;
+  float3 dx=(CoveredBodyPoint(i.p+float3(e,0,0),fitted)-CoveredBodyPoint(i.p-float3(e,0,0),fitted))/(2*e);
+  float3 dy=(CoveredBodyPoint(i.p+float3(0,e,0),fitted)-CoveredBodyPoint(i.p-float3(0,e,0),fitted))/(2*e);
+  float3 dz=(CoveredBodyPoint(i.p+float3(0,0,e),fitted)-CoveredBodyPoint(i.p-float3(0,0,e),fitted))/(2*e);
   i.n=i.n.x*cross(dy,dz)+i.n.y*cross(dz,dx)+i.n.z*cross(dx,dy);i.p=p;
  }
  float3 p=0,n=0;
@@ -293,8 +300,8 @@ VOut VSBody(SkinIn v) {
 uint BodyRegion(float3 p) {
  float x=abs(p.x);
  if(p.y>1.465 && dot(p.xz/float2(.106,.098),p.xz/float2(.106,.098))<1) return 5;
- float sleeve=dot(float2(x-.305,p.y-1.43),float2(.145,-.24))/.078625;
- if(x>.30 && p.y>.72) return sleeve>.85?2:1;
+ float sleeve=dot(float2(x-.225,p.y-1.43),float2(.123,-.2505))/.07787925;
+ if(x>.245 && p.y>.72) return sleeve>.85?2:1;
  if(p.y<1.01) return p.y>.79?6:(p.y<.53?4:3);
  return 0;
 }

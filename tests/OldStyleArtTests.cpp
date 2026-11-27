@@ -29,6 +29,33 @@ int main(int argc,char** argv){try {
  }
  Check(library.size()==33&&bytes<classart::geometryByteBudget,"Old-style class library budget");
  Check(playerbody::Collection()[0].mesh.indices.size()/3>=18000,"Dense anatomical body was not embedded");
+ for(auto cls:{rpg::ClassId::Warrior,rpg::ClassId::Scout,rpg::ClassId::Mage})for(bool tunic:{false,true}) {
+  auto outfit=CharacterOutfit::From(rpg::Inventory{},cls);outfit.tunic=tunic;
+  const auto rig=BuildCharacterRig(BuildCharacterPose(0,0,false,{}),outfit,{.3f,.3f,.3f,1});
+  Check(rig.deformation.y==0.f,"Equipment must not shrink or lower the reconstructed neck");
+ }
+ // The arming garment must follow the clavicle beneath the rigid armor. The
+ // old all-rigid warrior weights opened the neck/shoulder joins in motion.
+ for(auto part:{classart::Part::WarriorChest,classart::Part::WarriorVeteranChest})for(unsigned lod=0;lod<2;++lod) {
+  const auto& garment=library[unsigned(part)][lod];
+  const auto& weights=classart::GarmentInfluences(classart::Mesh(part,lod));
+  unsigned attachedShoulder=0,rigidPlate=0;
+  for(std::size_t i=0;i<garment.vertices.size();++i) {
+   const auto& vertex=garment.vertices[i];const auto& skin=weights[i];
+   const float values[]={skin.weights.x,skin.weights.y,skin.weights.z,skin.weights.w};
+   float clavicle=0;for(unsigned k=0;k<4;++k)if(skin.bones[k]>=12)clavicle+=values[k];
+   if(vertex.color.w==float(visual::Material::ArmingCloth) && vertex.position.y>1.55f && std::abs(vertex.position.x)<.10f) {
+    float arm=0;for(unsigned k=0;k<4;++k)if(skin.bones[k]>=6&&skin.bones[k]<10)arm+=values[k];
+    Check(arm<.0001f,"Standing collar pulled open by upper-arm weights");
+   }
+   if(vertex.color.w==float(visual::Material::ArmingCloth) && vertex.position.y>1.40f &&
+      vertex.position.y<1.52f && std::abs(vertex.position.x)>.17f && clavicle>.15f)++attachedShoulder;
+   if(vertex.color.w==float(visual::Material::ForgedSteel) || vertex.color.w==float(visual::Material::SaddleLeather)) {
+    Check(clavicle<.0001f,"Rigid breastplate deformed with the clavicle");++rigidPlate;
+   }
+  }
+  Check(attachedShoulder>20 && rigidPlate>100,"Missing articulated cloth beneath rigid warrior armor");
+ }
  // Waist anchors must remain attached while the hem follows the posed legs.
  // This catches accidental restoration of the old four rigid leg panels.
  for(unsigned cls=0;cls<3;++cls) {
@@ -73,14 +100,15 @@ int main(int argc,char** argv){try {
    }
    return closed;
   };
-  for(float side:{-1.f,1.f})for(float x:{.24f,.26f,.28f})for(float y:{1.46f,1.48f})
-   Check(coveredFront(side*x,y),"Open sleeve/doublet armhole in equipment LOD");
+  // Probe the anatomical armhole, not the removed 61 cm shoulder span.
+  for(float side:{-1.f,1.f})for(float x:{.18f,.20f,.22f})for(float y:{1.43f,1.45f})
+   Check(coveredFront(side*x,y,.025f),"Open sleeve/doublet armhole in equipment LOD");
   // These exposed shoulder/neck wedges were visible in the assembled Blender
   // study even though the lower armhole checks passed. Preserve the neck hole,
   // but require continuous clothing on both sides beneath it in both LODs.
   if(part<2)for(float side:{-1.f,1.f}) {
-   for(float x:{.12f,.14f,.16f})Check(coveredFront(side*x,1.52f,0),"Open warrior neckline/shoulder junction");
-   for(float x:{.10f,.12f,.14f})Check(coveredFront(side*x,1.53f,0),"Open warrior upper yoke");
+   for(float x:{.10f,.12f,.14f})Check(coveredFront(side*x,1.47f,0),"Open warrior neckline/shoulder junction");
+   for(float x:{.085f,.10f,.115f})Check(coveredFront(side*x,1.49f,0),"Open warrior upper yoke");
   }
   visual::BodyPalette palette{};
   for(unsigned bone=0;bone<visual::paletteBones;++bone) {

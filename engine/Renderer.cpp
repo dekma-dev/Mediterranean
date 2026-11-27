@@ -193,7 +193,7 @@ bool Renderer::CreatePipeline(const visual::BodyGeometry* previewBody,resources:
  elements=shader::InputElements(shader::VertexStream::Skinned);
  if (!Check(device_->CreateInputLayout(elements.data(),UINT(elements.size()),body->data,body->size,bodyLayout_.GetAddressOf()),L"Create skinned layout"))return false;
  static_assert(sizeof(Instance)==160,"Instance layout must match the shader.");
- static_assert(sizeof(visual::SkinInfluence)==32 && sizeof(visual::BodyPalette)==4672,"Keep skinning layouts synchronized with HLSL.");
+ static_assert(sizeof(visual::SkinInfluence)==32 && sizeof(visual::BodyPalette)==4704,"Keep skinning layouts synchronized with HLSL.");
  static_assert(sizeof(visual::HandPalette)==1024 && sizeof(visual::HandPalette)*visual::maxHands==65536,"Hand palettes must match HLSL and the D3D11 constant limit.");
  std::vector<Vertex> vertices; std::vector<std::uint32_t> indices;
  std::vector<visual::SkinInfluence> influences;

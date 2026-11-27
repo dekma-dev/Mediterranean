@@ -67,6 +67,22 @@ void Clothing() {
     }
   }
 }
+void AnatomicalShoulders() {
+  const auto& bones=visual::BodyBindPose();
+  const float span=bones[8].from.x-bones[6].from.x;
+  Check(span>.40f && span<.49f,"Shoulder joints returned to the inflated legacy span");
+  const auto& mesh=visual::CharacterBody(0);
+  unsigned clavicle=0;float width=0;
+  for(std::size_t i=0;i<mesh.mesh.vertices.size();++i) {
+    const auto p=mesh.mesh.vertices[i].position;
+    if(p.y>1.40f && p.y<1.51f)width=std::max(width,std::abs(p.x));
+    if(p.y<1.47f || std::abs(p.x)>.11f)continue;
+    const auto& skin=mesh.influences[i];const float w[]={skin.weights.x,skin.weights.y,skin.weights.z,skin.weights.w};
+    float arm=0;for(unsigned k=0;k<4;++k)if(skin.bones[k]>=6 && skin.bones[k]<10)arm+=w[k];
+    Check(arm<.01f,"Medial neck/trapezius was bound to the arm");++clavicle;
+  }
+  Check(width>.23f && width<.31f && clavicle>20,"Missing anatomical shoulder surface");
+}
 std::vector<unsigned char> Pixels(const std::filesystem::path& path) {
   using Microsoft::WRL::ComPtr;
   ComPtr<IWICImagingFactory> factory;ComPtr<IWICBitmapDecoder> decoder;
@@ -132,6 +148,6 @@ void Captures() {
 }
 }
 int main() {
-  Archive();Clothing();Captures();
+  Archive();Clothing();AnatomicalShoulders();Captures();
   std::cout<<"PASS: anatomical archive rejection, cached LODs, undergarment ownership and native body pose views\n";
 }

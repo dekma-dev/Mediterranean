@@ -250,18 +250,18 @@ void ShoulderArticulation() {
   CharacterPose pose{};
   for(unsigned arm=0;arm<2;++arm) {
     const float side=arm==0?1.f:-1.f;
-    pose.arms[arm].root={side*.305f,1.43f,0};
-    pose.arms[arm].joint={side*.305f,1.15f,0};
+    pose.arms[arm].root={side*CharacterPose::shoulderHalfWidth,1.43f,0};
+    pose.arms[arm].joint={side*CharacterPose::shoulderHalfWidth,1.15f,0};
     XMFLOAT3 origin;
     XMStoreFloat3(&origin,XMVector3TransformCoord(XMVectorZero(),GuardianShoulderTransform(pose,arm)));
-    Check(Distance(origin,{side*.34f,1.48f,0})<.00001f,"Resting shoulder lost authored socket");
+    Check(Distance(origin,{side*(CharacterPose::shoulderHalfWidth+.035f),1.48f,0})<.00001f,"Resting shoulder lost anatomical socket");
   }
   XMFLOAT3 previous{};
   for(int n=0;n<=180;++n) {
     const float angle=n*XM_PI/180;
     for(unsigned arm=0;arm<2;++arm) {
       const float side=arm==0?1.f:-1.f;
-      pose.arms[arm].joint={side*(.305f+.28f*std::sin(angle)),1.43f-.28f*std::cos(angle),0};
+      pose.arms[arm].joint={side*(CharacterPose::shoulderHalfWidth+.28f*std::sin(angle)),1.43f-.28f*std::cos(angle),0};
     }
     XMFLOAT3 left,right,tip;
     XMStoreFloat3(&left,XMVector3TransformCoord(XMVectorZero(),GuardianShoulderTransform(pose,0)));

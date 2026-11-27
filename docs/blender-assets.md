@@ -1,5 +1,33 @@
 # Blender collection in the native renderer
 
+## Connected neck and head attachment (2026-11-28, v27)
+
+The player body retains the original continuous anatomical neck instead of the
+low cut and narrow socket. A separate native neck joint connects its deformation
+to the lowered frozen head assembly; collars remain attached to the chest and
+have a lower front edge. Facial meshes, expressions, hair, authored clips and all
+thirteen user collection assets are preserved. See [the v27 record](player-neck-v27.md).
+
+## Anatomical shoulder refit (2026-11-27, v26)
+
+The player's shoulder joints now span 45 cm instead of the legacy 61 cm.
+The anatomical body, clavicle weights and sloped doublet have been refitted;
+all three focused classes retain their own equipment with smaller shoulder
+pieces. Hand paths and the shared bow grip follow the corrected proportions.
+Faces, authored motion bytes and all thirteen collection models are preserved.
+The assembled review source is `assets/authored/player-hero-v26.blend`; see
+[the v26 record](player-anatomy-v26.md) for sources and validation.
+
+## Continuous player tailoring (2026-11-27, v25)
+
+The warrior's revised clothing has a continuous anatomical doublet, integral
+collar and cuffs, construction seams, denser folds and fitted leather details.
+Collar/cuff weights and the covered neckline prevent the tearing and protruding
+edges found during native review. Both armor tiers and LODs are integrated;
+the face, anatomical source and v24 motion clips are retained. The assembled
+inspection copy is `assets/authored/player-hero-v25.blend`. See
+[the v25 record](player-tailoring-v25.md) for sources, bounds and verification.
+
 ## Ranged grips and constructed weapons (2026-11-14, v24)
 
 The current motion source is `assets/authored/player-motion-v24.blend`.

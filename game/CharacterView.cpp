@@ -41,10 +41,9 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
     const auto part=[&](M mesh,float x,float h,float z,XMFLOAT3 scale,XMFLOAT4 tint,S material,unsigned maxDetail=2) {
       renderer.DrawMesh(mesh,upper({x,h,z}),scale,tint,material,yaw+pose.upperYaw,pose.upperPitch,visual::ShadowMode::Cast,pose.upperRoll,maxDetail);
     };
-    // A smaller, slightly longer head proportion makes the guard less toy-like.
-    // Apply the same neck-centred transform to skin, features, hair and helmet.
-    const auto headFit=guard?XMMatrixTranslation(0,-1.61f,0)*XMMatrixScaling(.92f,.97f,.92f)*XMMatrixTranslation(0,1.61f,0):XMMatrixIdentity();
-    const auto headTransform=headFit*XMMatrixTranslation(0,-.055f,0)*pose.HeadTransform()*XMMatrixRotationY(yaw)*XMMatrixTranslation(p.x,base,p.z);
+    // Skin, eyes, hair and helmet remain one frozen assembly on the corrected
+    // neck attachment; lowering only the skin would detach facial features.
+    const auto headTransform=pose.HeadAttachmentTransform(guard)*XMMatrixRotationY(yaw)*XMMatrixTranslation(p.x,base,p.z);
     const auto actorTransform=XMMatrixRotationY(yaw)*XMMatrixTranslation(p.x,base,p.z);
     const auto head=[&](M mesh,float x,float h,float z,XMFLOAT3 scale,XMFLOAT4 tint,S material,float roll=0.f,unsigned maxDetail=3) {
       const unsigned detail=maxDetail==3?(mesh==M::Feature?1u:2u):maxDetail;
@@ -240,7 +239,7 @@ void DrawCharacter(Renderer& renderer,rpg::Vec2 p,float base,float yaw,DirectX::
           const bool scout=outfit.classId==rpg::ClassId::Scout;
           const auto along=[&](float t){return XMFLOAT3{hand.x+(elbow.x-hand.x)*t,hand.y+(elbow.y-hand.y)*t,hand.z+(elbow.z-hand.z)*t};};
           renderer.DrawMeshBetween(guard?M::OldWarriorBracer:scout?M::OldScoutBracer:M::OldMageCuff,
-            along(.06f),along(guard?.83f:scout?.76f:.52f),.17f,.17f,{1,1,1,1},S::Count,{std::sin(yaw),0,std::cos(yaw)});
+            along(.06f),along(guard?.83f:scout?.76f:.52f),.145f,.145f,{1,1,1,1},S::Count,{std::sin(yaw),0,std::cos(yaw)});
         } else renderer.DrawSegment(cuff,hand,.205f,.22f,leather,S::Leather);
       }
       // Wrist bridge overlaps both the solved forearm and shaped palm.

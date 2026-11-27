@@ -103,9 +103,15 @@ const std::vector<visual::SkinInfluence>& GarmentInfluences(visual::Mesh mesh) {
  Check(visual::IsGarmentMesh(mesh),"Not a skinned garment mesh");
  static const auto weights=[] {auto result=DecodeGarmentWeights(GarmentWeightBytes(),Collection());
   for(unsigned part=0;part<result.size();++part)for(unsigned lod=0;lod<2;++lod)
-   for(std::size_t i=0;i<result[part][lod].size();++i)
-    result[part][lod][i]=visual::ArticulateTorso(Collection()[part][lod].vertices[i].position,result[part][lod][i],
-      part==unsigned(Part::WarriorChest)||part==unsigned(Part::WarriorVeteranChest));
+   for(std::size_t i=0;i<result[part][lod].size();++i) {
+    const auto& vertex=Collection()[part][lod].vertices[i];
+    const bool warriorChest=part==unsigned(Part::WarriorChest)||part==unsigned(Part::WarriorVeteranChest);
+    // The plate and leather-faced brigandine keep their shape. The continuous
+    // arming doublet underneath follows the same spine/clavicles as the body;
+    // making every warrior vertex rigid pulled its neckline away from the skin.
+    const bool flexibleCloth=vertex.color.w==float(visual::Material::ArmingCloth);
+    result[part][lod][i]=visual::ArticulateTorso(vertex.position,result[part][lod][i],warriorChest&&!flexibleCloth);
+   }
   return result;}();
  const unsigned index=unsigned(mesh)-unsigned(visual::Mesh::OldWarriorChest);return weights[index/2][index%2];
 }

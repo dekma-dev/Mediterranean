@@ -22,6 +22,6 @@ inline DirectX::XMMATRIX GuardianShoulderTransform(const CharacterPose& pose,uns
   const float pitch=-std::clamp(XMVectorGetZ(direction)*.38f,-.30f,.30f);
   // Export origin is above/outside the anatomical shoulder socket.
   return XMMatrixTranslation(side*.035f,.05f,0)*XMMatrixRotationX(pitch)*XMMatrixRotationZ(roll)*
-    XMMatrixTranslation(side*.305f,1.43f-.95f,0)*torso*
+    XMMatrixTranslation(side*CharacterPose::shoulderHalfWidth,1.43f-.95f,0)*torso*
     XMMatrixTranslation(pose.bodyShift,.95f+pose.bodyLift,pose.bodyForward);
 }

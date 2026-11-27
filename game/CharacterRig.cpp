@@ -29,6 +29,10 @@ visual::BodyPalette BuildCharacterRig(const CharacterPose& pose,const CharacterO
   store(0,pose.PelvisTransform(),pelvis);
   const auto torso=XMMatrixRotationX(pose.upperPitch)*XMMatrixRotationZ(pose.upperRoll)*XMMatrixRotationY(pose.upperYaw);
   store(1,pose.UpperTransform(),torso);
+  // Only the anatomical BODY neck blends into this joint. Frozen facial
+  // meshes keep their rigid attachment, and garment collars stay on the chest.
+  const auto neck=pose.HeadTransform();
+  store(visual::neckBone,neck,XMMatrixTranspose(XMMatrixInverse(nullptr,neck)));
   for(unsigned i=0;i<2;++i){
     const auto spine=pose.SpineTransform(i);
     store(10+i,spine,XMMatrixTranspose(XMMatrixInverse(nullptr,spine)));
@@ -86,5 +90,9 @@ visual::BodyPalette BuildCharacterRig(const CharacterPose& pose,const CharacterO
     if(outfit.trousers){auto pants=fabric;pants.x*=.72f;pants.y*=.72f;pants.z*=.72f;result.colors[3]=result.colors[6]=pants;}
     if(outfit.boots){result.colors[4]=leather;result.colors[4].w=float(visual::Material::WornLeather);}
   }
+  // The connected anatomical neck already fits inside the retained head.
+  // The previous collar workaround shrank and lowered it, opening a gap when
+  // the head tilted. Keep the normal covered-torso fit, but no neck shrink.
+  result.deformation.y=0.f;
   return result;
 }

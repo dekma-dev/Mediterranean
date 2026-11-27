@@ -10,7 +10,9 @@ enum class Part:unsigned { WarriorChest,WarriorVeteranChest,WarriorShoulder,Warr
  WarriorSkirt,ScoutSkirt,MageSkirt,WarriorBelt,ScoutBelt,MageBelt,
  WarriorBracer,WarriorGreave,WarriorKnee,WarriorThigh,ScoutBracer,MageCuff,Count };
 using Library=std::array<std::array<visual::Geometry,2>,unsigned(Part::Count)>;
-inline constexpr std::size_t geometryByteBudget=32*1024*1024,weightByteBudget=10*1024*1024;
+// The v25 continuous warrior garments retain their sculpted fold geometry in
+// the near LOD; the far LOD remains reduced. Bound the complete 33-part library.
+inline constexpr std::size_t geometryByteBudget=40*1024*1024,weightByteBudget=12*1024*1024;
 using GarmentWeights=std::array<std::array<std::vector<visual::SkinInfluence>,2>,unsigned(Part::Count)>;
 Library Decode(std::string_view bytes);
 const Library& Collection();
